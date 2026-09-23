@@ -37,6 +37,8 @@ void LibretroVulkanContext::SwapBuffers() {
 	LibretroHWRenderContext::SwapBuffers();
 }
 
+static const VkApplicationInfo *GetApplicationInfo(void);
+
 static bool create_device(retro_vulkan_context *context, VkInstance instance, VkPhysicalDevice gpu, VkSurfaceKHR surface, PFN_vkGetInstanceProcAddr get_instance_proc_addr, const char **required_device_extensions, unsigned num_required_device_extensions, const char **required_device_layers, unsigned num_required_device_layers, const VkPhysicalDeviceFeatures *required_features) {
 	init_glslang();
 
@@ -49,7 +51,7 @@ static bool create_device(retro_vulkan_context *context, VkInstance instance, Vk
 		return false;
 	}
 
-	if (vk->CreateInstanceExternal(instance) != VK_SUCCESS) {
+	if (vk->CreateInstanceExternal(instance, GetApplicationInfo()->apiVersion) != VK_SUCCESS) {
 		ERROR_LOG(Log::G3D, "Failed to adopt libretro-provided Vulkan instance: %s", vk->InitError().c_str());
 		delete vk;
 		vk = nullptr;

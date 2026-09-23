@@ -190,7 +190,7 @@ public:
 	// like libretro/RetroArch) instead of creating our own. Runs the same post-creation bookkeeping
 	// (function pointer loading, API version/physical device enumeration, etc.) as CreateInstance(), but
 	// does not call vkCreateInstance, and DestroyInstance() will not call vkDestroyInstance either.
-	VkResult CreateInstanceExternal(VkInstance instance);
+	VkResult CreateInstanceExternal(VkInstance instance, uint32_t apiVersion);
 	void DestroyInstance();
 
 	int GetBestPhysicalDevice() const;

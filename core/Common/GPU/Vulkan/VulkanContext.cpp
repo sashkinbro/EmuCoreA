@@ -265,10 +265,11 @@ VkResult VulkanContext::CreateInstance(const CreateInfo &info) {
 	return FinishInstanceInit();
 }
 
-VkResult VulkanContext::CreateInstanceExternal(VkInstance instance) {
+VkResult VulkanContext::CreateInstanceExternal(VkInstance instance, uint32_t apiVersion) {
 	instance_ = instance;
 	ownsInstance_ = false;
-	DetectInstanceApiVersion();
+	// The loader maximum is not the API version requested for this external instance.
+	vulkanInstanceApiVersion_ = apiVersion;
 
 	// We didn't go through the normal extension-selection dance in CreateInstance() (there's nothing to
 	// enable - the instance already exists), but IsInstanceExtensionAvailable() and the properties2 codepath
@@ -279,7 +280,7 @@ VkResult VulkanContext::CreateInstanceExternal(VkInstance instance) {
 	// vkGetPhysicalDeviceProperties2/Features2 are core as of Vulkan 1.1, so an adopted 1.1+ instance can
 	// always use them regardless of whether the owning application explicitly enabled the KHR extension.
 	extensionsLookup_.KHR_get_physical_device_properties2 =
-		vulkanInstanceApiVersion_ >= VK_API_VERSION_1_1 || IsInstanceExtensionAvailable(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+		vulkanInstanceApiVersion_ >= VK_API_VERSION_1_1;
 
 	return FinishInstanceInit();
 }
@@ -642,7 +643,7 @@ VkResult VulkanContext::CreateDevice(int physical_device, const std::vector<cons
 	physical_device_ = physical_device;
 	INFO_LOG(Log::G3D, "Chose physical device %d: %s", physical_device, physicalDeviceProperties_[physical_device].properties.deviceName);
 
-	vulkanDeviceApiVersion_ = physicalDeviceProperties_[physical_device].properties.apiVersion;
+	vulkanDeviceApiVersion_ = std::min(physicalDeviceProperties_[physical_device].properties.apiVersion, vulkanInstanceApiVersion_);
 
 	queue_count = 0;
 	vkGetPhysicalDeviceQueueFamilyProperties(physical_devices_[physical_device_], &queue_count, nullptr);
