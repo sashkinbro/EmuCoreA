@@ -38,6 +38,17 @@ val discordSdkDirectory = (
             sdkDir.resolve("discord_partner_sdk.aar").isFile
     }
 
+val releaseStoreFilePath = localProperty("emucorea.release.storeFile")
+val releaseStorePassword = localProperty("emucorea.release.storePassword")
+val releaseKeyAlias = localProperty("emucorea.release.keyAlias")
+val releaseKeyPassword = localProperty("emucorea.release.keyPassword")
+val releaseSigningConfigured = listOf(
+    releaseStoreFilePath,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { it != null }
+
 android {
     namespace = "com.sbro.emucorea"
     compileSdk {
@@ -74,6 +85,17 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = rootProject.file(releaseStoreFilePath!!)
+                storePassword = releaseStorePassword!!
+                keyAlias = releaseKeyAlias!!
+                keyPassword = releaseKeyPassword!!
+            }
+        }
+    }
+
     buildTypes {
         debug {
             // The emulator core is performance-sensitive even when the
@@ -88,6 +110,9 @@ android {
             }
         }
         release {
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isDebuggable = false
             isJniDebuggable = false
             // AGP configures CMake with CMAKE_BUILD_TYPE=RelWithDebInfo, whose
