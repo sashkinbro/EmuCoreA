@@ -11,6 +11,7 @@ import com.sbro.emucorea.core.EmulatorBridge
 import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.drive.DriveBackupArchive
 import com.sbro.emucorea.data.drive.DriveBackupException
+import com.sbro.emucorea.data.drive.DriveBackupWork
 import com.sbro.emucorea.discord.DiscordIntegration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +41,7 @@ class EmuCoreAApp : Application() {
         }
         AppAnalytics.initialize(this)
         AppIconManager.applyProIcon(this, AppPreferences(this).getProUnlockedSync())
+        DriveBackupWork.resumePending(this)
         EmulatorBridge.initializeOnce(this)
         DiscordIntegration.initialize(this)
     }
