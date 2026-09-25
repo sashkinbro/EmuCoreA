@@ -397,7 +397,7 @@ class AppPreferences(private val context: Context) {
         const val OVERLAY_CONTROL_SCALE_MIN = 50
         const val OVERLAY_CONTROL_SCALE_MAX = 500
         const val OVERLAY_CONTROL_SCALE_DEFAULT = 100
-        const val OVERLAY_CONTROL_OPACITY_MIN = 20
+        const val OVERLAY_CONTROL_OPACITY_MIN = 5
         const val OVERLAY_CONTROL_OPACITY_MAX = 100
         const val OVERLAY_CONTROL_OPACITY_DEFAULT = 100
         const val OVERLAY_OPACITY_MIN = 0
@@ -954,7 +954,6 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setCustomTouchControls(library: CustomTouchControlLibrary) {
         context.dataStore.edit { prefs ->
-            if (prefs[PRO_UNLOCKED] != true) return@edit
             prefs[CUSTOM_TOUCH_CONTROLS_JSON] = library.sanitized().encode()
         }
     }

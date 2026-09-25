@@ -47,8 +47,10 @@ import com.sbro.emucorea.data.PlayerProfileRepository
 import com.sbro.emucorea.data.RetroAchievementsRepository
 import com.sbro.emucorea.data.resolveShaderChain
 import com.sbro.emucorea.data.TouchControlsLayoutProfile
+import com.sbro.emucorea.data.PER_GAME_CUSTOM_TOUCH_CONTROLS_KEY
 import com.sbro.emucorea.data.PER_GAME_TOUCH_CONTROLS_LAYOUT_KEY
 import com.sbro.emucorea.data.saveTouchControlsLayout
+import com.sbro.emucorea.data.withCustomTouchControls
 import com.sbro.emucorea.data.withTouchControlsLayout
 import com.sbro.emucorea.data.withoutTouchControlsLayout
 import com.sbro.emucorea.data.TouchControlVisualStyle
@@ -639,6 +641,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     /** Per-game core option overrides resolved at launch, applied after boot. */
     private var pendingPerGameCoreOptions: Map<String, String> = emptyMap()
     private var currentTouchControlsLayoutProfile: TouchControlsLayoutProfile? = null
+    private var currentCustomTouchControlsProfile: CustomTouchControlLibrary? = null
     private var lastAutoSavePlayTimeMs: Long = 0L
     private var pendingPlayTimeSyncMs: Long = 0L
     private var playTimeSyncJob: Job? = null
@@ -768,7 +771,9 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         }
         viewModelScope.launch {
             preferences.customTouchControls.collect { library ->
-                _uiState.value = _uiState.value.copy(customTouchControls = library)
+                _uiState.value = _uiState.value.copy(
+                    customTouchControls = currentCustomTouchControlsProfile ?: library
+                )
             }
         }
         viewModelScope.launch {
@@ -1539,6 +1544,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         }
         currentGamePath = if (bootToBios) null else path?.takeIf { it.isNotBlank() }
         currentTouchControlsLayoutProfile = null
+        currentCustomTouchControlsProfile = null
         currentGameCoverArtPath = null
         lastAutoSavePlayTimeMs = 0L
         pendingPlayTimeSyncMs = 0L
@@ -1803,6 +1809,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     val safePath = path.orEmpty()
                     val existingProfile = currentGamePath?.let(perGameSettingsRepository::get)
                     currentTouchControlsLayoutProfile = existingProfile?.touchControlsLayout
+                    currentCustomTouchControlsProfile = existingProfile?.customTouchControls
                     val metadata = EmulatorBridge.getGameMetadata(safePath)
                     currentGameTitle = EmulatorBridge.cleanGameDisplayTitle(metadata.title, safePath)
                     currentGameSerial = metadata.serial?.takeIf { it.isNotBlank() }
@@ -1843,6 +1850,10 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                         )
                     }
                 }
+                _uiState.value = _uiState.value.copy(
+                    customTouchControls = currentCustomTouchControlsProfile
+                        ?: preferences.customTouchControls.first()
+                )
                 updateCrashContext(
                     launchState = "starting",
                     launchPath = path
@@ -2631,6 +2642,36 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             resetTouchControlsLayoutForCurrentScope()
         }
     }
+
+    fun setCustomTouchControls(library: CustomTouchControlLibrary) {
+        viewModelScope.launch {
+            val sanitized = library.sanitized()
+            val gameKey = activePerGameKey()
+            if (gameKey != null) {
+                withContext(Dispatchers.IO) {
+                    val existing = perGameSettingsRepository.get(gameKey)
+                    perGameSettingsRepository.save(
+                        existing.withCustomTouchControls(
+                            gameKey = gameKey,
+                            gameTitle = resolvePerGameTitle(_uiState.value),
+                            gameSerial = currentGameSerial.takeIf { it.isNotBlank() },
+                            library = sanitized
+                        )
+                    )
+                }
+                currentCustomTouchControlsProfile = sanitized
+                _uiState.value = _uiState.value.copy(
+                    customTouchControls = sanitized,
+                    gameSettingsProfileActive = true
+                )
+            } else {
+                currentCustomTouchControlsProfile = null
+                preferences.setCustomTouchControls(sanitized)
+                _uiState.value = _uiState.value.copy(customTouchControls = sanitized)
+            }
+        }
+    }
+
     fun toggleFpsVisibility() {
         viewModelScope.launch {
             val newValue = !_uiState.value.showFps
@@ -4130,8 +4171,11 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         val gameKey = activePerGameKey()
         if (gameKey == null) {
             currentTouchControlsLayoutProfile = null
+            currentCustomTouchControlsProfile = null
             preferences.resetControlsLayout()
-            _uiState.value = _uiState.value.withOverlayLayoutSnapshot(preferences.overlayLayoutSnapshot.first())
+            _uiState.value = _uiState.value
+                .withOverlayLayoutSnapshot(preferences.overlayLayoutSnapshot.first())
+                .copy(customTouchControls = preferences.customTouchControls.first())
             return
         }
 
@@ -4146,10 +4190,14 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         currentTouchControlsLayoutProfile = null
+        currentCustomTouchControlsProfile = null
         val profileStillActive = perGameSettingsRepository.get(gameKey) != null
         _uiState.value = _uiState.value
             .withOverlayLayoutSnapshot(preferences.overlayLayoutSnapshot.first())
-            .copy(gameSettingsProfileActive = profileStillActive)
+            .copy(
+                customTouchControls = preferences.customTouchControls.first(),
+                gameSettingsProfileActive = profileStillActive
+            )
     }
 
     private suspend fun persistRuntimeState(
@@ -4160,6 +4208,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         return if (gameKey != null) {
             val existingProfile = perGameSettingsRepository.get(gameKey)
             val touchControlsLayout = existingProfile?.touchControlsLayout ?: currentTouchControlsLayoutProfile
+            val customTouchControls = existingProfile?.customTouchControls
+                ?: currentCustomTouchControlsProfile
             val runtimeProfile = updatedState.toPerGameSettings(
                 gameKey = gameKey,
                 gameTitle = resolvePerGameTitle(updatedState),
@@ -4187,14 +4237,19 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             }.orEmpty()
             val providedKeys = when {
                 runtimeProfile.providedKeys == null -> null
-                touchControlsLayout == null ->
-                    runtimeProfile.providedKeys + visualOverrideKeys + driverOverrideKeys + audioOverrideKeys
-                else -> runtimeProfile.providedKeys + visualOverrideKeys + driverOverrideKeys +
-                    audioOverrideKeys + PER_GAME_TOUCH_CONTROLS_LAYOUT_KEY
+                else -> buildSet<String> {
+                    addAll(runtimeProfile.providedKeys)
+                    addAll(visualOverrideKeys)
+                    addAll(driverOverrideKeys)
+                    addAll(audioOverrideKeys)
+                    if (touchControlsLayout != null) add(PER_GAME_TOUCH_CONTROLS_LAYOUT_KEY)
+                    if (customTouchControls != null) add(PER_GAME_CUSTOM_TOUCH_CONTROLS_KEY)
+                }
             }
             perGameSettingsRepository.save(
                 runtimeProfile.copy(
                     touchControlsLayout = touchControlsLayout,
+                    customTouchControls = customTouchControls,
                     touchControlVisualStyle = visualStyleOverride,
                     touchControlPressEffect = pressEffectOverride,
                     coreOptions = existingProfile?.coreOptions ?: runtimeProfile.coreOptions,
@@ -4257,6 +4312,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         val gameKey = activePerGameKey() ?: return
         perGameSettingsRepository.delete(gameKey)
         currentTouchControlsLayoutProfile = null
+        currentCustomTouchControlsProfile = null
         GamepadManager.clearPerGameOverrides()
         // Restore the global/core-default value of any option that was overridden
         // only by this game, so the live core matches the reset profile.
@@ -4276,6 +4332,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 .copy(
                     touchControlVisualStyle = settings.touchControlVisualStyle,
                     touchControlPressEffect = settings.touchControlPressEffect,
+                    customTouchControls = settings.customTouchControls,
                     gameSettingsProfileActive = false,
                     perGameCoreOptions = emptyMap(),
                     gamepadStickDeadzone = settings.gamepadStickDeadzone,
@@ -5574,6 +5631,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         currentGameTitle = ""
         currentGamePath = null
         currentTouchControlsLayoutProfile = null
+        currentCustomTouchControlsProfile = null
         currentGameSerial = ""
         currentGameCoverArtPath = null
         currentGameCrc = ""

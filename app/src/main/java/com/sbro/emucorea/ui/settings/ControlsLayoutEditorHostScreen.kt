@@ -20,12 +20,14 @@ import androidx.compose.ui.res.stringResource
 import com.sbro.emucorea.R
 import com.sbro.emucorea.core.DocumentPathResolver
 import com.sbro.emucorea.data.AppPreferences
+import com.sbro.emucorea.data.CustomTouchControlLibrary
 import com.sbro.emucorea.data.OverlayControlLayout
 import com.sbro.emucorea.data.PerGameSettingsRepository
 import com.sbro.emucorea.data.SettingsSnapshot
 import com.sbro.emucorea.data.TouchControlsLayoutProfile
 import com.sbro.emucorea.data.saveTouchControlsLayout
 import com.sbro.emucorea.data.toTouchControlsLayoutProfile
+import com.sbro.emucorea.data.withCustomTouchControls
 import com.sbro.emucorea.data.withTouchControlsLayout
 import com.sbro.emucorea.data.withoutTouchControlsLayout
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +60,9 @@ fun ControlsLayoutEditorHostScreen(
     }
     var editorState by remember(normalizedGamePath) { mutableStateOf<ControlsEditorState?>(null) }
     var hasGameOverride by remember(normalizedGamePath) { mutableStateOf(false) }
+    var persistedCustomControls by remember(normalizedGamePath) {
+        mutableStateOf<CustomTouchControlLibrary?>(null)
+    }
     var isFinishing by remember { mutableStateOf(false) }
     var isResetting by remember { mutableStateOf(false) }
     val saveFailureMessage = stringResource(R.string.controls_editor_save_failed)
@@ -70,29 +75,45 @@ fun ControlsLayoutEditorHostScreen(
             withContext(Dispatchers.IO) { repository.get(path) }
         }
         val layout = perGame?.touchControlsLayout ?: globalLayout.toTouchControlsLayoutProfile()
+        val customControls = perGame?.customTouchControls
+            ?: preferences.customTouchControls.first()
         return layout.toControlsEditorState(
             visualStyle = perGame?.touchControlVisualStyle ?: settings.touchControlVisualStyle,
             pressEffect = perGame?.touchControlPressEffect ?: settings.touchControlPressEffect,
-            overlayScale = globalLayout.overlayScale
-        ) to (perGame?.touchControlsLayout != null)
+            overlayScale = globalLayout.overlayScale,
+            customControls = customControls
+        ) to (perGame?.touchControlsLayout != null || perGame?.customTouchControls != null)
     }
 
     suspend fun persistState(state: ControlsEditorState) {
         val layout = state.toTouchControlsLayoutProfile()
+        val customControls = state.customControls.sanitized()
         if (normalizedGamePath == null) {
             preferences.saveTouchControlsLayout(layout)
+            if (customControls != persistedCustomControls) {
+                preferences.setCustomTouchControls(customControls)
+                persistedCustomControls = customControls
+            }
         } else {
             withContext(Dispatchers.IO) {
                 val existing = repository.get(normalizedGamePath)
                 repository.save(
-                    existing.withTouchControlsLayout(
-                        gameKey = normalizedGamePath,
-                        gameTitle = resolvedGameTitle,
-                        gameSerial = gameSerial,
-                        layout = layout
-                    )
+                    existing
+                        .withTouchControlsLayout(
+                            gameKey = normalizedGamePath,
+                            gameTitle = resolvedGameTitle,
+                            gameSerial = gameSerial,
+                            layout = layout
+                        )
+                        .withCustomTouchControls(
+                            gameKey = normalizedGamePath,
+                            gameTitle = resolvedGameTitle,
+                            gameSerial = gameSerial,
+                            library = customControls
+                        )
                 )
             }
+            persistedCustomControls = customControls
         }
     }
 
@@ -150,6 +171,7 @@ fun ControlsLayoutEditorHostScreen(
         }
         editorState = loaded.first
         hasGameOverride = loaded.second
+        persistedCustomControls = loaded.first.customControls
     }
 
     val state = editorState
@@ -224,22 +246,6 @@ fun ControlsLayoutEditorHostScreen(
                 current.copy(controlLayouts = layouts)
             }
         },
-        onToggleLeftInputMode = {
-            updateState { current ->
-                val layouts = current.controlLayouts.toMutableMap()
-                val leftStick = currentLayout(current, "left_stick")
-                val showingStick = leftStick.visible
-                layouts["left_stick"] = leftStick.copy(visible = !showingStick)
-                listOf("dpad_up", "dpad_down", "dpad_left", "dpad_right").forEach { id ->
-                    layouts[id] = currentLayout(current, id).copy(visible = showingStick)
-                }
-                current.copy(
-                    dpadOffset = current.lstickOffset,
-                    lstickOffset = current.dpadOffset,
-                    controlLayouts = layouts
-                )
-            }
-        },
         onSetControlVisible = { controlId, visible ->
             updateState { current ->
                 val layouts = current.controlLayouts.toMutableMap()
@@ -278,11 +284,15 @@ fun ControlsLayoutEditorHostScreen(
                 if (reset != null) {
                     editorState = reset.first
                     hasGameOverride = reset.second
+                    persistedCustomControls = reset.first.customControls
                 } else {
                     Toast.makeText(context, saveFailureMessage, Toast.LENGTH_SHORT).show()
                 }
                 isResetting = false
             }
+        },
+        onCustomControlsChange = { library ->
+            updateState { current -> current.copy(customControls = library) }
         }
     )
 }
