@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.pm.ActivityInfo
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -23,11 +25,13 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Remove
@@ -40,6 +44,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -70,6 +75,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
 import com.sbro.emucorea.R
 import com.sbro.emucorea.data.AppPreferences
@@ -686,7 +693,10 @@ fun ControlsEditorScreen(
                 }
 
                 OutlinedButton(
-                    onClick = { showControlAdjustDialog = !showControlAdjustDialog },
+                    onClick = {
+                        showControlAdjustDialog = !showControlAdjustDialog
+                        if (showControlAdjustDialog) comboDialogControlId = null
+                    },
                     enabled = selectedControlId != null && !selectedIsGroup,
                     shape = neonShape(16.dp),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
@@ -771,15 +781,11 @@ fun ControlsEditorScreen(
                         }
                     }
 
-                    Surface(
-                        modifier = Modifier.padding(top = 8.dp),
-                        color = Color(0xFF111827).copy(alpha = 0.82f),
-                        shape = neonShape(16.dp)
+                    AdjustPanel(
+                        title = customControl?.name ?: controlTitle(controlId),
+                        onDismiss = { showControlAdjustDialog = false },
+                        modifier = Modifier.padding(top = 8.dp)
                     ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
                         if (customControl != null) {
                             AdjustStepper(
                                 valueText = "${customControl.widthDp}×${customControl.heightDp} dp",
@@ -843,7 +849,6 @@ fun ControlsEditorScreen(
                             onMinus = { applyOpacity(opacity - 10) },
                             onPlus = { applyOpacity(opacity + 10) }
                         )
-                        }
                     }
                 }
 
@@ -853,7 +858,7 @@ fun ControlsEditorScreen(
                     null
                 }
                 val canEditCombo = customControl != null || standardComboActionId != null
-                if (canEditCombo) {
+                if (canEditCombo && !showControlAdjustDialog) {
                     Surface(
                         modifier = Modifier.padding(top = 8.dp),
                         color = Color(0xFF111827).copy(alpha = 0.82f),
@@ -866,6 +871,7 @@ fun ControlsEditorScreen(
                         ) {
                             OutlinedButton(
                                 onClick = {
+                                    showControlAdjustDialog = false
                                     if (customControl != null) {
                                         comboDialogControlId = customControl.id
                                     } else {
@@ -881,6 +887,15 @@ fun ControlsEditorScreen(
                                 modifier = Modifier.testTag("controls_editor_combo")
                             ) {
                                 Text(stringResource(R.string.touch_control_creator_combo_action))
+                            }
+                            customControl?.secondaryActionId?.let { secondary ->
+                                Text(
+                                    text = actionLabel(secondary),
+                                    style = MaterialTheme.typography.labelMedium.copy(
+                                        fontWeight = FontWeight.SemiBold
+                                    ),
+                                    color = Color.White.copy(alpha = 0.72f)
+                                )
                             }
                             if (customControl != null) {
                                 OutlinedButton(
@@ -942,6 +957,7 @@ fun ControlsEditorScreen(
             initialActionId = standardComboActionId,
             initialSecondaryActionId = null,
             confirmLabel = stringResource(R.string.controls_editor_done),
+            primaryEditable = false,
             onDismiss = { standardComboDialogControlId = null },
             onConfirm = { actionId, secondaryActionId ->
                 createComboFromStandardControl(standardComboControlId, actionId, secondaryActionId)
@@ -983,6 +999,51 @@ fun ControlsEditorScreen(
 }
 
 @Composable
+private fun AdjustPanel(
+    title: String,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Surface(
+        modifier = modifier.testTag("controls_editor_adjust_panel"),
+        color = Color(0xFF111827).copy(alpha = 0.92f),
+        shape = neonShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .widthIn(min = 280.dp, max = 420.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                    color = Color.White,
+                    maxLines = 1
+                )
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Close,
+                        contentDescription = stringResource(R.string.controls_editor_done),
+                        tint = Color.White.copy(alpha = 0.86f)
+                    )
+                }
+            }
+            content()
+        }
+    }
+}
+
+@Composable
 private fun AdjustStepper(
     valueText: String,
     minusEnabled: Boolean,
@@ -999,19 +1060,28 @@ private fun AdjustStepper(
             onClick = onMinus,
             enabled = minusEnabled,
             shape = neonShape(14.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.White.copy(alpha = 0.08f),
+                contentColor = Color.White
+            )
         ) {
             Icon(Icons.Rounded.Remove, contentDescription = null)
         }
         Text(
             text = valueText,
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = Color.White
         )
         OutlinedButton(
             onClick = onPlus,
             enabled = plusEnabled,
             shape = neonShape(14.dp),
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp)
+            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = Color.White.copy(alpha = 0.08f),
+                contentColor = Color.White
+            )
         ) {
             Icon(Icons.Rounded.Add, contentDescription = null)
         }
@@ -1025,103 +1095,185 @@ private fun ComboActionDialog(
     initialSecondaryActionId: String?,
     confirmLabel: String,
     onDismiss: () -> Unit,
-    onConfirm: (String, String?) -> Unit
+    onConfirm: (String, String?) -> Unit,
+    primaryEditable: Boolean = true
 ) {
     var actionId by remember(initialActionId) { mutableStateOf(initialActionId) }
     var secondaryActionId by remember(initialSecondaryActionId) {
         mutableStateOf(initialSecondaryActionId)
     }
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        title = {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(title, fontWeight = FontWeight.SemiBold)
-                ComboSelectionSummary(
-                    actionId = actionId,
-                    secondaryActionId = secondaryActionId
-                )
-            }
-        },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .padding(horizontal = 24.dp, vertical = 16.dp)
+                .widthIn(max = 560.dp)
+                .fillMaxWidth()
+                .testTag("controls_editor_combo_dialog"),
+            shape = neonShape(24.dp),
+            color = Color(0xFF0D1424).copy(alpha = 0.98f),
+            border = BorderStroke(1.dp, Color(0xFF6688FF).copy(alpha = 0.5f)),
+            shadowElevation = 16.dp
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                ComboActionSection(
-                    title = stringResource(R.string.touch_control_creator_action),
-                    selectedActionId = actionId,
-                    testTagPrefix = "controls_editor_combo_primary",
-                    onSelect = { selected ->
-                        selected?.let { action ->
-                            actionId = action
-                            if (secondaryActionId == action) secondaryActionId = null
-                        }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                        maxLines = 1
+                    )
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.theme_manager_cancel),
+                            tint = Color.White.copy(alpha = 0.8f)
+                        )
                     }
+                }
+
+                ComboActionPreview(
+                    primaryLabel = actionLabel(actionId),
+                    secondaryLabel = secondaryActionId?.let { actionLabel(it) }
                 )
+
+                ComboActionSection(
+                    title = stringResource(R.string.touch_control_creator_action)
+                ) {
+                    if (primaryEditable) {
+                        ActionSelector(
+                            selectedActionId = actionId,
+                            testTagPrefix = "controls_editor_combo_primary",
+                            onSelect = { selected ->
+                                selected?.let { action ->
+                                    actionId = action
+                                    if (secondaryActionId == action) secondaryActionId = null
+                                }
+                            }
+                        )
+                    } else {
+                        ComboActionBadge(
+                            label = actionLabel(actionId),
+                            highlighted = true
+                        )
+                    }
+                }
+
                 ComboActionSection(
                     title = stringResource(R.string.touch_control_creator_combo_action),
-                    subtitle = stringResource(R.string.touch_control_creator_combo_action_desc),
-                    selectedActionId = secondaryActionId,
-                    excludedActionId = actionId,
-                    allowNone = true,
-                    testTagPrefix = "controls_editor_combo_secondary",
-                    onSelect = { secondaryActionId = it }
-                )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = { onConfirm(actionId, secondaryActionId) },
-                shape = neonShape(14.dp),
-                modifier = Modifier.testTag("controls_editor_combo_confirm")
-            ) {
-                Text(confirmLabel)
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.theme_manager_cancel))
-            }
-        }
-    )
-}
+                    description = stringResource(R.string.touch_control_creator_combo_action_desc)
+                ) {
+                    ActionSelector(
+                        selectedActionId = secondaryActionId,
+                        excludedActionId = actionId,
+                        allowNone = true,
+                        testTagPrefix = "controls_editor_combo_secondary",
+                        onSelect = { secondaryActionId = it }
+                    )
+                }
 
-@Composable
-private fun ComboSelectionSummary(actionId: String, secondaryActionId: String?) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        ComboActionBadge(actionId = actionId, highlighted = true)
-        if (secondaryActionId != null) {
-            Text(
-                "+",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            ComboActionBadge(actionId = secondaryActionId, highlighted = false)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onDismiss) {
+                        Text(stringResource(R.string.theme_manager_cancel))
+                    }
+                    Button(
+                        onClick = { onConfirm(actionId, secondaryActionId) },
+                        modifier = Modifier
+                            .padding(start = 8.dp)
+                            .testTag("controls_editor_combo_confirm"),
+                        shape = neonShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF3565FF),
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Text(confirmLabel)
+                    }
+                }
+            }
         }
     }
 }
 
 @Composable
-private fun ComboActionBadge(actionId: String, highlighted: Boolean) {
+private fun ComboActionPreview(
+    primaryLabel: String,
+    secondaryLabel: String?
+) {
     Surface(
-        shape = neonShape(10.dp),
+        color = Color.White.copy(alpha = 0.06f),
+        shape = neonShape(16.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            ComboActionBadge(label = primaryLabel, highlighted = true)
+            Text(
+                text = "+",
+                modifier = Modifier.padding(horizontal = 12.dp),
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White.copy(alpha = 0.6f)
+            )
+            if (secondaryLabel != null) {
+                ComboActionBadge(label = secondaryLabel, highlighted = false)
+            } else {
+                Text(
+                    text = "—",
+                    style = MaterialTheme.typography.titleLarge,
+                    color = Color.White.copy(alpha = 0.35f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ComboActionBadge(
+    label: String,
+    highlighted: Boolean
+) {
+    Surface(
         color = if (highlighted) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+            Color(0xFF3565FF).copy(alpha = 0.32f)
         } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            Color(0xFF45E6FF).copy(alpha = 0.22f)
         },
-        contentColor = MaterialTheme.colorScheme.onSurface
+        shape = neonShape(12.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (highlighted) {
+                Color(0xFF7CC8FF).copy(alpha = 0.7f)
+            } else {
+                Color(0xFF45E6FF).copy(alpha = 0.6f)
+            }
+        )
     ) {
         Text(
-            text = actionLabel(actionId),
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold
+            text = label,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            color = Color.White
         )
     }
 }
@@ -1129,44 +1281,23 @@ private fun ComboActionBadge(actionId: String, highlighted: Boolean) {
 @Composable
 private fun ComboActionSection(
     title: String,
-    selectedActionId: String?,
-    testTagPrefix: String,
-    subtitle: String? = null,
-    excludedActionId: String? = null,
-    allowNone: Boolean = false,
-    onSelect: (String?) -> Unit
+    description: String? = null,
+    content: @Composable () -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = neonShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-    ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                if (subtitle != null) {
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            ActionSelector(
-                selectedActionId = selectedActionId,
-                excludedActionId = excludedActionId,
-                allowNone = allowNone,
-                testTagPrefix = testTagPrefix,
-                onSelect = onSelect
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+            color = Color(0xFF9DB4FF)
+        )
+        description?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.62f)
             )
         }
+        content()
     }
 }
 
