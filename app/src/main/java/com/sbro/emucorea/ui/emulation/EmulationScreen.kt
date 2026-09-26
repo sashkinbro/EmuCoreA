@@ -189,6 +189,7 @@ import com.sbro.emucorea.data.GameMenuSectionId
 import com.sbro.emucorea.data.GameMenuLayoutStyle
 import com.sbro.emucorea.data.gameMenuSectionsForTab
 import com.sbro.emucorea.ui.common.CustomControlVisual
+import com.sbro.emucorea.ui.common.actionDrawableRes
 import com.sbro.emucorea.ui.common.composeShape
 import com.sbro.emucorea.ui.common.BitmapPathImage
 import com.sbro.emucorea.ui.common.EmulationSideArtworkOverlay
@@ -2681,7 +2682,10 @@ private fun TouchButtonGroup(
                     )
                 }
             val pressed = activeTargets.containsValue(spec.id) || latchedTargets[spec.id] == true
-            if (spec.customControl != null) {
+            val vectorDrawable = spec.customControl
+                ?.takeIf { it.usesVectorStyle }
+                ?.let { actionDrawableRes(it.actionId) }
+            if (spec.customControl != null && vectorDrawable == null) {
                 CustomControlVisual(
                     control = spec.customControl,
                     pressed = pressed,
@@ -2689,7 +2693,7 @@ private fun TouchButtonGroup(
                 )
             } else {
                 VectorOverlayButton(
-                    drawableRes = requireNotNull(spec.drawableRes),
+                    drawableRes = vectorDrawable ?: requireNotNull(spec.drawableRes),
                     width = spec.width,
                     height = spec.height,
                     shape = spec.shape,
