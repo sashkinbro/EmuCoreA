@@ -261,6 +261,7 @@ data class SettingsUiState(
     val touchHaptics: Boolean = false,
     val touchHapticsPreset: Int = AppPreferences.DEFAULT_TOUCH_HAPTICS_PRESET,
     val touchHapticsStrength: Int = AppPreferences.DEFAULT_TOUCH_HAPTICS_STRENGTH,
+    val stickToggleTarget: Int = AppPreferences.DEFAULT_STICK_TOGGLE_TARGET,
     val gyroMode: Int = AppPreferences.GYRO_MODE_OFF,
     val gyroSensitivity: Int = AppPreferences.DEFAULT_GYRO_SENSITIVITY,
     val gyroSmoothing: Int = AppPreferences.DEFAULT_GYRO_SMOOTHING,
@@ -371,6 +372,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             preferences.cleanupLegacyClampingPreferencesIfNeeded()
             preferences.settingsSnapshot.collect { snapshot ->
                 applySettingsSnapshot(snapshot)
+            }
+        }
+        viewModelScope.launch {
+            preferences.stickToggleTarget.collect { target ->
+                _uiState.value = _uiState.value.copy(stickToggleTarget = target)
             }
         }
         viewModelScope.launch {
@@ -1333,6 +1339,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { preferences.setTouchscreenRightStickSensitivity(value) }
     }
     fun setTouchHapticsPreset(value: Int) { viewModelScope.launch { preferences.setTouchHapticsPreset(value) } }
+    fun setStickToggleTarget(value: Int) {
+        viewModelScope.launch { preferences.setStickToggleTarget(value) }
+    }
     fun setTouchHapticsStrength(value: Int) { viewModelScope.launch { preferences.setTouchHapticsStrength(value) } }
     fun setGyroMode(value: Int) { viewModelScope.launch { preferences.setGyroMode(value) } }
     fun setGyroSensitivity(value: Int) { viewModelScope.launch { preferences.setGyroSensitivity(value) } }

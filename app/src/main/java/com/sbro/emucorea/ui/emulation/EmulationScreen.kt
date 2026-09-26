@@ -1430,6 +1430,7 @@ fun EmulationScreen(
                     centerOffset = uiState.centerOffset,
                     controlLayouts = uiState.controlLayouts,
                     racingMode = uiState.racingMode,
+                    stickToggleTarget = uiState.stickToggleTarget,
                     onToggleLeftInputMode = viewModel::toggleLeftInputMode,
                     onPadInput = { keyCode, range, pressed ->
                         viewModel.onPadInput(overlayPadIndex, keyCode, range, pressed)
@@ -2071,6 +2072,7 @@ private fun LocalMultiplayerTouchZone(
             centerOffset = uiState.centerOffset,
             controlLayouts = uiState.controlLayouts,
             racingMode = uiState.racingMode,
+            stickToggleTarget = uiState.stickToggleTarget,
             onToggleLeftInputMode = onToggleLeftInputMode,
             onPadInput = { key, range, pressed -> onPadInput(padIndex, key, range, pressed) },
             respectSystemInsets = false
@@ -2128,6 +2130,7 @@ private fun OnScreenControls(
     centerOffset: Pair<Float, Float>,
     controlLayouts: Map<String, OverlayControlLayout>,
     racingMode: Boolean,
+    stickToggleTarget: Int = AppPreferences.DEFAULT_STICK_TOGGLE_TARGET,
     onToggleLeftInputMode: () -> Unit,
     onPadInput: (Int, Int, Boolean) -> Unit,
     respectSystemInsets: Boolean = true
@@ -2249,10 +2252,13 @@ private fun OnScreenControls(
             safeLeftInset = safeLeft,
             safeRightInset = safeRight,
             safeTopInset = safeTop,
-            safeBottomInset = safeBottom
+            safeBottomInset = safeBottom,
+            stickToggleTarget = stickToggleTarget
         )
         var extraDpadDirections by remember { mutableStateOf(emptySet<OverlayDpadDirection>()) }
         val currentExtraDpadDirections by rememberUpdatedState(extraDpadDirections)
+        var toggleDpadDirections by remember { mutableStateOf(emptySet<OverlayDpadDirection>()) }
+        val currentToggleDpadDirections by rememberUpdatedState(toggleDpadDirections)
 
         fun dpadKeyFor(direction: OverlayDpadDirection): Int = when (direction) {
             OverlayDpadDirection.Up -> PadKey.UP
@@ -2274,9 +2280,25 @@ private fun OnScreenControls(
             extraDpadDirections = next
         }
 
+        fun updateToggleDpadDirections(next: Set<OverlayDpadDirection>) {
+            val released = toggleDpadDirections - next
+            val pressed = next - toggleDpadDirections
+            released.forEach { direction -> currentOnPadInput(dpadKeyFor(direction), 0, false) }
+            if (pressed.isNotEmpty()) {
+                performTouchHaptic(ButtonPhase.PRESS)
+            } else if (released.isNotEmpty()) {
+                performTouchHaptic(ButtonPhase.RELEASE)
+            }
+            pressed.forEach { direction -> currentOnPadInput(dpadKeyFor(direction), 0, true) }
+            toggleDpadDirections = next
+        }
+
         DisposableEffect(Unit) {
             onDispose {
                 currentExtraDpadDirections.forEach { direction ->
+                    currentOnPadInput(dpadKeyFor(direction), 0, false)
+                }
+                currentToggleDpadDirections.forEach { direction ->
                     currentOnPadInput(dpadKeyFor(direction), 0, false)
                 }
             }
@@ -2378,6 +2400,19 @@ private fun OnScreenControls(
                 visualStyle = visualStyle,
                 pressEffect = pressEffect,
                 onDirectionsChange = ::updateExtraDpadDirections,
+                modifier = Modifier.offset {
+                    IntOffset(cluster.x.roundToPx(), cluster.y.roundToPx())
+                }
+            )
+        }
+
+        layout.toggleDpad?.takeIf { it.visible }?.let { cluster ->
+            VectorDpadCluster(
+                size = cluster.size,
+                alpha = cluster.opacity / 100f,
+                visualStyle = visualStyle,
+                pressEffect = pressEffect,
+                onDirectionsChange = ::updateToggleDpadDirections,
                 modifier = Modifier.offset {
                     IntOffset(cluster.x.roundToPx(), cluster.y.roundToPx())
                 }

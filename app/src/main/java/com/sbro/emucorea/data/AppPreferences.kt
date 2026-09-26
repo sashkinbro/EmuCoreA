@@ -350,7 +350,7 @@ class AppPreferences(private val context: Context) {
         )
 
         const val DEFAULT_LOCAL_LINK_PORT = 19072
-        private const val CURRENT_OVERLAY_LAYOUT_VERSION = 17
+        private const val CURRENT_OVERLAY_LAYOUT_VERSION = 18
         const val DEFAULT_NTSC_FRAMERATE = 59.94f
         const val MIN_REGION_FRAMERATE = 50f
         const val MAX_REGION_FRAMERATE = 65f
@@ -426,6 +426,12 @@ class AppPreferences(private val context: Context) {
         const val DEFAULT_PRESSURE_MODIFIER_AMOUNT = 50
         const val DEFAULT_PAD_VIBRATION_STRENGTH = 100
         const val DEFAULT_TOUCH_HAPTICS_STRENGTH = 60
+        const val STICK_TOGGLE_LEFT = 0
+        const val STICK_TOGGLE_RIGHT = 1
+        const val DEFAULT_STICK_TOGGLE_TARGET = STICK_TOGGLE_LEFT
+
+        fun normalizeStickToggleTarget(value: Int): Int =
+            if (value == STICK_TOGGLE_LEFT) STICK_TOGGLE_LEFT else STICK_TOGGLE_RIGHT
         const val TOUCH_HAPTICS_PRESET_SOFT = 0
         const val TOUCH_HAPTICS_PRESET_BALANCED = 1
         const val TOUCH_HAPTICS_PRESET_CRISP = 2
@@ -470,6 +476,9 @@ class AppPreferences(private val context: Context) {
             "dpad_left" to OverlayControlLayout(visible = false),
             "dpad_right" to OverlayControlLayout(visible = false),
             "dpad_cluster" to OverlayControlLayout(visible = true),
+            // Dedicated second D-pad owned by the stick toggle button: it replaces the
+            // selected stick and follows it. Never the editor-managed extra D-pad.
+            "dpad_toggle" to OverlayControlLayout(visible = false),
             "left_stick" to OverlayControlLayout(scale = stickScale, widthScale = 160, visible = true),
             "triangle" to OverlayControlLayout(),
             "cross" to OverlayControlLayout(),
@@ -477,7 +486,7 @@ class AppPreferences(private val context: Context) {
             "circle" to OverlayControlLayout(),
             "right_stick" to OverlayControlLayout(scale = stickScale, widthScale = 160, visible = false),
             "select" to OverlayControlLayout(scale = 80),
-            "left_input_toggle" to OverlayControlLayout(scale = 80, visible = false),
+            "left_input_toggle" to OverlayControlLayout(scale = 80),
             "start" to OverlayControlLayout(scale = 80),
             "fast_forward" to OverlayControlLayout(scale = 80, visible = false),
             "rewind" to OverlayControlLayout(scale = 80, visible = false)
@@ -757,6 +766,7 @@ class AppPreferences(private val context: Context) {
         private val INVERT_LEFT_STICK_HORIZONTAL = booleanPreferencesKey("invert_left_stick_horizontal")
         private val INVERT_RIGHT_STICK_HORIZONTAL = booleanPreferencesKey("invert_right_stick_horizontal")
         private val STICK_SURFACE_MODE = booleanPreferencesKey("stick_surface_mode")
+        private val STICK_TOGGLE_TARGET = intPreferencesKey("stick_toggle_target")
         private val CONTROL_LAYOUTS = stringPreferencesKey("control_layouts")
         private val OVERLAY_LAYOUT_VERSION = intPreferencesKey("overlay_layout_version")
     }
@@ -3763,6 +3773,16 @@ class AppPreferences(private val context: Context) {
     }
 
     val leftStickSensitivity: Flow<Int> = context.dataStore.data.map { it[LEFT_STICK_SENSITIVITY] ?: 100 }
+
+    val stickToggleTarget: Flow<Int> = context.dataStore.data.map { prefs ->
+        normalizeStickToggleTarget(prefs[STICK_TOGGLE_TARGET] ?: DEFAULT_STICK_TOGGLE_TARGET)
+    }
+
+    suspend fun setStickToggleTarget(target: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[STICK_TOGGLE_TARGET] = normalizeStickToggleTarget(target)
+        }
+    }
 
     suspend fun setLeftStickSensitivity(value: Int) {
         context.dataStore.edit { prefs ->

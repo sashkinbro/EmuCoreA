@@ -60,6 +60,7 @@ import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.AutoFixHigh
 import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.BugReport
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudSync
@@ -1323,6 +1324,10 @@ private fun SettingsContent(
                             actionLabel = stringResource(R.string.settings_edit_controls_action),
                             onClick = { onOpenControlsLayoutEditor?.invoke() },
                             enabled = onOpenControlsLayoutEditor != null
+                        )
+                        StickToggleTargetPicker(
+                            selected = uiState.stickToggleTarget,
+                            onSelect = viewModel::setStickToggleTarget
                         )
                         SliderItem(
                             icon = Icons.Rounded.TouchApp,
@@ -2900,6 +2905,47 @@ private fun GameMenuLayoutStylePicker(
         }
     }
     SettingsInlineNote(stringResource(R.string.settings_game_menu_layout_help))
+}
+
+@Composable
+private fun StickToggleTargetPicker(
+    selected: Int,
+    onSelect: (Int) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.settings_stick_toggle_target),
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+        )
+        Text(
+            text = stringResource(R.string.settings_stick_toggle_target_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(
+                AppPreferences.STICK_TOGGLE_LEFT to R.string.settings_stick_toggle_target_left,
+                AppPreferences.STICK_TOGGLE_RIGHT to R.string.settings_stick_toggle_target_right
+            ).forEach { (target, labelRes) ->
+                val isSelected = AppPreferences.normalizeStickToggleTarget(selected) == target
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onSelect(target) },
+                    label = { Text(stringResource(labelRes)) },
+                    leadingIcon = if (isSelected) {
+                        { Icon(Icons.Rounded.Check, contentDescription = null) }
+                    } else {
+                        null
+                    }
+                )
+            }
+        }
+    }
 }
 
 @Composable

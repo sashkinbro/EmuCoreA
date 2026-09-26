@@ -50,6 +50,7 @@ import com.sbro.emucorea.data.TouchControlsLayoutProfile
 import com.sbro.emucorea.data.PER_GAME_CUSTOM_TOUCH_CONTROLS_KEY
 import com.sbro.emucorea.data.PER_GAME_TOUCH_CONTROLS_LAYOUT_KEY
 import com.sbro.emucorea.data.saveTouchControlsLayout
+import com.sbro.emucorea.data.toggleStick
 import com.sbro.emucorea.data.withCustomTouchControls
 import com.sbro.emucorea.data.withTouchControlsLayout
 import com.sbro.emucorea.data.withoutTouchControlsLayout
@@ -169,6 +170,7 @@ data class EmulationUiState(
     val rbtnOffset: Pair<Float, Float> = AppPreferences.DEFAULT_RBTN_OFFSET_X to AppPreferences.DEFAULT_RBTN_OFFSET_Y,
     val centerOffset: Pair<Float, Float> = AppPreferences.DEFAULT_CENTER_OFFSET_X to AppPreferences.DEFAULT_CENTER_OFFSET_Y,
     val stickScale: Int = 100,
+    val stickToggleTarget: Int = AppPreferences.DEFAULT_STICK_TOGGLE_TARGET,
     val leftStickSensitivity: Int = 100,
     val rightStickSensitivity: Int = 100,
     val invertLeftStick: Boolean = false,
@@ -767,6 +769,11 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                         ?.touchControlPressEffect
                 }
                 _uiState.value = _uiState.value.copy(touchControlPressEffect = override ?: effect)
+            }
+        }
+        viewModelScope.launch {
+            preferences.stickToggleTarget.collect { target ->
+                _uiState.value = _uiState.value.copy(stickToggleTarget = target)
             }
         }
         viewModelScope.launch {
@@ -2521,28 +2528,21 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     fun toggleLeftInputMode() {
         viewModelScope.launch {
             val current = _uiState.value
-            val updatedLayouts = current.controlLayouts.toMutableMap()
-            val defaults = AppPreferences.defaultOverlayControlLayouts(current.stickScale)
-            val leftStickLayout = updatedLayouts["left_stick"] ?: defaults["left_stick"] ?: OverlayControlLayout(scale = current.stickScale)
-            val showingStick = leftStickLayout.visible
-
-            // Keep the DualShock: hiding the touch stick only stops stick input,
+            // Keep the DualShock: switching to the D-pad only stops stick input,
             // it must not demote the port to a digital pad (which kills rumble).
             NativeApp.setPadAnalogMode(0, true)
 
-            updatedLayouts["left_stick"] = leftStickLayout.copy(visible = !showingStick)
-            listOf("dpad_up", "dpad_down", "dpad_left", "dpad_right").forEach { id ->
-                val currentLayout = updatedLayouts[id] ?: defaults[id] ?: OverlayControlLayout()
-                updatedLayouts[id] = currentLayout.copy(visible = showingStick)
-            }
+            val profile = current.toTouchControlsLayoutProfile()
+            val toggled = profile.toggleStick(current.stickToggleTarget)
+            persistTouchControlsLayout(current.withTouchControlsLayout(toggled))
+        }
+    }
 
-            persistTouchControlsLayout(
-                current.copy(
-                    controlLayouts = updatedLayouts,
-                    dpadOffset = current.lstickOffset,
-                    lstickOffset = current.dpadOffset
-                )
-            )
+    fun setStickToggleTarget(target: Int) {
+        val normalized = AppPreferences.normalizeStickToggleTarget(target)
+        _uiState.value = _uiState.value.copy(stickToggleTarget = normalized)
+        viewModelScope.launch {
+            preferences.setStickToggleTarget(normalized)
         }
     }
 

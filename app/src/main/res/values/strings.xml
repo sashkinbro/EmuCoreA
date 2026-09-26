@@ -755,6 +755,10 @@
     <string name="settings_edit_controls_action">Edit</string>
     <string name="settings_edit_global_controls">Default Touch Layout</string>
     <string name="settings_edit_global_controls_desc">Set the touch controls used by every game that does not have its own layout.</string>
+    <string name="settings_stick_toggle_target">D-pad toggle button</string>
+    <string name="settings_stick_toggle_target_desc">The dot button in the middle swaps the chosen analog stick for a D-pad in the same place.</string>
+    <string name="settings_stick_toggle_target_left">Left stick</string>
+    <string name="settings_stick_toggle_target_right">Right stick</string>
     <string name="game_settings_edit_controls">Edit This Game\'s Touch Layout</string>
     <string name="game_settings_edit_controls_desc">Changes here apply only to this game. Reset the layout in the editor to use the global layout again.</string>
     <string name="controls_editor_title">Edit Layout</string>
