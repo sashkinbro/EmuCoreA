@@ -2205,11 +2205,12 @@ private fun CustomizationSettingsTab(
     val windowSize = LocalWindowInfo.current.containerSize
     val windowWidthDp = with(density) { windowSize.width.toDp().value.roundToInt() }.coerceAtLeast(1)
     val windowHeightDp = with(density) { windowSize.height.toDp().value.roundToInt() }.coerceAtLeast(1)
+    var previewGridScale by remember(uiState.homeGridScale) { mutableFloatStateOf(uiState.homeGridScale) }
     val previewColumns = calculateHomeGridColumnCount(
         screenWidthDp = windowWidthDp,
         screenHeightDp = windowHeightDp,
         smallestScreenWidthDp = minOf(windowWidthDp, windowHeightDp),
-        gridScale = uiState.homeGridScale
+        gridScale = previewGridScale
     )
     val sideArtworkPreviewLayout = calculateSideArtworkPreviewLayout(windowWidthDp, windowHeightDp)
     val backgroundRepository = remember(context) { HomeBackgroundRepository(context) }
@@ -2326,7 +2327,7 @@ private fun CustomizationSettingsTab(
                         repeat(previewColumns) { index ->
                             Surface(
                                 modifier = Modifier
-                                    .width(52.dp * uiState.homeGridScale)
+                                    .width(52.dp * previewGridScale)
                                     .aspectRatio(GameCoverAspectRatio),
                                 shape = neonShape(10.dp),
                                 color = when (index % 3) {
@@ -2376,6 +2377,21 @@ private fun CustomizationSettingsTab(
                 }
             }
         }
+        SliderItem(
+            icon = Icons.Rounded.Wallpaper,
+            title = stringResource(R.string.settings_customization_grid_size),
+            subtitle = "",
+            value = uiState.homeGridScale,
+            range = AppPreferences.MIN_HOME_GRID_SCALE..AppPreferences.MAX_HOME_GRID_SCALE,
+            steps = 19,
+            onValueChange = viewModel::setHomeGridScale,
+            onValueChangeLive = { previewGridScale = it },
+            valueLabel = { "${(it * 100).roundToInt()}%" },
+            helpText = stringResource(R.string.settings_customization_grid_size_help),
+            onResetToDefault = {
+                viewModel.setHomeGridScale(AppPreferences.DEFAULT_HOME_GRID_SCALE)
+            }
+        )
     }
 
     SettingsSection(title = stringResource(R.string.settings_customization_background_section)) {
@@ -2574,23 +2590,6 @@ private fun CustomizationSettingsTab(
                 onClick = viewModel::clearCustomEmulationSideArtwork
             )
         }
-    }
-
-    SettingsSection(title = stringResource(R.string.settings_customization_library_section)) {
-        SliderItem(
-            icon = Icons.Rounded.Wallpaper,
-            title = stringResource(R.string.settings_customization_grid_size),
-            subtitle = "",
-            value = uiState.homeGridScale,
-            range = AppPreferences.MIN_HOME_GRID_SCALE..AppPreferences.MAX_HOME_GRID_SCALE,
-            steps = 19,
-            onValueChange = viewModel::setHomeGridScale,
-            valueLabel = { "${(it * 100).roundToInt()}%" },
-            helpText = stringResource(R.string.settings_customization_grid_size_help),
-            onResetToDefault = {
-                viewModel.setHomeGridScale(AppPreferences.DEFAULT_HOME_GRID_SCALE)
-            }
-        )
     }
 
     SettingsSection(title = stringResource(R.string.settings_customization_drawer_section)) {
