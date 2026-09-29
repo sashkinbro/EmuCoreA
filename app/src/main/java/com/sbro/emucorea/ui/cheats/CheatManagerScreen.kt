@@ -218,7 +218,9 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
                         if (!resolved.serial.isNullOrBlank() && !resolved.crc.isNullOrBlank()) {
                             "${resolved.serial}_${resolved.crc}"
                         } else resolved.crc ?: resolved.serial
-                    } ?: fallbackName ?: "cheat_${System.currentTimeMillis()}"
+                    } ?: selectedGame?.serial?.takeIf { it.isNotBlank() }
+                        ?: fallbackName
+                        ?: "cheat_${System.currentTimeMillis()}"
                     cheatRepository.importCheatFile(gameKey, text, enableAllByDefault = false)
                 }.getOrDefault(0)
             }

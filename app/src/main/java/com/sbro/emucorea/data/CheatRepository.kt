@@ -103,21 +103,26 @@ class CheatRepository(private val context: Context) {
                 .filter { old.contains(it.id) }
                 .map(::cheatBlockSignature)
                 .toSet()
-        val importedBlocks = parseCheatBlocks(contents)
+        val importedBlocks = parseCheatBlocks(contents, serialFromGameKey(normalizedGameKey))
         if (importedBlocks.isEmpty()) return@synchronized 0
         val blocks = if (mergeWithExisting) {
             mergeCheatBlocks(existingBlocks, importedBlocks)
         } else {
             importedBlocks
         }
-        val storedContents = if (mergeWithExisting) serializeCheatBlocks(blocks) else contents
+        val storedContents = if (mergeWithExisting || isPpssppCheatFileContents(contents)) {
+            serializeCheatBlocks(blocks)
+        } else {
+            contents
+        }
         target.parentFile?.mkdirs()
         writeTextAtomically(target, storedContents)
         val enabledIds = if (enableAllByDefault) {
             blocks.map { it.id }
         } else {
-            blocks.filter { old.contains(it.id) || cheatBlockSignature(it) in oldEnabledSignatures }
-                .map { it.id }
+            blocks.filter {
+                it.enabled || old.contains(it.id) || cheatBlockSignature(it) in oldEnabledSignatures
+            }.map { it.id }
         }
         state.put(normalizedGameKey, JSONArray(enabledIds))
         if (normalizedGameKey != gameKey) state.remove(gameKey)
@@ -138,6 +143,7 @@ class CheatRepository(private val context: Context) {
             } else {
                 previous.copy(
                     lines = (previous.lines + block.lines).distinct(),
+                    enabled = previous.enabled || block.enabled,
                     author = previous.author ?: block.author
                 )
             }
@@ -335,6 +341,17 @@ class CheatRepository(private val context: Context) {
 
     private fun normalizeGameKey(gameKey: String): String = sanitizeFileName(gameKey).ifBlank { "cheat" }
 
+    private fun serialFromGameKey(gameKey: String): String? =
+        GAME_SERIAL_REGEX.find(gameKey)?.value?.let(::normalizeCheatSerial)
+
+    private fun isPpssppCheatFileContents(contents: String): Boolean =
+        contents.lineSequence().any { line ->
+            val trimmed = line.trimStart('\uFEFF', ' ', '\t')
+            trimmed.startsWith("_S ", ignoreCase = true) ||
+                trimmed.startsWith("_L ", ignoreCase = true) ||
+                trimmed.startsWith("_C", ignoreCase = true)
+        }
+
     private fun inferSerialAndCrc(gameKey: String): Pair<String?, String>? {
         val serialAndCrc = Regex("^([A-Z]{4}[-_]?\\d{5})[_-]([0-9A-F]{8})$", RegexOption.IGNORE_CASE)
             .matchEntire(gameKey)
@@ -460,150 +477,9 @@ class CheatRepository(private val context: Context) {
 
     private companion object {
         val CHEAT_IO_LOCK = Any()
-
-        val PATCH_LINE_REGEX = Regex(
-            pattern = "patch\\s*=\\s*[0-2]\\s*,\\s*(?:EE|IOP|(?:0x)?[0-9A-Fa-f]+)\\s*,\\s*" +
-                "([0-9A-Fa-f]{8})\\s*,\\s*(byte|short|word|[0-2])\\s*,\\s*([0-9A-Fa-f]+)",
-            option = RegexOption.IGNORE_CASE
-        )
-
-        val RAW_CODE_REGEX = Regex("[0-9A-Fa-f]{8}[\\s:+-]+[0-9A-Fa-f]{1,8}")
-
-        val AUTHOR_LINE_REGEX = Regex("^author\\s*=\\s*(.+)$", RegexOption.IGNORE_CASE)
-
-        val LIBRETRO_DESC_REGEX = Regex("^cheat\\d+_desc\\s*=\\s*\"?(.*?)\"?\\s*$", RegexOption.IGNORE_CASE)
-        val LIBRETRO_CODE_REGEX = Regex("^cheat\\d+_code\\s*=\\s*\"?(.+?)\"?\\s*$", RegexOption.IGNORE_CASE)
-        val LIBRETRO_COUNT_REGEX = Regex("^cheats\\s*=\\s*\\d+\\s*$", RegexOption.IGNORE_CASE)
-        val LIBRETRO_TOGGLE_REGEX = Regex("^cheat\\d+_enable\\s*=.*$", RegexOption.IGNORE_CASE)
-        val METADATA_LINE_REGEX = Regex("^[A-Za-z][A-Za-z0-9 _]*\\s*=.*$")
     }
 
     internal fun parsePatchBlocks(raw: String): List<CheatBlock> = parseCheatBlocks(raw)
-
-    private fun parseCheatBlocks(raw: String): List<CheatBlock> {
-        val lines = raw.lineSequence().map { it.trimEnd() }.toList()
-        val blocks = mutableListOf<CheatBlock>()
-        var currentTitle: String? = null
-        var currentAuthor: String? = null
-        var currentLines = mutableListOf<String>()
-        var index = 1
-
-        fun flush() {
-            val usefulLines = currentLines.filter { line ->
-                val trimmed = line.trimStart()
-                trimmed.startsWith("patch=", ignoreCase = true) ||
-                    trimmed.startsWith("dpatch=", ignoreCase = true) ||
-                    RAW_CODE_REGEX.matchEntire(trimmed) != null
-            }
-            if (usefulLines.isEmpty()) {
-                currentLines = mutableListOf()
-                return
-            }
-            val title = currentTitle?.takeIf { it.isNotBlank() } ?: "Cheat $index"
-            val slug = title.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
-            blocks += CheatBlock(
-                id = "${slug.ifBlank { "cheat" }}_$index",
-                title = title,
-                lines = usefulLines,
-                enabled = false,
-                author = currentAuthor?.takeIf { it.isNotBlank() }
-            )
-            index++
-            currentTitle = null
-            currentAuthor = null
-            currentLines = mutableListOf()
-        }
-
-        lines.forEach { line ->
-            val trimmed = line.trim()
-            val libretroDesc = LIBRETRO_DESC_REGEX.matchEntire(trimmed)
-            val libretroCode = LIBRETRO_CODE_REGEX.matchEntire(trimmed)
-            val semicolonLabel = trimmed.takeIf { it.startsWith(";") }
-                ?.removePrefix(";")
-                ?.trim()
-                ?.takeIf { it.startsWith("[") && it.endsWith("]") }
-                ?.removeSurrounding("[", "]")
-                ?.trim()
-            val label = when {
-                trimmed.startsWith("//") -> trimmed.removePrefix("//").trim()
-                trimmed.startsWith("comment=", ignoreCase = true) -> trimmed.substringAfter('=').trim()
-                trimmed.startsWith("[") && trimmed.endsWith("]") -> trimmed.removeSurrounding("[", "]").trim()
-                !semicolonLabel.isNullOrBlank() -> semicolonLabel
-                libretroDesc != null -> libretroDesc.groupValues[1].trim()
-                else -> null
-            }
-            val isPatchLine = trimmed.startsWith("patch=", ignoreCase = true) ||
-                trimmed.startsWith("dpatch=", ignoreCase = true)
-            val codeCandidate = trimmed.substringBefore("//").substringBefore("#").trim()
-            val isRawCode = RAW_CODE_REGEX.matchEntire(codeCandidate) != null
-            val libretroCodes = libretroCode
-                ?.groupValues
-                ?.get(1)
-                ?.split('+')
-                ?.map(String::trim)
-                ?.filter(String::isNotEmpty)
-                .orEmpty()
-                .chunked(2)
-                .filter { it.size == 2 }
-                .map { "${it[0]} ${it[1]}" }
-                .filter { RAW_CODE_REGEX.matchEntire(it) != null }
-            when {
-                libretroCode != null -> {
-                    if (libretroCodes.isNotEmpty()) currentLines += libretroCodes
-                }
-                !label.isNullOrBlank() -> {
-                    if (currentLines.isNotEmpty()) {
-                        flush()
-                    }
-                    currentTitle = label
-                    currentAuthor = null
-                }
-                AUTHOR_LINE_REGEX.matchEntire(trimmed) != null -> {
-                    currentAuthor = AUTHOR_LINE_REGEX.matchEntire(trimmed)
-                        ?.groupValues?.get(1)?.trim()
-                        ?.takeIf { it.isNotBlank() }
-                }
-                isPatchLine -> currentLines += trimmed
-                METADATA_LINE_REGEX.matchEntire(trimmed) != null ||
-                    LIBRETRO_COUNT_REGEX.matchEntire(trimmed) != null ||
-                    LIBRETRO_TOGGLE_REGEX.matchEntire(trimmed) != null -> Unit
-                isRawCode && currentTitle != null -> currentLines += codeCandidate
-            }
-        }
-        flush()
-        val parsedBlocks = blocks.ifEmpty {
-            lines
-                .mapNotNull { line ->
-                    line.trim().takeIf { value ->
-                        value.startsWith("patch=", ignoreCase = true) ||
-                            value.startsWith("dpatch=", ignoreCase = true) ||
-                            RAW_CODE_REGEX.matchEntire(value) != null
-                    }
-                }
-                .mapIndexed { idx, line ->
-                    CheatBlock(
-                        id = "cheat_${idx + 1}",
-                        title = "Cheat ${idx + 1}",
-                        lines = listOf(line),
-                        enabled = false
-                    )
-                }
-        }
-        val merged = linkedMapOf<String, CheatBlock>()
-        parsedBlocks.forEach { block ->
-            val key = block.title.trim().lowercase()
-            val existing = merged[key]
-            merged[key] = if (existing == null) {
-                block
-            } else {
-                existing.copy(
-                    lines = (existing.lines + block.lines).distinct(),
-                    author = existing.author ?: block.author
-                )
-            }
-        }
-        return merged.values.toList()
-    }
 
     private fun cheatBlockLabel(block: CheatBlock): String {
         val author = block.author?.trim().orEmpty()
@@ -624,4 +500,186 @@ private fun JSONArray.toStringSet(): Set<String> {
             if (value.isNotBlank()) add(value)
         }
     }
+}
+
+private val RAW_CODE_REGEX = Regex("[0-9A-Fa-f]{8}[\\s:+-]+[0-9A-Fa-f]{1,8}")
+
+private val AUTHOR_LINE_REGEX = Regex("^author\\s*=\\s*(.+)$", RegexOption.IGNORE_CASE)
+
+private val LIBRETRO_DESC_REGEX = Regex("^cheat\\d+_desc\\s*=\\s*\"?(.*?)\"?\\s*$", RegexOption.IGNORE_CASE)
+private val LIBRETRO_CODE_REGEX = Regex("^cheat\\d+_code\\s*=\\s*\"?(.+?)\"?\\s*$", RegexOption.IGNORE_CASE)
+private val LIBRETRO_COUNT_REGEX = Regex("^cheats\\s*=\\s*\\d+\\s*$", RegexOption.IGNORE_CASE)
+private val LIBRETRO_TOGGLE_REGEX = Regex("^cheat\\d+_enable\\s*=.*$", RegexOption.IGNORE_CASE)
+private val METADATA_LINE_REGEX = Regex("^[A-Za-z][A-Za-z0-9 _]*\\s*=.*$")
+
+private val PPSSPP_GAME_ID_REGEX = Regex("^_[Ss]\\s+(.+?)\\s*$")
+private val PPSSPP_CHEAT_NAME_REGEX = Regex("^_[Cc]([0-9])\\s*(.*)$")
+private val PPSSPP_CODE_REGEX = Regex(
+    "^_[Ll]\\s+(?:0x)?([0-9A-Fa-f]{1,8})\\s+(?:0x)?([0-9A-Fa-f]{1,8})\\s*$"
+)
+private val GAME_SERIAL_REGEX = Regex(
+    "(?<![A-Za-z0-9])([A-Za-z]{4})[-_]?(\\d{5})(?![0-9A-Fa-f])"
+)
+
+private fun normalizeCheatSerial(value: String?): String? =
+    value?.uppercase(Locale.US)?.replace(Regex("[^A-Z0-9]"), "")?.takeIf { it.isNotBlank() }
+
+internal fun parseCheatBlocks(raw: String, serialFilter: String? = null): List<CheatBlock> {
+    val targetSerial = normalizeCheatSerial(serialFilter)
+    val lines = raw.trimStart('\uFEFF').lineSequence().map { it.trimEnd() }.toList()
+    val blocks = mutableListOf<CheatBlock>()
+    var currentTitle: String? = null
+    var currentAuthor: String? = null
+    var currentEnabled = false
+    var currentLines = mutableListOf<String>()
+    var index = 1
+    var currentSection: String? = null
+    var hasSections = false
+
+    fun flush() {
+        val usefulLines = currentLines.filter { line ->
+            val trimmed = line.trimStart()
+            trimmed.startsWith("patch=", ignoreCase = true) ||
+                trimmed.startsWith("dpatch=", ignoreCase = true) ||
+                RAW_CODE_REGEX.matchEntire(trimmed) != null
+        }
+        if (usefulLines.isEmpty()) {
+            currentLines = mutableListOf()
+            return
+        }
+        if (targetSerial != null && hasSections && currentSection != targetSerial) {
+            currentTitle = null
+            currentAuthor = null
+            currentEnabled = false
+            currentLines = mutableListOf()
+            return
+        }
+        val title = currentTitle?.takeIf { it.isNotBlank() } ?: "Cheat $index"
+        val slug = title.lowercase().replace(Regex("[^a-z0-9]+"), "_").trim('_')
+        blocks += CheatBlock(
+            id = "${slug.ifBlank { "cheat" }}_$index",
+            title = title,
+            lines = usefulLines,
+            enabled = currentEnabled,
+            author = currentAuthor?.takeIf { it.isNotBlank() }
+        )
+        index++
+        currentTitle = null
+        currentAuthor = null
+        currentEnabled = false
+        currentLines = mutableListOf()
+    }
+
+    lines.forEach { line ->
+        val trimmed = line.trim()
+        val ppssppGameId = PPSSPP_GAME_ID_REGEX.matchEntire(trimmed)
+        val ppssppCheatName = PPSSPP_CHEAT_NAME_REGEX.matchEntire(trimmed)
+        val ppssppCode = PPSSPP_CODE_REGEX.matchEntire(trimmed)
+        val libretroDesc = LIBRETRO_DESC_REGEX.matchEntire(trimmed)
+        val libretroCode = LIBRETRO_CODE_REGEX.matchEntire(trimmed)
+        val semicolonLabel = trimmed.takeIf { it.startsWith(";") }
+            ?.removePrefix(";")
+            ?.trim()
+            ?.takeIf { it.startsWith("[") && it.endsWith("]") }
+            ?.removeSurrounding("[", "]")
+            ?.trim()
+        val label = when {
+            trimmed.startsWith("//") -> trimmed.removePrefix("//").trim()
+            trimmed.startsWith("comment=", ignoreCase = true) -> trimmed.substringAfter('=').trim()
+            trimmed.startsWith("[") && trimmed.endsWith("]") -> trimmed.removeSurrounding("[", "]").trim()
+            !semicolonLabel.isNullOrBlank() -> semicolonLabel
+            libretroDesc != null -> libretroDesc.groupValues[1].trim()
+            else -> null
+        }
+        val isPatchLine = trimmed.startsWith("patch=", ignoreCase = true) ||
+            trimmed.startsWith("dpatch=", ignoreCase = true)
+        val codeCandidate = trimmed.substringBefore("//").substringBefore("#").trim()
+        val isRawCode = RAW_CODE_REGEX.matchEntire(codeCandidate) != null
+        val libretroCodes = libretroCode
+            ?.groupValues
+            ?.get(1)
+            ?.split('+')
+            ?.map(String::trim)
+            ?.filter(String::isNotEmpty)
+            .orEmpty()
+            .chunked(2)
+            .filter { it.size == 2 }
+            .map { "${it[0]} ${it[1]}" }
+            .filter { RAW_CODE_REGEX.matchEntire(it) != null }
+        when {
+            ppssppGameId != null -> {
+                hasSections = true
+                flush()
+                currentSection = normalizeCheatSerial(ppssppGameId.groupValues[1])
+            }
+            ppssppCheatName != null -> {
+                flush()
+                currentTitle = ppssppCheatName.groupValues[2].trim()
+                currentAuthor = null
+                currentEnabled = ppssppCheatName.groupValues[1] != "0"
+            }
+            ppssppCode != null -> {
+                if (currentTitle != null) {
+                    val address = ppssppCode.groupValues[1].uppercase(Locale.US).padStart(8, '0')
+                    val value = ppssppCode.groupValues[2].uppercase(Locale.US).padStart(8, '0')
+                    currentLines += "$address $value"
+                }
+            }
+            trimmed.startsWith("_") -> Unit
+            libretroCode != null -> {
+                if (libretroCodes.isNotEmpty()) currentLines += libretroCodes
+            }
+            !label.isNullOrBlank() -> {
+                if (currentLines.isNotEmpty()) {
+                    flush()
+                }
+                currentTitle = label
+                currentAuthor = null
+            }
+            AUTHOR_LINE_REGEX.matchEntire(trimmed) != null -> {
+                currentAuthor = AUTHOR_LINE_REGEX.matchEntire(trimmed)
+                    ?.groupValues?.get(1)?.trim()
+                    ?.takeIf { it.isNotBlank() }
+            }
+            isPatchLine -> currentLines += trimmed
+            METADATA_LINE_REGEX.matchEntire(trimmed) != null ||
+                LIBRETRO_COUNT_REGEX.matchEntire(trimmed) != null ||
+                LIBRETRO_TOGGLE_REGEX.matchEntire(trimmed) != null -> Unit
+            isRawCode && currentTitle != null -> currentLines += codeCandidate
+        }
+    }
+    flush()
+    val parsedBlocks = blocks.ifEmpty {
+        lines
+            .mapNotNull { line ->
+                line.trim().takeIf { value ->
+                    value.startsWith("patch=", ignoreCase = true) ||
+                        value.startsWith("dpatch=", ignoreCase = true) ||
+                        RAW_CODE_REGEX.matchEntire(value) != null
+                }
+            }
+            .mapIndexed { idx, line ->
+                CheatBlock(
+                    id = "cheat_${idx + 1}",
+                    title = "Cheat ${idx + 1}",
+                    lines = listOf(line),
+                    enabled = false
+                )
+            }
+    }
+    val merged = linkedMapOf<String, CheatBlock>()
+    parsedBlocks.forEach { block ->
+        val key = block.title.trim().lowercase()
+        val existing = merged[key]
+        merged[key] = if (existing == null) {
+            block
+        } else {
+            existing.copy(
+                lines = (existing.lines + block.lines).distinct(),
+                enabled = existing.enabled || block.enabled,
+                author = existing.author ?: block.author
+            )
+        }
+    }
+    return merged.values.toList()
 }
