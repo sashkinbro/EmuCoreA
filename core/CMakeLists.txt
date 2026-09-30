@@ -3,6 +3,10 @@ cmake_minimum_required(VERSION 3.16)
 project(PPSSPP)
 enable_testing()
 
+# Google Play requires 16 KiB page size support: keep every ELF load segment aligned
+# even when a toolchain default changes.
+add_link_options("-Wl,-z,max-page-size=16384" "-Wl,-z,common-page-size=16384")
+
 #This is supposed to work but doesn't!
 if(NOT ANDROID)
 	set(CMAKE_CXX_STANDARD 17)
