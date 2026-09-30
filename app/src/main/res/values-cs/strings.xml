@@ -2482,9 +2482,10 @@
     <string name="theme_manager_preview_body">Povrchy, text, zvýraznění a tvary se aktualizují okamžitě.</string>
     <string name="theme_manager_preview_toggle">Možnost rozhraní</string>
     <string name="theme_manager_preview_toggle_desc">Ovládací prvky si zachovají styl zvoleného motivu.</string>
-    <string name="core_update_reset_title">Nové jádro emulátoru</string>
+    <string name="core_update_reset_title">Aktualizace jádra</string>
     <string name="core_update_reset_body">Tato aktualizace obsahuje změny jádra emulátoru. Resetujte mezipaměť a konfiguraci, abyste předešli problémům.</string>
     <string name="core_update_reset_kept">BIOS, složky her, ovládání, uložení, paměťové karty a obaly zůstanou zachovány.</string>
-    <string name="core_update_reset_action">Resetovat nastavení emulátoru</string>
+    <string name="core_update_reset_action">Obnovit nastavení</string>
     <string name="core_update_reset_keep">Ponechat nastavení</string>
+    <string name="core_update_reset_done">Nastavení bylo obnoveno</string>
 </resources>
