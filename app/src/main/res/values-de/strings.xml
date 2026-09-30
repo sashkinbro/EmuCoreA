@@ -2463,4 +2463,9 @@
     <string name="theme_manager_preview_body">Oberflächen, Text, Akzente und Formen werden sofort aktualisiert.</string>
     <string name="theme_manager_preview_toggle">Interface-Option</string>
     <string name="theme_manager_preview_toggle_desc">Steuerelemente behalten das ausgewählte Theme-Styling bei.</string>
+    <string name="core_update_reset_title">Neuer Emulator-Core</string>
+    <string name="core_update_reset_body">Dieses Update enthält Änderungen am Emulator-Core. Setze Emulator-Cache und Konfiguration zurück, damit der neue Core ohne Fehler läuft.</string>
+    <string name="core_update_reset_kept">BIOS, Spielordner, Steuerung, Spielstände, Speicherkarten und Cover bleiben erhalten.</string>
+    <string name="core_update_reset_action">Emulator-Einstellungen zurücksetzen</string>
+    <string name="core_update_reset_keep">Einstellungen behalten</string>
 </resources>

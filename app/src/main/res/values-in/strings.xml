@@ -2475,4 +2475,9 @@
     <string name="theme_manager_preview_body">Permukaan, teks, aksen, dan bentuk langsung diperbarui.</string>
     <string name="theme_manager_preview_toggle">Opsi antarmuka</string>
     <string name="theme_manager_preview_toggle_desc">Kontrol mempertahankan gaya tema yang dipilih.</string>
+    <string name="core_update_reset_title">Core emulator baru</string>
+    <string name="core_update_reset_body">Pembaruan ini menyertakan perubahan pada core emulator. Reset cache dan konfigurasi agar tidak terjadi masalah.</string>
+    <string name="core_update_reset_kept">BIOS, folder game, kontrol, simpanan, kartu memori, dan sampul tetap disimpan.</string>
+    <string name="core_update_reset_action">Reset pengaturan emulator</string>
+    <string name="core_update_reset_keep">Pertahankan pengaturan</string>
 </resources>
