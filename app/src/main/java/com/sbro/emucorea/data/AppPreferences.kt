@@ -545,6 +545,8 @@ class AppPreferences(private val context: Context) {
         private val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         private val PRO_UNLOCKED = booleanPreferencesKey("pro_unlocked")
         private val WELCOME_DIALOG_SHOWN = booleanPreferencesKey("welcome_dialog_shown")
+        private val LAST_CORE_BINARY_FINGERPRINT =
+            stringPreferencesKey("last_core_binary_fingerprint")
         private val PERFORMANCE_PROFILE = intPreferencesKey("performance_profile")
         private val GPU_HARDWARE_PROFILE = intPreferencesKey("gpu_hardware_profile")
         private val LANGUAGE_TAG = stringPreferencesKey("language_tag")
@@ -1598,6 +1600,20 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setWelcomeDialogShown(shown: Boolean) {
         context.dataStore.edit { prefs -> prefs[WELCOME_DIALOG_SHOWN] = shown }
+    }
+
+    val lastCoreBinaryFingerprint: Flow<String?> = context.dataStore.data
+        .map { prefs -> prefs[LAST_CORE_BINARY_FINGERPRINT] }
+        .distinctUntilChanged()
+
+    suspend fun setLastCoreBinaryFingerprint(fingerprint: String?) {
+        context.dataStore.edit { prefs ->
+            if (fingerprint.isNullOrBlank()) {
+                prefs.remove(LAST_CORE_BINARY_FINGERPRINT)
+            } else {
+                prefs[LAST_CORE_BINARY_FINGERPRINT] = fingerprint
+            }
+        }
     }
 
     val languageTag: Flow<String?> = context.dataStore.data.map { prefs ->
