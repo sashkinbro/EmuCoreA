@@ -1430,6 +1430,7 @@ fun EmulationScreen(
                     centerOffset = uiState.centerOffset,
                     controlLayouts = uiState.controlLayouts,
                     racingMode = uiState.racingMode,
+                    stickyButtons = uiState.stickyButtons,
                     stickToggleTarget = uiState.stickToggleTarget,
                     onToggleLeftInputMode = viewModel::toggleLeftInputMode,
                     onPadInput = { keyCode, range, pressed ->
@@ -2072,6 +2073,7 @@ private fun LocalMultiplayerTouchZone(
             centerOffset = uiState.centerOffset,
             controlLayouts = uiState.controlLayouts,
             racingMode = uiState.racingMode,
+            stickyButtons = uiState.stickyButtons,
             stickToggleTarget = uiState.stickToggleTarget,
             onToggleLeftInputMode = onToggleLeftInputMode,
             onPadInput = { key, range, pressed -> onPadInput(padIndex, key, range, pressed) },
@@ -2130,6 +2132,7 @@ private fun OnScreenControls(
     centerOffset: Pair<Float, Float>,
     controlLayouts: Map<String, OverlayControlLayout>,
     racingMode: Boolean,
+    stickyButtons: Set<String> = emptySet(),
     stickToggleTarget: Int = AppPreferences.DEFAULT_STICK_TOGGLE_TARGET,
     onToggleLeftInputMode: () -> Unit,
     onPadInput: (Int, Int, Boolean) -> Unit,
@@ -2317,7 +2320,8 @@ private fun OnScreenControls(
                     opacity = spec.opacity / 100f,
                     onPressChange = buttonPressHandler(spec.id),
                     onClick = if (spec.id == "left_input_toggle") onToggleLeftInputMode else null,
-                    tapToHold = racingMode && isRacingTapToHoldButton(spec.id)
+                    tapToHold = (racingMode && isRacingTapToHoldButton(spec.id)) ||
+                        spec.id in stickyButtons
                 )
             }
         }

@@ -178,6 +178,7 @@ data class EmulationUiState(
     val invertLeftStickHorizontal: Boolean = false,
     val invertRightStickHorizontal: Boolean = false,
     val racingMode: Boolean = false,
+    val stickyButtons: Set<String> = emptySet(),
     val touchscreenRightStick: Boolean = AppPreferences.DEFAULT_TOUCHSCREEN_RIGHT_STICK,
     val touchscreenRightStickSensitivity: Int = AppPreferences.DEFAULT_TOUCHSCREEN_RIGHT_STICK_SENSITIVITY,
     val touchHaptics: Boolean = false,
@@ -489,6 +490,7 @@ private data class LiveRuntimeSnapshot(
     val frameLimitEnabled: Boolean,
     val fastForwardSpeed: Float,
     val racingMode: Boolean,
+    val stickyButtons: Set<String>,
     val touchscreenRightStick: Boolean,
     val touchscreenRightStickSensitivity: Int,
     val touchHaptics: Boolean,
@@ -1261,6 +1263,11 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         viewModelScope.launch {
+            preferences.stickyButtons.collect { buttons ->
+                applyGlobalRuntimePreferenceUpdate { it.copy(stickyButtons = buttons) }
+            }
+        }
+        viewModelScope.launch {
             preferences.touchscreenRightStick.collect { enabled ->
                 applyGlobalRuntimePreferenceUpdate { it.copy(touchscreenRightStick = enabled) }
             }
@@ -1958,6 +1965,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     frameLimitEnabled = liveRuntime.frameLimitEnabled,
                     fastForwardSpeed = liveRuntime.fastForwardSpeed,
                     racingMode = liveRuntime.racingMode,
+                    stickyButtons = liveRuntime.stickyButtons,
                     touchscreenRightStick = liveRuntime.touchscreenRightStick,
                     touchscreenRightStickSensitivity = liveRuntime.touchscreenRightStickSensitivity,
                     touchHaptics = liveRuntime.touchHaptics,
@@ -4531,6 +4539,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             frameLimitEnabled = settings.frameLimitEnabled,
             fastForwardSpeed = settings.fastForwardSpeed,
             racingMode = settings.racingMode,
+            stickyButtons = settings.stickyButtons,
             touchscreenRightStick = settings.touchscreenRightStick,
             touchscreenRightStickSensitivity = settings.touchscreenRightStickSensitivity,
             touchHaptics = settings.touchHaptics,
@@ -4770,6 +4779,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             showFps = pick("showFps", showFps) { showFps },
             fpsOverlayMode = pick("fpsOverlayMode", fpsOverlayMode) { fpsOverlayMode },
             racingMode = pick("racingMode", racingMode) { racingMode },
+            stickyButtons = pick("stickyButtons", stickyButtons) { stickyButtons },
             touchscreenRightStick = pick("touchscreenRightStick", touchscreenRightStick) { touchscreenRightStick },
             touchscreenRightStickSensitivity = pick(
                 "touchscreenRightStickSensitivity",
@@ -4939,6 +4949,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             skipDuplicateFrames = skipDuplicateFrames,
             frameLimitEnabled = frameLimitEnabled,
             racingMode = racingMode,
+            stickyButtons = stickyButtons,
             touchscreenRightStick = touchscreenRightStick,
             touchscreenRightStickSensitivity = touchscreenRightStickSensitivity,
             touchHaptics = touchHaptics,
@@ -5065,6 +5076,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         if (skipDuplicateFrames != settings.skipDuplicateFrames) add("skipDuplicateFrames")
         if (frameLimitEnabled != settings.frameLimitEnabled) add("frameLimitEnabled")
         if (racingMode != settings.racingMode) add("racingMode")
+        if (stickyButtons != settings.stickyButtons) add("stickyButtons")
         if (touchscreenRightStick != settings.touchscreenRightStick) add("touchscreenRightStick")
         if (touchscreenRightStickSensitivity != settings.touchscreenRightStickSensitivity) {
             add("touchscreenRightStickSensitivity")
