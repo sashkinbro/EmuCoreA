@@ -1337,7 +1337,8 @@ private fun SettingsContent(
                         )
                         StickToggleTargetPicker(
                             selected = uiState.stickToggleTarget,
-                            onSelect = viewModel::setStickToggleTarget
+                            onSelect = viewModel::setStickToggleTarget,
+                            helpText = stringResource(R.string.settings_help_stick_toggle_target)
                         )
                         SliderItem(
                             icon = Icons.Rounded.TouchApp,
@@ -2925,18 +2926,30 @@ private fun GameMenuLayoutStylePicker(
 @Composable
 private fun StickToggleTargetPicker(
     selected: Int,
-    onSelect: (Int) -> Unit
+    onSelect: (Int) -> Unit,
+    helpText: String? = null
 ) {
+    val title = stringResource(R.string.settings_stick_toggle_target)
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 20.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text(
-            text = stringResource(R.string.settings_stick_toggle_target),
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.weight(1f)
+            )
+            helpText?.let {
+                SettingHelpButton(title = title, description = it)
+            }
+        }
         Text(
             text = stringResource(R.string.settings_stick_toggle_target_desc),
             style = MaterialTheme.typography.bodySmall,

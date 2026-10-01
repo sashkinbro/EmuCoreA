@@ -29,11 +29,10 @@ object AudioDefaults {
     const val BUFFER_MS_MIN = 10
     const val BUFFER_MS_MAX = 500
 
-    // Mixer queue target, matching PPSSPP's StereoResampler cushion: 40 ms by
-    // default (PPSSPP's bExtraAudioBuffering doubles it to 80 ms). Larger values
-    // absorb more frame-time jitter at the cost of audio latency; the ring is
-    // sized so the target can go up to half of it.
-    const val OUTPUT_LATENCY_MS_DEFAULT = 40
+    // Mixer queue target, matching PPSSPP's extra audio buffering (80 ms).
+    // Larger values absorb more frame-time jitter at the cost of audio
+    // latency; the ring is sized so the target can go up to half of it.
+    const val OUTPUT_LATENCY_MS_DEFAULT = 80
     const val OUTPUT_LATENCY_MS_MIN = 10
     const val OUTPUT_LATENCY_MS_MAX = 500
     // Do not request the platform's low latency path by default; the smaller

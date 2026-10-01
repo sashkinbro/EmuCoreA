@@ -710,9 +710,14 @@
     <string name="gpu_powervr_title">PowerVR</string>
     <string name="settings_racing_mode">Rennmodus</string>
     <string name="settings_racing_mode_desc">Tippe auf Aktions- und Schultertasten, um sie gedrückt zu halten, und tippe erneut, um sie loszulassen.</string>
-    <string name="settings_sticky_buttons">Fixierte Tasten</string>
+    <string name="settings_sticky_buttons">Einrastende Tasten</string>
     <string name="settings_sticky_buttons_desc">Tippe auf eine ausgewählte Taste, um sie zu halten, und tippe erneut, um sie loszulassen.</string>
     <string name="settings_help_sticky_buttons">Ermöglicht die Auswahl von Overlay-Tasten, die ihren gedrückten Zustand per Tippen umschalten, statt gehalten werden zu müssen. Nützlich für Shooter und Horror-Spiele, bei denen R1, R2 oder andere Tasten gedrückt bleiben sollen, während du die Gesichtstasten benutzt.</string>
+    <string name="settings_stick_toggle_target">D-Pad-Umschalttaste</string>
+    <string name="settings_stick_toggle_target_desc">Die Punkt-Taste in der Mitte ersetzt den gewählten Analogstick an derselben Stelle durch ein D-Pad.</string>
+    <string name="settings_stick_toggle_target_left">Linker Stick</string>
+    <string name="settings_stick_toggle_target_right">Rechter Stick</string>
+    <string name="settings_help_stick_toggle_target">Fügt eine kleine Punkt-Taste in der Mitte der Touch-Steuerung hinzu. Beim Antippen wird der gewählte Analogstick an derselben Stelle durch ein D-Pad ersetzt; erneutes Antippen stellt den Stick wieder her. Nützlich in Spielen, die analoge Bewegung mit digitalen Menüs oder Raster-Navigation mischen. Betrifft nur das Overlay auf dem Bildschirm.</string>
     <string name="settings_help_racing_mode">Bewirkt, dass Touch-Aktionstasten und Schultertasten ihren gedrückten Zustand durch Antippen umschalten. Dies ist nützlich für Rennspiele, bei denen die Beschleunigung gehalten werden muss, während Start, Select, Sticks und das Steuerkreuz ihr normales Verhalten beibehalten.</string>
     <string name="game_settings_manager_choose_game">Spiel auswählen</string>
     <string name="game_settings_manager_no_games">Keine Spiele in deiner aktuellen Bibliothek gefunden.</string>

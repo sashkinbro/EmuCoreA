@@ -710,9 +710,14 @@
     <string name="gpu_powervr_title">PowerVR</string>
     <string name="settings_racing_mode">Mode course</string>
     <string name="settings_racing_mode_desc">Touchez les boutons d\'action et les gâchettes pour les maintenir enfoncés, puis touchez-les à nouveau pour les relâcher.</string>
-    <string name="settings_sticky_buttons">Boutons maintenus</string>
+    <string name="settings_sticky_buttons">Boutons rémanents</string>
     <string name="settings_sticky_buttons_desc">Touchez un bouton sélectionné pour le maintenir, puis touchez à nouveau pour le relâcher.</string>
     <string name="settings_help_sticky_buttons">Permet de choisir des boutons de l\'overlay qui basculent leur état enfoncé d\'un simple toucher au lieu d\'un maintien. Utile pour les jeux de tir et d\'horreur qui veulent garder R1, R2 ou d\'autres boutons enfoncés pendant que vous utilisez les boutons de façade.</string>
+    <string name="settings_stick_toggle_target">Bouton de bascule D-pad</string>
+    <string name="settings_stick_toggle_target_desc">Le bouton point au centre remplace le stick analogique choisi par un D-pad au même endroit.</string>
+    <string name="settings_stick_toggle_target_left">Stick gauche</string>
+    <string name="settings_stick_toggle_target_right">Stick droit</string>
+    <string name="settings_help_stick_toggle_target">Ajoute un petit bouton point au centre des commandes tactiles. En le touchant, le stick analogique choisi est remplacé par un D-pad au même endroit, et un nouveau toucher restaure le stick. Utile dans les jeux qui mélangent déplacement analogique et menus numériques ou navigation en grille. N\'affecte que l\'overlay à l\'écran.</string>
     <string name="settings_help_racing_mode">Permet aux boutons d\'action tactiles et aux gâchettes de basculer leur état enfoncé d\'une simple pression. Cela est utile pour les jeux de course où l\'accélération doit être maintenue, tandis que Start, Select, les joysticks et la croix directionnelle conservent leur comportement normal.</string>
     <string name="game_settings_manager_choose_game">Choisir un jeu</string>
     <string name="game_settings_manager_no_games">Aucun jeu trouvé dans votre bibliothèque actuelle.</string>

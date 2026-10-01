@@ -713,6 +713,11 @@
     <string name="settings_sticky_buttons">固定按键</string>
     <string name="settings_sticky_buttons_desc">轻点所选按键即可保持按下，再次轻点即可松开。</string>
     <string name="settings_help_sticky_buttons">可让你选择以轻点切换按下状态的覆盖按键，而无需一直按住。适合在射击和恐怖游戏中，让你使用正面按键时保持 R1、R2 或其他按键按下。</string>
+    <string name="settings_stick_toggle_target">D-pad 切换按钮</string>
+    <string name="settings_stick_toggle_target_desc">中间的圆点按钮会将所选摇杆原位置切换为 D-pad。</string>
+    <string name="settings_stick_toggle_target_left">左摇杆</string>
+    <string name="settings_stick_toggle_target_right">右摇杆</string>
+    <string name="settings_help_stick_toggle_target">在触摸控制中央添加一个小圆点按钮。轻点后，所选摇杆会在原位置切换为 D-pad，再次轻点则恢复摇杆。适合将摇杆移动与数字菜单或网格导航结合的游戏。仅影响屏幕上的触摸覆盖层。</string>
     <string name="settings_help_racing_mode">使触摸动作按钮和肩部按钮通过轻触来切换其按下状态。这对于需要保持按住加速键的赛车游戏非常有用，同时 Start、Select、摇杆和十字键 (D-pad) 将保持正常行为。</string>
     <string name="game_settings_manager_choose_game">选择游戏</string>
     <string name="game_settings_manager_no_games">在当前库中未找到游戏。</string>

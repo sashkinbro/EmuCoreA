@@ -711,6 +711,11 @@
     <string name="settings_sticky_buttons">Sabit tuşlar</string>
     <string name="settings_sticky_buttons_desc">Seçili bir tuşa dokunarak basılı tutun, bırakmak için tekrar dokunun.</string>
     <string name="settings_help_sticky_buttons">Basılı tutmak yerine dokunuşla basılı durumunu değiştiren kaplama tuşlarını seçmenizi sağlar. R1, R2 veya diğer tuşların yüz tuşlarını kullanırken basılı kalmasını isteyen nişancı ve korku oyunları için kullanışlıdır.</string>
+    <string name="settings_stick_toggle_target">D-pad değiştirme düğmesi</string>
+    <string name="settings_stick_toggle_target_desc">Ortadaki nokta düğmesi, seçilen analog çubuğu aynı yerde D-pad ile değiştirir.</string>
+    <string name="settings_stick_toggle_target_left">Sol çubuk</string>
+    <string name="settings_stick_toggle_target_right">Sağ çubuk</string>
+    <string name="settings_help_stick_toggle_target">Dokunmatik kontrollerin ortasına küçük bir nokta düğmesi ekler. Dokunulduğunda seçilen analog çubuk aynı yerde D-pad ile değiştirilir, tekrar dokunulduğunda çubuk geri gelir. Analog hareketi dijital menüler veya ızgara gezinmesiyle birleştiren oyunlarda kullanışlıdır. Yalnızca ekran kaplamasını etkiler.</string>
     <string name="settings_help_racing_mode">Dokunmatik eylem düğmelerinin ve omuz düğmelerinin tek bir dokunuşla basılı duruma geçmesini sağlar. Bu, hızlanmanın basılı tutulması gereken yarış oyunları için yararlıyken Start, Select, çubuklar ve D-pad normal davranışını korur.</string>
     <string name="game_settings_manager_choose_game">Oyun seç</string>
     <string name="game_settings_manager_no_games">Mevcut kitaplığınızda oyun bulunamadı.</string>

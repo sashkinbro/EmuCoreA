@@ -24,6 +24,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.sbro.emucorea.R
 import com.sbro.emucorea.core.LocalTvUiEnvironment
@@ -66,6 +67,7 @@ internal fun StickyButtonsSelector(
     selected: Set<String>,
     onSelectionChange: (Set<String>) -> Unit,
     modifier: Modifier = Modifier,
+    horizontalPadding: Dp = 16.dp,
     helpText: String? = null,
     onResetToDefault: (() -> Unit)? = null
 ) {
@@ -74,10 +76,12 @@ internal fun StickyButtonsSelector(
     val titleFocusRequester = remember { FocusRequester() }
     val helpFocusRequester = remember { FocusRequester() }
     val resetToast = stringResource(R.string.settings_reset_to_default_toast)
+    val insidePaddedSection = horizontalPadding <= 0.dp
+    val contentPadding = if (insidePaddedSection) GameSettingsSectionContentPadding else horizontalPadding
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = horizontalPadding)
                 .then(
                     if (tvUiEnabled && helpText != null) {
                         Modifier
@@ -128,8 +132,15 @@ internal fun StickyButtonsSelector(
         LazyRow(
             modifier = Modifier
                 .fillMaxWidth()
+                .then(
+                    if (insidePaddedSection) {
+                        Modifier.sectionContentFullBleed(GameSettingsSectionContentPadding)
+                    } else {
+                        Modifier
+                    }
+                )
                 .tvFocusGroup(),
-            contentPadding = PaddingValues(horizontal = 16.dp),
+            contentPadding = PaddingValues(horizontal = contentPadding),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             items(STICKY_BUTTON_IDS) { id ->
