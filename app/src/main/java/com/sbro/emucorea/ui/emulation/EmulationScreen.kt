@@ -464,6 +464,11 @@ fun EmulationScreen(
         uri?.let(viewModel::swapDisc)
     }
     val rootCutoutPadding = WindowInsets.displayCutout.asPaddingValues()
+    val gameCutoutPadding = if (globalDefaults.respectDisplayCutout) {
+        rootCutoutPadding
+    } else {
+        PaddingValues(0.dp)
+    }
     val rootNavPadding = WindowInsets.navigationBars.asPaddingValues()
     val overlayLeftSafeInset = maxOf(
         rootCutoutPadding.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr),
@@ -970,6 +975,7 @@ fun EmulationScreen(
                 },
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(gameCutoutPadding)
                     .pointerInteropFilter { event ->
                         if (!showControlsEditor && !uiState.showMenu && event.actionMasked == MotionEvent.ACTION_DOWN) {
                             val timestamp = event.eventTime
