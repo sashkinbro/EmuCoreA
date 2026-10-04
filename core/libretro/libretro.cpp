@@ -2246,23 +2246,16 @@ void System_AudioPushSamples(const int32_t *audio, int numSamples, float volume)
 
    std::lock_guard<std::mutex> lock(output_audio_buffer_mutex);
 
-   // Convert to 16-bit audio for further processing.
-   int16_t buffer[1024 * 2];
-   int origSamples = numSamples * 2;
-
-   while (numSamples > 0) {
-      int blockSize = std::min(1024, numSamples);
-      for (int i = 0; i < blockSize; i++) {
-         buffer[i * 2] = Clamp16(audio[i * 2]);
-         buffer[i * 2 + 1] = Clamp16(audio[i * 2 + 1]);
-      }
-
-      numSamples -= blockSize;
-   }
-
+   const int origSamples = numSamples * 2;
    if (output_audio_buffer.capacity - output_audio_buffer.size < origSamples)
       ensure_output_audio_buffer_capacity((output_audio_buffer.capacity + origSamples) * 1.5);
-   memcpy(output_audio_buffer.data + output_audio_buffer.size, buffer, origSamples * sizeof(*output_audio_buffer.data));
+
+   // Convert to 16-bit audio for further processing. Convert straight into the
+   // output buffer: the old fixed 1024-frame staging array silently dropped
+   // everything past the first block and copied uninitialized stack data.
+   int16_t *dst = output_audio_buffer.data + output_audio_buffer.size;
+   for (int i = 0; i < origSamples; i++)
+      dst[i] = Clamp16(audio[i]);
    output_audio_buffer.size += origSamples;
 }
 

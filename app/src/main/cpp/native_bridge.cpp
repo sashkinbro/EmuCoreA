@@ -625,10 +625,12 @@ struct AudioOutput {
 void UpdatePacingTarget(AudioOutput* output) {
     // The app's "Output latency" setting sizes the mixer cushion, mirroring
     // PPSSPP's StereoResampler target (40 ms by default, 80 ms with extra audio
-    // buffering). It is a queue target, not a device buffer size.
+    // buffering). It is a queue target, not a device buffer size. The ring and
+    // the target are measured in core-rate frames, so the device rate must not
+    // leak in here even when the stream runs at 48 kHz.
     const int latency_ms = g_frontend.audio_output_latency_ms.load();
     const int32_t target =
-        static_cast<int32_t>(static_cast<int64_t>(latency_ms) * output->sample_rate / 1000);
+        static_cast<int32_t>(static_cast<int64_t>(latency_ms) * kCoreSampleRateHz / 1000);
     output->pacing_high_water_frames =
         std::clamp(target, 1024, static_cast<int32_t>(kAudioRingCapacityFrames / 2));
 }
@@ -1779,7 +1781,11 @@ Java_com_sbro_emucorea_core_NativeCoreBridge_createAudioOutput(JNIEnv*, jobject)
     AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_OUTPUT);
     AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
     AAudioStreamBuilder_setChannelCount(builder, 2);
-    AAudioStreamBuilder_setSampleRate(builder, output->sample_rate);
+    // Do not request 44.1 kHz: PPSSPP's Android backend opens the device at its
+    // native rate and resamples in the emulator. Asking AAudio for 44.1 kHz on
+    // a 48 kHz device forces AudioFlinger to resample behind our back, which
+    // costs latency and crackles under load. The converter already consumes the
+    // 44.1 kHz ring at whatever rate AAudio actually gave us.
     // Keep the shared-mode stream small, like PPSSPP's OpenSL buffer: a large
     // capacity makes AAudio hand out capacity/2 as the callback size (60 ms at
     // the default settings), and a callback that big can only be fed if the
