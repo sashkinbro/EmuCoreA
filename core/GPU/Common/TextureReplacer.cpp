@@ -109,14 +109,7 @@ void TextureReplacer::NotifyConfigChanged() {
 	}
 
 	if (!replaceEnabled_ && wasReplaceEnabled) {
-		// Everything in levelCache_ holds this pointer - LoadIni fixes them up when it swaps the
-		// VFS, and the same has to happen here or they're left dangling. Decimate(ALL) below only
-		// frees their data, it doesn't erase the entries.
-		for (auto &repl : levelCache_) {
-			repl.second->vfs_ = nullptr;
-		}
-		delete vfs_;
-		vfs_ = nullptr;
+		DeleteVFS();
 		Decimate(ReplacerDecimateMode::ALL);
 	} else if (!wasReplaceEnabled && replaceEnabled_) {
 		std::string error;
@@ -131,11 +124,21 @@ void TextureReplacer::NotifyConfigChanged() {
 		std::string error;
 		bool result = LoadIni(&error, false);
 		if (!result) {
-			// Ignore errors here, just log if we successfully loaded an ini.
+			// Ignore errors here, just log if we successfully loaded an ini. But the VFS is gone, so replacement is off.
+			replaceEnabled_ = false;
 		} else {
 			INFO_LOG(Log::G3D, "Loaded INI file for saving.");
 		}
 	}
+}
+
+void TextureReplacer::DeleteVFS() {
+	// Everything in levelCache_ uses the VFS, and may have a load task running against it.
+	for (auto &repl : levelCache_) {
+		repl.second->Unload();
+	}
+	delete vfs_;
+	vfs_ = nullptr;
 }
 
 bool TextureReplacer::LoadIni(std::string *error, bool notify) {
@@ -144,16 +147,18 @@ bool TextureReplacer::LoadIni(std::string *error, bool notify) {
 	hashranges_.clear();
 	filtering_.clear();
 	reducehashranges_.clear();
+	// These hold what the old ini said about each texture, including "no replacement" markers.
+	// Only references go, the textures stay in levelCache_.
+	cache_.clear();
+	savedCache_.clear();
 
-	allowVideo_ = false;
 	ignoreAddress_ = false;
 	reduceHash_ = false;
 	reduceHashGlobalValue = 0.5;
 	// Prevents dumping the mipmaps.
 	ignoreMipmap_ = false;
 
-	delete vfs_;
-	vfs_ = nullptr;
+	DeleteVFS();
 
 	Path zipPath = basePath_ / ZIP_FILENAME;
 
@@ -229,6 +234,7 @@ bool TextureReplacer::LoadIni(std::string *error, bool notify) {
 
 			if (filenameMap.empty()) {
 				WARN_LOG(Log::TexReplacement, "No replacement textures found.");
+				delete dir;
 				return false;
 			}
 
@@ -336,7 +342,6 @@ bool TextureReplacer::LoadIniValues(IniFile &ini, VFSBackend *dir, bool isOverri
 		return false;
 	}
 
-	options->Get("video", &allowVideo_);
 	options->Get("ignoreAddress", &ignoreAddress_);
 	// Multiplies sizeInRAM/bytesPerLine in XXHASH by 0.5.
 	options->Get("reduceHash", &reduceHash_);
@@ -669,15 +674,18 @@ ReplacedTexture *TextureReplacer::FindReplacement(ReplacementCacheKey replacemen
 	desc.cacheKey = replacementKey;
 	desc.forceFiltering = (TextureFiltering)0;  // invalid value
 
+	// Hash ranges are per address even with ignoreAddress, since ComputeHash applies them.
+	LookupHashRange(replacementKey.Address(), w, h, &desc.newW, &desc.newH);
+
+	// cache_ stays keyed by the full key. ignoreAddress only affects finding the files.
+	ReplacementCacheKey lookupKey = replacementKey;
 	if (ignoreAddress_) {
-		replacementKey.ZeroAddress();
-	} else {
-		LookupHashRange(replacementKey.Address(), w, h, &desc.newW, &desc.newH);
+		lookupKey.ZeroAddress();
 	}
 
 	bool foundAlias = false;
 	bool ignored = false;
-	std::string hashfiles = LookupHashFile(replacementKey, &foundAlias, &ignored);
+	std::string hashfiles = LookupHashFile(lookupKey, &foundAlias, &ignored);
 
 	// Early-out for ignored textures, let's not bother even starting a thread task.
 	if (ignored) {
@@ -688,7 +696,7 @@ ReplacedTexture *TextureReplacer::FindReplacement(ReplacementCacheKey replacemen
 		return nullptr;
 	}
 
-	FindFiltering(replacementKey, &desc.forceFiltering);
+	FindFiltering(lookupKey, &desc.forceFiltering);
 
 	if (foundAlias) {
 		desc.logId = hashfiles;
@@ -706,12 +714,14 @@ ReplacedTexture *TextureReplacer::FindReplacement(ReplacementCacheKey replacemen
 	}
 
 	_dbg_assert_(!hashfiles.empty());
-	// OK, we might already have a matching texture, we use hashfiles as a key. Look it up in the level cache.
-	auto iter = levelCache_.find(hashfiles);
+	// OK, we might already have a matching texture. Textures sharing files can still differ in how
+	// they're scaled and filtered, so those go in the level cache key too.
+	std::string levelKey = StringFromFormat("%s#%dx%d>%dx%d#%d", hashfiles.c_str(), desc.w, desc.h, desc.newW, desc.newH, (int)desc.forceFiltering);
+	auto iter = levelCache_.find(levelKey);
 	if (iter != levelCache_.end()) {
 		// Insert an entry into the cache for faster lookup next time.
 		ReplacedTextureRef ref;
-		ref.hashfiles = hashfiles;
+		ref.hashfiles = levelKey;
 		ref.texture = iter->second;
 		cache_.emplace(std::make_pair(replacementKey, ref));
 		return iter->second;
@@ -724,12 +734,11 @@ ReplacedTexture *TextureReplacer::FindReplacement(ReplacementCacheKey replacemen
 	ReplacedTexture *texture = new ReplacedTexture(vfs_, desc);
 
 	ReplacedTextureRef ref;
-	ref.hashfiles = hashfiles;
+	ref.hashfiles = levelKey;
 	ref.texture = texture;
 	cache_.emplace(std::make_pair(replacementKey, ref));
 
-	// Also, insert the level in the level cache so we can look up by desc_->hashfiles again.
-	levelCache_.emplace(std::make_pair(hashfiles, texture));
+	levelCache_.emplace(std::make_pair(levelKey, texture));
 	return texture;
 }
 
@@ -797,7 +806,7 @@ bool TextureReplacer::WillSave(const ReplacedTextureDecodeInfo &replacedInfo) co
 	// Don't save the PPGe texture.
 	if (replacedInfo.addr > 0x05000000 && replacedInfo.addr < PSP_GetKernelMemoryEnd())
 		return false;
-	if (replacedInfo.isVideo && !allowVideo_)
+	if (replacedInfo.isVideo)
 		return false;
 
 	return true;

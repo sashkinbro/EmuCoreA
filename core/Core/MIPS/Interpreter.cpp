@@ -35,6 +35,7 @@
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/HLETables.h"
 #include "Core/HLE/ReplaceTables.h"
+#include "Core/HLE/sceKernelInterrupt.h"
 #include "Core/HW/GpioMMIO.h"
 
 #define R(i) (mips->r[i])
@@ -156,6 +157,7 @@ void WriteMMIO_U16(MIPSState *mips, u32 addr, u16 value) {
 void WriteMMIO_U32(MIPSState *mips, u32 addr, u32 value) {
 	if (!Memory::IsKernelCodeAddress(mips->pc)) {
 		Core_MemoryException(addr, 4, mips->pc, MemoryExceptionType::WRITE_WORD, "Kernel mode only");
+		return;
 	}
 	if (GpioMMIO::IsGpioAddress(addr)) {
 		GpioMMIO::Write32(addr, value);
@@ -913,8 +915,9 @@ namespace MIPSInt {
 				s32 a = (s32)R(rs);
 				s32 b = (s32)R(rt);
 				if (a == (s32)0x80000000 && b == -1) {
+					// The one overflow. Hardware leaves the remainder at zero (cpu/cpu_alu/cpu_div).
 					LO = 0x80000000;
-					HI = -1;
+					HI = 0;
 				} else if (b != 0) {
 					LO = (u32)(a / b);
 					HI = (u32)(a % b);
@@ -1052,25 +1055,22 @@ namespace MIPSInt {
 		PC += 4;
 	}
 
+	// The interrupt enable flag, shared with the HLE sceKernelCpuSuspendIntr/ResumeIntr, which on
+	// hardware are just mfic v0, $0; mtic zero, $0 and mtic a0, $0. Only $0 exists.
 	void Int_Special2(MIPSState *mips, MIPSOpcode op) {
-		static int reported = 0;
+		int rt = _RT;
 		switch (op & 0x3F) {
 		case 36:  // mfic
-			// move from interrupt controller, not implemented
-			// See related report https://report.ppsspp.org/logs/kind/316 for possible locations.
-			// Also see https://forums.ps2dev.org/viewtopic.php?p=32700#p32700 .
-			// TODO: Should we actually implement this?
-			if (!reported) {
-				WARN_LOG(Log::CPU, "MFIC Disable/Enable Interrupt CPU instruction");
-				reported = 1;
-			}
+			if (rt != 0)
+				R(rt) = __InterruptsEnabled() ? 1 : 0;
 			break;
 		case 38:  // mtic
-			// move to interrupt controller, not implemented
-			if (!reported) {
-				WARN_LOG(Log::CPU, "MTIC Disable/Enable Interrupt CPU instruction");
-				reported = 1;
-			}
+			// Only bit 0 counts: mtic 2 disables. Pending interrupts run at the next scheduling point,
+			// not right away as with sceKernelCpuResumeIntr.
+			if (R(rt) & 1)
+				__EnableInterrupts();
+			else
+				__DisableInterrupts();
 			break;
 		}
 		PC += 4;
@@ -1120,7 +1120,13 @@ namespace MIPSInt {
 
 		switch (op & 0x3f)
 		{
-		case 4:	F(fd)	= sqrtf(F(fs)); break; //sqrt
+		case 4:	//sqrt
+			F(fd) = sqrtf(F(fs));
+			// A negative input gives a positive NaN, not the host's (cpu/fpu/roundmode).
+			if (F(fs) < 0.0f) {
+				FsI(fd) = 0x7FC00000;
+			}
+			break;
 		case 5:	F(fd)	= fabsf(F(fs)); break; //abs
 		case 6:	F(fd)	= F(fs); break; //mov
 		case 7:	F(fd)	= -F(fs); break; //neg
@@ -1128,46 +1134,25 @@ namespace MIPSInt {
 		case 13:
 		case 14:
 		case 15:
-			if (my_isnanorinf(F(fs)))
-			{
-				FsI(fd) = my_isinf(F(fs)) && F(fs) < 0.0f ? -2147483648LL : 2147483647LL;
-				break;
-			}
 			switch (op & 0x3f)
 			{
 			// round.w.s is round-half-to-even, not half-away-from-zero - and its mode is fixed,
 			// so unlike cvt.w.s below it must not follow fcr31. round_ieee_754 is both.
-			case 12: FsI(fd) = (int)round_ieee_754(F(fs)); break; //round.w.s
-			case 13: //trunc.w.s
-				if (F(fs) >= 0.0f) {
-					FsI(fd) = (int)floorf(F(fs));
-					// Overflow, but it was positive.
-					if (FsI(fd) == -2147483648LL) {
-						FsI(fd) = 2147483647LL;
-					}
-				} else {
-					// Overflow happens to be the right value anyway.
-					FsI(fd) = (int)ceilf(F(fs));
-				}
-				break;
-			case 14: FsI(fd) = (int)ceilf (F(fs)); break; //ceil.w.s
-			case 15: FsI(fd) = (int)floorf(F(fs)); break; //floor.w.s
+			case 12: FsI(fd) = SaturatedFloatToInt(round_ieee_754(F(fs))); break; //round.w.s
+			case 13: FsI(fd) = SaturatedFloatToInt(truncf(F(fs))); break; //trunc.w.s
+			case 14: FsI(fd) = SaturatedFloatToInt(ceilf(F(fs))); break; //ceil.w.s
+			case 15: FsI(fd) = SaturatedFloatToInt(floorf(F(fs))); break; //floor.w.s
 			}
 			break;
 		case 32: F(fd) = (float)FsI(fs); break; //cvt.s.w
 
 		case 36:
-			if (my_isnanorinf(F(fs)))
-			{
-				FsI(fd) = my_isinf(F(fs)) && F(fs) < 0.0f ? -2147483648LL : 2147483647LL;
-				break;
-			}
 			switch (mips->fcr31 & 3)
 			{
-			case 0: FsI(fd) = (int)round_ieee_754(F(fs)); break;  // RINT_0
-			case 1: FsI(fd) = (int)F(fs); break;  // CAST_1
-			case 2: FsI(fd) = (int)ceilf(F(fs)); break;  // CEIL_2
-			case 3: FsI(fd) = (int)floorf(F(fs)); break;  // FLOOR_3
+			case 0: FsI(fd) = SaturatedFloatToInt(round_ieee_754(F(fs))); break;  // RINT_0
+			case 1: FsI(fd) = SaturatedFloatToInt(truncf(F(fs))); break;  // CAST_1
+			case 2: FsI(fd) = SaturatedFloatToInt(ceilf(F(fs))); break;  // CEIL_2
+			case 3: FsI(fd) = SaturatedFloatToInt(floorf(F(fs))); break;  // FLOOR_3
 			}
 			break; //cvt.w.s
 		default:

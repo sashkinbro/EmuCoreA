@@ -581,6 +581,7 @@ void VulkanRenderManager::CompileThreadFunc() {
 			}
 			toCompile = std::move(compileQueue_);
 			compileQueue_.clear();
+			compileScheduling_ = true;
 			if (!runCompileThread_) {
 				exitAfterCompile = true;
 			}
@@ -624,6 +625,11 @@ void VulkanRenderManager::CompileThreadFunc() {
 
 			Task *task = new CreateMultiPipelinesTask(vulkan_, entries);
 			g_threadManager.EnqueueTask(task);
+		}
+
+		{
+			std::unique_lock<std::mutex> lock(compileQueueMutex_);
+			compileScheduling_ = false;
 		}
 
 		if (exitAfterCompile) {
@@ -904,6 +910,16 @@ void VulkanRenderManager::ReportBadStateForDraw() {
 }
 
 int VulkanRenderManager::WaitForPipelines() {
+	// Pipelines still in the queue, or taken off it but not yet made into tasks, aren't in flight yet.
+	while (true) {
+		{
+			std::unique_lock<std::mutex> lock(compileQueueMutex_);
+			if (compileQueue_.empty() && !compileScheduling_) {
+				break;
+			}
+		}
+		sleep_ms(2, "pipeline-queue-wait");
+	}
 	return CreateMultiPipelinesTask::WaitForAll();
 }
 
@@ -1706,14 +1722,15 @@ void VulkanRenderManager::Run(VKRRenderThreadTask &task) {
 	frameData.profile.descWriteTime = time_now_d() - descStart;
 
 	queueRunner_.PreprocessSteps(task.steps);
-	// Likely during shutdown, happens in headless.
-	if (task.steps.empty() && !frameData.hasAcquired)
-		frameData.skipSwap = true;
 	//queueRunner_.LogSteps(stepsOnThread, false);
 	queueRunner_.RunSteps(task.steps, task.frame, frameData, frameDataShared_);
 
 	switch (task.runType) {
 	case VKRRunType::SUBMIT:
+		// A frame that never drew to the backbuffer never acquired an image, so there's nothing to
+		// wait for or present. Headless has such frames, and so does shutdown.
+		if (!frameData.hasAcquired)
+			frameData.skipSwap = true;
 		frameData.Submit(vulkan_, FrameSubmitType::FinishFrame, frameDataShared_);
 		break;
 

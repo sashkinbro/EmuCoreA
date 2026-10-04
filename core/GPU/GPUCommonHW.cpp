@@ -416,11 +416,6 @@ void GPUCommonHW::CheckConfigChanged(const DisplayLayoutConfig &config) {
 		BuildReportingInfo();
 		configChanged_ = false;
 	}
-
-	// Check needed when running tests.
-	if (framebufferManager_) {
-		framebufferManager_->CheckPostShaders(config);
-	}
 }
 
 void GPUCommonHW::CheckDisplayResized() {
@@ -982,6 +977,7 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 			gstate_c.AdvanceVerts(vertexType, count, bytesRead);
 			return;
 		}
+		cyclesExecuted += EstimateFillCycles(prim, verts, inds, count, decoder, vertexType);
 	}
 
 #define MAX_CULL_CHECK_COUNT 2500
@@ -1097,6 +1093,9 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 				}
 			}
 			if (passCulling) {
+				if (vertexType & GE_VTYPE_THROUGH_MASK) {
+					cyclesExecuted += EstimateFillCycles(newPrim, verts, inds, count, decoder, vertexType);
+				}
 				if (!drawEngineCommon_->SubmitPrim(verts, inds, newPrim, count, decoder, vertTypeID, clockwise, &bytesRead, flags)) {
 					canExtend = false;
 				}
@@ -1748,8 +1747,8 @@ void GPUCommonHW::FormatGPUStatsCommon(StringWriter &w) {
 		gpuStats.perFrame.vertexGPUCycles + gpuStats.perFrame.otherGPUCycles,
 		vertexAverageCycles);
 	w.F("FBOs active: %d (evaluations: %d, created %d)\n"
-		"Textures: %d (s: %d), dec: %d, invalidated: %d, changed %d, hashed: %d kB, clut %d\n"
-		"readbacks %d (%d non-block), upload %d (cached %d), depal %d\n"
+		"Text: %d (s: %d), dec: %d, invalidated: %d, changed %d, hashed: %d kB, clut %d\n"
+		"readbacks %d (%d non-block), upload %d (cached %d), depal %d, video %d\n"
 		"block transfers: %d\n"
 		"Cpy: depth %d, color %d, reint %d, blend %d, self %d\n",
 		(int)framebufferManager_->NumVFBs(),
@@ -1767,6 +1766,7 @@ void GPUCommonHW::FormatGPUStatsCommon(StringWriter &w) {
 		gpuStats.perFrame.numUploads,
 		gpuStats.perFrame.numCachedUploads,
 		gpuStats.perFrame.numDepal,
+		gpuStats.perFrame.numVideoTextures,
 		gpuStats.perFrame.numBlockTransfers,
 		gpuStats.perFrame.numDepthCopies,
 		gpuStats.perFrame.numColorCopies,

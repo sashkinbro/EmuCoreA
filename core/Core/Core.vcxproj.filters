@@ -556,6 +556,9 @@
     <ClCompile Include="Dialog\PSPNpSigninDialog.cpp">
       <Filter>Dialog</Filter>
     </ClCompile>
+    <ClCompile Include="Dialog\PSPHtmlViewerDialog.cpp">
+      <Filter>Dialog</Filter>
+    </ClCompile>
     <ClCompile Include="Debugger\DisassemblyManager.cpp">
       <Filter>Debugger</Filter>
     </ClCompile>
@@ -1240,9 +1243,6 @@
     <ClCompile Include="TiltEventProcessor.cpp">
       <Filter>Core</Filter>
     </ClCompile>
-    <ClCompile Include="MIPS\MIPSVFPUFallbacks.cpp">
-      <Filter>MIPS</Filter>
-    </ClCompile>
     <ClCompile Include="ConfigSettings.cpp">
       <Filter>Core</Filter>
     </ClCompile>
@@ -1884,6 +1884,9 @@
     <ClInclude Include="Dialog\PSPNpSigninDialog.h">
       <Filter>Dialog</Filter>
     </ClInclude>
+    <ClInclude Include="Dialog\PSPHtmlViewerDialog.h">
+      <Filter>Dialog</Filter>
+    </ClInclude>
     <ClInclude Include="MIPS\JitCommon\JitState.h">
       <Filter>MIPS\JitCommon</Filter>
     </ClInclude>
@@ -2219,9 +2222,6 @@
     </ClInclude>
     <ClInclude Include="TiltEventProcessor.h">
       <Filter>Core</Filter>
-    </ClInclude>
-    <ClInclude Include="MIPS\MIPSVFPUFallbacks.h">
-      <Filter>MIPS</Filter>
     </ClInclude>
     <ClInclude Include="ConfigSettings.h">
       <Filter>Core</Filter>

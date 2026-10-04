@@ -38,6 +38,20 @@ static void test_disallowed_setting(const char* library_name, const char* settin
   ASSERT_FALSE(rc_libretro_is_setting_allowed(settings, setting, value));
 }
 
+static void test_system_allowed_setting(const char* library_name, uint32_t system_id, const char* setting, const char* value) {
+  const rc_disallowed_setting_t* settings = rc_libretro_get_disallowed_settings_for_system(library_name, system_id);
+  if (!settings)
+    return;
+
+  ASSERT_TRUE(rc_libretro_is_setting_allowed(settings, setting, value));
+}
+
+static void test_system_disallowed_setting(const char* library_name, uint32_t system_id, const char* setting, const char* value) {
+  const rc_disallowed_setting_t* settings = rc_libretro_get_disallowed_settings_for_system(library_name, system_id);
+  ASSERT_PTR_NOT_NULL(settings);
+  ASSERT_FALSE(rc_libretro_is_setting_allowed(settings, setting, value));
+}
+
 static void test_allowed_system(const char* library_name, uint32_t console_id) {
   ASSERT_TRUE(rc_libretro_is_system_allowed(library_name, console_id));
 }
@@ -833,6 +847,10 @@ void test_rc_libretro(void) {
   TEST_PARAMS3(test_disallowed_setting, "Genesis Plus GX Wide", "genesis_plus_gx_wide_region_detect", "PAL");
   TEST_PARAMS3(test_allowed_setting,    "Genesis Plus GX Wide", "genesis_plus_gx_wide_region_detect", "NTSC-J");
 
+  TEST_PARAMS4(test_system_allowed_setting, "melonDS", RC_CONSOLE_NINTENDO_DS, "melonds_console_mode", "DS");
+  TEST_PARAMS4(test_system_disallowed_setting, "melonDS", RC_CONSOLE_NINTENDO_DS, "melonds_console_mode", "DSi");
+  TEST_PARAMS4(test_system_allowed_setting, "melonDS", RC_CONSOLE_NINTENDO_DSI, "melonds_console_mode", "DSi");
+
   TEST_PARAMS3(test_allowed_setting,    "Mesen", "mesen_region", "Auto");
   TEST_PARAMS3(test_allowed_setting,    "Mesen", "mesen_region", "NTSC");
   TEST_PARAMS3(test_disallowed_setting, "Mesen", "mesen_region", "PAL");
@@ -909,6 +927,12 @@ void test_rc_libretro(void) {
   TEST_PARAMS2(test_allowed_system,     "Mesen-S", RC_CONSOLE_SUPER_NINTENDO);
   TEST_PARAMS2(test_disallowed_system,  "Mesen-S", RC_CONSOLE_GAMEBOY);
   TEST_PARAMS2(test_disallowed_system,  "Mesen-S", RC_CONSOLE_GAMEBOY_COLOR);
+
+  /* boundary cases, loaded library/setting name may contain a prefix */
+  TEST_PARAMS3(test_allowed_setting,    "Beetle PSX", "x", "50%");
+  TEST_PARAMS3(test_allowed_setting,    "Beetle PSX Unknown", "beetle_psx_cpu_freq_scale", "50%");
+  TEST_PARAMS3(test_allowed_setting,    "cap32", "cap32_autorun", "x");
+  TEST_PARAMS2(test_allowed_system,     "Mesen-S Unknown", RC_CONSOLE_GAMEBOY);
 
   /* rc_libretro_memory_init */
   TEST(test_memory_init_without_regions);

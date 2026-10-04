@@ -14,10 +14,12 @@
     <ClCompile Include="TestShaderGenerators.cpp" />
     <ClCompile Include="TestThreadManager.cpp" />
     <ClCompile Include="TestSoftwareGPUJit.cpp" />
+    <ClCompile Include="TestCrossSIMD.cpp" />
     <ClCompile Include="TestIRPassSimplify.cpp" />
     <ClCompile Include="TestDemangle.cpp" />
     <ClCompile Include="TestLzrc.cpp" />
     <ClCompile Include="TestMpegCsc.cpp" />
+    <ClCompile Include="TestSplineTessellation.cpp" />
     <ClCompile Include="TestTextureReplacer.cpp" />
     <ClCompile Include="TestRiscVEmitter.cpp" />
     <ClCompile Include="TestVFS.cpp" />

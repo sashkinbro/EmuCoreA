@@ -360,7 +360,8 @@ public:
 		if (s >= 3) {
 			Do(p, mode_);
 		} else {
-			mode_ = FONT_OPEN_INTERNAL_FULL;
+			// Only the destructor looks at this: a font loaded above is ours to delete.
+			mode_ = internalFont == -1 ? FONT_OPEN_USERBUFFER : FONT_OPEN_INTERNAL_FULL;
 		}
 	}
 
@@ -1106,6 +1107,9 @@ void __FontDoState(PointerWrap &p) {
 
 	Do(p, actionPostAllocCallback);
 	__KernelRestoreActionType(actionPostAllocCallback, PostAllocCallback::Create);
+	if (s >= 2) {
+		useAllocCallbacks = true;
+	}
 	Do(p, actionPostOpenCallback);
 	__KernelRestoreActionType(actionPostOpenCallback, PostOpenCallback::Create);
 	if (s >= 2) {
@@ -1117,6 +1121,11 @@ void __FontDoState(PointerWrap &p) {
 		__KernelRestoreActionType(actionPostCharInfoFreeCallback, PostCharInfoFreeCallback::Create);
 	} else {
 		useAllocCallbacks = false;
+		// The state numbered the action types without these, so the slots they got at boot may now
+		// belong to other types. Give them new ones.
+		actionPostOpenAllocCallback = __KernelRegisterActionType(PostOpenAllocCallback::Create);
+		actionPostCharInfoAllocCallback = __KernelRegisterActionType(PostCharInfoAllocCallback::Create);
+		actionPostCharInfoFreeCallback = __KernelRegisterActionType(PostCharInfoFreeCallback::Create);
 	}
 }
 
@@ -1310,18 +1319,6 @@ static int sceFontFindOptimumFont(u32 libHandle, u32 fontStylePtr, u32 errorCode
 	Font *optimumFont = 0;
 	Font *nearestFont = 0;
 	float nearestDist = std::numeric_limits<float>::infinity();
-
-	if (PSP_CoreParameter().compat.flags().Fontltn12Hack && requestedStyle->fontLanguage == 2) {
-		for (size_t j = 0; j < internalFonts.size(); j++) {
-			const auto &tempmatchStyle = internalFonts[j]->GetFontStyle();
-			const std::string str(tempmatchStyle.fontFileName);
-			if (str == "ltn12.pgf") {
-				optimumFont = internalFonts[j];
-				*errorCode = 0;
-				return hleLogInfo(Log::sceFont, GetInternalFontIndex(optimumFont));
-			}
-		}
-	}
 
 	for (size_t i = 0; i < internalFonts.size(); i++) {
 		MatchQuality q = internalFonts[i]->MatchesStyle(*requestedStyle);

@@ -29,6 +29,7 @@
 #include "Common/System/OSD.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/Serialize/SerializeFuncs.h"
+#include "Common/Serialize/SerializeDeque.h"
 #include "Common/Serialize/SerializeMap.h"
 #include "Common/Data/Format/JSONReader.h"
 #include "Common/System/System.h"
@@ -378,6 +379,13 @@ bool LoadAutoDNS(std::string_view json) {
 			net::DNSResolveFree(resolved);
 		}
 	}
+
+	// The connection usually gets its IP (and copies the DNS server) before the json has arrived,
+	// so a game asking for the DNS server afterwards would otherwise get the empty one.
+	if (netApctlState == PSP_NET_APCTL_STATE_GOT_IP) {
+		INFO_LOG(Log::sceNet, "Updating the connection's DNS server to %s", g_infraDNSConfig.dns.c_str());
+		truncate_cpy(netApctlInfo.primaryDns, sizeof(netApctlInfo.primaryDns), g_infraDNSConfig.dns);
+	}
 	return true;
 }
 
@@ -660,6 +668,12 @@ void __NetApctlShutdown() {
 }
 
 void __NetShutdown() {
+	// A Netconf dialog may have started the json download. Don't leave it running past us.
+	if (g_infraDL) {
+		g_infraDL->Cancel();
+		g_infraDL.reset();
+	}
+
 	// Network Cleanup
 	Net_Term();
 
@@ -694,7 +708,7 @@ void netValidateLoopMemory() {
 
 // This feels like a dubious proposition, mostly...
 void __NetDoState(PointerWrap &p) {
-	auto s = p.Section("sceNet", 1, 6);
+	auto s = p.Section("sceNet", 1, 7);
 	if (!s)
 		return;
 
@@ -750,6 +764,18 @@ void __NetDoState(PointerWrap &p) {
 		netApctlInfoId = 0;
 		NetApctl_InitDefaultInfo();
 	}
+	if (s >= 7) {
+		// The state only moves on when an event is processed, and each queues the next, so a
+		// connect in progress would never finish without them.
+		std::lock_guard<std::recursive_mutex> apctlGuard(apctlEvtMtx);
+		Do(p, apctlEvents);
+		// Allocated from user memory, which the load just replaced.
+		Do(p, apctlProdCodeAddr);
+	} else if (p.mode == p.MODE_READ) {
+		std::lock_guard<std::recursive_mutex> apctlGuard(apctlEvtMtx);
+		apctlEvents.clear();
+		apctlProdCodeAddr = 0;
+	}
 
 	if (p.mode == p.MODE_READ) {
 		// Let's not change "Inited" value when Loading SaveState in the middle of multiplayer to prevent memory & port leaks
@@ -757,8 +783,6 @@ void __NetDoState(PointerWrap &p) {
 		netInetInited = cur_netInetInited;
 		g_netInited = cur_netInited;
 
-		// Discard leftover events
-		apctlEvents.clear();
 		// Discard created resolvers for now (since i'm not sure whether the information in the struct is sufficient or not, and we don't support multi-threading yet anyway)
 		__NetResolverShutdown();
 	}

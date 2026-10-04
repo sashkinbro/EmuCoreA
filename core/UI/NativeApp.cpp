@@ -37,6 +37,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <vector>
 
 
 #include "ext/imgui/imgui.h"
@@ -61,6 +62,7 @@
 #include "Common/Render/Text/draw_text.h"
 #include "Common/GPU/OpenGL/GLFeatures.h"
 #include "Common/GPU/thin3d.h"
+#include "Common/GPU/Vulkan/FixedSPIRVCache.h"
 #include "Common/UI/UI.h"
 #include "Common/UI/Screen.h"
 #include "Common/UI/ScreenManager.h"
@@ -797,6 +799,16 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 
 	g_DownloadManager.SetCacheDir(GetSysDirectory(DIRECTORY_APP_CACHE));
 
+#if !PPSSPP_PLATFORM(UWP)
+	// The SPIR-V of thin3d's shaders and other fixed ones. Only read on first use, so only by Vulkan.
+	if (g_Config.bShaderCache) {
+		File::CreateFullPath(GetSysDirectory(DIRECTORY_APP_CACHE));
+		// About twice what a session compiles (menu and a game: 10, a few more with post-processing
+		// or texture upscaling), so it's flushed once outdated entries have piled up.
+		SetFixedSPIRVCachePath(GetSysDirectory(DIRECTORY_APP_CACHE) / "vulkan_spirv.cache", 32);
+	}
+#endif
+
 	ApplyAchievementsHostOverride();
 
 	g_screenManager = new ScreenManager();
@@ -872,15 +884,12 @@ bool CreateGlobalPipelines();
 
 // TODO: Add faster special case for channels == 2.
 static void NativeMixWrapper(float *dest, int framesToWrite, int sampleRateHz, void *userdata) {
-	static int16_t *buffer;
-	static int bufSize;
-	if (bufSize < framesToWrite * 2) {
-		// This one leaks on exit. Oh well.
-		buffer = new int16_t[framesToWrite * 2];
-		bufSize = framesToWrite * 2;
+	static std::vector<int16_t> buffer;
+	if ((int)buffer.size() < framesToWrite * 2) {
+		buffer.resize(framesToWrite * 2);
 	}
 
-	NativeMix(buffer, framesToWrite, sampleRateHz, userdata);
+	NativeMix(buffer.data(), framesToWrite, sampleRateHz, userdata);
 
 	for (int i = 0; i < framesToWrite * 2; i++) {
 		dest[i] = (float)buffer[i] * (float)(1.0f / 32767.0f);
@@ -968,6 +977,10 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 		ImGui_ImplThin3d_CreateDeviceObjects(g_draw);
 	}
 
+#if !PPSSPP_PLATFORM(UWP)
+	// Now, rather than only at shutdown: on mobile the app can be killed without one.
+	SaveFixedSPIRVCache();
+#endif
 
 	INFO_LOG(Log::System, "NativeInitGraphics completed");
 
@@ -1028,6 +1041,10 @@ bool CreateGlobalPipelines() {
 
 void NativeShutdownGraphics(GraphicsContext *graphicsContext) {
 	INFO_LOG(Log::System, "NativeShutdownGraphics begin");
+
+#if !PPSSPP_PLATFORM(UWP)
+	SaveFixedSPIRVCache();
+#endif
 
 	graphicsContext->NotifyEmuThreadExit();
 
@@ -1836,7 +1853,7 @@ void NativeShutdown() {
 
 	g_controlMapper.RemoveListener(&g_globalListener);
 
-	Achievements::Shutdown();
+	Achievements::Shutdown(false);  // CancelAll below drops the pending requests.
 
 	if (g_Config.bAchievementsEnable) {
 		FILE *iconCacheFile = File::OpenCFile(GetSysDirectory(DIRECTORY_CACHE) / "icon.cache", "wb");
@@ -1861,6 +1878,9 @@ void NativeShutdown() {
 	ShutdownWebServer();
 
 	__UPnPShutdown();
+
+	// A request finishing while globals are destroyed at exit touches g_OSD, which may be gone by then.
+	g_DownloadManager.CancelAll();
 
 	net::Shutdown();
 

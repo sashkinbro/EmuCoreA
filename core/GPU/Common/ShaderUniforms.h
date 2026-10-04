@@ -58,7 +58,7 @@ R"(  mat4 u_proj;
   vec2 u_rasterOffset; vec2 u_minZmaxZ;
   vec4 u_uvscaleoffset;
   vec4 u_matambientalpha;
-  uint u_spline_counts;
+  uint pad0;
   uint u_depal_mask_shift_off_fmt;
   uint u_colorWriteMask;
   float u_mipBias;
@@ -112,6 +112,9 @@ uint32_t PackLightControlBits();
 uint32_t PackDepalBits(bool pixelMapped);
 
 void UpdateFogCoef(const GEState &state, float fogCoef[2]);
+
+// Computes u_texclamp and u_texclampoff. Only meaningful when gstate_c.needShaderTexClamp is set.
+void CalcTexClamp(float texClamp[4], float texClampOffset[2]);
 
 // This happens so much that I want it inline.
 inline void UpdateUVScaleOff(const GEState &state, float uvScaleOff[4]) {

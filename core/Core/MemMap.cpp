@@ -84,6 +84,7 @@ static u8 *m_pUncachedVRAM[4];
 u32 g_MemorySize;
 // Used to store the PSP model on game startup.
 u32 g_PSPModel;
+u32 g_UserPartitionSize;
 
 static MemMapSetupFlags g_setupFlags;
 
@@ -368,6 +369,10 @@ static void DoMemoryVoid(PointerWrap &p, uint32_t start, uint32_t size) {
 	// We only handle aligned data and sizes.
 	if ((size & 0x3F) != 0 || ((uintptr_t)d & 0x3F) != 0)
 		return p.DoVoid(d, size);
+
+	if ((p.mode == PointerWrap::MODE_READ || p.mode == PointerWrap::MODE_VERIFY) && !p.CheckRead(size)) {
+		return;
+	}
 
 	switch (p.mode) {
 	case PointerWrap::MODE_READ:

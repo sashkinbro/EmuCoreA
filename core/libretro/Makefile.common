@@ -25,7 +25,6 @@ INCFLAGS += \
 	-I$(EXTDIR)/glslang \
 	-I$(EXTDIR)/glslang-build \
 	-I$(EXTDIR)/native \
-	-I$(EXTDIR)/minimp3 \
 	-I$(EXTDIR)/zlib \
 	-I$(EXTDIR)/cpu_features/include \
 	-I$(ZSTDDIR) \
@@ -173,9 +172,6 @@ else
 endif
 
 SOURCES_C += $(LIBRETRODIR)/ext/glew/glew.c
-
-SOURCES_CXX += \
-	$(EXTDIR)/minimp3/minimp3.cpp
 
 SOURCES_C += \
 	$(EXTDIR)/libkirk/AES.c \
@@ -733,8 +729,10 @@ SOURCES_CXX += \
 	       $(COREDIR)/Dialog/PSPMsgDialog.cpp \
 	       $(COREDIR)/Dialog/PSPNetconfDialog.cpp \
 	       $(COREDIR)/Dialog/PSPNpSigninDialog.cpp \
+	       $(COREDIR)/Dialog/PSPHtmlViewerDialog.cpp \
 	       $(COREDIR)/Dialog/PSPOskDialog.cpp \
 	       $(COREDIR)/Dialog/PSPOskConstants.cpp \
+	       $(COREDIR)/Dialog/PSPPlaceholderDialog.cpp \
 	       $(COREDIR)/Dialog/PSPSaveDialog.cpp \
 	       $(COREDIR)/Dialog/PSPScreenshotDialog.cpp \
 	       $(COREDIR)/Dialog/SavedataParam.cpp \
@@ -886,7 +884,6 @@ SOURCES_CXX += \
 	       $(COREDIR)/MIPS/MIPSTables.cpp \
 	       $(COREDIR)/MIPS/MIPSStackWalk.cpp \
 	       $(COREDIR)/MIPS/MIPSVFPUUtils.cpp \
-	       $(COREDIR)/MIPS/MIPSVFPUFallbacks.cpp \
 	       $(COREDIR)/MIPS/MIPSTracer.cpp \
 	       $(COREDIR)/MemFault.cpp \
 	       $(COREDIR)/MemMap.cpp \

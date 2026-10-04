@@ -224,6 +224,8 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(reRawBase), CmdParamType::String, "re-raw-base", '\0', "Treat --re-module as a raw code image loaded at this address, e.g. 0x08300000", CmdLineMode::Headless},
 	{POFF(reDecrypt), CmdParamType::String, "re-decrypt", '\0', "Decrypt one encrypted PSP file (PRX or ME image) and exit", CmdLineMode::Headless},
 	{POFF(reDecryptOut), CmdParamType::String, "re-decrypt-out", '\0', "Output file for --re-decrypt (default: decrypted.bin)", CmdLineMode::Headless},
+	{POFF(dumpFile), CmdParamType::String, "dump-file", '\0', "Copy one file out of the disc image, e.g. disc0:/PSP_GAME/USRDIR/MOVIE.PMF, or list a directory, and exit", CmdLineMode::Headless},
+	{POFF(dumpFileOut), CmdParamType::String, "dump-file-out", '\0', "Output file for --dump-file (default: the file's own name)", CmdLineMode::Headless},
 	{POFF(odsLog), CmdParamType::Bool, "odslog", 'o', "Also log through OutputDebugString (Windows)", CmdLineMode::Headless},
 	{POFF(generateInterpreterDispatch), CmdParamType::Bool, "generate-interpreter-dispatch", '\0', "Generate C++ interpreter dispatch code (ExecInstruction) to stdout and exit", CmdLineMode::Headless},
 	{POFF(resolutionScale), CmdParamType::Int, "resolution-scale", '\0', "Set the resolution scale factor"},
@@ -232,6 +234,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(autoSaveLoadSymbols), CmdParamType::Bool, "auto-save-load-symbols", '\0', "Auto save/load per-module and per-game symbol files (see bAutoSaveLoadSymbols)", CmdLineMode::Both},
 	{POFF(bootVSH), CmdParamType::Bool, "vsh", '\0', "Boot the VSH (requires files dumped from a PSP in the flash0 directory)"},
 	{POFF(disableHLE), CmdParamType::Int, "disable-hle", '\0', "Bitmask of libraries to run the real firmware module for instead of our HLE", CmdLineMode::Both},
+	{POFF(forceHLE), CmdParamType::Int, "force-hle", '\0', "Bitmask of libraries to run our HLE for, even where the real module is the default", CmdLineMode::Both},
 	{POFF(memReadAction), CmdParamType::Enum, "memread", '\0', "Set the action for memory read exceptions", CmdLineMode::Both, g_ExceptionActionValues, ARRAY_SIZE(g_ExceptionActionValues)},
 	{POFF(memWriteAction), CmdParamType::Enum, "memwrite", '\0', "Set the action for memory write exceptions", CmdLineMode::Both, g_ExceptionActionValues, ARRAY_SIZE(g_ExceptionActionValues)},
 	{POFF(breakAction), CmdParamType::Enum, "break", '\0', "Set the action for break exceptions", CmdLineMode::Both, g_ExceptionActionValues, ARRAY_SIZE(g_ExceptionActionValues)},
@@ -413,7 +416,7 @@ CommandLineParseResult CommandLineOptions::Parse(int argc, const char *argv[], C
 				parsedAutoParam = true;
 				break;
 			} else if (result == ParseParamResult::BadValue) {
-				return CommandLineParseResult::Exit;
+				return CommandLineParseResult::Error;
 			} // else nomatch
 		}
 
@@ -505,6 +508,11 @@ CommandLineParseResult CommandLineOptions::Parse(int argc, const char *argv[], C
 		i++;
 	}
 
+	if (debuggerPort.has_value() && debuggerRunPort.has_value()) {
+		PRINT_STDERR("Error: --debugger and --debugger-run can't be used together.\n");
+		return CommandLineParseResult::Error;
+	}
+
 	// Final adjustments to adjust for old inconsistent code
 	if (log.has_value()) {
 		enableLogging = true;
@@ -563,6 +571,11 @@ void CommandLineOptions::ApplyToConfig() const {
 		// DoNotSaveSetting so a per-game config can't quietly put the HLE back.
 		g_Config.iDisableHLE = disableHLE.value();
 		g_Config.DoNotSaveSetting(&g_Config.iDisableHLE);
+	}
+
+	if (forceHLE.has_value()) {
+		g_Config.iForceEnableHLE = forceHLE.value();
+		g_Config.DoNotSaveSetting(&g_Config.iForceEnableHLE);
 	}
 
 	if (logLevel.has_value()) {

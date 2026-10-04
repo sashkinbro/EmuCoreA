@@ -93,6 +93,9 @@ static bool framebufIsLatched;
 
 static int enterVblankEvent = -1;
 static int leaveVblankEvent = -1;
+// Threads whose vblank wait is over, released a little after the vblank (see hleEnterVblank).
+static int vblankWakeEvent = -1;
+static std::vector<SceUID> vblankWakePending;
 static int afterFlipEvent = -1;
 static int lagSyncEvent = -1;
 
@@ -135,8 +138,10 @@ std::map<SceUID, int> vblankPausedWaits;
 
 // STATE END
 
-// The vblank period is 731.5 us (0.7315 ms)
-const double vblankMs = 0.7315;
+// tests/display/vblanklen measures 730-770us from sceDisplayWaitVblankStart returning until
+// vblank ends, and an hcount of up to 14 inside it. The wait's own latency is in that, so this is
+// the upper end.
+const double vblankMs = 0.770;
 // These are guesses based on tests.
 const double vsyncStartMs = 0.5925;
 const double vsyncEndMs = 0.7265;
@@ -154,6 +159,7 @@ static u64 nextFlipCycles = 0;
 
 void hleEnterVblank(u64 userdata, int cyclesLate);
 void hleLeaveVblank(u64 userdata, int cyclesLate);
+static void hleVblankWake(u64 userdata, int cyclesLate);
 void hleAfterFlip(u64 userdata, int cyclesLate);
 void hleLagSync(u64 userdata, int cyclesLate);
 
@@ -208,6 +214,8 @@ void __DisplayInit() {
 
 	enterVblankEvent = CoreTiming::RegisterEvent("EnterVBlank", &hleEnterVblank);
 	leaveVblankEvent = CoreTiming::RegisterEvent("LeaveVBlank", &hleLeaveVblank);
+	vblankWakeEvent = CoreTiming::RegisterEvent("VBlankWake", &hleVblankWake);
+	vblankWakePending.clear();
 	afterFlipEvent = CoreTiming::RegisterEvent("AfterFlip", &hleAfterFlip);
 
 	lagSyncEvent = CoreTiming::RegisterEvent("LagSync", &hleLagSync);
@@ -229,7 +237,7 @@ struct GPUStatistics_v0 {
 };
 
 void __DisplayDoState(PointerWrap &p) {
-	auto s = p.Section("sceDisplay", 1, 7);
+	auto s = p.Section("sceDisplay", 1, 8);
 	if (!s)
 		return;
 
@@ -256,14 +264,24 @@ void __DisplayDoState(PointerWrap &p) {
 	CoreTiming::RestoreRegisterEvent(leaveVblankEvent, "LeaveVBlank", &hleLeaveVblank);
 	Do(p, afterFlipEvent);
 	CoreTiming::RestoreRegisterEvent(afterFlipEvent, "AfterFlip", &hleAfterFlip);
+	if (s >= 8) {
+		Do(p, vblankWakeEvent);
+		Do(p, vblankWakePending);
+	} else {
+		vblankWakeEvent = -1;
+		vblankWakePending.clear();
+	}
+	CoreTiming::RestoreRegisterEvent(vblankWakeEvent, "VBlankWake", &hleVblankWake);
 
 	if (s >= 5) {
 		Do(p, lagSyncEvent);
 		Do(p, lagSyncScheduled);
 		CoreTiming::RestoreRegisterEvent(lagSyncEvent, "LagSync", &hleLagSync);
-		lastLagSync = time_now_d();
-		if (lagSyncScheduled != UseLagSync()) {
-			ScheduleLagSync();
+		if (p.mode == p.MODE_READ) {
+			lastLagSync = time_now_d();
+			if (lagSyncScheduled != UseLagSync()) {
+				ScheduleLagSync();
+			}
 		}
 	} else {
 		lagSyncEvent = -1;
@@ -297,6 +315,10 @@ void __DisplayDoState(PointerWrap &p) {
 		Do(p, lastFlipCycles);
 		Do(p, nextFlipCycles);
 	}
+	if (p.mode == p.MODE_READ) {
+		// Not saved. Start counting again rather than carry over the session before the load.
+		lastFlipsTooFrequent = 0;
+	}
 
 	gpu->DoState(p);
 
@@ -308,13 +330,14 @@ void __DisplayDoState(PointerWrap &p) {
 
 void __DisplayShutdown() {
 	vblankWaitingThreads.clear();
+	vblankWakePending.clear();
 }
 
 void __DisplayVblankBeginCallback(SceUID threadID, SceUID prevCallbackId) {
 	SceUID pauseKey = prevCallbackId == 0 ? threadID : prevCallbackId;
 
-	// This means two callbacks in a row.  PSP crashes if the same callback waits inside itself (may need more testing.)
-	// TODO: Handle this better?
+	// Shouldn't happen: each nesting level pauses under its own key, and on hardware a callback can
+	// nest only one level (a CB wait that would go deeper never returns.)
 	if (vblankPausedWaits.find(pauseKey) != vblankPausedWaits.end()) {
 		return;
 	}
@@ -534,26 +557,28 @@ void hleEnterVblank(u64 userdata, int cyclesLate) {
 
 	CoreTiming::ScheduleEvent(msToCycles(vblankMs) - cyclesLate, leaveVblankEvent, vbCount + 1);
 
-	// Trigger VBlank interrupt handlers.
-	__TriggerInterrupt(PSP_INTR_IMMEDIATE | PSP_INTR_ONLY_IF_ENABLED | PSP_INTR_ALWAYS_RESCHED, PSP_VBLANK_INTR, PSP_INTR_SUB_ALL);
-
-	// Wake up threads waiting for VBlank
-	u32 error;
-	bool wokeThreads = false;
+	// Threads waiting for this vblank are released about 48us after it, plus ~9us for each one
+	// beyond the first: on hardware a lone waiter returns ~53us after a vblank handler would run,
+	// and with four the first to run does so ~85us after the handler (pspautotests
+	// threads/scheduling/vblankwake). Which vblank a wait is for is still decided here, so a
+	// thread that starts waiting in between waits for the next one.
+	// TODO: The vblank itself takes ~62us of CPU on hardware (~70us with a handler, which runs
+	// ~28us in), and a waiter back ~90us after it still reads hcount 1. Both fit only if the
+	// interrupt comes ~40us before the line count wraps, which we don't model yet, so that cost
+	// isn't charged either.
 	for (size_t i = 0; i < vblankWaitingThreads.size(); i++) {
 		if (--vblankWaitingThreads[i].vcountUnblock == 0) {
-			// Only wake it if it wasn't already released by someone else.
-			SceUID waitID = __KernelGetWaitID(vblankWaitingThreads[i].threadID, WAITTYPE_VBLANK, error);
-			if (waitID == 1) {
-				__KernelResumeThreadFromWait(vblankWaitingThreads[i].threadID, 0);
-				wokeThreads = true;
-			}
+			vblankWakePending.push_back(vblankWaitingThreads[i].threadID);
 			vblankWaitingThreads.erase(vblankWaitingThreads.begin() + i--);
 		}
 	}
-	if (wokeThreads) {
-		__KernelReSchedule("entered vblank");
+	if (!vblankWakePending.empty()) {
+		const int releaseUs = 48 + 9 * ((int)vblankWakePending.size() - 1);
+		CoreTiming::ScheduleEvent(usToCycles(releaseUs) - cyclesLate, vblankWakeEvent, 0);
 	}
+
+	// Trigger VBlank interrupt handlers.
+	__TriggerInterrupt(PSP_INTR_IMMEDIATE | PSP_INTR_ONLY_IF_ENABLED | PSP_INTR_ALWAYS_RESCHED, PSP_VBLANK_INTR, PSP_INTR_SUB_ALL);
 
 	// We use the emulation timebase here, for auto movements to be smooth as seen from the game.
 	g_controlMapper.UpdateAutoMovements(CoreTiming::GetGlobalTimeUs() / 1000000.0);
@@ -748,6 +773,23 @@ void hleAfterFlip(u64 userdata, int cyclesLate) {
 	}
 }
 
+static void hleVblankWake(u64 userdata, int cyclesLate) {
+	u32 error;
+	bool wokeThreads = false;
+	for (SceUID threadID : vblankWakePending) {
+		// Only wake it if it wasn't already released by someone else.
+		SceUID waitID = __KernelGetWaitID(threadID, WAITTYPE_VBLANK, error);
+		if (waitID == 1) {
+			__KernelResumeThreadFromWait(threadID, 0);
+			wokeThreads = true;
+		}
+	}
+	vblankWakePending.clear();
+	if (wokeThreads) {
+		__KernelReSchedule("vblank waiters released");
+	}
+}
+
 void hleLeaveVblank(u64 userdata, int cyclesLate) {
 	flippedThisFrame = false;
 	VERBOSE_LOG(Log::sceDisplay,"Leave VBlank %i", (int)userdata - 1);
@@ -807,6 +849,14 @@ static u32 sceDisplayIsVblank() {
 }
 
 void __DisplayWaitForVblanks(const char *reason, int vblanks, bool callbacks) {
+	// Nothing can wait in an interrupt handler or with dispatch disabled, and sceDisplaySetMode
+	// then returns 0 without waiting (pspautotests intr/waits). Gods Eater Burst calls it from its
+	// vblank handler, and the wait went to the idle thread the handler runs on. Once both idle
+	// threads were waiting there was nothing left to schedule.
+	if (__IsInInterrupt() || !__KernelIsDispatchEnabled()) {
+		return;
+	}
+
 	const s64 ticksIntoFrame = CoreTiming::GetTicks(currentMIPS) - DisplayFrameStartTicks();
 	const s64 cyclesToNextVblank = msToCycles(frameMs) - ticksIntoFrame;
 

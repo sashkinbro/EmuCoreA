@@ -311,6 +311,7 @@ int NetAdhocPtp_Connect(int id, int timeout, int flag, bool allowForcedConnect =
 
 // Forward declarations for the savestate mechanism (the matching is sadly not inside its own section)
 void deleteMatchingEvents(const int matchingId = -1);
+void discardMatchingEvents();
 void DoNetAdhocMatchingInited(PointerWrap &p);
 void DoNetAdhocMatchingThreads(PointerWrap &p);
 void ZeroNetAdhocMatchingThreads();
@@ -510,7 +511,7 @@ static void __AdhocctlNotify(u64 userdata, int cyclesLate) {
 		return;
 	}
 
-	// Socket not found?! Should never happen! But if it ever happened (ie. loaded from SaveState where adhocctlRequests got cleared) return BUSY and let the game try again.
+	// Socket not found?! Should never happen! But if it ever happened (ie. loaded from an old SaveState, which didn't keep adhocctlRequests) return BUSY and let the game try again.
 	if (adhocctlRequests.find(uid) == adhocctlRequests.end()) {
 		WARN_LOG(Log::sceNet, "sceNetAdhocctl Socket WaitID(%i) not found!", uid);
 		__KernelResumeThreadFromWait(threadID, SCE_NET_ADHOCCTL_ERROR_BUSY);
@@ -559,7 +560,8 @@ static void __AdhocctlNotify(u64 userdata, int cyclesLate) {
 		}
 
 		// Retry until successfully sent. Login packet sent after successfully connected to Adhoc Server (indicated by networkInited), so we're not sending Login again here
-		if ((req.opcode == OPCODE_LOGIN && !g_adhocServerConnected) || (ret == SOCKET_ERROR && (sockerr == EAGAIN || sockerr == EWOULDBLOCK))) {
+		// A login stops waiting early once the friend finder has tried and failed to connect.
+		if ((req.opcode == OPCODE_LOGIN && !g_adhocServerConnected && !g_adhocServerLoginFailed) || (ret == SOCKET_ERROR && (sockerr == EAGAIN || sockerr == EWOULDBLOCK))) {
 			u64 now = (u64)(time_now_d() * 1000000.0);
 			if (now - adhocctlStartTime <= static_cast<u64>(adhocDefaultTimeout) + 500) {
 				// Try again in another 0.5ms until timedout.
@@ -1784,7 +1786,7 @@ int WaitBlockingAdhocSocket(u64 threadSocketId, int type, int pspSocketId, void*
 }
 
 void __NetAdhocDoState(PointerWrap &p) {
-	auto s = p.Section("sceNetAdhoc", 1, 8);
+	auto s = p.Section("sceNetAdhoc", 1, 9);
 	if (!s)
 		return;
 
@@ -1864,15 +1866,27 @@ void __NetAdhocDoState(PointerWrap &p) {
 		netAdhocGameModeEntered = false;
 		netAdhocEnterGameModeTimeout = 15000000;
 	}
+	if (s >= 9) {
+		// A thread may be waiting on one (sceNetAdhocctlInit waits for the login.) Without it, the
+		// wait ends in an error, which for Init can't be retried: the library already counts as inited.
+		Do(p, adhocctlRequests);
+		if (p.mode == p.MODE_READ) {
+			adhocctlStartTime = (u64)(time_now_d() * 1000000.0);
+		}
+	} else if (p.mode == p.MODE_READ) {
+		adhocctlRequests.clear();
+	}
 
 	if (p.mode == p.MODE_READ) {
 		// Discard leftover events
-		adhocctlEvents.clear();
-		adhocctlRequests.clear();
+		{
+			std::lock_guard<std::recursive_mutex> adhocGuard(adhocEvtMtx);
+			adhocctlEvents.clear();
+		}
 		adhocSocketRequests.clear();
 		sendTargetPeers.clear();
 		deleteAllAdhocSockets();
-		deleteMatchingEvents();
+		discardMatchingEvents();
 
 		// Let's not change "Inited" value when Loading SaveState to prevent memory & port leaks
 		RestoreNetAdhocMatchingInited();
@@ -1908,9 +1922,14 @@ void __NetAdhocInit() {
 	__AdhocNotifInit();
 	__AdhocServerInit();
 
-	// Create built-in AdhocServer Thread
+	// Create built-in AdhocServer Thread. The flag is set here rather than by the thread, so that a
+	// shutdown that clears it before the thread gets going can't be undone (see friendFinder).
 	adhocServerRunning = false;
+	if (adhocServerThread.joinable()) {
+		adhocServerThread.join();
+	}
 	if (g_Config.bEnableWlan && g_Config.bEnableAdhocServer) {
+		adhocServerRunning = true;
 		adhocServerThread = std::thread(proAdhocServerThread, SERVER_PORT);
 	}
 }
@@ -1953,8 +1972,10 @@ u32 sceNetAdhocInit() {
 		}
 
 		auto n = GetI18NCategory(I18NCat::NETWORKING);
-		std::string_view modeStr = serverHasRelay ? n->T("Relay server mode") : n->T("P2P mode");
-		g_OSD.Show(OSDType::MESSAGE_INFO, ApplySafeSubstitutions("%1: %2", n->T("Ad Hoc multiplayer"), modeStr), 0.0f, "adhoc started");
+		if (g_Config.bEnableWlan) {
+			std::string_view modeStr = serverHasRelay ? n->T("Relay server mode") : n->T("P2P mode");
+			g_OSD.Show(OSDType::MESSAGE_INFO, ApplySafeSubstitutions("%1: %2", n->T("Ad Hoc multiplayer"), modeStr), 0.0f, "adhoc started");
+		}
 
 		// Return Success
 		return hleLogInfo(Log::sceNet, 0, "at %08x", currentMIPS->pc);
@@ -1981,6 +2002,7 @@ int sceNetAdhocctlInit(int stackSize, int prio, u32 productAddr) {
 
 	adhocctlEvents.clear();
 	netAdhocctlInited = true; //needed for cleanup during AdhocctlTerm even when it failed to connect to Adhoc Server (since it's being faked as success)
+	g_adhocServerLoginFailed = false;
 	isAdhocctlNeedLogin = true;
 
 	// Create fake PSP Thread for callback
@@ -1993,6 +2015,12 @@ int sceNetAdhocctlInit(int stackSize, int prio, u32 productAddr) {
 
 	// TODO: Merging friendFinder (real) thread to AdhocThread (fake) thread on PSP side
 	if (!friendFinderRunning) {
+		// Set before the thread starts, not by it: shutting down before it got going used to clear
+		// the flag first, and then the thread set it again and never stopped, hanging the join.
+		if (friendFinderThread.joinable()) {
+			friendFinderThread.join();
+		}
+		friendFinderRunning = true;
 		friendFinderThread = std::thread(friendFinder);
 	}
 
@@ -3165,6 +3193,7 @@ int sceNetAdhocctlScan() {
 		// Only scan when in Disconnected state, otherwise AdhocServer will kick you out
 		if (adhocctlState == ADHOCCTL_STATE_DISCONNECTED && !isAdhocctlBusy) {
 			isAdhocctlBusy = true;
+			g_adhocServerLoginFailed = false;
 			isAdhocctlNeedLogin = true;
 			adhocctlState = ADHOCCTL_STATE_SCANNING;
 			adhocctlCurrentMode = ADHOCCTL_MODE_NORMAL;
@@ -3658,6 +3687,7 @@ int NetAdhocctl_Create(const char *groupName) {
 			// Disconnected State
 			if (adhocctlState == ADHOCCTL_STATE_DISCONNECTED && !isAdhocctlBusy) {
 				isAdhocctlBusy = true;
+				g_adhocServerLoginFailed = false;
 				isAdhocctlNeedLogin = true;
 
 				// Set Network Name

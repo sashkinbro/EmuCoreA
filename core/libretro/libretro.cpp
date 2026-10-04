@@ -1583,6 +1583,7 @@ bool retro_load_game(const struct retro_game_info *game) {
 
    // set cpuCore from libretro setting variable
    coreParam.cpuCore         =  (CPUCore)g_Config.iCpuCore;
+   coreParam.bUseVertexDecoderJit = System_GetPropertyBool(SYSPROP_CAN_JIT);
 
    g_pendingBoot = true;
 
@@ -2232,6 +2233,7 @@ void System_RunOnMainThread(std::function<void()>) {}
 void NativeFrame(GraphicsContext *graphicsContext) {}
 void NativeResized() {}
 void System_Toast(std::string_view str) {}
+void System_LaunchUrl(LaunchUrlType urlType, std::string_view url) {}
 
 inline int16_t Clamp16(int32_t sample) {
    if (sample < -32767) return -32767;

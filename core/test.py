@@ -40,6 +40,18 @@ PPSSPP_EXE = None
 TEST_ROOT = "pspautotests/tests/"
 TIMEOUT = 5
 
+# The slower CPU backends need a longer wall clock on the CPU-heavy tests - the interpreter runs
+# misc/deadbeef in about 3s. Scale the timeout per backend rather than raising it for everyone, so
+# a genuine hang under the JIT is still caught in five seconds.
+CPU_TIMEOUTS = {
+  'interpreter': 20,
+  'ir': 10,
+  'jit': 5,
+  'jit-ir': 5,
+}
+
+DEBUG_TIMEOUT_SCALE = 3
+
 class Command(object):
   def __init__(self, cmd, data = None):
     self.cmd = cmd
@@ -76,14 +88,29 @@ tests_good = [
   "cpu/cpu_alu/cpu_alu",
   "cpu/cpu_alu/cpu_branch",
   "cpu/cpu_alu/cpu_branch2",
+  "cpu/cpu_alu/cpu_div",
+  "cpu/vfpu/callout",
   "cpu/vfpu/colors",
   "cpu/vfpu/convert",
+  "cpu/vfpu/convert_scaled",
+  "cpu/vfpu/minmax",
+  "cpu/vfpu/prefix_branch",
+  "cpu/vfpu/prefix_ctrl",
+  "cpu/vfpu/vbranch",
+  "cpu/vfpu/vrnd",
+  "cpu/vfpu/overlap",
   "cpu/vfpu/gum",
   "cpu/vfpu/matrix",
   "cpu/vfpu/vavg",
+  "cpu/vfpu/exact",
+  "cpu/vfpu/vrot",
   "cpu/icache/icache",
   "cpu/lsu/lsu",
+  "cpu/lsu/llsc",
   "cpu/fpu/fpu",
+  "cpu/fpu/rounding",
+  "cpu/fpu/roundmode",
+  "cpu/fpu/fpu_branch",
 
   "audio/atrac/addstreamdata",
   "audio/atrac/atractest",
@@ -102,6 +129,9 @@ tests_good = [
   "audio/atrac/second/setbuffer",
   "audio/atrac/setdata",
   "audio/atrac/sas",
+  "audio/atrac/c0mono",
+  "audio/audiocodec/basic",
+  "audio/audiocodec/at3param",
   "audio/mp3/checkneeded",
   "audio/mp3/getbitrate",
   "audio/mp3/getchannel",
@@ -124,9 +154,11 @@ tests_good = [
   "audio/blocking/depth",
   "audio/blocking/errors",
   "audio/blocking/overhead",
+  "audio/blocking/parked",
   "audio/blocking/oneshot",
   "audio/blocking/restlen",
   "audio/blocking/vaudio",
+  "audio/sceaudio/reserve",
   "audio/sceaudio/datalen",
   "audio/output2/changelength",
   "audio/output2/release",
@@ -151,6 +183,7 @@ tests_good = [
   "ctrl/sampling2/sampling2",
   "ctrl/vblank",
   "display/display",
+  "display/hcount",
   "display/vblankmulti",
   "display/isstate",
   "display/setframebuf",
@@ -189,10 +222,16 @@ tests_good = [
   "gpu/dither/dither",
   "gpu/filtering/mipmaplinear",
   "gpu/ge/break",
+  "gpu/ge/breakwait",
+  "gpu/ge/callbackstate",
   "gpu/ge/context",
   "gpu/ge/edram",
   "gpu/ge/enqueueparam",
+  "gpu/ge/intrsuspend",
   "gpu/ge/queue",
+  "gpu/ge/queue2",
+  "gpu/lighting/shademap",
+  "gpu/lighting/specular",
   "gpu/primitives/indices",
   "gpu/primitives/invalidprim",
   "gpu/primitives/points",
@@ -231,9 +270,13 @@ tests_good = [
   "hash/sha1ctx",
   "hle/check_not_used_uids",
   "intr/intr",
+  "intr/mfic",
   "intr/enablesub",
+  "intr/registersub",
+  "intr/releasesub",
   "intr/suspended",
   "intr/vblank/vblank",
+  "intr/delays/delays",
   "io/cwd/cwd",
   "io/file/rename",
   "io/directory/directory",
@@ -248,6 +291,7 @@ tests_good = [
   "malloc/malloc",
   "misc/dcache",
   "misc/deadbeef",
+  "modules/unresolved/unresolved",
   "misc/libc",
   "misc/sdkver",
   "misc/testgp",
@@ -256,6 +300,7 @@ tests_good = [
   "mstick/mstick",
   "power/cpu",
   "power/power",
+  "power/freq",
   "power/volatile/lock",
   "power/volatile/trylock",
   "power/volatile/unlock",
@@ -275,12 +320,23 @@ tests_good = [
   "threads/alarm/cancel/cancel",
   "threads/alarm/refer/refer",
   "threads/alarm/set/set",
+  "threads/callbacks/afterwait",
   "threads/callbacks/callbacks",
+  "threads/callbacks/cancel",
+  "threads/callbacks/cbtimeout",
   "threads/callbacks/check",
+  "threads/callbacks/count",
   "threads/callbacks/create",
   "threads/callbacks/delete",
+  "threads/callbacks/delivery",
   "threads/callbacks/exit",
+  "threads/callbacks/intrnotify",
+  "threads/callbacks/nested",
+  "threads/callbacks/notify",
+  "threads/callbacks/otherthread",
+  "threads/callbacks/recursion",
   "threads/callbacks/refer",
+  "threads/callbacks/waittypes",
   "threads/events/events",
   "threads/events/cancel/cancel",
   "threads/events/clear/clear",
@@ -300,6 +356,7 @@ tests_good = [
   "threads/fpl/refer",
   "threads/fpl/tryallocate",
   "threads/k0/k0",
+  "threads/lwmutex/callbacks",
   "threads/lwmutex/create",
   "threads/lwmutex/delete",
   "threads/lwmutex/lock",
@@ -337,6 +394,14 @@ tests_good = [
   "threads/mutex/try",
   "threads/mutex/unlock",
   "threads/mutex/unlock2",
+  "threads/scheduling/dispatch",
+  "threads/callbacks/combos",
+  "threads/scheduling/delayzero",
+  "threads/scheduling/dispatchwake",
+  "threads/scheduling/mutexhandoff",
+  "threads/scheduling/vblankwake",
+  "threads/scheduling/readyqueue",
+  "threads/scheduling/waittimeouts",
   "threads/semaphores/semaphores",
   "threads/semaphores/cancel",
   "threads/semaphores/create",
@@ -356,10 +421,13 @@ tests_good = [
   "threads/threads/stackfree",
   "threads/threads/start",
   "threads/threads/suspend",
+  "threads/threads/terminate",
+  "threads/threads/termsuspended",
   "threads/threads/threadend",
   "threads/threads/threadmanidlist",
   "threads/threads/threadmanidtype",
   "threads/threads/threads",
+  "threads/tls/allocate",
   "threads/tls/create",
   "threads/tls/partition",
   "threads/tls/kernel/partition",
@@ -368,8 +436,10 @@ tests_good = [
   "threads/tls/free",
   "threads/tls/priority",
   "threads/tls/refer",
+  "threads/tls/timeout",
   "threads/vpl/allocate",
   "threads/vpl/cancel",
+  "threads/vpl/create",
   "threads/vpl/delete",
   "threads/vpl/fifo",
   "threads/vpl/free",
@@ -391,12 +461,21 @@ tests_good = [
   "threads/vtimers/start",
   "threads/vtimers/stop",
   "threads/wakeup/wakeup",
+  "utility/dialog/abort",
+  "utility/dialog/htmlviewer",
+  "utility/dialog/priority",
+  "utility/dialog/sizes",
+  "utility/dialog/status",
   "utility/msgdialog/abort",
   "utility/savedata/autosave",
+  "utility/savedata/shutdownstatus",
   "utility/savedata/filelist",
+  "utility/savedata/getsize",
   "utility/savedata/makedata",
   "utility/systemparam/systemparam",
+  "umd/api/api",
   "umd/callbacks/umd",
+  "umd/wait/wait",
   "umd/register",
   "video/mpeg/ringbuffer/avail",
   "video/mpeg/ringbuffer/construct",
@@ -421,20 +500,48 @@ tests_good = [
 
 # Broken tests
 # -b flag runs these.
+
+# Tests that don't pass yet on an architecture we can only reach through emulation. Pass
+# --known-failures=<arch> to drop them from the run, so CI can still catch anything *new* breaking
+# while these stay outstanding. Keep a reason next to each one, and delete entries as they're fixed
+# rather than letting the list rot.
+known_failures = {
+  "riscv64": [
+    # No flush-to-zero: the ISA has no control for it, so a denormal result survives where the
+    # PSP would have flushed it. Everything else in this test passes.
+    "cpu/fpu/fpu",
+    # The ISA returns the canonical NaN (0x7fc00000) from every operation, never the operand's
+    # NaN, so a negative or signaling NaN input loses its sign and payload. Everything else passes.
+    "cpu/fpu/roundmode",
+  ],
+  "loongarch64": [
+    "cpu/fpu/fpu",
+  ],
+}
+
 tests_next = [
 # These are the next tests up for fixing. These run by default.
   "cpu/fpu/fcr",
+  "cpu/vfpu/prefix_consume",  # see the pspautotests commit for what differs per core
+  "cpu/vfpu/prefix_sat",
+  "cpu/vfpu/prefix_unpack",  # an invalid swizzle replays an earlier prefixed value, not emulated
+  "cpu/vfpu/vbranch_hazard",  # VFPU pipeline latencies, which a compiler pads for; not emulated
+  "cpu/vfpu/minmax_tie",  # vmin/vmax return the second operand on a -0/+0 tie; the IR path returns the first
+  "cpu/vfpu/minmax_zero",  # signed zero and denormals in vmin/vmax
+  "cpu/vfpu/specials",  # vcmp on denormals, NaN canonicalization and denormal flush in vbfy/vocp/vavg/vfad/vsocp
+  "cpu/vfpu/overlap_vcrsp",  # vcrsp overlapping its source, which the assembler refuses; the hardware doesn't read-before-write
+  "cpu/fpu/fpu_branch_hazard",  # a bc1x right after c.xx.s sees the old condition; the compiler pads for it, not emulated
+  "cpu/fpu/fpu_nan",  # 0/0 and inf-inf give 0x7fc00000; x86 hosts make 0xffc00000, and a check per op isn't worth it
+  "cpu/lsu/cacheop",  # the data cache is write-back and the uncached mirror shows it; not emulated
   "cpu/vfpu/prefixes",
   "cpu/vfpu/vector",
   "cpu/vfpu/vregs",
   "audio/sceaudio/output",
-  "audio/sceaudio/reserve",
   "audio/sascore/setadsr",
   "audio/mp3/init",
   "audio/output2/frequency",
   "audio/output2/rest",
   "ccc/convertstring",
-  "display/hcount",
   "font/fonttest",
   "font/charinfo",
   "font/newlib",
@@ -459,12 +566,15 @@ tests_next = [
   "gpu/primitives/bezier",
   "gpu/primitives/continue",
   "gpu/primitives/immediate",
+  "gpu/primitives/indices32",
   "gpu/primitives/lines",
   "gpu/primitives/linestrip",
   "gpu/primitives/spline",
   "gpu/reflection/reflection",
   "gpu/rendertarget/rendertarget",
   "gpu/signals/continue",
+  # Old SDK: a stall update from inside a SUSPEND handler is remembered, but not applied to the GE. See docs/sceGe.md.
+  "gpu/signals/handlercalls",
   "gpu/signals/jumps",
   "gpu/signals/simple",
   "gpu/simple/simple",
@@ -474,8 +584,6 @@ tests_next = [
   "gpu/texmtx/uvs",
   "gpu/textures/size",
   "gpu/triangle/triangle",
-  "intr/registersub",
-  "intr/releasesub",
   "intr/waits",
   "sysmem/kernel/heapgrow",
   "io/file/file",
@@ -495,25 +603,16 @@ tests_next = [
   #"modules/loadexec/loader",
   "net/http/http",
   "net/primary/ether",
-  "power/freq",
   "sysmem/partition",
-  "threads/callbacks/cancel",
-  "threads/callbacks/count",
-  "threads/callbacks/notify",
   # These two mbx tests only appeared to work because they papered over bugs 
 
 
-  "threads/scheduling/dispatch",
   "threads/scheduling/scheduling",
   "threads/threads/create",
-  "threads/threads/terminate",
   "threads/tls/memory",
-  "threads/vpl/create",
   "umd/io/umd_io",
   "umd/raw_access/raw_access",
-  "umd/wait/wait",
   "utility/msgdialog/dialog",
-  "utility/savedata/getsize",
   "utility/savedata/idlist",
   # These tests appear to be broken and just hang.
   #"utility/savedata/deletebroken",
@@ -573,9 +672,25 @@ def init():
     print("PPSSPPHeadless executable missing, please build one.")
     sys.exit(1)
 
+def cpu_backend(args):
+  # Which backend headless will end up on, given the args we hand through to it. Headless defaults
+  # to the JIT, and a later flag overrides an earlier one, like its own parsing in Core/CmdLine.cpp.
+  short_flags = {'-i': 'interpreter', '-r': 'ir', '-j': 'jit', '-J': 'jit-ir'}
+  backend = 'jit'
+  for arg in args:
+    if arg in short_flags:
+      backend = short_flags[arg]
+    elif arg.startswith('--cpu='):
+      backend = arg[len('--cpu='):]
+  return backend
+
 def run_tests(test_list, args):
   global PPSSPP_EXE, TIMEOUT
   returncode = 0
+  timeout = CPU_TIMEOUTS.get(cpu_backend(args), TIMEOUT)
+  # Debug builds are several times slower, enough for the heavier tests to brush the limit.
+  if 'Debug' in os.path.normpath(PPSSPP_EXE).split(os.sep):
+    timeout *= DEBUG_TIMEOUT_SCALE
 
   test_filenames = []
   for test in test_list:
@@ -589,11 +704,11 @@ def run_tests(test_list, args):
 
   if len(test_filenames):
     # TODO: Maybe --compare should detect --graphics?
-    cmdline = [PPSSPP_EXE, '--root', TEST_ROOT + '../', '--compare', '--timeout-wall=' + str(TIMEOUT), '@-']
+    cmdline = [PPSSPP_EXE, '--root', TEST_ROOT + '../', '--compare', '--timeout-wall=' + str(timeout), '@-']
     cmdline.extend([i for i in args if i not in ['-g', '-m', '-b']])
 
     c = Command(cmdline, '\n'.join(test_filenames))
-    returncode = c.run(TIMEOUT * len(test_filenames))
+    returncode = c.run(timeout * len(test_filenames))
 
     print("Ran " + ' '.join(cmdline))
 
@@ -604,10 +719,17 @@ def main():
   tests = []
   args = []
   teamcity = False
+  skip_arch = None
   for arg in sys.argv[1:]:
     if arg == '--teamcity':
       args.append(arg)
       teamcity = True
+    elif arg.startswith('--known-failures='):
+      # Ours, not headless's - don't pass it through.
+      skip_arch = arg[len('--known-failures='):]
+      if skip_arch not in known_failures:
+        print("Unknown architecture for --known-failures: " + skip_arch)
+        sys.exit(1)
     elif arg[0] == '-':
       args.append(arg)
     else:
@@ -626,6 +748,12 @@ def main():
     tests = [i for i in tests_next if i.startswith(tests[0])]
   elif '-m' in args:
     tests = [i for i in tests_next + tests_good if i.startswith(tests[0])]
+
+  if skip_arch:
+    skipped = [t for t in tests if t in known_failures[skip_arch]]
+    tests = [t for t in tests if t not in known_failures[skip_arch]]
+    if skipped:
+      print("Skipping %d known failures on %s: %s" % (len(skipped), skip_arch, ", ".join(skipped)))
 
   returncode = run_tests(tests, args)
   if teamcity:

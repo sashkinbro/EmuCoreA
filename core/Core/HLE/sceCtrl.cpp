@@ -15,9 +15,11 @@
 // Official git repository and contact information can be found at
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
+#include <algorithm>
 #include <cmath>
 #include <atomic>
 #include <mutex>
+#include <vector>
 
 #include "Common/Serialize/Serializer.h"
 #include "Common/Serialize/SerializeFuncs.h"
@@ -206,6 +208,58 @@ u32 __CtrlReadLatch()
 	return ret;
 }
 
+// Presses held for a number of vblank samples (the debugger's input.buttons.press). Counted down on
+// the emulator thread at each vblank, so how long a press lasts doesn't depend on how fast the
+// emulator runs. Guarded by ctrlMutex; not saved.
+struct TimedPress {
+	int id;
+	u32 buttons;
+	int samplesLeft;
+};
+static std::vector<TimedPress> timedPresses;
+static int nextTimedPressId = 1;
+
+int __CtrlPressFor(u32 buttons, int vblanks) {
+	std::lock_guard<std::mutex> guard(ctrlMutex);
+	buttons &= CTRL_MASK_USER;
+	ctrlCurrent.buttons |= buttons;
+	const int id = nextTimedPressId++;
+	timedPresses.push_back(TimedPress{ id, buttons, std::max(vblanks, 1) });
+	return id;
+}
+
+bool __CtrlPressActive(int id) {
+	std::lock_guard<std::mutex> guard(ctrlMutex);
+	for (const TimedPress &press : timedPresses) {
+		if (press.id == id) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// After the vblank's sample, so a press of N vblanks is seen by N samples.
+static void __CtrlUpdateTimedPresses() {
+	std::lock_guard<std::mutex> guard(ctrlMutex);
+	if (timedPresses.empty()) {
+		return;
+	}
+	u32 released = 0;
+	for (TimedPress &press : timedPresses) {
+		if (--press.samplesLeft <= 0) {
+			released |= press.buttons;
+		}
+	}
+	timedPresses.erase(std::remove_if(timedPresses.begin(), timedPresses.end(), [](const TimedPress &press) {
+		return press.samplesLeft <= 0;
+	}), timedPresses.end());
+	// Unless another press still holds them.
+	for (const TimedPress &press : timedPresses) {
+		released &= ~press.buttons;
+	}
+	ctrlCurrent.buttons &= ~released;
+}
+
 void __CtrlUpdateButtons(u32 bitsToSet, u32 bitsToClear)
 {
 	bitsToClear &= CTRL_MASK_USER;
@@ -344,6 +398,7 @@ void __CtrlVblank() {
 	// This always runs, so make sure we're in vblank mode.
 	if (ctrlCycle == 0)
 		__CtrlDoSample();
+	__CtrlUpdateTimedPresses();
 }
 
 static void __CtrlTimerUpdate(u64 userdata, int cyclesLate)
@@ -424,6 +479,8 @@ void __CtrlDoState(PointerWrap &p)
 void __CtrlShutdown()
 {
 	waitingThreads.clear();
+	std::lock_guard<std::mutex> guard(ctrlMutex);
+	timedPresses.clear();
 }
 
 static u32 sceCtrlSetSamplingCycle(u32 cycle)
@@ -585,6 +642,14 @@ static const HLEFunction sceCtrl[] =
 	{0X6841BE1A, nullptr,                                  "sceCtrlSetRapidFire",              '?', ""  },
 	{0XA7144800, &WrapI_II<sceCtrlSetIdleCancelThreshold>, "sceCtrlSetIdleCancelThreshold",    'i', "ii"},
 	{0X687660FA, &WrapI_UU<sceCtrlGetIdleCancelThreshold>, "sceCtrlGetIdleCancelThreshold",    'i', "xx"},
+	// The "2" variants take a port first: (int port, data, int count).
+	{0X5A36B1C2, nullptr,                                  "sceCtrlPeekBufferPositive2",       '?', ""  },
+	{0X239A6BA7, nullptr,                                  "sceCtrlPeekBufferNegative2",       '?', ""  },
+	{0X1098030B, nullptr,                                  "sceCtrlReadBufferPositive2",       '?', ""  },
+	{0X7C3675AB, nullptr,                                  "sceCtrlReadBufferNegative2",       '?', ""  },
+	// sceCtrl_driver's NID for sceCtrlPeekBufferPositive in 3.71. Imported by NJEMU's SystemButtons.prx
+	// kernel plugin, which picks it when sceKernelDevkitVersion() is 3.71 or newer (#8925).
+	{0XC4AAD55F, &WrapI_UU<sceCtrlPeekBufferPositive>,     "sceCtrlPeekBufferPositive",        'i', "xx"},
 };
 
 void Register_sceCtrl()

@@ -531,7 +531,6 @@
     <ClCompile Include="MIPS\LoongArch64\LoongArch64CompVec.cpp" />
     <ClCompile Include="MIPS\LoongArch64\LoongArch64Jit.cpp" />
     <ClCompile Include="MIPS\LoongArch64\LoongArch64RegCache.cpp" />
-    <ClCompile Include="MIPS\MIPSVFPUFallbacks.cpp" />
     <ClCompile Include="MIPS\RiscV\RiscVAsm.cpp" />
     <ClCompile Include="MIPS\RiscV\RiscVCompALU.cpp" />
     <ClCompile Include="MIPS\RiscV\RiscVCompBranch.cpp" />
@@ -570,6 +569,7 @@
     <ClCompile Include="Dialog\PSPMsgDialog.cpp" />
     <ClCompile Include="Dialog\PSPNetconfDialog.cpp" />
     <ClCompile Include="Dialog\PSPNpSigninDialog.cpp" />
+    <ClCompile Include="Dialog\PSPHtmlViewerDialog.cpp" />
     <ClCompile Include="Dialog\PSPOskDialog.cpp" />
     <ClCompile Include="Dialog\PSPPlaceholderDialog.cpp" />
     <ClCompile Include="Dialog\PSPSaveDialog.cpp" />
@@ -1069,7 +1069,6 @@
     <ClInclude Include="MIPS\IR\IRRegCache.h" />
     <ClInclude Include="MIPS\LoongArch64\LoongArch64Jit.h" />
     <ClInclude Include="MIPS\LoongArch64\LoongArch64RegCache.h" />
-    <ClInclude Include="MIPS\MIPSVFPUFallbacks.h" />
     <ClInclude Include="MIPS\RiscV\RiscVJit.h" />
     <ClInclude Include="MIPS\RiscV\RiscVRegCache.h" />
     <ClInclude Include="MIPS\x86\X64IRJit.h" />
@@ -1089,6 +1088,7 @@
     <ClInclude Include="Dialog\PSPMsgDialog.h" />
     <ClInclude Include="Dialog\PSPNetconfDialog.h" />
     <ClInclude Include="Dialog\PSPNpSigninDialog.h" />
+    <ClInclude Include="Dialog\PSPHtmlViewerDialog.h" />
     <ClInclude Include="Dialog\PSPOskDialog.h" />
     <ClInclude Include="Dialog\PSPPlaceholderDialog.h" />
     <ClInclude Include="Dialog\PSPSaveDialog.h" />

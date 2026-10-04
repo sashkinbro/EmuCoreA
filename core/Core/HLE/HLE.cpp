@@ -253,8 +253,8 @@ static bool g_disableHLELatched;
 static DisableHLEFlags g_unavailableDisableFlags = (DisableHLEFlags)0;
 
 // Process compat flags.
-static DisableHLEFlags ComputeDisableHLEFlags() {
-	DisableHLEFlags flags = (DisableHLEFlags)g_Config.iDisableHLE | AlwaysDisableHLEFlags();
+static DisableHLEFlags ComputeDisableHLEFlags(DisableHLEFlags alwaysDisabled = AlwaysDisableHLEFlags()) {
+	DisableHLEFlags flags = (DisableHLEFlags)g_Config.iDisableHLE | alwaysDisabled;
 	if (PSP_CoreParameter().compat.flags().DisableHLESceFont) {
 		flags |= DisableHLEFlags::sceFont;
 	}
@@ -447,6 +447,10 @@ void HLECheckModuleAvailability() {
 	}
 }
 
+DisableHLEFlags HLEGetUnavailableDisableFlags() {
+	return g_unavailableDisableFlags;
+}
+
 void HLEInit() {
 	RegisterAllModules();
 	// Latched lazily rather than here: the compat flags this depends on aren't loaded yet.
@@ -469,6 +473,12 @@ void HLEDoState(PointerWrap &p) {
 			g_effectiveDisableHLE = (DisableHLEFlags)disableHLE;
 			g_disableHLELatched = true;
 		}
+	} else if (p.mode == p.MODE_READ) {
+		// Older states didn't save the flags. They were all made before any module graduated past
+		// these, so resolving their imports against today's defaults would leave the ones since
+		// (sceMpeg, sceFont, the leaf libraries...) as unresolved stubs.
+		g_effectiveDisableHLE = ComputeDisableHLEFlags(DisableHLEFlags::scePsmf | DisableHLEFlags::scePsmfPlayer | DisableHLEFlags::sceCcc);
+		g_disableHLELatched = true;
 	}
 
 	// Can't be inside a syscall when saving state, reset this so errors aren't misleading.
@@ -483,16 +493,30 @@ void HLEDoState(PointerWrap &p) {
 	if (s >= 2) {
 		int actions = (int)mipsCallActions.size();
 		Do(p, actions);
-		if (actions != (int)mipsCallActions.size()) {
-			mipsCallActions.resize(actions);
+		if (p.mode == p.MODE_READ) {
+			for (PSPAction *action : mipsCallActions) {
+				delete action;
+			}
+			mipsCallActions.clear();
+			if (actions < 0) {
+				p.SetError(p.ERROR_FAILURE);
+				return;
+			}
+			mipsCallActions.resize(actions, nullptr);
 		}
 
 		for (auto &action : mipsCallActions) {
 			int actionTypeID = action != nullptr ? action->actionTypeID : -1;
 			Do(p, actionTypeID);
 			if (actionTypeID != -1) {
-				if (p.mode == p.MODE_READ)
+				if (p.mode == p.MODE_READ) {
 					action = __KernelCreateAction(actionTypeID);
+					if (!action) {
+						ERROR_LOG(Log::SaveState, "Unable to load state: unknown action type %d", actionTypeID);
+						p.SetError(p.ERROR_FAILURE);
+						return;
+					}
+				}
 				action->DoState(p);
 			}
 		}
@@ -735,6 +759,9 @@ u32 hleDelayResult(u32 result, const char *reason, int usec) {
 
 	if (!__KernelIsDispatchEnabled()) {
 		WARN_LOG(Log::HLE, "%s: Dispatch disabled, not delaying HLE result (right thing to do?)", g_stackSize ? g_stack[0]->name : "?");
+	} else if (__IsInInterrupt()) {
+		// Nothing can wait in an interrupt handler. The wait would go to the idle thread it runs on.
+		WARN_LOG(Log::HLE, "%s: In interrupt, not delaying HLE result", g_stackSize ? g_stack[0]->name : "?");
 	} else {
 		SceUID thread = __KernelGetCurThread();
 		if (KernelIsThreadWaiting(thread))
@@ -751,6 +778,8 @@ u64 hleDelayResult(u64 result, const char *reason, int usec) {
 	// _dbg_assert_(g_stackSize == 0);
 	if (!__KernelIsDispatchEnabled()) {
 		WARN_LOG(Log::HLE, "%s: Dispatch disabled, not delaying HLE result (right thing to do?)", g_stack[0]->name ? g_stack[0]->name : "N/A");
+	} else if (__IsInInterrupt()) {
+		WARN_LOG(Log::HLE, "%s: In interrupt, not delaying HLE result", g_stack[0]->name ? g_stack[0]->name : "N/A");
 	} else {
 		// TODO: Defer this, so you can call this multiple times, in case of syscalls calling syscalls? Although, return values are tricky.
 		SceUID thread = __KernelGetCurThread();

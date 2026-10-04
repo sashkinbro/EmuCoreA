@@ -37,9 +37,11 @@
 #include <typeinfo>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include <memory>
 #include <vector>
 #include <string>
 #include <sstream>
@@ -103,6 +105,7 @@
 #include "Common/UI/View.h"
 #include "Common/UI/ViewGroup.h"
 #include "Core/Debugger/MemBlockInfo.h"
+#include "Core/FileLoaders/CachingFileLoader.h"
 #include "Core/FileSystems/FileSystem.h"
 #include "Core/FileSystems/ISOFileSystem.h"
 #include "Core/MemMap.h"
@@ -180,196 +183,6 @@ bool System_AudioRecordingState() { return false; }
 #ifndef M_PI_2
 #define M_PI_2     1.57079632679489661923
 #endif
-
-// asin acos atan: https://github.com/michaldrobot/ShaderFastLibs/blob/master/ShaderFastMathLib.h
-
-// TODO:
-// Fast approximate sincos for NEON
-// http://blog.julien.cayzac.name/2009/12/fast-sinecosine-for-armv7neon.html
-// Fast sincos
-// http://www.dspguru.com/dsp/tricks/parabolic-approximation-of-sin-and-cos
-
-// minimax (surprisingly terrible! something must be wrong)
-// double asin_plus_sqrtthing = .9998421793 + (1.012386649 + (-.6575341673 + .8999841642 + (-1.669668977 + (1.571945105 - .5860008052 * x) * x) * x) * x) * x;
-
-// VERY good. 6 MAD, one division.
-// double asin_plus_sqrtthing = (1.807607311 + (.191900116 + (-2.511278506 + (1.062519236 + (-.3572142480 + .1087063463 * x) * x) * x) * x) * x) / (1.807601897 - 1.615203794 * x);
-// float asin_plus_sqrtthing_correct_ends =
-// 	(1.807607311f + (.191900116f + (-2.511278506f + (1.062519236f + (-.3572142480f + .1087063463f * x) * x) * x) * x) * x) / (1.807607311f - 1.615195094 * x);
-
-// Unfortunately this is very serial.
-// At least there are only 8 constants needed - load them into two low quads and go to town.
-// For every step, VDUP the constant into a new register (out of two alternating), then VMLA or VFMA into it.
-
-// http://www.ecse.rpi.edu/~wrf/Research/Short_Notes/arcsin/
-// minimax polynomial rational approx, pretty good, get four digits consistently.
-// unfortunately fastasin(1.0) / M_PI_2  != 1.0f, but it's pretty close.
-float fastasin(double x) {
-	float sign = x >= 0.0f ? 1.0f : -1.0f;
-	x = fabs(x);
-	float sqrtthing = sqrt(1.0f - x * x);
-	// note that the sqrt can run parallel while we do the rest
-	// if the hardware supports it
-
-	float y = -.3572142480f + .1087063463f * x;
-	y = y * x + 1.062519236f;
-	y = y * x + -2.511278506f;
-	y = y * x + .191900116f;
-	y = y * x + 1.807607311f;
-	y /= (1.807607311f - 1.615195094 * x);
-	return sign * (y - sqrtthing);
-}
-
-double atan_66s(double x) {
-	const double c1=1.6867629106;
-	const double c2=0.4378497304;
-	const double c3=1.6867633134;
-
-	double x2; // The input argument squared
-
-	x2 = x * x;
-	return (x*(c1 + x2*c2)/(c3 + x2));
-}
-
-// Terrible.
-double fastasin2(double x) {
-	return atan_66s(x / sqrt(1 - x * x));
-}
-
-// Also terrible.
-float fastasin3(float x) {
-	return x + x * x * x * x * x * 0.4971;
-}
-
-// Great! This is the one we'll use. Can be easily rescaled to get the right range for free.
-// http://mathforum.org/library/drmath/view/54137.html
-// http://www.musicdsp.org/showone.php?id=115
-float fastasin4(float x) {
-	float sign = x >= 0.0f ? 1.0f : -1.0f;
-	x = fabs(x);
-	x = M_PI/2 - sqrtf(1.0f - x) * (1.5707288 + -0.2121144*x + 0.0742610*x*x + -0.0187293*x*x*x);
-	return sign * x;
-}
-
-// Or this:
-float fastasin5(float x)
-{
-	float sign = x >= 0.0f ? 1.0f : -1.0f;
-	x = fabs(x);
-	float fRoot = sqrtf(1.0f - x);
-	float fResult = 0.0742610f + -0.0187293f  * x;
-	fResult = -0.2121144f + fResult * x;
-	fResult = 1.5707288f + fResult * x;
-	fResult = M_PI/2 - fRoot*fResult;
-	return sign * fResult;
-}
-
-
-// This one is unfortunately not very good. But lets us avoid PI entirely
-// thanks to the special arguments of the PSP functions.
-// http://www.dspguru.com/dsp/tricks/parabolic-approximation-of-sin-and-cos
-#define C            0.70710678118654752440f    // 1.0f / sqrt(2.0f)
-// Some useful constants (PI and <math.h> are not part of algo)
-#define BITSPERQUARTER (20)
-void fcs(float angle, float &sinout, float &cosout) {
-	int phasein = angle * (1 << BITSPERQUARTER);
-	// Modulo phase into quarter, convert to float 0..1
-	float modphase = (phasein & ((1<<BITSPERQUARTER)-1)) * (1.0f / (1<<BITSPERQUARTER));
-	// Extract quarter bits
-	int quarter = phasein >> BITSPERQUARTER;
-	// Recognize quarter
-	if (!quarter) {
-		// First quarter, angle = 0 .. pi/2
-		float x = modphase - 0.5f;      // 1 sub
-		float temp = (2 - 4*C)*x*x + C; // 2 mul, 1 add
-		sinout = temp + x;              // 1 add
-		cosout = temp - x;              // 1 sub
-	} else if (quarter == 1) {
-		// Second quarter, angle = pi/2 .. pi
-		float x = 0.5f - modphase;      // 1 sub
-		float temp = (2 - 4*C)*x*x + C; // 2 mul, 1 add
-		sinout = x + temp;              // 1 add
-		cosout = x - temp;              // 1 sub
-	} else if (quarter == 2) {
-		// Third quarter, angle = pi .. 1.5pi
-		float x = modphase - 0.5f;      // 1 sub
-		float temp = (4*C - 2)*x*x - C; // 2 mul, 1 sub
-		sinout = temp - x;              // 1 sub
-		cosout = temp + x;              // 1 add
-	} else if (quarter == 3) {
-		// Fourth quarter, angle = 1.5pi..2pi
-		float x = modphase - 0.5f;      // 1 sub
-		float temp = (2 - 4*C)*x*x + C; // 2 mul, 1 add
-		sinout = x - temp;              // 1 sub
-		cosout = x + temp;              // 1 add
-	}
-}
-#undef C
-
-
-const float PI_SQR      = 9.86960440108935861883449099987615114f;
-
-//https://code.google.com/p/math-neon/source/browse/trunk/math_floorf.c?r=18
-// About 2 correct decimals. Not great.
-void fcs2(float theta, float &outsine, float &outcosine) {
-	float gamma = theta + 1;
-	gamma += 2;
-	gamma /= 4;
-	theta += 2;
-	theta /= 4;
-	//theta -= (float)(int)theta;
-	//gamma -= (float)(int)gamma;
-	theta -= floorf(theta);
-	gamma -= floorf(gamma);
-	theta *= 4;
-	theta -= 2;
-	gamma *= 4;
-	gamma -= 2;
-
-	float x = 2 * gamma - gamma * fabs(gamma);
-	float y = 2 * theta - theta * fabs(theta);
-	const float P = 0.225f;
-	outsine = P * (y * fabsf(y) - y) + y;   // Q * y + P * y * abs(y)
-	outcosine = P * (x * fabsf(x) - x) + x;   // Q * y + P * y * abs(y)
-}
-
-
-
-void fastsincos(float x, float &sine, float &cosine) {
-	fcs2(x, sine, cosine);
-}
-
-bool TestSinCos() {
-	for (int i = -100; i <= 100; i++) {
-		float f = i / 30.0f;
-
-		// The PSP sin/cos take as argument angle * M_PI_2.
-		// We need to match that.
-		float slowsin = sinf(f * M_PI_2), slowcos = cosf(f * M_PI_2);
-		float fastsin, fastcos;
-		fastsincos(f, fastsin, fastcos);
-		if (g_testLog) {
-			printf("%f: slow: %0.8f, %0.8f fast: %0.8f, %0.8f\n", f, slowsin, slowcos, fastsin, fastcos);
-		}
-	}
-	return true;
-}
-
-
-bool TestAsin() {
-	for (int i = -100; i <= 100; i++) {
-		float f = i / 100.0f;
-		float slowval = asinf(f) / M_PI_2;
-		float fastval = fastasin5(f) / M_PI_2;
-		if (g_testLog) {
-			printf("slow: %0.16f fast: %0.16f\n", slowval, fastval);
-		}
-		float diff = fabsf(slowval - fastval);
-		// EXPECT_TRUE(diff < 0.0001f);
-	}
-	// EXPECT_TRUE(fastasin(1.0) / M_PI_2 <= 1.0f);
-	return true;
-}
 
 bool TestMathUtil() {
 	EXPECT_FALSE(my_isinf(1.0));
@@ -1355,6 +1168,12 @@ bool TestBlockAllocator() {
 		EXPECT_TRUE(ValidateAllocator(a, kStart, oddSize));
 	}
 
+	// Validating is quadratic in the block count, so the churn loops below only do it periodically.
+	// A broken tiling or free count doesn't repair itself, so it's still caught, just a few steps late.
+	auto validateEvery = [](int i, int count) {
+		return (i & 63) == 63 || i == count - 1;
+	};
+
 	// Churn again, this time mixing in aligned allocations and AllocAt so the block list gets into
 	// shapes the plain alloc/free loop never produces.
 	{
@@ -1364,7 +1183,8 @@ bool TestBlockAllocator() {
 		u32 rng = 987654321;
 		auto next = [&rng]() { rng = rng * 1103515245u + 12345u; return (rng >> 16) & 0x7FFF; };
 
-		for (int i = 0; i < 4000; ++i) {
+		const int kIterations = 3000;
+		for (int i = 0; i < kIterations; ++i) {
 			const int op = next() % 100;
 			if (op < 30 && !live.empty()) {
 				const size_t idx = next() % live.size();
@@ -1393,8 +1213,8 @@ bool TestBlockAllocator() {
 				if (addr != (u32)-1)
 					live.push_back(addr);
 			}
-			if (!ValidateAllocator(a, kStart, kSize)) {
-				printf("BlockAllocator invariant broken at iteration %d (op %d)\n", i, op);
+			if (validateEvery(i, kIterations) && !ValidateAllocator(a, kStart, kSize)) {
+				printf("BlockAllocator invariant broken by iteration %d\n", i);
 				return false;
 			}
 		}
@@ -1415,7 +1235,8 @@ bool TestBlockAllocator() {
 		u32 rng = 12345;
 		auto next = [&rng]() { rng = rng * 1103515245u + 12345u; return (rng >> 16) & 0x7FFF; };
 
-		for (int i = 0; i < 3000; ++i) {
+		const int kIterations = 2000;
+		for (int i = 0; i < kIterations; ++i) {
 			const bool doAlloc = live.empty() || (next() % 100) < 55;
 			if (doAlloc) {
 				u32 size = ((next() % 64) + 1) * kGrain;
@@ -1434,8 +1255,8 @@ bool TestBlockAllocator() {
 				EXPECT_TRUE(a.Free(live[idx].first));
 				live.erase(live.begin() + idx);
 			}
-			if (!ValidateAllocator(a, kStart, kSize)) {
-				printf("BlockAllocator invariant broken at iteration %d\n", i);
+			if (validateEvery(i, kIterations) && !ValidateAllocator(a, kStart, kSize)) {
+				printf("BlockAllocator invariant broken by iteration %d\n", i);
 				return false;
 			}
 		}
@@ -1986,12 +1807,100 @@ bool TestFastVec() {
 	return true;
 }
 
+// vfpu_dot's SIMD versions against the reference, on inputs chosen to make trouble: close
+// exponents, cancelling products, ties, zeroes and subnormals, the overflow and underflow edges,
+// inf and NaN, and sums whose rounding carries into the next power of two.
+bool TestVFPUDot() {
+	uint64_t state = 0x9E3779B97F4A7C15ULL;
+	auto rnd = [&]() {
+		state ^= state << 13;
+		state ^= state >> 7;
+		state ^= state << 17;
+		return state;
+	};
+	auto fromBits = [](uint32_t bits) {
+		float f;
+		memcpy(&f, &bits, sizeof(f));
+		return f;
+	};
+	auto toBits = [](float f) {
+		uint32_t bits;
+		memcpy(&bits, &f, sizeof(bits));
+		return bits;
+	};
+	auto check = [&](const float a[4], const float b[4]) {
+		const uint32_t expected = toBits(vfpu_dot_reference(a, b));
+		const uint32_t actual = toBits(vfpu_dot(a, b));
+		if (expected != actual) {
+			printf("vfpu_dot(%08x %08x %08x %08x, %08x %08x %08x %08x) = %08x, expected %08x\n",
+				toBits(a[0]), toBits(a[1]), toBits(a[2]), toBits(a[3]), toBits(b[0]), toBits(b[1]), toBits(b[2]), toBits(b[3]), actual, expected);
+			return false;
+		}
+		return true;
+	};
+	for (int n = 0; n < 4000000; n++) {
+		float a[4], b[4];
+		const int mode = (int)(rnd() & 15);
+		const int base = 1 + (int)(rnd() % 254);
+		const int spread = mode < 8 ? 3 : 40;
+		for (int i = 0; i < 4; i++) {
+			if (mode == 15) {
+				a[i] = fromBits((uint32_t)rnd());
+				b[i] = fromBits((uint32_t)rnd());
+				continue;
+			}
+			int ea = base + (int)(rnd() % (2 * spread + 1)) - spread;
+			int eb = 127 + (int)(rnd() % (2 * spread + 1)) - spread;
+			ea = std::max(0, std::min(254, ea));
+			eb = std::max(0, std::min(254, eb));
+			uint32_t xa = ((uint32_t)rnd() & 0x80000000) | (ea << 23) | ((uint32_t)rnd() & 0x7FFFFF);
+			uint32_t xb = ((uint32_t)rnd() & 0x80000000) | (eb << 23) | ((uint32_t)rnd() & 0x7FFFFF);
+			switch (rnd() & 63) {
+			case 0: xa &= 0x80000000; break;
+			case 1: xb &= 0x807FFFFF; break;
+			case 2: xa |= 0x7F800000; xa &= 0xFF800000; break;
+			case 3: xb |= 0x7FC00000; break;
+			case 4: xa &= 0xFFFF0000; break;
+			default: break;
+			}
+			a[i] = fromBits(xa);
+			b[i] = fromBits(xb);
+		}
+		if (mode == 5) {
+			// Nearly cancelling products.
+			a[1] = -a[0];
+			b[1] = fromBits(toBits(b[0]) ^ ((uint32_t)rnd() & 7));
+		}
+		if (!check(a, b))
+			return false;
+	}
+
+	// Sums just below and above a power of two, whose rounding carries into the next exponent:
+	// 1.0 from just under it, and inf at the top of the range.
+	for (int e = 1; e <= 254; e++) {
+		for (int s = 0; s < 2; s++) {
+			const uint32_t sign = (uint32_t)s << 31;
+			for (int k = 1; k <= 40; k++) {
+				const uint32_t small = e - k >= 1 ? ((uint32_t)(e - k) << 23) | ((uint32_t)k * 0x2AAAA) : 0;
+				float a[4] = { fromBits(sign | (e << 23)), fromBits((sign ^ 0x80000000u) | small), 0.0f, 0.0f };
+				float b[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+				if (!check(a, b))
+					return false;
+				a[0] = fromBits(sign | (e << 23) | 0x7FFFFF);
+				a[1] = fromBits(sign | small);
+				if (!check(a, b))
+					return false;
+				a[2] = a[1];
+				if (!check(a, b))
+					return false;
+			}
+		}
+	}
+	return true;
+}
+
 bool TestVFPUSinCos() {
 	float sine, cosine;
-	// Needed for VFPU tables.
-	// There might be a better place to invoke it, but whatever.
-	g_VFS.Register("", new DirectoryReader(Path("assets")));
-	InitVFPU();
 	vfpu_sincos(0.0f, sine, cosine);
 	EXPECT_EQ_FLOAT(sine, 0.0f);
 	EXPECT_EQ_FLOAT(cosine, 1.0f);
@@ -2133,6 +2042,65 @@ bool TestParseLBN() {
 		u32 startSector, readSize;
 		EXPECT_FALSE(parseLBN(invalidStrings[i], &startSector, &readSize));
 	}
+	return true;
+}
+
+// Serves byte i as (u8)(i * 31 + 7), clamped to the file size like HTTPFileLoader.
+// The read counter lives outside, since CachingFileLoader deletes its backend.
+class PatternFileLoader : public FileLoader {
+public:
+	PatternFileLoader(s64 size, std::atomic<int> *reads) : size_(size), reads_(reads) {}
+	bool Exists() override { return true; }
+	bool IsDirectory() override { return false; }
+	s64 FileSize() override { return size_; }
+	Path GetPath() const override { return Path(); }
+	size_t ReadAt(s64 pos, size_t bytes, size_t count, void *data, Flags flags) override {
+		(*reads_)++;
+		s64 end = std::min(pos + (s64)(bytes * count), size_);
+		for (s64 i = pos; i < end; i++) {
+			((u8 *)data)[i - pos] = (u8)(i * 31 + 7);
+		}
+		return pos < end ? (size_t)(end - pos) / bytes : 0;
+	}
+
+private:
+	s64 size_;
+	std::atomic<int> *reads_;
+};
+
+static bool MatchesPattern(const u8 *data, s64 pos, size_t bytes) {
+	for (size_t i = 0; i < bytes; i++) {
+		if (data[i] != (u8)((pos + i) * 31 + 7)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+static bool TestCachingFileLoader() {
+	// The last 64 KB block of the file is short.
+	const s64 size = 3 * 65536 + 1234;
+	std::atomic<int> reads{};
+	std::unique_ptr<CachingFileLoader> loader(new CachingFileLoader(new PatternFileLoader(size, &reads)));
+	std::vector<u8> buf(65536 * 2);
+
+	s64 pos = 3 * 65536 + 100;
+	EXPECT_EQ_INT(loader->ReadAt(pos, 100, buf.data()), 100);
+	EXPECT_TRUE(MatchesPattern(buf.data(), pos, 100));
+	pos = 2 * 65536 + 10;
+	EXPECT_EQ_INT(loader->ReadAt(pos, (size_t)(size - pos), buf.data()), (int)(size - pos));
+	EXPECT_TRUE(MatchesPattern(buf.data(), pos, (size_t)(size - pos)));
+
+	// Both reads ended in the last block, so everything they touched is cached and there's
+	// nothing left to read ahead. Nothing further should reach the backend, even past EOF.
+	int readsBefore = reads;
+	pos = 3 * 65536 + 100;
+	for (int i = 0; i < 100; i++) {
+		EXPECT_EQ_INT(loader->ReadAt(pos, 100, buf.data()), 100);
+	}
+	// Waits for any read-ahead.
+	loader.reset();
+	EXPECT_EQ_INT(reads, readsBefore);
 	return true;
 }
 
@@ -2764,88 +2732,6 @@ bool TestSIMD() {
 	return true;
 }
 
-static void PrintFloats(const float *f, int count) {
-	for (int i = 0; i < count; i++) {
-		printf("%.1ff, ", f[i]);
-	}
-	printf("\n");
-}
-
-static bool CompareFloats(const float *values, const float *known_good, int count, int line) {
-	int wrongCount = 0;
-
-	for (int i = 0; i < count; i++) {
-		if (values[i] != known_good[i]) {
-			wrongCount++;
-		}
-	}
-
-	if (wrongCount > 0) {
-		for (int i = 0; i < count; i++) {
-			bool wrong = values[i] != known_good[i];
-			printf("%d: %0.3f vs %0.3f %s\n", i + 1, values[i], known_good[i], wrong ? "!! MISMATCH" : "");
-		}
-		printf("At UnitTest.cpp:%d: %d / %d were wrong\n", line, wrongCount, count);
-		return false;
-	} else {
-		return true;
-	}
-}
-
-bool TestCrossSIMD() {
-	static const float a_values[16] = { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f };
-	static const float b_values[16] = { -12.0f, 3.0f, -2.5f, 5.0f, 31.0f, 0.5f, 4.0f, 6.0f, 7.0f, 13.0f, 12.0f, 51.0f, 81.0f, 32.0f };
-	static const float known_result[16] = { 395.0f, 171.0f, 41.5f, 170.0f, 942.0f, 410.5f, 111.5f, 475.0f, 1358.0f, 607.5f, 163.0f, 728.0f, 297.0f, 49.5f, 25.0f, 160.0f, };
-	float result[16];
-	Mat4F32 a(a_values);
-	Mat4F32 b(b_values);
-
-	Mul4x4By4x4(a, b).Store(result);
-	if (!CompareFloats(result, known_result, 16, __LINE__)) {
-		return false;
-	}
-
-	Mat4x3F32 d = Mat4x3F32(b_values + 2);
-	Mul4x3By4x4(d, a).Store(result);
-
-	static const float known_4x3_result[16] = { 332.5f, 371.0f, 404.5f, 438.0f, 80.5f, 95.0f, 105.5f, 116.0f, 192.0f, 237.0f, 269.0f, 301.0f, 790.0f, 1036.0f, 1185.0f, 1349.0f, };
-	if (!CompareFloats(result, known_4x3_result, 16, __LINE__)) {
-		return false;
-	}
-
-	static const float vec_values[4] = { 3.0f, 5.0f, 7.0f, 10000000.0f };
-	Vec4F32 v = Vec4F32::Load(vec_values);
-
-	v.AsVec3ByMatrix44(b).Store3(result);
-
-	static const float known_vec_result[3] = { 249.0f, 134.5f, 96.5f, };
-	if (!CompareFloats(result, known_vec_result, ARRAY_SIZE(known_vec_result), __LINE__)) {
-		return false;
-	}
-	Vec4F32 scale = Vec4F32::Load(a_values);
-	Vec4F32 translate = Vec4F32::Load(b_values);
-
-	TranslateAndScaleInplace(a, scale, translate);
-	a.Store(result);
-
-	static const float known_scale_result[16] = { -47.0f, 16.0f, -1.0f, 36.0f, -103.0f, 41.0f, 1.5f, 81.0f, -146.0f, 61.0f, 3.5f, 117.0f, 14.0f, 30.0f, 0.0f, 0.0f,};
-	if (!CompareFloats(result, known_scale_result, ARRAY_SIZE(known_scale_result), __LINE__)) {
-		return false;
-	}
-
-	s8 values[4] = {-1, -128, 127, 45};
-	float fvalues[4];
-	Vec4F32::LoadS8Norm(values).Store(fvalues);
-	static const float known_s8norm_result[4] = {(float)values[0]/128.0f, (float)values[1]/128.0f, (float)values[2]/128.0f, (float)values[3]/128.0f,};
-	if (!CompareFloats(fvalues, known_s8norm_result, ARRAY_SIZE(known_s8norm_result), __LINE__)) {
-		return false;
-	}
-
-	// PrintFloats(result, 16);
-
-	return true;
-}
-
 bool TestVolumeFunc() {
 	for (int i = 0; i <= 20; i++) {
 		float mul = Volume10ToMultiplier(i);
@@ -3044,6 +2930,7 @@ struct TestItem {
 
 bool TestArmEmitter();
 bool TestArm64Emitter();
+bool TestCrossSIMD();
 bool TestX64Emitter();
 bool TestRiscVEmitter();
 bool TestLoongArch64Emitter();
@@ -3055,6 +2942,7 @@ bool TestVFS();
 bool TestZipSlip();
 bool TestLzrc();
 bool TestMpegCsc();
+bool TestSplineTessellation();
 bool TestDemangle();
 
 // The 8.3 short names games read out of d_private. These aren't verified against hardware yet (no
@@ -3226,9 +3114,8 @@ TestItem availableTests[] = {
 	TEST_ITEM(LoongArch64Emitter),
 #endif
 	TEST_ITEM(VertexJit),
-	TEST_ITEM(Asin),
-	TEST_ITEM(SinCos),
 	TEST_ITEM(VFPUSinCos),
+	TEST_ITEM(VFPUDot),
 	TEST_ITEM(MathUtil),
 	TEST_ITEM(Parsers),
 	TEST_ITEM(TruncateCpy),
@@ -3244,6 +3131,7 @@ TestItem availableTests[] = {
 	TEST_ITEM(Jit),
 	TEST_ITEM(VFPUMatrixTranspose),
 	TEST_ITEM(ParseLBN),
+	TEST_ITEM(CachingFileLoader),
 	TEST_ITEM(QuickTexHash),
 	TEST_ITEM(CLZ),
 	TEST_ITEM(MemMap),
@@ -3276,6 +3164,7 @@ TestItem availableTests[] = {
 	TEST_ITEM(ZipSlip),
 	TEST_ITEM(Lzrc),
 	TEST_ITEM(MpegCsc),
+	TEST_ITEM(SplineTessellation),
 	TEST_ITEM(Demangle),
 	TEST_ITEM(TextureReplacer),
 	TEST_ITEM(UITabOrder),

@@ -68,6 +68,13 @@ A working invocation, and the traps around it:
 - **Prefer `--debugger=0` and scrape `Listening on port N` from that run's own log** over hardcoding a port. Also
   `taskkill //F //IM PPSSPPHeadless.exe` between runs for hygiene (Git Bash here has no `pkill`) - leftover
   instances are easy to accumulate when a script leaves the CPU stopped at a breakpoint.
+- **On Linux, kill leftovers with `pkill -x PPSSPPHeadless`, never `pkill -f PPSSPPHeadless`.** `-f` matches full
+  command lines, and the shell running your `pkill` has "PPSSPPHeadless" in its own command line, so it kills
+  itself (exit 144) and the emulator instances you meant to clear survive into the next run.
+- **Attaching gdb to a running instance fails under WSL/Ubuntu** (`ptrace_scope`: "Could not attach to process"),
+  so a hang has to be caught by starting the run under gdb. Interrupting a batch-mode gdb from another shell with
+  `pkill -INT` never got as far as the backtrace in the 2026-09-22 attempts. Before reaching for gdb, first rule out
+  the cheap explanations below (backend, flags) by diffing a good and a bad command line.
 
   Some history, because it silently produced a round of bogus results before it was fixed: `Common/Net/HTTPServer.cpp`
   used to set `SO_REUSEADDR`, which on Winsock means "allow binding a port someone else is already listening on"
@@ -88,17 +95,25 @@ A working invocation, and the traps around it:
   and the game ran to completion - not a transport problem.
 - Some events deliberately never respond while the CPU is stepping, so `--sync` will burn its full timeout on them:
   `gpu.stats.get` and `gpu.stats.feed` (documented - they answer after the next flip), `gpu.record.dump`, and
-  `input.buttons.press` (waits for N frames). Resume the CPU first, or skip them in scripted runs.
-- Log broadcasts drown scripted output. Send this first:
-  `{"event":"broadcast.config.set","disallowed":{"logger":true,"input":true}}`. Note `wsdbg`'s `key=value` shorthand
-  can't build nested objects - paste raw JSON lines (any line starting with `{` is sent verbatim) for those.
+  `input.buttons.press` (waits for N frames). Send them with wsdbg's `:nowait`, and let the next line
+  (a `cpu.runUntilTime`) run the CPU:
+  `:nowait input.buttons.press button=circle duration=4`. `duration` counts vblanks, not seconds.
+- **Don't send a bare `cpu.resume` in a `--sync` script.** `--sync` waits for the CPU to stop again, which
+  a free run never does, so it burns the whole `--sync-timeout` while headless runs unthrottled, which can
+  be hundreds of emulated seconds. Use `cpu.runUntilTime`.
+- Log broadcasts drown scripted output. Pass `--quiet` to wsdbg, which turns them off.
+- **Nested parameters work in wsdbg's `key=value` shorthand**: values are parsed as JSON, and single quotes keep
+  the inner double quotes, e.g. `input.buttons.send buttons='{"cross":true}'`. Prefer that over a raw JSON line,
+  which gets no ticket (see below).
 - Keep wsdbg scripts in files and pipe them in, rather than building JSON inline in a shell command - inline
   `{"event":...}` in a bash heredoc trips Claude Code's command analyzer ("brace with quote character") and forces a
   manual approval prompt for every single invocation.
 - **`--sync` can only match a response to a request that carries a ticket**, and wsdbg only assigns tickets to its
-  `key=value` shorthand. A raw JSON line (needed for nested params) gets no ticket, so `--sync` just waits for the
-  next message and treats whatever broadcast arrives first as the answer, silently desynchronising the rest of the
-  script. Use the shorthand wherever the parameters are flat. Hex works there: `memory.disasm address=0x08804000`.
+  `key=value` shorthand. A raw JSON line without a `ticket` isn't waited for at all, so use the shorthand (nested
+  values included, see above). Hex works there: `memory.disasm address=0x08804000`.
+- **To see the screen from a script, use wsdbg's `:screenshot <file.png>`** while the CPU is stopped, e.g. after a
+  `cpu.runUntilTime`. With headless, run `--graphics=software` for it: headless Vulkan has no output image to read
+  back and asserts. Give a native path on Windows (`C:/...`, not `/c/...`).
 - **Headless reports `SYSPROP_HAS_DEBUGGER` as false** (only `Windows/main.cpp` implements it), so anything gated on
   it does nothing there - `LoadSymbolsIfSupported()` in `Core/System.cpp`, for instance, doesn't load `.ppmap`/`.sym`
   at all under headless. Gate new debugger-adjacent features on their own config flag, not on that property.
@@ -134,8 +149,8 @@ A working invocation, and the traps around it:
   calls `gpu->PerformWriteFormattedFromMemory()`. The software renderer reads that memory directly and so renders
   the frame whether or not anything was notified. A missing notification therefore looks perfect under
   `--graphics=software` and shows up as a frozen screen on every real backend, while the decode logs keep scrolling
-  past as if all were well. Reproduce display bugs on `--graphics=d3d11` or `--graphics=vulkan` (`directx9` is not
-  a valid value) and compare `--screenshot-save=` output, not the log.
+  past as if all were well. Reproduce display bugs on a hardware backend (see "Choosing a GPU backend" below;
+  `directx9` is not a valid value) and compare `--screenshot-save=` output, not the log.
 - **`wsdbg --launch` only works with the headless build.** The app build is a GUI-subsystem exe with no stdout, so
   the `Listening on port N` line never reaches the launcher and it gives up. Start it yourself with an explicit
   `--debugger=PORT` and point wsdbg at that port. Note also that `--debugger-run` is `CmdLineMode::Headless`; the
@@ -145,6 +160,64 @@ A working invocation, and the traps around it:
   `--log --loglevel=3` keeps the port line while cutting the debug flood - full `--log` at the default level costs
   a lot of emulation speed (a 25-second run of a game playing video wrote 450k lines and ran several times slower
   than real time, which on its own looks like the stall you're hunting).
+
+## Measuring a commercial game with headless
+
+Headless will happily run a game and print nothing, or run *a different configuration than the one you asked
+for*, and both look like a clean pass if you are counting log lines. Four traps, each of which silently
+produced a round of bogus results here:
+
+- **`--log` is required for any log output at all**, and the log goes to **stderr**. Without it you get only
+  headless's own lines (`Loaded State`, `TIMEOUT`); `-d`/`-v` set the level but don't turn the printf logger
+  on. So folding stderr in isn't optional if you're grepping, which is what makes the third trap bite.
+- **Headless's memory stick is not the app's.** It defaults to `<exe dir>/memstick` (`headless/Headless.cpp`),
+  so `Windows/<platform>/<config>/memstick`, while the app derives its own from `installed.txt` or Documents
+  (`InitMemstickDirectory` in `Windows/main.cpp`, which carries a TODO about sharing the derivation). Headless
+  *creates* that directory, empty `PSP/NAND/flash0` and all, so firmware installed through the app is invisible
+  and every LLE module quietly falls back to HLE - at which point you are measuring the HLE you were trying to
+  compare against. Pass `--memstick=` explicitly; it resolves relative to the CWD, not the exe.
+- **Check the exit code.** An unrecognised parameter prints `Error: ...` to stderr and exits 1, which is
+  correct and easy to throw away: fold stderr into stdout (which the first trap forces), count grep hits, and a
+  run that never started reports the same all-zero line as a clean one.
+- **Zero is not a pass.** Measuring by log-grepping needs a positive precondition asserted separately ("did
+  this run reach the code at all"), or "0 errors" also means "0 anything" - which is equally what a failed
+  boot, a savestate that never reaches the cutscene, and a silent HLE fallback produce.
+
+The last three compound: the fix is to treat the run's exit code and a positive "we got here" counter as
+preconditions, and only then believe the error counts.
+
+Rather than silently falling back to HLE, headless refuses the run: an explicit
+`--disable-hle=` whose firmware module isn't there names the module, prints the `flash0:/kd` and memory stick
+it looked in (usually enough to spot that it's the one beside the exe), and exits 1. Only an *explicit*
+`--disable-hle` binds - sceMpeg and sceMp4 are LLE by default and still fall back quietly, or every run on a
+machine with no firmware would fail. So when a measurement depends on the real module, pass the flag
+explicitly even though it's on by default, and the run will tell you if it didn't get it.
+
+`--force-hle=` is the other direction, and the one to reach for when deciding whether something is
+our fault: it puts our HLE back for libraries that now run the real module by default, so the same
+repro can be run both ways and the logs diffed. That is how the leftover warnings in Tekken 6 were
+sorted - three appeared identically with `--force-hle=16`, which made them the game's own, and the
+fourth only under the real module, which made it ours. Neither `--nand=` pointing somewhere empty
+nor `--appendconfig` does this job: the firmware gets found anyway and the setting is per-game.
+
+### Choosing a GPU backend
+
+- **`--graphics=software`** (the default) needs no GPU at all, and matches the GPU pspautotests' reference
+  screenshots (taken on a PSP) best. It's slow for games, though: it runs display lists synchronously inside
+  `sceGeListEnQueue`, which then dominates any profile of the emulator thread.
+- **`--graphics=vulkan`** renders offscreen, into images of its own with no window or swapchain, so it needs no
+  display. On macOS it goes through MoltenVK.
+- **`--graphics=opengl`** renders offscreen on macOS (a CGL context with a framebuffer object of its own), and
+  through a hidden SDL window elsewhere.
+- **`--graphics=d3d11`** (Windows) renders through a hidden window.
+
+For game runs, prefer a hardware backend: 30 emulated seconds of God of War take 3-4 seconds instead of a minute.
+The pspautotests pass on Vulkan and OpenGL except for 17 GPU tests, whose references are hardware screenshots
+that the hardware backends don't match exactly.
+
+Pass `--graphics` explicitly even when you want the default, so a copied command line doesn't depend on it. If a
+run goes silent with no CPU use, a host thread is blocked, and neither `--timeout-wall` nor `--timeout-emulated`
+will end it, as both are only checked when the emulation loop comes around.
 
 ## Debugging and breakpoint considerations
 
@@ -160,6 +233,32 @@ Concretely, as measured against the headless build (2026-08-16), per CPU backend
 | `cpu.stepInto/Over/Out`, `runUntil`, `nextHLE` | works | works |
 | `memory.breakpoint.*` (memchecks) | works | **only for constant addresses** |
 | `cpu.regBreakpoint.*` | works | never trips (as documented) |
+
+## Native debuggers and the memory fault handler
+
+With fast memory on, a bad guest access from JIT code is a real host SIGSEGV/SIGBUS (an access violation on
+Windows), which `Memory::HandleFault` (`Core/MemFault.cpp`) catches and turns into a clean emulator-side
+exception. A native debugger sees the fault first and stops there, so a run that would have reported
+`Read Word: SIGSEGV at ...` looks like a crash instead. Continuing hands the fault to the handler, like a
+first-chance exception in Visual Studio. To keep the debugger out of the way when the faults are expected:
+
+- **lldb (macOS/iOS)** needs both of these, verified 2026-09-28 against `pspautotests/tests/cpu/crash`. The
+  first skips the stop on the Mach-level EXC_BAD_ACCESS, the second the stop on the signal it turns into:
+
+  ```
+  settings set platform.plugin.darwin.ignored-exceptions EXC_BAD_ACCESS
+  process launch --stop-at-entry
+  process handle SIGSEGV SIGBUS -s false -n false -p true
+  continue
+  ```
+
+  (`process handle` needs a live process, hence the `--stop-at-entry`.) The catch is that a genuine host crash
+  then kills the process without stopping in the debugger.
+- **gdb (Linux/Android)**: `handle SIGSEGV nostop noprint pass`.
+
+The `pspautotests/tests/cpu/crash/crash_*.prx` binaries each make one bad access (read, write, float, bad jump),
+which makes them the quickest check that the handler works on a platform: run one with `-j` in headless. They
+should print the guest exception and exit 0, not die with signal 11.
 
 ## Debugging a game that works on hardware but not in PPSSPP
 

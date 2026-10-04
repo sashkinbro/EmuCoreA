@@ -50,11 +50,13 @@
 #include "Common/Thread/ThreadManager.h"
 #include "Common/GPU/Vulkan/VulkanGraphicsContext.h"
 #include "Core/CmdLine.h"
+#include "Common/Net/HTTPRequest.h"
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
 #include "Core/EmuThread.h"
+#include "Core/HLE/HLE.h"
 #include "Core/MIPS/MIPSTables.h"
 #include "Core/System.h"
 #include "Core/Util/PSARUnpack.h"
@@ -83,6 +85,9 @@ static bool g_screenshotSaved = false;
 static double g_maxScreenshotError = 0.0;
 static bool g_screenshotFailed = false;
 static std::string g_debugOutputBuffer;
+// Set when a run was asked for a configuration that couldn't be honoured. That isn't a test result,
+// so it fails the process whether or not this run was comparing anything.
+static bool g_configRefused = false;
 static bool g_writeFailureScreenshot = true;
 static bool g_writeDebugOutput = true;
 // Whether the emulated program's stdout/stderr are forwarded to ours. On by default - just running
@@ -266,9 +271,6 @@ static GraphicsContext *CreateGraphicsContext(GPUCore gpuCore, std::string **dev
 	switch (gpuCore) {
 	case GPUCORE_GLES:
 		return new SDLHeadlessGLGraphicsContext();
-	case GPUCORE_VULKAN:
-		*deviceSetting = &g_Config.sVulkanDevice;
-		return new VulkanGraphicsContext();
 	default:
 		return nullptr;
 	}
@@ -282,17 +284,14 @@ static GraphicsContext *CreateGraphicsContext(GPUCore gpuCore, std::string **dev
 	case GPUCORE_DIRECTX11:
 		*deviceSetting = &g_Config.sD3D11Device;
 		return new D3D11Context();
-	case GPUCORE_VULKAN:
-		*deviceSetting = &g_Config.sVulkanDevice;
-		return new VulkanGraphicsContext();
 	case GPUCORE_SOFTWARE:
 	default:
 		return nullptr;
 	}
-#elif PPSSPP_ARCH(LOONGARCH64)
-	// The loongarch64 cross-compilation toolchain has no SDL3 packages available (see the
-	// LOONGARCH64_DEVICE branch in CMakeLists.txt), so this build is compile-tested only and
-	// never actually needs to create a graphics context at runtime.
+#elif defined(HEADLESS_NO_SDL)
+	// A HEADLESS_CROSS build (see CMakeLists.txt): the loongarch64 and riscv64 cross-compilation
+	// sysroots have no SDL3, and a build for another architecture than the host's has no matching
+	// one either. These still run fine with --graphics=software, which needs no graphics context.
 	*deviceSetting = nullptr;
 	return nullptr;
 #elif PPSSPP_PLATFORM(ANDROID)
@@ -325,7 +324,25 @@ struct AutoTestOptions {
 	bool verbose;
 	bool bench;
 	bool printEqualLines;
+	// What --disable-hle asked for, or 0 if it was not passed. Only an explicit request binds:
+	// sceMpeg and sceMp4 run the firmware module by default now and fall back to the HLE wherever
+	// none is installed, which must not fail every run on such a machine.
+	int requiredDisableHLE;
+	// The WebSocket debugger is on (--debugger or --debugger-run), so a stop is its to resume.
+	bool debugger;
 };
+
+// Ends a frame of the draw context the way the app does, presenting it. Unpresented frames never
+// finish: with Vulkan, presenting is what returns a frame's image, and OpenGL's render thread only
+// finishes a frame when it's presented, so either would eventually wait forever. Neither waits for
+// vsync here (Vulkan and, on macOS, OpenGL render offscreen, and the hidden-window OpenGL context
+// swaps with interval 0). D3D11 presents to a hidden window, which could.
+static void EndDrawFrame(Draw::DrawContext *draw) {
+	draw->EndFrame();
+	if (GetGPUBackend() == GPUBackend::VULKAN || GetGPUBackend() == GPUBackend::OPENGL) {
+		draw->Present(Draw::PresentMode::FIFO);
+	}
+}
 
 static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &coreParameter, const AutoTestOptions &opt) {
 	using namespace Draw;
@@ -361,6 +378,29 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 
 	if (!PSP_IsInited()) {
 		GitHubActionsPrint("error", "Test init failed for %s", currentTestName.c_str());
+		return false;
+	}
+
+	// Running a different configuration than the one asked for measures the wrong thing without
+	// saying so, which is worse in a test tool than not running at all.
+	const int missingHLE = (int)HLEGetUnavailableDisableFlags() & opt.requiredDisableHLE;
+	if (missingHLE) {
+		for (int i = 0; i < (int)DisableHLEFlags::Count; i++) {
+			if (!(missingHLE & (1 << i))) {
+				continue;
+			}
+			const HLEModuleMeta *meta = GetHLEModuleMetaByFlag((DisableHLEFlags)(1 << i));
+			fprintf(stderr, "--disable-hle asked for %s, but no firmware module for it is installed "
+				"or on the disc - our HLE would run instead.\n", meta ? meta->modname : "an unknown module");
+		}
+		// Nearly always because headless defaulted the memory stick to one beside the exe rather than
+		// the app's, so the firmware installed through the app isn't the firmware it looked at.
+		fprintf(stderr, "Looked in %s (memory stick %s).\n",
+			(g_Config.nandRootDirectory / "flash0" / "kd").c_str(), g_Config.memStickDirectory.c_str());
+		GitHubActionsPrint("error", "Requested --disable-hle unavailable for %s", currentTestName.c_str());
+		g_configRefused = true;
+		// Booted, so it has to come down the same way a finished run does.
+		PSP_Shutdown(true);
 		return false;
 	}
 
@@ -423,16 +463,29 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 		if (coreState == CORE_NEXTFRAME) {
 			// INFO_LOG(Log::System, "(frame)");
 			coreState = CORE_RUNNING_CPU;
-			// Close and reopen the host frame, which is what the app does once per displayed
-			// frame. All the GPU's per-frame work hangs off BeginHostFrame - the texture cache's
+			// Close and reopen the frame, which is what the app does once per displayed frame.
+			// All the GPU's per-frame work hangs off BeginHostFrame - the texture cache's
 			// StartFrame and the framebuffer manager's DecimateFBOs - so with a single host frame
 			// spanning the whole run, none of it ever ran here, and a long test decayed nothing.
+			//
+			// The draw context's frame has to turn over too, and for the same reason one level up:
+			// Vulkan's push buffers are recycled by BeginFrame, so one frame spanning the run means
+			// nothing is ever reused and every allocation takes a fresh 8MB block - about 13MB a
+			// second, which runs a long test out of device memory. Draw frame outside, host frame
+			// inside, the way the app nests them.
 			if (gpu) {
 				gpu->EndHostFrame();
+			}
+			if (draw) {
+				EndDrawFrame(draw);
+				draw->BeginFrame(Draw::DebugFlags::NONE);
+			}
+			if (gpu) {
 				gpu->BeginHostFrame(g_Config.GetDisplayLayoutConfig(DeviceOrientation::Landscape));
 			}
 		}
-		if (coreState == CORE_STEPPING_CPU && !coreParameter.startBreak) {
+		// Without a debugger nothing can resume a stop, so it ends the run.
+		if (coreState == CORE_STEPPING_CPU && !opt.debugger) {
 			break;
 		}
 		bool debugger = false;
@@ -462,6 +515,13 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 		gpu->EndHostFrame();
 	}
 
+	// Before EndDrawFrame: Vulkan can only read back a framebuffer inside a frame.
+	if (!g_screenshotSavePath.empty() && !g_screenshotSaved) {
+		// SendDebugScreenshot ignores the descriptor and reads the display framebuffer from the GPU
+		// itself, so there's nothing to fill in here.
+		SendDebugScreenshot(DebugScreenshotDesc{});
+	}
+
 	if (draw) {
 		// Vulkan may get angry if we don't do a final present.
 		if (gpu) {
@@ -471,13 +531,7 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 			gpu->CopyDisplayToOutput(g_Config.GetDisplayLayoutConfig(DeviceOrientation::Landscape));
 		}
 
-		draw->EndFrame();
-	}
-
-	if (!g_screenshotSavePath.empty() && !g_screenshotSaved) {
-		// SendDebugScreenshot ignores the descriptor and reads the display framebuffer from the GPU
-		// itself, so there's nothing to fill in here.
-		SendDebugScreenshot(DebugScreenshotDesc{});
+		EndDrawFrame(draw);
 	}
 
 	PSP_Shutdown(true);
@@ -607,6 +661,10 @@ int RunTests(GraphicsContext *graphicsContext, CoreParameter &coreParameter, con
 		}
 	}
 
+	if (g_configRefused) {
+		return 1;
+	}
+
 	return 0;
 }
 
@@ -633,6 +691,11 @@ int main(int argc, const char* argv[]) {
 	if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
 		perror("Unable to ignore SIGPIPE");
 	}
+#endif
+#if PPSSPP_PLATFORM(MAC)
+	// MoltenVK logs its setup and every unsupported feature to the console, which mixes into the
+	// test output. Only its errors, unless asked for more.
+	setenv("MVK_CONFIG_LOG_LEVEL", "1", 0);
 #endif
 
 	SetupCRT(true);
@@ -668,6 +731,8 @@ int main(int argc, const char* argv[]) {
 	testOptions.verbose = cmdLineOptions.verbose.value_or(false);
 	testOptions.printEqualLines = cmdLineOptions.printEqualLines.value_or(false);
 	testOptions.maxScreenshotError = cmdLineOptions.maxScreenshotError.value_or(0.0);
+	testOptions.requiredDisableHLE = cmdLineOptions.disableHLE.value_or(0);
+	testOptions.debugger = cmdLineOptions.DebuggerPort().has_value();
 
 	bool fullLog = cmdLineOptions.enableLogging.value_or(false);
 	const char *stateToLoad = cmdLineOptions.stateToLoad.has_value() ? cmdLineOptions.stateToLoad.value().c_str() : nullptr;
@@ -800,11 +865,6 @@ int main(int argc, const char* argv[]) {
 	// Force known values for deterministic test execution. This happens before
 	// ApplyToConfig() below, so a matching command line flag can still override any of it -
 	// ApplyToConfig() always has the final say on the settings in g_Config.
-	//
-	// This affects the test execution of pspautotests/tests/gpu/vertices/morph.prx, even though
-	// we actually set the cpu core in CoreParameter below.
-	// The check that decides that is in the DrawEngineCommon constructor.
-	g_Config.iCpuCore = (int)CPUCore::INTERPRETER;
 
 	// NOTE: In headless mode, we never save the config. This is just for this run.
 	g_Config.iDumpFileTypes = 0;
@@ -834,13 +894,18 @@ int main(int argc, const char* argv[]) {
 	// value rather than the ConfigSetting default. This one defaults to true in the app, and
 	// leaving it false made headless run games differently from every other build.
 	g_Config.bFuncReplacements = true;
-	g_Config.bSoftwareRendering = cmdLineOptions.softwareRendering.value_or(false);
+	// Software unless --graphics picked a hardware backend (which sets softwareRendering=false).
+	// Defaulting this to false silently ran everything on OpenGL, which hangs games early in boot
+	// under Mesa llvmpipe on Linux/WSL.
+	g_Config.bSoftwareRendering = cmdLineOptions.softwareRendering.value_or(true);
 	g_Config.bSoftwareRenderingJit = true;
 	g_Config.iSplineBezierQuality = 2;
 	g_Config.bHighQualityDepth = true;
 	g_Config.bMemStickInserted = true;
 	g_Config.iMemStickSizeGB = 16;
 	g_Config.bEnableWlan = true;
+	// The net tests want WLAN on, but a test run shouldn't depend on reaching a real adhoc server.
+	g_Config.sProAdhocServer = "localhost";
 	g_Config.sMACAddress = "12:34:56:78:9A:BC";
 	g_Config.iFirmwareVersion = PSP_DEFAULT_FIRMWARE;
 	g_Config.iPSPModel = PSP_MODEL_SLIM;
@@ -867,8 +932,6 @@ int main(int argc, const char* argv[]) {
 		g_Config.iForceEnableHLE = 0xFFFFFFFF & ~g_Config.iDisableHLE;
 	}
 
-	// This looks contradictory to above checks. But, this preserves the old test behavior which apparently ran the JIT for the CPU
-	// but ended up running software vertex decoding due to the setting in g_Config. Yeah, it's a mess.
 	CPUCore cpuCore = CPUCore::JIT;
 	if (cmdLineOptions.cpuCore.has_value()) {
 		cpuCore = cmdLineOptions.cpuCore.value();
@@ -900,21 +963,34 @@ int main(int argc, const char* argv[]) {
 		// We don't bother with a window.
 		graphicsContext = new NullGraphicsContext();
 	} else {
-#if PPSSPP_PLATFORM(ANDROID) || PPSSPP_ARCH(LOONGARCH64)
+#if PPSSPP_PLATFORM(ANDROID) || defined(HEADLESS_NO_SDL)
 		fprintf(stderr, "Headless graphics context creation is not supported on this platform.\n");
 		return 1;
 #else
-		// TODO: Will we need a larger window for higher resolutions? Well, not if we use buffered rendering.
-		window = CreateHiddenWindow(480, 272, cmdLineOptions.gpuBackend.value_or(GPUBackend::OPENGL), &windowDesc);
-		if (!windowDesc.Valid()) {
-			fprintf(stderr, "Failed to create a window for graphics context");
-			return 1;
-		}
-		graphicsContext = CreateGraphicsContext(gpuCore, &deviceSetting);
-		if (!graphicsContext) {
-			// If we don't get the desired context, we DO NOT fall back.
-			fprintf(stderr, "Failed to create a graphics context for GPU core");
-			return 1;
+		if (gpuCore == GPUCORE_VULKAN) {
+			// Vulkan renders into images of its own, with no window or swapchain.
+			VulkanGraphicsContext *vulkanContext = new VulkanGraphicsContext();
+			vulkanContext->SetOffscreen(480, 272);
+			graphicsContext = vulkanContext;
+			deviceSetting = &g_Config.sVulkanDevice;
+#if PPSSPP_PLATFORM(MAC) && defined(SDL)
+		} else if (gpuCore == GPUCORE_GLES) {
+			// So does OpenGL, into a framebuffer object of its own.
+			graphicsContext = new CGLHeadlessGraphicsContext(480, 272);
+#endif
+		} else {
+			// TODO: Will we need a larger window for higher resolutions? Well, not if we use buffered rendering.
+			window = CreateHiddenWindow(480, 272, cmdLineOptions.gpuBackend.value_or(GPUBackend::OPENGL), &windowDesc);
+			if (!windowDesc.Valid()) {
+				fprintf(stderr, "Failed to create a window for graphics context\n");
+				return 1;
+			}
+			graphicsContext = CreateGraphicsContext(gpuCore, &deviceSetting);
+			if (!graphicsContext) {
+				// If we don't get the desired context, we DO NOT fall back.
+				fprintf(stderr, "Failed to create a graphics context for GPU core\n");
+				return 1;
+			}
 		}
 #endif
 	}
@@ -923,6 +999,9 @@ int main(int argc, const char* argv[]) {
 	// but not now.
 	CoreParameter coreParameter;
 	coreParameter.cpuCore = (CPUCore)cpuCore;
+	// The pspautotests expectations and frametest references were recorded with the C++ vertex
+	// decoder, and the JIT decoders don't match it everywhere yet.
+	coreParameter.bUseVertexDecoderJit = false;
 	coreParameter.gpuCore = (GPUCore)gpuCore;
 	coreParameter.graphicsContext = graphicsContext;
 	coreParameter.enableSound = false;
@@ -988,6 +1067,14 @@ int main(int argc, const char* argv[]) {
 	// "flash0:/kd/foo.prx" module path needs nandRootDirectory, which is only settled just above.
 	if (cmdLineOptions.reDecrypt.has_value()) {
 		return RunDecryptFile(cmdLineOptions.reDecrypt.value(), cmdLineOptions.reDecryptOut.value_or("decrypted.bin"));
+	}
+	if (cmdLineOptions.dumpFile.has_value()) {
+		if (cmdLineOptions.bootFilenames.empty()) {
+			fprintf(stderr, "--dump-file needs the disc image as the positional argument\n");
+			return 1;
+		}
+		const std::string &inPath = cmdLineOptions.dumpFile.value();
+		return RunDumpDiscFile(cmdLineOptions.bootFilenames[0], inPath, cmdLineOptions.dumpFileOut.value_or(Path(inPath.substr(inPath.find(':') + 1)).GetFilename()));
 	}
 	if (cmdLineOptions.reModule.has_value()) {
 		ReverseEngineerOptions reOptions;
@@ -1083,6 +1170,12 @@ int main(int argc, const char* argv[]) {
 			ShutdownWebServer();
 			return 1;
 		}
+		// With port 0 the OS picks one, and a client (wsdbg --launch) can only learn it from our
+		// output. Print it outside the log system so it doesn't depend on --log.
+		if (cmdLineOptions.DebuggerPort().value() == 0) {
+			fprintf(stderr, "Debugger listening on port %d\n", WebServerPort());
+			fflush(stderr);
+		}
 	}
 
 	if (cmdLineOptions.stateToSave.has_value()) {
@@ -1130,13 +1223,16 @@ int main(int argc, const char* argv[]) {
 		ShutdownWebServer();
 	}
 
-#if PPSSPP_PLATFORM(ANDROID) || PPSSPP_ARCH(LOONGARCH64)
+#if PPSSPP_PLATFORM(ANDROID) || defined(HEADLESS_NO_SDL)
 	// ... see above
 #else
 	if (window) {
 		DestroyHiddenWindow(window,	windowDesc);
 	}
 #endif
+
+	// A request finishing while globals are destroyed at exit touches g_OSD, which may be gone by then.
+	g_DownloadManager.CancelAll();
 
 	g_VFS.Clear();
 	g_logManager.Shutdown();

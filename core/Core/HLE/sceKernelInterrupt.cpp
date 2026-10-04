@@ -98,7 +98,8 @@ static int sceKernelCpuSuspendIntr()
 static void sceKernelCpuResumeIntr(u32 enable)
 {
 	VERBOSE_LOG(Log::sceIntc, "sceKernelCpuResumeIntr(%i)", enable);
-	if (enable)
+	// This is mtic a0, $0, which only looks at bit 0 (tests/intr/mfic).
+	if (enable & 1)
 	{
 		__EnableInterrupts();
 		hleRunInterrupts();
@@ -192,18 +193,21 @@ void IntrHandler::clear()
 	subIntrHandlers.clear();
 }
 
-void IntrHandler::queueUp(int subintr) {
+int IntrHandler::queueUp(int subintr) {
 	if (subintr == PSP_INTR_SUB_NONE) {
 		pendingInterrupts.push_back(PendingInterrupt(intrNumber, subintr));
-	} else {
-		// Just call execute on all the subintr handlers for this interrupt.
-		// They will get queued up.
-		for (auto iter = subIntrHandlers.begin(); iter != subIntrHandlers.end(); ++iter) {
-			if ((subintr == PSP_INTR_SUB_ALL || iter->first == subintr) && iter->second.enabled && iter->second.handlerAddress != 0) {
-				pendingInterrupts.push_back(PendingInterrupt(intrNumber, iter->first));
-			}
+		return 1;
+	}
+	// Just call execute on all the subintr handlers for this interrupt.
+	// They will get queued up.
+	int count = 0;
+	for (auto iter = subIntrHandlers.begin(); iter != subIntrHandlers.end(); ++iter) {
+		if ((subintr == PSP_INTR_SUB_ALL || iter->first == subintr) && iter->second.enabled && iter->second.handlerAddress != 0) {
+			pendingInterrupts.push_back(PendingInterrupt(intrNumber, iter->first));
+			count++;
 		}
 	}
+	return count;
 }
 
 void IntrHandler::DoState(PointerWrap &p)
@@ -359,6 +363,7 @@ retry:
 			inInterrupt = false;
 			goto retry;
 		}
+		currentMIPS->downcount -= handler->entryCycles();
 
 		currentMIPS->r[MIPS_REG_RA] = __KernelInterruptReturnAddress();
 		return true;
@@ -382,9 +387,10 @@ static void __TriggerRunInterrupts(int type)
 			// "Always" only means if dispatch is enabled.
 			if (!__RunOnePendingInterrupt() && __KernelIsDispatchEnabled())
 			{
-				SceUID savedThread = __KernelGetCurThread();
-				if (__KernelSwitchOffThread("interrupt"))
-					threadBeforeInterrupt = savedThread;
+				// With no handler to run and return from, just pick a thread again. This used to
+				// switch to idle, and the interrupted thread sat there until some later event
+				// rescheduled: ~775us of every frame at a vblank with no handler registered.
+				__KernelReSchedule("interrupt");
 			}
 		}
 		else
@@ -392,14 +398,35 @@ static void __TriggerRunInterrupts(int type)
 	}
 }
 
-void __TriggerInterrupt(int type, PSPInterrupt intno, int subintr)
+int __TriggerInterrupt(int type, PSPInterrupt intno, int subintr)
 {
 	if (interruptsEnabled || (type & PSP_INTR_ONLY_IF_ENABLED) == 0)
 	{
-		intrHandlers[intno]->queueUp(subintr);
+		// Returning from an interrupt clears the ll bit, handler or not (pspautotests cpu/lsu/llsc).
+		currentMIPS->llBit = 0;
+		int queued = intrHandlers[intno]->queueUp(subintr);
 		VERBOSE_LOG(Log::sceIntc, "Triggering subinterrupts for interrupt %i sub %i (%i in queue)", intno, subintr, (u32)pendingInterrupts.size());
 		__TriggerRunInterrupts(type);
+		return queued;
 	}
+	return 0;
+}
+
+int __CancelRaisedInterrupts(PSPInterrupt intno) {
+	int count = 0;
+	auto it = pendingInterrupts.begin();
+	// The one at the front is what's running, if anything is, and gets popped when it returns.
+	if (inInterrupt && it != pendingInterrupts.end())
+		++it;
+	while (it != pendingInterrupts.end()) {
+		if (it->intr == intno) {
+			it = pendingInterrupts.erase(it);
+			count++;
+		} else {
+			++it;
+		}
+	}
+	return count;
 }
 
 void __KernelReturnFromInterrupt()
@@ -414,6 +441,14 @@ void __KernelReturnFromInterrupt()
 
 	if (pend.intr >= 0 && pend.intr < ARRAY_SIZE(intrHandlers)) {
 		intrHandlers[pend.intr]->handleResult(pend);
+		// Charged once the last queued handler for this interrupt is done.
+		bool moreOfThis = false;
+		for (const PendingInterrupt &other : pendingInterrupts) {
+			moreOfThis = moreOfThis || other.intr == pend.intr;
+		}
+		if (!moreOfThis) {
+			currentMIPS->downcount -= intrHandlers[pend.intr]->exitCycles();
+		}
 	} else {
 		_assert_msg_(false, "Bad pend.intr: %d", pend.intr);
 	}
@@ -433,6 +468,10 @@ void __KernelReturnFromInterrupt()
 			__KernelSwitchToThread(threadBeforeInterrupt, "left interrupt");
 	}
 	hleNoLogVoid();
+}
+
+void __SetIntrHandlerCosts(PSPInterrupt intno, int entryCycles, int exitCycles) {
+	intrHandlers[intno]->setCosts(entryCycles, exitCycles);
 }
 
 void __RegisterIntrHandler(u32 intrNumber, IntrHandler* handler)
@@ -494,12 +533,64 @@ int __ReleaseSubIntrHandler(int intrNumber, int subIntrNumber) {
 	return 0;
 }
 
+// What a user mode caller finds on each interrupt, as interruptman.prx checks it: whether a driver
+// has installed a handler for the interrupt at all, whether it has sub-interrupt slots, and whether
+// user handlers are allowed in them. This is system state rather than a rule, read back from
+// intr/registersub and intr/releasesub on a 6.61 PSP (running PSPLink, whose USB drivers may count.)
+// Interrupt 8 had a handler in an older recording and doesn't now, so treat this as approximate.
+enum class IntrUserAccess : u8 {
+	NO_HANDLER,   // SCE_KERNEL_ERROR_NOTFOUND_HANDLER
+	NO_SUBS,      // SCE_KERNEL_ERROR_ILLEGAL_INTRCODE, the sub number is always out of range
+	KERNEL_SUBS,  // SCE_KERNEL_ERROR_ILLEGAL_INTRCODE to register, empty slots to release
+	USER,
+};
+
+static IntrUserAccess GetIntrUserAccess(u32 intrNumber) {
+	switch (intrNumber) {
+	case PSP_GE_INTR:
+	case PSP_VBLANK_INTR:
+		return IntrUserAccess::USER;
+	case 4: case 6: case 21:
+		return IntrUserAccess::KERNEL_SUBS;
+	case 7: case 10: case 12: case 15: case 16: case 17: case 18: case 19: case 20: case 22:
+	case 23: case 24: case 26: case 31: case 36: case 50: case 56: case 57: case 58: case 59:
+	case 60: case 61: case 65:
+		return IntrUserAccess::NO_SUBS;
+	default:
+		return IntrUserAccess::NO_HANDLER;
+	}
+}
+
+// The vblank slots a user handler may take (the rest are the kernel's), and those the display
+// driver already holds.
+static bool IsUserVblankSubIntr(u32 subIntrNumber) {
+	return subIntrNumber < 16;
+}
+static bool IsKernelHeldVblankSubIntr(u32 subIntrNumber) {
+	return (subIntrNumber >= 18 && subIntrNumber <= 20) || (subIntrNumber >= 24 && subIntrNumber <= 26);
+}
+
 u32 sceKernelRegisterSubIntrHandler(u32 intrNumber, u32 subIntrNumber, u32 handler, u32 handlerArg) {
 	if (intrNumber >= PSP_NUMBER_INTERRUPTS) {
 		return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_ILLEGAL_INTRCODE, "invalid interrupt");
 	}
+	switch (GetIntrUserAccess(intrNumber)) {
+	case IntrUserAccess::NO_HANDLER:
+		return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_NOTFOUND_HANDLER, "no handler for this interrupt");
+	case IntrUserAccess::NO_SUBS:
+	case IntrUserAccess::KERNEL_SUBS:
+		return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_ILLEGAL_INTRCODE, "no user subinterrupts");
+	case IntrUserAccess::USER:
+		break;
+	}
 	if (subIntrNumber >= PSP_NUMBER_SUBINTERRUPTS) {
 		return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_ILLEGAL_INTRCODE, "invalid subinterrupt");
+	}
+	if (intrNumber == PSP_VBLANK_INTR) {
+		if (IsKernelHeldVblankSubIntr(subIntrNumber))
+			return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_FOUND_HANDLER, "held by the kernel");
+		if (!IsUserVblankSubIntr(subIntrNumber))
+			return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_ILLEGAL_INTRCODE, "kernel only subinterrupt");
 	}
 
 	u32 error;
@@ -521,8 +612,16 @@ u32 sceKernelReleaseSubIntrHandler(u32 intrNumber, u32 subIntrNumber) {
 	if (intrNumber >= PSP_NUMBER_INTERRUPTS) {
 		return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_ILLEGAL_INTRCODE, "invalid interrupt");
 	}
-	if (subIntrNumber >= PSP_NUMBER_SUBINTERRUPTS) {
+	const IntrUserAccess access = GetIntrUserAccess(intrNumber);
+	if (access == IntrUserAccess::NO_HANDLER) {
+		return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_NOTFOUND_HANDLER, "no handler for this interrupt");
+	}
+	if (access == IntrUserAccess::NO_SUBS || subIntrNumber >= PSP_NUMBER_SUBINTERRUPTS) {
 		return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_ILLEGAL_INTRCODE, "invalid subinterrupt");
+	}
+	// User code can't have put anything in the kernel's slots, and can't release what's there.
+	if (access == IntrUserAccess::KERNEL_SUBS || (intrNumber == PSP_VBLANK_INTR && !IsUserVblankSubIntr(subIntrNumber))) {
+		return hleLogError(Log::sceIntc, SCE_KERNEL_ERROR_NOTFOUND_HANDLER, "not a user subinterrupt");
 	}
 
 	u32 error = __ReleaseSubIntrHandler(intrNumber, subIntrNumber);
@@ -615,6 +714,7 @@ static u32 sceKernelMemcpy(u32 dst, u32 src, u32 size) {
 	if (Memory::IsVRAMAddress(src) || Memory::IsVRAMAddress(dst)) {
 		skip = gpu->PerformMemoryCopy(dst, src, size);
 	}
+	gpu->NotifyVideoCopy(dst, src, size);
 
 	// Technically should crash if these are invalid and size > 0...
 	if (!skip && Memory::IsValidAddress(dst) && Memory::IsValidAddress(src) && Memory::IsValidAddress(dst + size - 1) && Memory::IsValidAddress(src + size - 1))  {

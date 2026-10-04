@@ -471,6 +471,9 @@ struct SceKernelSMOption {
 static int actionAfterModule;
 
 static std::set<SceUID> loadedModules;
+// Set once we've seen a PSP_MODULE_VSH_MODE module load (i.e. we're booting the VSH rather
+// than a game), and reset on the next __KernelLoadExec. See ShouldHLEModuleForLoad below.
+static bool g_runningVSH = false;
 // STATE END
 //////////////////////////////////////////////////////////////////////////
 
@@ -479,7 +482,7 @@ static void __KernelModuleInit() {
 }
 
 void __KernelModuleDoState(PointerWrap &p) {
-	auto s = p.Section("sceKernelModule", 1, 2);
+	auto s = p.Section("sceKernelModule", 1, 3);
 	if (!s)
 		return;
 
@@ -490,6 +493,19 @@ void __KernelModuleDoState(PointerWrap &p) {
 
 	if (s >= 2) {
 		Do(p, loadedModules);
+	}
+	if (s >= 3) {
+		Do(p, g_runningVSH);
+	} else if (p.mode == p.MODE_READ) {
+		// Derive it the way the loader sets it.
+		g_runningVSH = false;
+		for (SceUID moduleId : loadedModules) {
+			u32 error;
+			PSPModule *module = kernelObjects.Get<PSPModule>(moduleId, error);
+			if (module && ((module->nm.attribute & PSP_MODULE_VSH_MODE) != 0 || equals(module->nm.name, "vsh_module"))) {
+				g_runningVSH = true;
+			}
+		}
 	}
 
 	if (p.mode == p.MODE_READ) {
@@ -503,6 +519,9 @@ void __KernelModuleDoState(PointerWrap &p) {
 				}
 			}
 		}
+		// The functions were found in memory from before the load, where other code may have been
+		// (an overlay module, say.) Hash them from what's there now, so a hook only goes where it matches.
+		MIPSAnalyst::RehashFunctions();
 		if (g_Config.bFuncReplacements) {
 			MIPSAnalyst::ReplaceFunctions();
 		}
@@ -1116,10 +1135,6 @@ enum : u32 {
 	PSP_MAGIC = 0x5053507e,
 	ELF_MAGIC = 0x464c457f,
 };
-
-// Set once we've seen a PSP_MODULE_VSH_MODE module load (i.e. we're booting the VSH rather
-// than a game), and reset on the next __KernelLoadExec. See ShouldHLEModuleForLoad below.
-static bool g_runningVSH = false;
 
 // A few flash0 modules (VSH's own bridge/UI/utility libraries) should only ever be genuinely
 // loaded - rather than faked via any HLE implementation we may have for them - once we know
@@ -2026,6 +2041,17 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 	return module;
 }
 
+bool KernelUnloadModuleByID(SceUID moduleId) {
+	u32 error;
+	PSPModule *module = kernelObjects.Get<PSPModule>(moduleId, error);
+	if (!module) {
+		return false;
+	}
+	module->Cleanup();
+	kernelObjects.Destroy<PSPModule>(moduleId);
+	return true;
+}
+
 bool KernelModuleIsLoaded(std::string_view name) {
 	u32 error;
 	for (SceUID moduleId : loadedModules) {
@@ -2427,6 +2453,7 @@ u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr) {
 		const u32 error = hleLogError(Log::Loader, SCE_KERNEL_ERROR_FILEERR, "module file size is 0");
 		return hleDelayResult(error, "module loaded", 500);
 	}
+	const int fileSize = (int)fileData.size();
 
 	// A .sprx installed by a PKG game update comes wrapped in an NPDRM "\0PSPEDAT" container: a
 	// 0x90-byte header naming the content ID, then the payload at the offset in its u16 at 0x0C.
@@ -2518,8 +2545,11 @@ u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr) {
 		INFO_LOG(Log::sceModule,"%i=sceKernelLoadModule(name=%s,flag=%08x,(...))", module->GetUID(), name, flags);
 	}
 
-	// TODO: This is not the right timing and probably not the right wait type, just an approximation.
-	return hleDelayResult(hleNoLog(module->GetUID()), "module loaded", 500);
+	// Opening and reading the file, then about 1ms plus 30us per KB of loader work, the caller waiting
+	// throughout. The loader part is what a load took on hardware beyond an open and a read of the
+	// same file (pspautotests threads/scheduling/callcosts, from an SD card in a memory stick adapter).
+	const int loadUs = __IoOpenDelayUs(name) + __IoReadDelayUs(fileSize) + 1000 + fileSize / 34;
+	return hleDelayResult(hleNoLog(module->GetUID()), "module loaded", loadUs);
 }
 
 static u32 sceKernelLoadModuleNpDrm(const char *name, u32 flags, u32 optionAddr) {
@@ -2688,7 +2718,9 @@ static u32 sceKernelUnloadModule(u32 moduleId) {
 
 	module->Cleanup();
 	kernelObjects.Destroy<PSPModule>(moduleId);
-	return hleDelayResult(hleLogDebug(Log::sceModule, moduleId), "module unloaded", 500);
+	// About 400us of work that better threads can preempt, and worse ones don't get in on
+	// (tests/threads/scheduling/syscallkinds).
+	return __KernelBusyDelayResult(hleLogDebug(Log::sceModule, moduleId), (int)usToCycles(400), "module unloaded");
 }
 
 u32 __KernelStopUnloadSelfModuleWithOrWithoutStatus(u32 exitCode, u32 argSize, u32 argp, u32 statusAddr, u32 optionAddr, bool WithStatus) {
@@ -2956,6 +2988,10 @@ u32 sceKernelFindModuleByName(const char *name)
 }
 
 // The id in question here is a file handle.
+// On hardware, from a game's own fd on ms0: or host0: this fails with
+// SCE_KERNEL_ERROR_PROHIBIT_LOADMODULE_DEVICE: the file has to pass a kernel-only ioctl (0x00208001),
+// which a user fd doesn't (it returns ILLEGAL_PERM). sceKernelLoadModule opens the file itself, so it
+// passes. Whether a disc0:/umd0: fd passes is untested, so we let every device through.
 static u32 sceKernelLoadModuleByID(u32 id, u32 flags, u32 lmoptionPtr) {
 	u32 error;
 	u32 handle = __IoGetFileHandleFromId(id, error);

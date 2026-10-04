@@ -42,11 +42,11 @@
 #include "GPU/Common/GPUStateUtils.h"
 #include "GPU/ge_constants.h"
 #include "GPU/Debugger/Record.h"
+#include "GPU/GPUCommon.h"
 #include "GPU/GPUState.h"
 #include "Core/Util/PPGeDraw.h"
 
 // Videos should be updated every few frames, so we forget quickly.
-#define VIDEO_DECIMATE_AGE 4
 
 // If a texture hasn't been seen for this many frames, get rid of it.
 #define TEXTURE_KILL_AGE 200
@@ -114,6 +114,8 @@ TextureCacheCommon::TextureCacheCommon(Draw::DrawContext *draw, Draw2D *draw2D)
 }
 
 TextureCacheCommon::~TextureCacheCommon() {
+	// Only DeviceLost cleared these, which the GLES and D3D11 backends don't go through at shutdown.
+	clutTextureCache_.Clear();
 	FreeAlignedMemory(clutBufConverted_);
 	FreeAlignedMemory(clutBufRaw_);
 	FreeAlignedMemory(expandClut_);
@@ -153,6 +155,7 @@ void TextureCacheCommon::StartFrame() {
 		gpuStats.perFrame.numReplacerTrackedTex = replacer_.GetNumTrackedTextures();
 		gpuStats.perFrame.numCachedReplacedTextures = replacer_.GetNumCachedReplacedTextures();
 	}
+	gpuStats.perFrame.numVideoTextures = (int)gpu->Videos().size();
 
 	if (texelsScaledThisFrame_) {
 		VERBOSE_LOG(Log::TexCache, "Scaled %d texels", texelsScaledThisFrame_);
@@ -341,6 +344,9 @@ SamplerCacheKey TextureCacheCommon::GetSamplingParams(int maxLevel, const TexCac
 		break;
 	}
 
+	if (key.aniso) {
+		key.anisoLevel = (uint8_t)g_Config.iAnisotropyLevel;
+	}
 	return key;
 }
 
@@ -395,12 +401,15 @@ SamplerCacheKey GetFramebufferSamplingParams(const GEState &gstate, u16 bufferWi
 
 static u32 ComputeTextureHash(TextureReplacer &replacer, u32 addr, int bufw, int w, int h, bool swizzled, const TexCacheEntry *entry) {
 	const GETextureFormat format = entry->format;
+	// Swizzled CLUT4 glyph atlases can fill below the visible UV range while remaining
+	// 512 pixels tall.  Hashing only maxSeenV rows misses those updates (#21980).
+	const u16 hashMaxSeenV = h == 512 && swizzled && format == GE_TFMT_CLUT4 ? 512 : entry->maxSeenV;
 	if (replacer.Enabled()) {
-		return replacer.ComputeHash(addr, bufw, w, h, swizzled, format, entry->maxSeenV);
+		return replacer.ComputeHash(addr, bufw, w, h, swizzled, format, hashMaxSeenV);
 	}
 
-	if (h == 512 && entry->maxSeenV < 512 && entry->maxSeenV != 0) {
-		h = (int)entry->maxSeenV;
+	if (h == 512 && hashMaxSeenV < 512 && hashMaxSeenV != 0) {
+		h = (int)hashMaxSeenV;
 	}
 
 	u32 sizeInRAM;
@@ -422,8 +431,9 @@ static u32 ComputeTextureHash(TextureReplacer &replacer, u32 addr, int bufw, int
 	if (Memory::IsValidRange(addr, sizeInRAM)) {
 		gpuStats.perFrame.numTextureDataBytesHashed += sizeInRAM;
 
-		// return XXH64(checkp, sizeInRAM, 0xBACD7814);
-		return StableQuickTexHash(checkp, sizeInRAM);
+		// XXH3 is faster than StableQuickTexHash on ARM64 and doesn't collide the way it did (#8249).
+		// Texture replacement keeps its own hash setting above, so this doesn't affect texture packs.
+		return (u32)XXH3_64bits(checkp, sizeInRAM);
 	} else {
 		return 0;
 	}
@@ -710,8 +720,11 @@ TextureApplyResult TextureCacheCommon::ApplyTexture(bool doBind) {
 				_dbg_assert_(h == gstate.getTextureHeight(0));
 				_dbg_assert_(entry->addr == texaddr);
 				UpdateMaxSeenV(entry, gstate.isModeThrough());
-				const u32 newFullHash = ComputeTextureHash(replacer_, entry->addr, entry->bufw, w, h, swizzled, entry);
-				if (newFullHash != entry->fullhash) {
+				// A video texture is new every frame by definition, so hashing it only confirms what
+				// the VIDEO flag already said.
+				const bool skipHash = isVideo;
+				const u32 newFullHash = skipHash ? 0 : ComputeTextureHash(replacer_, entry->addr, entry->bufw, w, h, swizzled, entry);
+				if (skipHash || newFullHash != entry->fullhash) {
 					// The texture changed. Throw it in the secondary cache. Then we'll create a new entry later.
 					gpuStats.perFrame.numTexturesChanged++;
 					if (!isVideo) {
@@ -750,12 +763,14 @@ TextureApplyResult TextureCacheCommon::ApplyTexture(bool doBind) {
 							DEBUG_LOG(Log::TexCache, "%08x: Second cache already had one with hash %08x (tex has addr %08x)! (%dx%d)", texaddr, entry->fullhash, entry->addr, w, h);
 							// Just release the old entry, drop it on the ground.
 							ReleaseTexture(entry, true);
+							delete entry;
 							entry = nullptr;
 						}
 					} else {
 						// Just release the old video entry, drop it on the ground.
 						VERBOSE_LOG(Log::TexCache, "%08x: Dropping old invalidated video image (%dx%d)", texaddr, w, h);
 						ReleaseTexture(entry, true);
+						delete entry;
 						entry = nullptr;
 					}
 
@@ -765,7 +780,9 @@ TextureApplyResult TextureCacheCommon::ApplyTexture(bool doBind) {
 					// Now, look for the new hash in the secondary cache.
 					// If we find it, we can use that instead of building a new texture. We then pull it out from
 					// the secondary cache and move it to the main cache.
-					TexCache::iterator secondIterNew = secondCache_.find(secondKeyNew);
+					// Without a hash there is nothing to look up by, and a frame that will never recur has
+					// nothing to gain from the secondary cache anyway.
+					TexCache::iterator secondIterNew = skipHash ? secondCache_.end() : secondCache_.find(secondKeyNew);
 					if (secondIterNew != secondCache_.end()) {
 						// Found it, but does it match our current params?  If not, abort.
 						if (secondIterNew->second->MatchesProperties(dim, texFormat, maxLevel)) {
@@ -793,9 +810,9 @@ TextureApplyResult TextureCacheCommon::ApplyTexture(bool doBind) {
 							// other stuff like Gran Turismo or Gods Eater font rendering unless there are hash collisions..
 							DEBUG_LOG(Log::TexCache, "%08x: No entry for hash %08x in secondary cache, creating new in main cache.", texaddr, newFullHash);
 						}
-						// Well, not found, so we need to create a new entry.
-						cache_.erase(entryIter);
 					}
+					// The slot was released above. Erase it, since the framebuffer match below can return before it's refilled.
+					cache_.erase(entryIter);
 					entry = nullptr;
 					entryIter = cache_.end();
 				} else {
@@ -904,7 +921,8 @@ TextureApplyResult TextureCacheCommon::ApplyTexture(bool doBind) {
 	if (clutInShader) {
 		entry->status |= TexStatus::CLUT8_INDEXED;
 	}
-	if (IsVideo(entry->addr)) {
+	const bool isVideo = IsVideo(entry->addr);
+	if (isVideo) {
 		entry->status |= TexStatus::VIDEO;
 	}
 
@@ -912,8 +930,8 @@ TextureApplyResult TextureCacheCommon::ApplyTexture(bool doBind) {
 	gstate_c.curTextureHeight = h;
 	UpdateMaxSeenV(entry, gstate.isModeThrough());  // Critical to update this before hashing! As it's used to decide the hash range.
 
-	// TODO: Avoid hashing known video textures.
-	if (!(entry->status & TexStatus::IS_PPGE_ATLAS)) {
+	const bool skipHash = isVideo;
+	if (!(entry->status & TexStatus::IS_PPGE_ATLAS) && !skipHash) {
 		entry->fullhash = ComputeTextureHash(replacer_, entry->addr, entry->bufw, w, h, swizzled, entry);
 	}
 
@@ -927,7 +945,15 @@ TextureApplyResult TextureCacheCommon::ApplyTexture(bool doBind) {
 TextureApplyResult TextureCacheCommon::ApplyTextureFinish(TexCacheEntry *entry, bool doBind) {
 	_dbg_assert_(entry);
 
-	gstate_c.SetTextureIsVideo((entry->status & TexStatus::VIDEO) != 0);
+	const bool isVideo = (entry->status & TexStatus::VIDEO) != 0;
+	gstate_c.SetTextureIsVideo(isVideo);
+	if (isVideo) {
+		// Restrict sampling to the 480x272 frame (see CalcTexClamp), since with the forced linear
+		// filtering, whatever is next to it in memory bleeds in at the edges.
+		gstate_c.curTextureXOffset = 0;
+		gstate_c.curTextureYOffset = 0;
+		gstate_c.SetNeedShaderTexclamp(true);
+	}
 	gstate_c.SetTextureIsArray(false);  // Ordinary 2D textures still aren't used by array view in VK. We probably might as well, though, at this point..
 	gstate_c.SetTextureIsFramebuffer(false);
 	entry->lastFrame = gpuStats.totals.numFlips;
@@ -1124,26 +1150,11 @@ void TextureCacheCommon::Decimate(const TexCacheEntry *const exceptThisOne, bool
 		}
 	}
 
-	// Decimate known videos (so the list doesn't grow unboundedly or we start to misidentify textures as video).
-	for (auto iter = videos_.begin(); iter != videos_.end(); ) {
-		if (iter->flips + VIDEO_DECIMATE_AGE < gpuStats.totals.numFlips) {
-			iter = videos_.erase(iter);
-		} else {
-			++iter;
-		}
-	}
-
 	replacer_.Decimate(forcePressure ? ReplacerDecimateMode::FORCE_PRESSURE : ReplacerDecimateMode::NEW_FRAME);
 }
 
 bool TextureCacheCommon::IsVideo(u32 texaddr) const {
-	texaddr &= 0x3FFFFFFF;
-	for (const VideoInfo &info : videos_) {
-		if (texaddr >= info.addr && texaddr < info.addr + info.size) {
-			return true;
-		}
-	}
-	return false;
+	return gpu->IsVideo(texaddr);
 }
 
 void TextureCacheCommon::NotifyFramebuffer(VirtualFramebuffer *framebuffer, FramebufferNotification msg) {
@@ -1499,11 +1510,6 @@ void TextureCacheCommon::NotifyConfigChanged() {
 	replacer_.NotifyConfigChanged();
 }
 
-void TextureCacheCommon::NotifyWriteFormattedFromMemory(u32 addr, int size, int width, GEBufferFormat fmt) {
-	addr &= 0x3FFFFFFF;
-	videos_.push_back({ addr, (u32)size, gpuStats.totals.numFlips });
-}
-
 void TextureCacheCommon::LoadClut(u32 clutAddr, u32 loadBytes, GPURecord::Recorder *recorder) {
 	if (loadBytes == 0) {
 		// Don't accidentally overwrite clutTotalBytes_ with a zero.
@@ -1776,7 +1782,7 @@ ReplacedTexture *TextureCacheCommon::FindReplacement(TexCacheEntry *entry, int *
 		return nullptr;
 	}
 
-	if ((entry->status & TexStatus::VIDEO) && !replacer_.AllowVideo()) {
+	if (entry->status & TexStatus::VIDEO) {
 		return nullptr;
 	}
 
@@ -2733,7 +2739,6 @@ void TextureCacheCommon::Clear(bool delete_them) {
 		cache_.clear();
 		secondCache_.clear();
 	}
-	videos_.clear();
 
 	if (dynamicClutFbo_) {
 		dynamicClutFbo_->Release();
@@ -2743,6 +2748,8 @@ void TextureCacheCommon::Clear(bool delete_them) {
 		dynamicClutTemp_->Release();
 		dynamicClutTemp_ = nullptr;
 	}
+	// The dynamic CLUT lived in the framebuffers released above. Fall back to the RAM copy until the next LoadClut.
+	clutRenderAddress_ = 0xFFFFFFFF;
 }
 
 // One type of texture update can happen without the involvement of the CPU: Block transfers.

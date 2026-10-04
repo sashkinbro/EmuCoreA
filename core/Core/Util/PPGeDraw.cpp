@@ -1445,6 +1445,12 @@ void PPGeImage::Free() {
 	}
 }
 
+void PPGeImage::Forget() {
+	texture_ = 0;
+	loadFailed_ = false;
+	loadedTextures_.erase(std::remove(loadedTextures_.begin(), loadedTextures_.end(), this), loadedTextures_.end());
+}
+
 void PPGeImage::DoState(PointerWrap &p) {
 	auto s = p.Section("PPGeImage", 1, 2);
 	if (!s)

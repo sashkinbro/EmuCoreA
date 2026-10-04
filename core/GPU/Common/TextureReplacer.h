@@ -76,6 +76,8 @@ enum class ReplacerDecimateMode {
 
 class TextureReplacer {
 public:
+	TextureReplacer(const TextureReplacer &) = delete;
+	TextureReplacer &operator=(const TextureReplacer &) = delete;
 	// The draw context is checked for supported texture formats.
 	TextureReplacer(Draw::DrawContext *draw);
 	~TextureReplacer();
@@ -85,8 +87,6 @@ public:
 	bool Enabled() const { return replaceEnabled_ || saveEnabled_; }  // used to check hashing method etc.
 	bool ReplaceEnabled() const { return replaceEnabled_; }
 	bool SaveEnabled() const { return saveEnabled_; }
-
-	bool AllowVideo() const { return allowVideo_; }
 
 	u32 ComputeHash(u32 addr, int bufw, int w, int h, bool swizzled, GETextureFormat fmt, u16 maxSeenV);
 
@@ -118,6 +118,7 @@ protected:
 	bool FindFiltering(ReplacementCacheKey key, TextureFiltering *forceFiltering);
 
 	bool LoadIni(std::string *error, bool notify = true);
+	void DeleteVFS();
 	bool LoadIniValues(IniFile &ini, VFSBackend *dir, bool isOverride, std::string *error);
 	void ParseHashRange(const std::string &key, const std::string &value);
 	void ParseFiltering(const std::string &key, const std::string &value);
@@ -128,7 +129,6 @@ protected:
 
 	bool replaceEnabled_ = false;
 	bool saveEnabled_ = false;
-	bool allowVideo_ = false;
 	bool ignoreAddress_ = false;
 	bool reduceHash_ = false;
 	bool ignoreMipmap_ = false;

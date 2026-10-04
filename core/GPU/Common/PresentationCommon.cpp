@@ -555,8 +555,12 @@ static void DoRelease(T *&obj) {
 
 template <typename T>
 static void DoReleaseVector(std::vector<T *> &list) {
-	for (auto &obj : list)
-		obj->Release();
+	for (auto &obj : list) {
+		// Can be null when a creation failed partway.
+		if (obj) {
+			obj->Release();
+		}
+	}
 	list.clear();
 }
 
@@ -676,7 +680,7 @@ void PresentationCommon::RunPostshaderPasses(const DisplayLayoutConfig &config, 
 	bool useNearest = flags & OutputFlags::NEAREST;
 	bool useStereo = gstate_c.Use(GPU_USE_SIMPLE_STEREO_PERSPECTIVE) && stereoPipeline_ != nullptr;  // TODO: Also check that the backend has support for it.
 
-	const bool usePostShader = usePostShader_ && !useStereo && !(flags & OutputFlags::RB_SWIZZLE);
+	const bool usePostShader = usePostShader_ && !useStereo && !(flags & (OutputFlags::RB_SWIZZLE | OutputFlags::NO_POST_SHADER));
 	const bool isFinalAtOutputResolution = usePostShader && postShaderFramebuffers_.size() < postShaderPipelines_.size();
 	int lastWidth = srcWidth_;
 	int lastHeight = srcHeight_;
@@ -893,7 +897,7 @@ void PresentationCommon::CopyToOutput(const DisplayLayoutConfig &config) {
 	bool useNearest = outputFlags_ & OutputFlags::NEAREST;
 	bool useStereo = gstate_c.Use(GPU_USE_SIMPLE_STEREO_PERSPECTIVE) && stereoPipeline_ != nullptr;  // TODO: Also check that the backend has support for it.
 
-	const bool usePostShader = usePostShader_ && !useStereo && !(outputFlags_ & OutputFlags::RB_SWIZZLE);
+	const bool usePostShader = usePostShader_ && !useStereo && !(outputFlags_ & (OutputFlags::RB_SWIZZLE | OutputFlags::NO_POST_SHADER));
 	const bool isFinalAtOutputResolution = usePostShader && postShaderFramebuffers_.size() < postShaderPipelines_.size();
 	int lastWidth = srcWidth_;
 	int lastHeight = srcHeight_;

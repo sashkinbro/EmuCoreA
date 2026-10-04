@@ -365,7 +365,6 @@
     <ClInclude Include="..\ext\lzma-sdk\LzmaDec.h" />
     <ClInclude Include="..\ext\lzma-sdk\Precomp.h" />
     <ClInclude Include="..\ext\lzma-sdk\RotateDefs.h" />
-    <ClInclude Include="..\ext\minimp3\minimp3.h" />
     <ClInclude Include="..\ext\naett-lib\naett.h" />
     <ClInclude Include="..\ext\naett-lib\src\naett_internal.h" />
     <ClInclude Include="..\ext\nanosvg\src\nanosvg.h" />
@@ -391,7 +390,6 @@
     <ClInclude Include="Data\Collections\Hashmaps.h" />
     <ClInclude Include="Data\Collections\LinkedList.h" />
     <ClInclude Include="Data\Collections\Slice.h" />
-    <ClInclude Include="Data\Collections\ThreadSafeList.h" />
     <ClInclude Include="Data\Collections\TinySet.h" />
     <ClInclude Include="Data\Color\RGBAUtil.h" />
     <ClInclude Include="Data\Convert\SmallDataConvert.h" />
@@ -453,6 +451,7 @@
     <ClInclude Include="GPU\Vulkan\VulkanAlloc.h" />
     <ClInclude Include="GPU\Vulkan\VulkanBarrier.h" />
     <ClInclude Include="GPU\Vulkan\VulkanContext.h" />
+    <ClInclude Include="GPU\Vulkan\FixedSPIRVCache.h" />
     <ClInclude Include="GPU\Vulkan\VulkanDebug.h" />
     <ClInclude Include="GPU\Vulkan\VulkanDescSet.h" />
     <ClInclude Include="GPU\Vulkan\VulkanFramebuffer.h" />
@@ -868,7 +867,6 @@
     <ClCompile Include="..\ext\lzma-sdk\Delta.c" />
     <ClCompile Include="..\ext\lzma-sdk\Lzma2Dec.c" />
     <ClCompile Include="..\ext\lzma-sdk\LzmaDec.c" />
-    <ClCompile Include="..\ext\minimp3\minimp3.cpp" />
     <ClCompile Include="..\ext\naett-lib\src\naett_core.c" />
     <ClCompile Include="..\ext\naett-lib\src\naett_win.c" />
     <ClCompile Include="..\ext\pugixml\pugixml.cpp" />

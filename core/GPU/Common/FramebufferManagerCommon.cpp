@@ -103,10 +103,8 @@ bool FramebufferManagerCommon::UpdateRenderSize(int msaaLevel) {
 
 	presentation_->UpdateRenderSize(renderWidth_, renderHeight_);
 
-	// If just switching TO buffered rendering, no need to pause the threads. In fact this causes problems due to the open backbuffer renderpass.
-	if (!useBufferedRendering_ && newBuffered) {
-		return false;
-	}
+	// Switching to buffered rendering must also recreate the framebuffers: the existing VFBs have no fbo,
+	// and nothing else gives them one.
 	return newRender || newSettings;
 }
 
@@ -508,7 +506,7 @@ VirtualFramebuffer *FramebufferManagerCommon::DoSetRenderFrameBuffer(Framebuffer
 			vfb->lastFrameNewSize = gpuStats.totals.numFlips;
 		}
 
-		if (!resized && renderScaleFactor_ != 1 && vfb->renderScaleFactor == 1) {
+		if (!resized && renderScaleFactor_ != 1 && vfb->renderScaleFactor == 1 && !ShouldDownloadFramebufferColor(vfb)) {
 			// Might be time to change this framebuffer - have we used depth?
 			if ((vfb->usageFlags & FB_USAGE_COLOR_MIXED_DEPTH) && !PSP_CoreParameter().compat.flags().ForceLowerResolutionForEffectsOn) {
 				ResizeFramebufFBO(vfb, vfb->width, vfb->height, true);
@@ -1066,6 +1064,9 @@ void FramebufferManagerCommon::DownloadFramebufferOnSwitch(VirtualFramebuffer *v
 }
 
 bool FramebufferManagerCommon::ShouldDownloadFramebufferColor(const VirtualFramebuffer *vfb) {
+	if (PSP_CoreParameter().compat.flags().ForceEnableGPUReadback) {
+		return true;
+	}
 	// Dangan Ronpa hack
 	return PSP_CoreParameter().compat.flags().Force04154000Download && vfb->fb_address == 0x04154000;
 }
@@ -1528,6 +1529,7 @@ Draw::Texture *FramebufferManagerCommon::MakePixelTexture(const u8 *srcPixels, G
 	Draw::Texture *tex = draw_->CreateTexture(desc);
 	if (!tex) {
 		ERROR_LOG(Log::G3D, "Failed to create DrawPixels texture");
+		return nullptr;
 	}
 	// We don't need to count here, already counted by numUploads by the caller.
 
@@ -1543,7 +1545,9 @@ Draw::Texture *FramebufferManagerCommon::MakePixelTexture(const u8 *srcPixels, G
 bool FramebufferManagerCommon::DrawFramebufferToOutput(const DisplayLayoutConfig &config, const u8 *srcPixels, int srcStride, GEBufferFormat srcPixelFormat) {
 	textureCache_->ForgetLastTexture();
 
-	Draw::Texture *pixelsTex = MakePixelTexture(srcPixels, srcPixelFormat, srcStride, 512, 272);
+	// Upload exactly the displayed 480x272, so that filtering (and post shaders) clamp at the edge of the
+	// image instead of pulling in what's past it in memory - often garbage, like when this is video.
+	Draw::Texture *pixelsTex = MakePixelTexture(srcPixels, srcPixelFormat, srcStride, 480, 272);
 	if (!pixelsTex) {
 		return false;
 	}
@@ -1553,14 +1557,19 @@ bool FramebufferManagerCommon::DrawFramebufferToOutput(const DisplayLayoutConfig
 	if (needBackBufferYSwap_) {
 		flags |= OutputFlags::BACKBUFFER_FLIPPED;
 	}
+	if (!useBufferedRendering_) {
+		// We're inside the backbuffer pass, where nothing else will draw this image.
+		flags |= OutputFlags::NO_POST_SHADER;
+	}
 
-	constexpr float u0 = 0.0f, u1 = 480.0f / 512.0f;
+	constexpr float u0 = 0.0f, u1 = 1.0f;
 	constexpr float v0 = 0.0f, v1 = 1.0f;
 
-	if (useBufferedRendering_) {
-		presentation_->UpdateUniforms(textureCache_->VideoIsPlaying());
-		presentation_->SourceTexture(pixelsTex, 512, 272);
-		presentation_->RunPostshaderPasses(config, flags, uvRotation, u0, v0, u1, v1);
+	presentation_->UpdateUniforms(gpu->VideoIsPlaying());
+	presentation_->SourceTexture(pixelsTex, 480, 272);
+	presentation_->RunPostshaderPasses(config, flags, uvRotation, u0, v0, u1, v1);
+	if (!useBufferedRendering_) {
+		presentation_->CopyToOutput(config);
 	}
 
 	// PresentationCommon sets all kinds of state, we can't rely on anything.
@@ -1725,7 +1734,7 @@ void FramebufferManagerCommon::PrepareCopyDisplayToOutput(const DisplayLayoutCon
 
 		int actualWidth = (vfb->bufferWidth * vfb->renderWidth) / vfb->width;
 		int actualHeight = (vfb->bufferHeight * vfb->renderHeight) / vfb->height;
-		presentation_->UpdateUniforms(textureCache_->VideoIsPlaying());
+		presentation_->UpdateUniforms(gpu->VideoIsPlaying());
 		presentation_->SourceFramebuffer(vfb->fbo, actualWidth, actualHeight);
 		presentation_->RunPostshaderPasses(config, flags, uvRotation, u0, v0, u1, v1);
 	}
@@ -1871,7 +1880,7 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 		}
 		return;
 	}
-	if (!old.fbo && vfb->last_frame_failed != 0 && vfb->last_frame_failed - gpuStats.totals.numFlips < 63) {
+	if (!old.fbo && vfb->last_frame_failed != 0 && gpuStats.totals.numFlips - vfb->last_frame_failed < 63) {
 		// Don't constantly retry FBOs which failed to create.
 		return;
 	}
@@ -2859,9 +2868,7 @@ void FramebufferManagerCommon::NotifyBlockTransferAfter(u32 dstBasePtr, int dstS
 		if (isPrevDisplayBuffer || isDisplayBuffer) {
 			FlushBeforeCopy();
 			// HACK
-			if (DrawFramebufferToOutput(displayLayoutConfigCopy_, Memory::GetPointerUnchecked(dstBasePtr), dstStride, displayFormat_)) {
-				presentation_->CopyToOutput(displayLayoutConfigCopy_);
-			}
+			DrawFramebufferToOutput(displayLayoutConfigCopy_, Memory::GetPointerUnchecked(dstBasePtr), dstStride, displayFormat_);
 			return;
 		}
 	}
@@ -3350,7 +3357,8 @@ void FramebufferManagerCommon::FlushBeforeCopy() {
 // TODO: Replace with with depal, reading the palette from the texture on the GPU directly.
 void FramebufferManagerCommon::DownloadFramebufferForClut(u32 fb_address, u32 loadBytes) {
 	VirtualFramebuffer *vfb = GetVFBAt(fb_address);
-	if (vfb && vfb->fb_stride != 0) {
+	// Without an fbo there's nothing to read back (ReadbackFramebuffer would read the backbuffer instead).
+	if (vfb && vfb->fb_stride != 0 && vfb->fbo) {
 		const u32 bpp = BufferFormatBytesPerPixel(vfb->fb_format);
 		int x = 0;
 		int y = 0;

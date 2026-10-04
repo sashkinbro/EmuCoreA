@@ -589,9 +589,7 @@ static void test_hash_dreamcast_split_bin()
   ASSERT_STR_EQUALS(hash_iterator, expected_md5);
 }
 
-static void test_hash_dreamcast_cue()
-{
-  const char* cue_file =
+static const char* dreamcast_cue_file =
       "FILE \"track01.bin\" BINARY\n"
       "  TRACK 01 MODE1/2352\n"
       "    INDEX 01 00:00:00\n"
@@ -610,12 +608,15 @@ static void test_hash_dreamcast_cue()
       "  TRACK 05 MODE1/2352\n"
       "    INDEX 00 00:00:00\n"
       "    INDEX 01 00:03:00\n";
+
+static void test_hash_dreamcast_cue()
+{
   size_t image_size;
   uint8_t* image = convert_to_2352(generate_dreamcast_bin(45000, 1697028, &image_size), &image_size, 45000);
   char hash_file[33], hash_iterator[33];
   const char* expected_md5 = "c952864c3364591d2a8793ce2cfbf3a0";
 
-  mock_file(0, "game.cue", (uint8_t*)cue_file, strlen(cue_file));
+  mock_file(0, "game.cue", (uint8_t*)dreamcast_cue_file, strlen(dreamcast_cue_file));
   mock_file(1, "track01.bin", image, 1425312);    /* 606 sectors */
   mock_file(2, "track02.bin", image, 1589952);    /* 676 sectors */
   mock_file(3, "track03.bin", image, image_size); /* 737 sectors */
@@ -632,6 +633,45 @@ static void test_hash_dreamcast_cue()
   struct rc_hash_iterator iterator;
 
   rc_hash_initialize_iterator(&iterator, "game.cue", NULL, 0);
+  result_iterator = rc_hash_iterate(hash_iterator, &iterator);
+  rc_hash_destroy_iterator(&iterator);
+
+  /* cleanup */
+  free(image);
+  init_mock_cdreader();
+
+  /* validation */
+  ASSERT_NUM_EQUALS(result_file, 1);
+  ASSERT_STR_EQUALS(hash_file, expected_md5);
+
+  ASSERT_NUM_EQUALS(result_iterator, 1);
+  ASSERT_STR_EQUALS(hash_iterator, expected_md5);
+}
+
+static void test_hash_dreamcast_cue_buffered()
+{
+  size_t image_size;
+  uint8_t* image = convert_to_2352(generate_dreamcast_bin(45000, 1697028, &image_size), &image_size, 45000);
+  char hash_file[33], hash_iterator[33];
+  const char* expected_md5 = "c952864c3364591d2a8793ce2cfbf3a0";
+
+  mock_file(0, "game.cue", (uint8_t*)dreamcast_cue_file, strlen(dreamcast_cue_file));
+  mock_file(1, "track01.bin", image, 1425312);    /* 606 sectors */
+  mock_file(2, "track02.bin", image, 1589952);    /* 676 sectors */
+  mock_file(3, "track03.bin", image, image_size); /* 737 sectors */
+  mock_file(4, "track04.bin", image, 1237152);    /* 526 sectors */
+  mock_file(5, "track05.bin", image, image_size);
+
+  rc_hash_init_default_cdreader(); /* want to test actual first_track_sector calculation */
+
+  /* test file hash */
+  int result_file = rc_hash_generate_from_file(hash_file, RC_CONSOLE_DREAMCAST, "game.cue");
+
+  /* test file identification from iterator with buffered cue file */
+  int result_iterator;
+  struct rc_hash_iterator iterator;
+
+  rc_hash_initialize_iterator(&iterator, "game.cue", (uint8_t*)dreamcast_cue_file, strlen(dreamcast_cue_file));
   result_iterator = rc_hash_iterate(hash_iterator, &iterator);
   rc_hash_destroy_iterator(&iterator);
 
@@ -1254,6 +1294,204 @@ static void test_hash_psp_homebrew()
   ASSERT_STR_EQUALS(hash_iterator, expected_md5);
 }
 
+static void test_hash_ps3()
+{
+  const size_t param_sfo_size = 690;
+  uint8_t* param_sfo = generate_generic_file(param_sfo_size);
+  const size_t eboot_bin_size = 273470;
+  uint8_t* eboot_bin = generate_generic_file(eboot_bin_size);
+  size_t image_size;
+  uint8_t* image = generate_iso9660_bin(160, "TEST", &image_size);
+  char hash_file[33], hash_iterator[33];
+  const char* expected_md5 = "27ec2f9b7238b2ef29af31ddd254f201";
+
+  generate_iso9660_file(image, "PS3_GAME\\PARAM.SFO", param_sfo, param_sfo_size);
+  generate_iso9660_file(image, "PS3_GAME\\USRDIR\\EBOOT.BIN", eboot_bin, eboot_bin_size);
+
+  mock_file(0, "game.iso", image, image_size);
+
+  /* test file hash */
+  int result_file = rc_hash_generate_from_file(hash_file, RC_CONSOLE_PLAYSTATION_3, "game.iso");
+
+  /* test file identification from iterator */
+  int result_iterator;
+  struct rc_hash_iterator iterator;
+
+  rc_hash_initialize_iterator(&iterator, "game.iso", NULL, 0);
+  result_iterator = rc_hash_iterate(hash_iterator, &iterator);
+  rc_hash_destroy_iterator(&iterator);
+
+  /* cleanup */
+  free(image);
+  free(eboot_bin);
+  free(param_sfo);
+
+  /* validation */
+  ASSERT_NUM_EQUALS(result_file, 1);
+  ASSERT_STR_EQUALS(hash_file, expected_md5);
+
+  ASSERT_NUM_EQUALS(result_iterator, 1);
+  ASSERT_STR_EQUALS(hash_iterator, expected_md5);
+}
+
+static void test_hash_ps3_no_param_sfo()
+{
+  const size_t eboot_bin_size = 273470;
+  uint8_t* eboot_bin = generate_generic_file(eboot_bin_size);
+  size_t image_size;
+  uint8_t* image = generate_iso9660_bin(160, "TEST", &image_size);
+  char hash_file[33], hash_iterator[33];
+
+  /* PS3_GAME/PARAM.SFO is missing - not a PS3 game disc */
+  generate_iso9660_file(image, "PS3_GAME\\USRDIR\\EBOOT.BIN", eboot_bin, eboot_bin_size);
+
+  mock_file(0, "game.iso", image, image_size);
+
+  int result_file = rc_hash_generate_from_file(hash_file, RC_CONSOLE_PLAYSTATION_3, "game.iso");
+
+  int result_iterator;
+  struct rc_hash_iterator iterator;
+  rc_hash_initialize_iterator(&iterator, "game.iso", NULL, 0);
+  result_iterator = rc_hash_iterate(hash_iterator, &iterator);
+  rc_hash_destroy_iterator(&iterator);
+
+  free(image);
+  free(eboot_bin);
+
+  ASSERT_NUM_EQUALS(result_file, 0);
+  ASSERT_NUM_EQUALS(result_iterator, 0);
+}
+
+static void test_hash_ps3_no_eboot()
+{
+  const size_t param_sfo_size = 690;
+  uint8_t* param_sfo = generate_generic_file(param_sfo_size);
+  size_t image_size;
+  uint8_t* image = generate_iso9660_bin(160, "TEST", &image_size);
+  char hash_file[33], hash_iterator[33];
+
+  /* PS3_GAME/USRDIR/EBOOT.BIN is missing - could not find primary executable */
+  generate_iso9660_file(image, "PS3_GAME\\PARAM.SFO", param_sfo, param_sfo_size);
+
+  mock_file(0, "game.iso", image, image_size);
+
+  int result_file = rc_hash_generate_from_file(hash_file, RC_CONSOLE_PLAYSTATION_3, "game.iso");
+
+  int result_iterator;
+  struct rc_hash_iterator iterator;
+  rc_hash_initialize_iterator(&iterator, "game.iso", NULL, 0);
+  result_iterator = rc_hash_iterate(hash_iterator, &iterator);
+  rc_hash_destroy_iterator(&iterator);
+
+  free(image);
+  free(param_sfo);
+
+  ASSERT_NUM_EQUALS(result_file, 0);
+  ASSERT_NUM_EQUALS(result_iterator, 0);
+}
+
+static void test_hash_ps3_m3u()
+{
+  const size_t param_sfo_size = 690;
+  uint8_t* param_sfo = generate_generic_file(param_sfo_size);
+  const size_t eboot_bin_size = 273470;
+  uint8_t* eboot_bin = generate_generic_file(eboot_bin_size);
+  size_t image_size;
+  uint8_t* image = generate_iso9660_bin(160, "TEST", &image_size);
+  char hash_file[33], hash_iterator[33];
+  const char* expected_md5 = "27ec2f9b7238b2ef29af31ddd254f201";
+
+  generate_iso9660_file(image, "PS3_GAME\\PARAM.SFO", param_sfo, param_sfo_size);
+  generate_iso9660_file(image, "PS3_GAME\\USRDIR\\EBOOT.BIN", eboot_bin, eboot_bin_size);
+
+  mock_file(0, "game.iso", image, image_size);
+  mock_file(1, "game.m3u", (uint8_t*)"game.iso", 8);
+
+  /* test file hash */
+  int result_file = rc_hash_generate_from_file(hash_file, RC_CONSOLE_PLAYSTATION_3, "game.m3u");
+
+  /* test file identification from iterator */
+  int result_iterator;
+  struct rc_hash_iterator iterator;
+  rc_hash_initialize_iterator(&iterator, "game.m3u", NULL, 0);
+  result_iterator = rc_hash_iterate(hash_iterator, &iterator);
+  rc_hash_destroy_iterator(&iterator);
+
+  /* cleanup */
+  free(image);
+  free(eboot_bin);
+  free(param_sfo);
+
+  /* validation */
+  ASSERT_NUM_EQUALS(result_file, 1);
+  ASSERT_STR_EQUALS(hash_file, expected_md5);
+  ASSERT_NUM_EQUALS(result_iterator, 1);
+  ASSERT_STR_EQUALS(hash_iterator, expected_md5);
+}
+
+static void test_hash_ps3_extracted_disc()
+{
+  const size_t param_sfo_size = 690;
+  uint8_t* param_sfo = generate_generic_file(param_sfo_size);
+  const size_t eboot_bin_size = 273470;
+  uint8_t* eboot_bin = generate_generic_file(eboot_bin_size);
+  char hash_file[33];
+  const char* expected_md5 = "27ec2f9b7238b2ef29af31ddd254f201";
+
+  mock_file(0, "PS3_GAME/PARAM.SFO", param_sfo, param_sfo_size);
+  mock_file(1, "PS3_GAME/USRDIR/EBOOT.BIN", eboot_bin, eboot_bin_size);
+
+  int result_file = rc_hash_generate_from_file(hash_file, RC_CONSOLE_PLAYSTATION_3, "PS3_GAME/USRDIR/EBOOT.BIN");
+
+  free(eboot_bin);
+  free(param_sfo);
+
+  ASSERT_NUM_EQUALS(result_file, 1);
+  ASSERT_STR_EQUALS(hash_file, expected_md5);
+}
+
+static void test_hash_ps3_installed_pkg()
+{
+  const size_t param_sfo_size = 690;
+  uint8_t* param_sfo = generate_generic_file(param_sfo_size);
+  const size_t eboot_bin_size = 273470;
+  uint8_t* eboot_bin = generate_generic_file(eboot_bin_size);
+  char hash_file[33];
+  const char* expected_md5 = "27ec2f9b7238b2ef29af31ddd254f201";
+
+  mock_file(0, "PARAM.SFO", param_sfo, param_sfo_size);
+  mock_file(1, "USRDIR/EBOOT.BIN", eboot_bin, eboot_bin_size);
+
+  int result_file = rc_hash_generate_from_file(hash_file, RC_CONSOLE_PLAYSTATION_3, "USRDIR/EBOOT.BIN");
+
+  free(eboot_bin);
+  free(param_sfo);
+
+  ASSERT_NUM_EQUALS(result_file, 1);
+  ASSERT_STR_EQUALS(hash_file, expected_md5);
+}
+
+static void test_hash_ps3_flat_elf()
+{
+  const size_t param_sfo_size = 690;
+  uint8_t* param_sfo = generate_generic_file(param_sfo_size);
+  const size_t eboot_bin_size = 273470;
+  uint8_t* eboot_bin = generate_generic_file(eboot_bin_size);
+  char hash_file[33];
+  const char* expected_md5 = "27ec2f9b7238b2ef29af31ddd254f201";
+
+  mock_file(0, "PARAM.SFO", param_sfo, param_sfo_size);
+  mock_file(1, "EBOOT.BIN", eboot_bin, eboot_bin_size);
+
+  int result_file = rc_hash_generate_from_file(hash_file, RC_CONSOLE_PLAYSTATION_3, "EBOOT.BIN");
+
+  free(eboot_bin);
+  free(param_sfo);
+
+  ASSERT_NUM_EQUALS(result_file, 1);
+  ASSERT_STR_EQUALS(hash_file, expected_md5);
+}
+
 static void test_hash_sega_cd()
 {
   /* the first 512 bytes of sector 0 are a volume header and ROM header. 
@@ -1275,6 +1513,40 @@ static void test_hash_sega_cd()
   struct rc_hash_iterator iterator;
 
   rc_hash_initialize_iterator(&iterator, "game.cue", NULL, 0);
+  result_iterator = rc_hash_iterate(hash_iterator, &iterator);
+  rc_hash_destroy_iterator(&iterator);
+
+  /* cleanup */
+  free(image);
+
+  /* validation */
+  ASSERT_NUM_EQUALS(result_file, 1);
+  ASSERT_STR_EQUALS(hash_file, expected_md5);
+
+  ASSERT_NUM_EQUALS(result_iterator, 1);
+  ASSERT_STR_EQUALS(hash_iterator, expected_md5);
+}
+
+static void test_hash_sega_cd_buffered()
+{
+  /* the first 512 bytes of sector 0 are a volume header and ROM header.
+   * generate a generic block and add the Sega CD marker */
+  size_t image_size = 512;
+  uint8_t* image = generate_generic_file(image_size);
+  char hash_file[33], hash_iterator[33];
+  const char* expected_md5 = "574498e1453cb8934df60c4ab906e783";
+  memcpy(image, "SEGADISCSYSTEM  ", 16);
+
+  mock_file(0, "game.iso", image, image_size);
+
+  /* test file hash */
+  int result_file = rc_hash_generate_from_file(hash_file, RC_CONSOLE_SEGA_CD, "game.iso");
+
+  /* test file identification from iterator */
+  int result_iterator;
+  struct rc_hash_iterator iterator;
+
+  rc_hash_initialize_iterator(&iterator, "game.iso", image, image_size);
   result_iterator = rc_hash_iterate(hash_iterator, &iterator);
   rc_hash_destroy_iterator(&iterator);
 
@@ -1393,6 +1665,7 @@ void test_hash_disc(void) {
   TEST(test_hash_dreamcast_single_bin);
   TEST(test_hash_dreamcast_split_bin);
   TEST(test_hash_dreamcast_cue);
+  TEST(test_hash_dreamcast_cue_buffered);
 
   /* Gamecube */
   TEST(test_hash_gamecube);
@@ -1434,8 +1707,18 @@ void test_hash_disc(void) {
   TEST(test_hash_psp_video);
   TEST(test_hash_psp_homebrew);
 
+  /* PlayStation 3 */
+  TEST(test_hash_ps3);
+  TEST(test_hash_ps3_no_param_sfo);
+  TEST(test_hash_ps3_no_eboot);
+  TEST(test_hash_ps3_m3u);
+  TEST(test_hash_ps3_extracted_disc);
+  TEST(test_hash_ps3_installed_pkg);
+  TEST(test_hash_ps3_flat_elf);
+
   /* Sega CD */
   TEST(test_hash_sega_cd);
+  TEST(test_hash_sega_cd_buffered);
   TEST(test_hash_sega_cd_invalid_header);
 
   /* Sega Saturn */

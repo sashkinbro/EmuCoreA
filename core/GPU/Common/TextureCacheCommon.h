@@ -86,6 +86,8 @@ struct SamplerCacheKey {
 			bool tClamp : 1;
 			bool aniso : 1;
 			bool texture3d : 1;
+			// Baked into the sampler objects, so it has to be part of the key, or a change wouldn't apply.
+			uint8_t anisoLevel;
 		};
 	};
 	bool operator < (const SamplerCacheKey &other) const {
@@ -158,6 +160,9 @@ ENUM_CLASS_BITOPS(TexStatus);
 
 // TODO: Shrink this struct. There is some fluff.
 struct TexCacheEntry {
+	TexCacheEntry() = default;
+	TexCacheEntry(const TexCacheEntry &) = delete;
+	TexCacheEntry &operator=(const TexCacheEntry &) = delete;
 	~TexCacheEntry() {
 #ifdef _DEBUG
 		if (texturePtr || textureName || vkTex)
@@ -336,6 +341,8 @@ struct TextureApplyResult {
 
 class TextureCacheCommon {
 public:
+	TextureCacheCommon(const TextureCacheCommon &) = delete;
+	TextureCacheCommon &operator=(const TextureCacheCommon &) = delete;
 	TextureCacheCommon(Draw::DrawContext *draw, Draw2D *draw2D);
 	virtual ~TextureCacheCommon();
 
@@ -362,7 +369,6 @@ public:
 	// FramebufferManager keeps TextureCache updated about what regions of memory are being rendered to,
 	// so that it can invalidate TexCacheEntries pointed at those addresses.
 	void NotifyFramebuffer(VirtualFramebuffer *framebuffer, FramebufferNotification msg);
-	void NotifyWriteFormattedFromMemory(u32 addr, int size, int width, GEBufferFormat fmt);
 
 	int NumLoadedTextures() const {
 		return (int)cache_.size();
@@ -372,9 +378,6 @@ public:
 	}
 	bool IsFakeMipmapChange() {
 		return PSP_CoreParameter().compat.flags().FakeMipmapChange && gstate.getTexLevelMode() == GE_TEXLEVEL_MODE_CONST;
-	}
-	bool VideoIsPlaying() {
-		return !videos_.empty();
 	}
 	virtual bool GetCurrentTextureDebug(GPUDebugBuffer &buffer, int level, bool *isFramebuffer) { return false; }
 
@@ -392,15 +395,6 @@ public:
 	const size_t CacheSizeEstimate() const;
 	const size_t SecondCacheSizeEstimate() const;
 
-	struct VideoInfo {
-		u32 addr;
-		u32 size;
-		int flips;
-	};
-
-	const std::vector<VideoInfo> &Videos() const {
-		return videos_;
-	}
 
 protected:
 	bool PrepareBuildTexture(BuildTexturePlan &plan, TexCacheEntry *entry);
@@ -471,7 +465,6 @@ protected:
 	// The secondary cache uses the texture hash and clut hash as the key.
 	TexCache secondCache_;
 
-	std::vector<VideoInfo> videos_;
 
 	AlignedVector<u32, 16> tmpTexBuf32_;
 	AlignedVector<u32, 16> tmpTexBufRearrange_;

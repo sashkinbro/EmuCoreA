@@ -38,7 +38,12 @@ class BlockAllocator;
 
 int sceKernelChangeThreadPriority(SceUID threadID, int priority);
 SceUID __KernelCreateThreadInternal(const char *threadName, SceUID moduleID, u32 entry, u32 prio, int stacksize, u32 attr);
-int __KernelCreateThread(const char *threadName, SceUID moduleID, u32 entry, u32 prio, int stacksize, u32 attr, u32 optionAddr, bool allowKernel);
+// With busyCyclesOut, the cost of filling the stack is left for the caller to take (see
+// __KernelBusyDelayResult) instead of being eaten here.
+int __KernelCreateThread(const char *threadName, SceUID moduleID, u32 entry, u32 prio, int stacksize, u32 attr, u32 optionAddr, bool allowKernel, int *busyCyclesOut = nullptr);
+// For a syscall that keeps the CPU busy for a long time. The caller gets the result after the
+// given cycles, but better threads that wake meanwhile run first, and worse ones don't run.
+u32 __KernelBusyDelayResult(u32 result, int cycles, const char *reason);
 int sceKernelCreateThread(const char *threadName, u32 entry, u32 prio, int stacksize, u32 attr, u32 optionAddr);
 int sceKernelDelayThread(u32 usec);
 int sceKernelDelayThreadCB(u32 usec);
@@ -132,7 +137,9 @@ typedef void (* WaitBeginCallbackFunc)(SceUID threadID, SceUID prevCallbackId);
 // Resume wait and timeout as a thread exits a callback.
 typedef void (* WaitEndCallbackFunc)(SceUID threadID, SceUID prevCallbackId);
 
-void __KernelRegisterWaitTypeFuncs(WaitType type, WaitBeginCallbackFunc beginFunc, WaitEndCallbackFunc endFunc);
+typedef void (*WaitTimeoutFunc)(u64 threadID, int cyclesLate);
+// timeoutFunc runs when a wait of this type, started with __KernelWaitCurThreadWithTimeout(), times out.
+void __KernelRegisterWaitTypeFuncs(WaitType type, WaitBeginCallbackFunc beginFunc, WaitEndCallbackFunc endFunc, WaitTimeoutFunc timeoutFunc = nullptr);
 
 #if COMMON_LITTLE_ENDIAN
 typedef WaitType WaitType_le;
@@ -300,6 +307,11 @@ public:
 	KernelThreadDebugInterface debug;
 
 	bool isProcessingCallbacks = false;
+	// False until the thread first waits after being started (see __KernelDelayReturnsAtOnce).
+	bool hasWaited = true;
+	// A callback was notified while this thread was in a CB wait, which pauses the wait right away
+	// (see __KernelNotifyCallback). The thread is still waiting until its callbacks run.
+	bool waitPausedForCallback = false;
 	u32 currentMipscallId = -1;
 	SceUID currentCallbackId = -1;
 
@@ -372,6 +384,22 @@ u32 __KernelGetWaitTimeoutPtr(SceUID threadID, u32 &error);
 SceUID __KernelGetWaitID(SceUID threadID, WaitType type, u32 &error);
 SceUID __KernelGetCurrentCallbackID(SceUID threadID, u32 &error);
 void __KernelWaitCurThread(WaitType type, SceUID waitId, u32 waitValue, u32 timeoutPtr, bool processCallbacks, const char *reason);
+// See the definition for how hardware times waits out.
+bool __KernelWaitTimesOutAtOnce(u32 timeoutPtr, int basePercent = 85, int stepPercent = 35);
+s64 __KernelWaitTimeoutUs(u32 micro);
+// The one CoreTiming event every kernel object wait's timeout runs on, keyed by thread.
+int __KernelWaitTimeoutEvent();
+// Schedules the timeout for a wait about to start, if timeoutPtr (0 or valid) gives one.
+void __KernelScheduleWaitTimeout(SceUID threadID, u32 timeoutPtr);
+// Starts a wait on a kernel object, with the timeout the hardware would use.
+void __KernelWaitCurThreadWithTimeout(WaitType type, SceUID waitID, u32 waitValue, u32 timeoutPtr, bool processCallbacks, const char *reason);
+// Old savestates had an event per kind of object. Points one at the shared handler.
+void __KernelRestoreOldWaitTimeoutEvent(int &eventType, const char *name);
+// How long after its deadline a wait's timeout goes off. Not part of the time left written back.
+const int WAIT_TIMEOUT_LATENCY_US = 18;
+// The deadline is taken this far into the call, after what we already charge before scheduling.
+// threads/semaphores/wait and threads/fpl/cancel pin it between about 10 and 15us.
+const int WAIT_TIMEOUT_DEADLINE_US = 12;
 void __KernelWaitCallbacksCurThread(WaitType type, SceUID waitID, u32 waitValue, u32 timeoutPtr);
 void __KernelReSchedule(const char *reason = "no reason");
 void __KernelReSchedule(bool doCallbacks, const char *reason);

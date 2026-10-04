@@ -89,7 +89,6 @@ void DrawEngineVulkan::InitDeviceObjects() {
 	res = vkCreateSampler(device, &samp, nullptr, &nullSampler_);
 	_dbg_assert_(VK_SUCCESS == res);
 
-	draw_->SetInvalidationCallback(std::bind(&DrawEngineVulkan::Invalidate, this, std::placeholders::_1));
 }
 
 DrawEngineVulkan::~DrawEngineVulkan() {
@@ -106,6 +105,7 @@ void DrawEngineVulkan::DestroyDeviceObjects() {
 	VulkanRenderManager *renderManager = (VulkanRenderManager *)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
 
 	draw_->SetInvalidationCallback(InvalidationCallback());
+	invalidationCallbackInstalled_ = false;
 
 	pushUBO_ = nullptr;
 
@@ -143,6 +143,10 @@ void DrawEngineVulkan::DeviceRestore(Draw::DrawContext *draw) {
 
 void DrawEngineVulkan::BeginFrame() {
 	DrawEngineCommon::BeginFrame();
+	if (!invalidationCallbackInstalled_) {
+		draw_->SetInvalidationCallback(std::bind(&DrawEngineVulkan::Invalidate, this, std::placeholders::_1));
+		invalidationCallbackInstalled_ = true;
+	}
 
 	lastPipeline_ = nullptr;
 
@@ -550,6 +554,8 @@ void DrawEngineVulkan::ResetAfterSkippedDraw() {
 	numDrawVerts_ = 0;
 	numDrawInds_ = 0;
 	vertexCountInDrawCalls_ = 0;
+	expandedVertsInDrawCalls_ = 0;
+	numVertsToDecode_ = 0;
 	decodeIndsCounter_ = 0;
 	decodeVertsCounter_ = 0;
 	gstate_c.vertexFullAlpha = true;

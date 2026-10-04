@@ -58,10 +58,10 @@
 namespace MIPSComp {
 	JitInterface *jit;
 
-	void JitAt() {
+	void JitAt(MIPSState *mips) {
 		// TODO: We could probably check for a bad pc here, and fire an exception. Could spare us from some crashes.
 		// Although, we just tried to load from this address to check for a JIT block, and if we're here, that succeeded..
-		jit->Compile(currentMIPS->pc);
+		jit->Compile(mips->pc);
 	}
 
 	void DoDummyJitState(PointerWrap &p) {
@@ -70,7 +70,9 @@ namespace MIPSComp {
 		if (!s)
 			return;
 
-		bool dummy = false;
+		// This is startDefaultPrefix. Writing false made a JIT loading the state assume an uneaten
+		// prefix for the rest of the session.
+		bool dummy = currentMIPS->HasDefaultPrefix();
 		Do(p, dummy);
 		if (s >= 2) {
 			dummy = true;

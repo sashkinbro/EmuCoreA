@@ -170,6 +170,7 @@ void __KernelInit()
 	__HttpInit();
 	__NpInit();
 	__RegInit();
+	__NpDrmInit();
 	
 	SaveState::Init();  // Must be after IO, as it may create a directory
 	Reporting::Init();
@@ -314,6 +315,10 @@ void __KernelDoState(PointerWrap &p)
 		__UsbGpsDoState(p);
 		__UsbMicDoState(p);
 		__RegDoState(p);
+		// These two were written long ago but never called, so older states lack them.
+		__DmacDoState(p);
+		__UsbCamDoState(p);
+		__NpDrmDoState(p);
 
 		// IMPORTANT! Add new sections last!
 	}
@@ -593,9 +598,11 @@ void KernelObjectPool::DoState(PointerWrap &p) {
 			Do(p, type);
 			pool[i] = CreateByIDType(type);
 
-			// Already logged an error.
-			if (pool[i] == nullptr)
+			// Already logged an error.  The rest of the stream can't be read without knowing its size.
+			if (pool[i] == nullptr) {
+				p.SetError(p.ERROR_FAILURE);
 				return;
+			}
 
 			pool[i]->uid = i + handleOffset;
 		} else {
@@ -648,6 +655,8 @@ KernelObject *KernelObjectPool::CreateByIDType(int type) {
 		return __KernelDirListingObject();
 	case SCE_KERNEL_TMID_ThreadEventHandler:
 		return __KernelThreadEventHandlerObject();
+	case PPSSPP_KERNEL_TMID_Heap:
+		return __KernelHeapObject();
 
 	default:
 		ERROR_LOG(Log::SaveState, "Unable to load state: could not find object type %d.", type);
@@ -884,8 +893,7 @@ const HLEFunction ThreadManForUser[] =
 	{0X721067F3, &WrapI_IU<sceKernelReferTlsplStatus>,               "sceKernelReferTlsplStatus",                 'i', "xp"      },
 	// Not completely certain about args.
 	{0X4A719FB2, &WrapI_I<sceKernelFreeTlspl>,                       "sceKernelFreeTlspl",                        'i', "i"       },
-	// Internal.  Takes (uid, &addr) as parameters... probably.
-	//{0x65F54FFB, nullptr,                                            "_sceKernelAllocateTlspl",                   'v', ""        },
+	// _sceKernelAllocateTlspl is added at the end of the table.
 	// NOTE: sceKernelGetTlsAddr is in Kernel_Library, see sceKernelInterrupt.cpp.
 
 	// Not sure if these should be hooked up. See below.
@@ -899,6 +907,8 @@ const HLEFunction ThreadManForUser[] =
 	{0X91E4F6A7, &WrapU_V<sceKernelLibcClock>,                       "sceKernelLibcClock",                      'x', "" },
 	{0XB435DEC5, &WrapI_V<sceKernelDcacheWritebackInvalidateAll>,    "sceKernelDcacheWritebackInvalidateAll",   'i', "" },
 
+	// Internal, the syscall behind sceKernelGetTlsAddr in usersystemlib.
+	{0x65F54FFB, &WrapI_IUU<_sceKernelAllocateTlspl>,                "_sceKernelAllocateTlspl",                   'i', "ixp"     },
 };
 
 const HLEFunction ThreadManForKernel[] =

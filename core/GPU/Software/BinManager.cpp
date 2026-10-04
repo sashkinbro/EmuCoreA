@@ -173,13 +173,27 @@ BinManager::~BinManager() {
 
 void BinManager::UpdateState() {
 	PROFILE_THIS_SCOPE("bin_state");
+	auto jitGen = []() {
+		return Rasterizer::JitClearGeneration() + Sampler::JitClearGeneration();
+	};
+	// A JIT clear frees the code the current state's function pointers point into.
+	if (jitGen_ != jitGen()) {
+		dirty_ |= SoftDirty::PIXEL_ALL | SoftDirty::SAMPLER_ALL | SoftDirty::RAST_ALL;
+	}
 	if (HasDirty(SoftDirty::PIXEL_ALL | SoftDirty::SAMPLER_ALL | SoftDirty::RAST_ALL)) {
 		if (states_.Full())
 			Flush("states");
 		creatingState_ = true;
 		stateIndex_ = (uint16_t)states_.Push(RasterizerState());
-		// When new funcs are compiled, we need to flush if WX exclusive.
-		ComputeRasterizerState(&states_[stateIndex_], this);
+		// When new funcs are compiled, we need to flush if WX exclusive. Compiling can also clear the caches,
+		// losing the funcs picked before it, so then compute it again.
+		for (int tries = 0; tries < 3; ++tries) {
+			jitGen_ = jitGen();
+			ComputeRasterizerState(&states_[stateIndex_], this);
+			if (jitGen_ == jitGen()) {
+				break;
+			}
+		}
 		states_[stateIndex_].samplerID.cached.clut = cluts_[clutIndex_].readable;
 		creatingState_ = false;
 
@@ -195,6 +209,7 @@ void BinManager::UpdateState() {
 	const bool hadDepth = pendingWrites_[1].base != 0;
 
 	if (HasDirty(SoftDirty::BINNER_RANGE)) {
+		drawTargetAddr_ = gstate.getFrameBufAddress();
 		DrawingCoords scissorTL(gstate.getScissorX1(), gstate.getScissorY1());
 		DrawingCoords scissorBR(std::min(gstate.getScissorX2(), gstate.getRegionX2()), std::min(gstate.getScissorY2(), gstate.getRegionY2()));
 		ScreenCoords screenScissorTL = TransformUnit::DrawingToScreen(scissorTL, 0);
@@ -232,21 +247,32 @@ void BinManager::UpdateState() {
 		if (newMaxTasks > MAX_POSSIBLE_TASKS)
 			newMaxTasks = MAX_POSSIBLE_TASKS;
 		// We don't want to overlap wrong, so flush any pending.
+		bool flushed = false;
 		if (maxTasks_ != newMaxTasks) {
 			maxTasks_ = newMaxTasks;
 			Flush("selfrender");
+			flushed = true;
 		}
-		pendingOverlap_ = pendingOverlap_ || selfRender;
 
 		// Lastly, we have to check if we're newly writing depth we were texturing before.
 		// This happens in Call of Duty (depth clear after depth texture), for example.
-		if (!hadDepth && state.pixelID.depthWrite) {
+		if (!flushed && !hadDepth && state.pixelID.depthWrite) {
 			for (size_t i = 0; i < states_.Size(); ++i) {
 				if (HasTextureWrite(states_.Peek(i))) {
 					Flush("selfdepth");
+					flushed = true;
+					break;
 				}
 			}
 		}
+
+		if (flushed) {
+			// The flush forgot what this draw writes and reads, so record it again.
+			MarkPendingWrites(state);
+			MarkPendingReads(state);
+			ClearDirty(SoftDirty::BINNER_RANGE);
+		}
+		pendingOverlap_ = pendingOverlap_ || selfRender;
 		ClearDirty(SoftDirty::BINNER_OVERLAP);
 	}
 }
@@ -267,14 +293,14 @@ bool BinManager::HasTextureWrite(const RasterizerState &state) {
 	return false;
 }
 
-bool BinManager::IsExactSelfRender(const Rasterizer::RasterizerState &state, const BinItem &item) {
+bool BinManager::IsExactSelfRender(const Rasterizer::RasterizerState &state, const BinItem &item) const {
 	if (item.type != BinItemType::SPRITE && item.type != BinItemType::RECT)
 		return false;
 	if (state.textureProj || state.maxTexLevel > 0)
 		return false;
 
 	// Only possible if the texture is 1:1.
-	if ((state.texaddr[0] & 0x0F1FFFFF) != (gstate.getFrameBufAddress() & 0x0F1FFFFF))
+	if ((state.texaddr[0] & 0x0F1FFFFF) != (drawTargetAddr_ & 0x0F1FFFFF))
 		return false;
 	int bufferPixelWidth = BufferFormatBytesPerPixel(state.pixelID.FBFormat());
 	int texturePixelWidth = textureBitsPerPixel[state.samplerID.texfmt] / 8;
@@ -336,8 +362,13 @@ void BinManager::MarkPendingWrites(const Rasterizer::RasterizerState &state) {
 	constexpr uint32_t mirrorMask = 0x041FFFFF;
 	const uint32_t bpp = state.pixelID.FBFormat() == GE_FORMAT_8888 ? 4 : 2;
 	pendingWrites_[0].Expand(gstate.getFrameBufAddress() & mirrorMask, bpp, gstate.FrameBufStride(), scissorTL, scissorBR);
-	if (state.pixelID.depthWrite)
+	if (state.pixelID.depthWrite) {
 		pendingWrites_[1].Expand(gstate.getDepthBufAddress() & mirrorMask, 2, gstate.DepthBufStride(), scissorTL, scissorBR);
+	} else if (gstate.isDepthTestEnabled() && !gstate.isModeClear()) {
+		// Testing without writing still reads the depth buffer, so a transfer into it has to wait.
+		const uint32_t depthAddr = gstate.getDepthBufAddress() & mirrorMask;
+		pendingReads_[depthAddr].Expand(depthAddr, 2, gstate.DepthBufStride(), scissorTL, scissorBR);
+	}
 }
 
 inline void BinDirtyRange::Expand(uint32_t newBase, uint32_t bpp, uint32_t stride, const DrawingCoords &tl, const DrawingCoords &br) {
@@ -559,8 +590,17 @@ void BinManager::Drain(bool flushing) {
 }
 
 void BinManager::Flush(const char *reason) {
-	if (queueRange_.x1 == 0x7FFFFFFF)
+	if (queueRange_.x1 == 0x7FFFFFFF) {
+		// Nothing queued, so nothing refers to the older states and CLUTs. Trim them anyway: callers
+		// flush because one of these rings is full, and push into it right after.
+		while (states_.Size() > 1) {
+			states_.SkipNext();
+		}
+		while (cluts_.Size() > 1) {
+			cluts_.SkipNext();
+		}
 		return;
+	}
 
 	double st = 0.0;
 	const bool collectDebugStats = g_coreCollectDebugStats;

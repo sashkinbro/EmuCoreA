@@ -32,7 +32,7 @@
 struct AT3BitrateMeta {
 	u16 sampleSize;
 	u8 dataByte;
-	u8 jointStereo;  // I think?
+	u8 jointStereo;
 };
 
 static const AT3BitrateMeta g_at3BitrateMeta[5] = {
@@ -242,12 +242,13 @@ int InitContextFromTrackInfo(SceAtracContext *ctx, const TrackInfo *wave, u32 bu
 			(ctx->codec).fmt.at3.formatByte2 = wave->tailFlag;
 			return 0;
 		}
-		// At3. Set up the hardware codec (hopefully we can correctly support this in sceAudiocodec and thus sceAtrac LLE in the future)
-		// This is not actually necessary since we don't use the actual hardware codec.
+		// At3. Set up the hardware codec parameter as libatrac3plus.prx's SetData (0880645c) does:
+		// keyed by frame size and the joint-stereo flag (sampleSizeMaybe, for Atrac3), it stores the
+		// data byte, as a word. We don't decode through it, but it's what the game sees.
 		for (int counter = 4; counter >= 0; counter--) {
 			if ((g_at3BitrateMeta[counter].sampleSize == (ctx->info).sampleSize) &&
-				((int)g_at3BitrateMeta[counter].dataByte == wave->sampleSizeMaybe)) {
-				(ctx->codec).fmt.at3.formatByte1 = (char)g_at3BitrateMeta[counter].jointStereo;
+				((int)g_at3BitrateMeta[counter].jointStereo == wave->sampleSizeMaybe)) {
+				(ctx->codec).fmt.at3.formatByte1 = g_at3BitrateMeta[counter].dataByte;
 				(ctx->codec).fmt.at3.formatByte2 = 0;
 				(ctx->codec).fmt.at3.unk2a = 0;
 				(ctx->codec).fmt.at3.unk2b = 0;
@@ -336,7 +337,7 @@ void Atrac2::DumpBufferToFile() {
 }
 
 void Atrac2::DoState(PointerWrap &p) {
-	auto s = p.Section("Atrac2", 1, 3);
+	auto s = p.Section("Atrac2", 1, 4);
 	if (!s)
 		return;
 
@@ -361,8 +362,14 @@ void Atrac2::DoState(PointerWrap &p) {
 	}
 
 	const SceAtracIdInfo &info = context_->info;
+	if (s >= 4) {
+		Do(p, jointStereo_);
+	} else if (p.mode == p.MODE_READ) {
+		jointStereo_ = IsAtrac3StreamJointStereo(info.codec, info.sampleSize, info.numChan);
+	}
+
 	if (p.mode == p.MODE_READ && info.state != ATRAC_STATUS_NO_DATA) {
-		CreateDecoder(info.codec, info.sampleSize, info.numChan);
+		CreateDecoder(info.codec, info.sampleSize, info.numChan, jointStereo_);
 	}
 }
 
@@ -1003,7 +1010,8 @@ int Atrac2::SetData(const Track &track, u32 bufferAddr, u32 readSize, u32 buffer
 
 	SceAtracIdInfo &info = context_->info;
 
-	CreateDecoder(info.codec, info.sampleSize, info.numChan);
+	jointStereo_ = track.jointStereo != 0;
+	CreateDecoder(info.codec, info.sampleSize, info.numChan, jointStereo_);
 
 	outputChannels_ = outputChannels;
 
@@ -1018,8 +1026,9 @@ int Atrac2::SetData(const Track &track, u32 bufferAddr, u32 readSize, u32 buffer
 		info.fileDataEnd, info.decodePos, info.numSkipFrames, info.numChan
 	);
 
-	int skipCount = 0;  // TODO: use for delay
+	int skipCount = 0;
 	retval = SkipFrames(&skipCount);
+	setDataSkippedFrames_ = skipCount;
 
 	// Seen in Mui Mui house. Things go very wrong after this..
 	if (retval == SCE_ERROR_ATRAC_API_FAIL) {
@@ -1138,7 +1147,9 @@ void Atrac2::InitLowLevel(const Atrac3LowLevelParams &params, int codecType) {
 	info.dataOff = 0;
 	info.decodePos = 0;
 	info.state = ATRAC_STATUS_LOW_LEVEL;
-	CreateDecoder(codecType, info.sampleSize, info.numChan);
+	// There's no track header here, so go by the bitrate.
+	jointStereo_ = IsAtrac3StreamJointStereo(codecType, info.sampleSize, info.numChan);
+	CreateDecoder(codecType, info.sampleSize, info.numChan, jointStereo_);
 }
 
 int Atrac2::DecodeLowLevel(const u8 *srcData, int *bytesConsumed, s16 *dstData, int *bytesWritten) {

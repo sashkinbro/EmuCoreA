@@ -69,7 +69,6 @@ add_library(Common STATIC
 	Data/Collections/FastVec.h
 	Data/Collections/CharQueue.h
 	Data/Collections/CyclicBuffer.h
-	Data/Collections/ThreadSafeList.h
 	Data/Color/RGBAUtil.cpp
 	Data/Color/RGBAUtil.h
 	Data/Convert/ColorConv.cpp
@@ -180,6 +179,7 @@ add_library(Common STATIC
 	GPU/Vulkan/VulkanDebug.h
 	GPU/Vulkan/VulkanContext.cpp
 	GPU/Vulkan/VulkanContext.h
+	GPU/Vulkan/FixedSPIRVCache.h
 	GPU/Vulkan/VulkanDescSet.cpp
 	GPU/Vulkan/VulkanDescSet.h
 	GPU/Vulkan/VulkanFramebuffer.cpp
@@ -386,7 +386,7 @@ if(TARGET Ext::GLEW)
 endif()
 
 if(WIN32)
-	target_link_libraries(Common winmm dsound dxguid d2d1 dwrite d3d11 Version)
+	target_link_libraries(Common winmm dsound dxguid d2d1 dwrite d3d11 Version dbghelp)
 endif()
 
 target_link_libraries(Common ${LIBZIP_LIBRARY} 7zip ${PNG_LIBRARIES} basis_universal ${ZLIB_LIBRARY} pugixml vma gason udis86 ${RT_LIB} ${ATOMIC_LIB})

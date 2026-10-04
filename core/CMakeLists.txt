@@ -188,6 +188,8 @@ option(USE_VULKAN_DISPLAY_KHR "Enable or disable full screen display of Vulkan" 
 # :: Frontends
 option(MOBILE_DEVICE "Set to ON when targeting a mobile device" ${MOBILE_DEVICE})
 option(HEADLESS "Set to OFF to not generate the PPSSPPHeadless target" ${HEADLESS})
+# Set by b.sh for the loongarch64/riscv64 cross builds, whose sysroots have no SDL3.
+option(HEADLESS_CROSS "Set to ON for a headless-only cross build (no SDL frontend)" ${HEADLESS_CROSS})
 option(ATLAS_TOOL "Set to OFF to not generate the ATLAS_TOOL target" ${ATLAS_TOOL})
 option(UNITTEST "Set to ON to generate the unittest target" ${UNITTEST})
 option(SIMULATOR "Set to ON when targeting an x86 simulator of an ARM platform" ${SIMULATOR})
@@ -335,7 +337,7 @@ set(SDL_LIB_TARGET "")
 set(SDL_TTF_LIB_TARGET "")
 set(FONTCONFIG_LIB_TARGET "")
 
-if(NOT LIBRETRO AND NOT IOS AND NOT LOONGARCH64_DEVICE AND NOT ANDROID)
+if(NOT LIBRETRO AND NOT IOS AND NOT HEADLESS_CROSS AND NOT ANDROID)
 	find_package(SDL3 QUIET)
 	if(NOT SDL3_FOUND)
 		if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND (EXISTS "/usr/bin/apt" OR EXISTS "/usr/bin/apt-get" OR EXISTS "/etc/debian_version"))
@@ -512,11 +514,8 @@ if(NOT MSVC)
 	if(IOS)
 		set(CMAKE_OSX_DEPLOYMENT_TARGET "12.0")
 	elseif(APPLE AND NOT CMAKE_CROSSCOMPILING)
-		if(LIBRETRO AND ARM64)
-			set(CMAKE_OSX_DEPLOYMENT_TARGET "10.14")
-		else()
-			set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13")
-		endif()
+		# The oldest libc++ in current Xcode supports ("The selected platform is no longer supported" below).
+		set(CMAKE_OSX_DEPLOYMENT_TARGET "11.0")
 		add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-stdlib=libc++>" -U__STRICT_ANSI__)
 		set(CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")
 	elseif(NOT ANDROID)
@@ -1005,9 +1004,14 @@ elseif(WIN32)
 	# Don't care about SDL.
 	set(TargetBin PPSSPPWindows)
 elseif(LIBRETRO)
-elseif(LOONGARCH64_DEVICE)
-	# Cross-compiling for loongarch64 currently only builds PPSSPPHeadless, and there's
-	# no SDL3 available for that target, so skip the desktop SDL frontend entirely.
+elseif(HEADLESS_CROSS)
+	# The loongarch64/riscv64 cross builds only build PPSSPPHeadless, and there's no
+	# SDL3 available in those sysroots, so skip the desktop SDL frontend entirely.
+	# Note this is deliberately not keyed off the target architecture: a native build
+	# on such a machine can have SDL3 and should still get the normal frontend.
+	# Headless.cpp keys its no-window path off this too, so the same option serves for
+	# any headless-only build without SDL (an x86_64 build on an arm64 Mac, say).
+	add_definitions(-DHEADLESS_NO_SDL)
 else()
 	if(GOLD)
 		set(TargetBin PPSSPPGold)
@@ -1269,7 +1273,6 @@ set(NativeAssets
 	assets/lang
 	assets/shaders
 	assets/themes
-	assets/vfpu
 	assets/Roboto_Condensed-Regular.ttf
 	assets/Roboto_Condensed-Light.ttf
 	assets/Roboto_Condensed-Bold.ttf
@@ -1366,6 +1369,7 @@ if(UNITTEST)
 		unittest/TestShaderGenerators.cpp
 		unittest/TestArmEmitter.cpp
 		unittest/TestArm64Emitter.cpp
+		unittest/TestCrossSIMD.cpp
 		unittest/TestIRPassSimplify.cpp
 		unittest/TestX64Emitter.cpp
 		unittest/TestVertexJit.cpp
@@ -1373,6 +1377,7 @@ if(UNITTEST)
 		unittest/TestZipSlip.cpp
 		unittest/TestLzrc.cpp
 		unittest/TestMpegCsc.cpp
+		unittest/TestSplineTessellation.cpp
 		unittest/TestDemangle.cpp
 		unittest/TestTextureReplacer.cpp
 		unittest/TestRiscVEmitter.cpp
@@ -1480,7 +1485,6 @@ if(TargetBin)
 		file(GLOB_RECURSE THEME_FILE assets/themes/*)
 		file(GLOB_RECURSE DEBUGGER_FILES assets/debugger/*)
 		file(GLOB_RECURSE WEB_UPLOAD_FILES assets/upload/*)
-		file(GLOB_RECURSE VFPU_FILES assets/vfpu/*)
 
 		if(NOT IOS)
 			set_source_files_properties(${BigFontAssets} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets")
@@ -1492,7 +1496,6 @@ if(TargetBin)
 			set_source_files_properties(${THEME_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/themes")
 			set_source_files_properties(${DEBUGGER_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/debugger")
 			set_source_files_properties(${WEB_UPLOAD_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/upload")
-			set_source_files_properties(${VFPU_FILES} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources/assets/vfpu")
 		endif()
 
 		if(IOS)

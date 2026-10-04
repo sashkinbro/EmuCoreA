@@ -141,6 +141,14 @@ enum class IROp : uint8_t {
 	OptFCvtSWFromGPR,
 	FMovToGPR,
 	OptFMovToGPRShr8,
+	// A conditional exit merged with the ExitToConst after it, which stays behind as the target
+	// to take otherwise (in its constant).
+	OptExitToConstIfEqElse,
+	OptExitToConstIfNeqElse,
+	OptExitToConstIfGtZElse,
+	OptExitToConstIfGeZElse,
+	OptExitToConstIfLtZElse,
+	OptExitToConstIfLeZElse,
 
 	FSat0_1,
 	FSatMinus1_1,
@@ -187,8 +195,7 @@ enum class IROp : uint8_t {
 	Vec2Unpack16To32,
 	Vec4Unpack8To32,
 	Vec4DuplicateUpperBitsAndShift1,  // Bizarro vuc2i behaviour, in an instruction. Split?
-	Vec4ClampToZero,
-	Vec2ClampToZero,
+	// vi2x. The 31 ones take bits 30 and down, after clamping negative lanes to zero (vi2uc, vi2us).
 	Vec4Pack31To8,
 	Vec4Pack32To8,
 	Vec2Pack31To16,
@@ -197,9 +204,14 @@ enum class IROp : uint8_t {
 	// Slow special functions. Used on singles.
 	FSin,
 	FCos,
-	FRSqrt,
-	FRecip,
+	FRSqrt,  // vrsq, bit-exact with the PSP
+	FRecip,  // vrcp, bit-exact with the PSP
 	FAsin,
+	FVSqrt,  // vsqrt, bit-exact with the PSP (FSqrt is the FPU's IEEE sqrt.s)
+	FExp2,  // vexp2, bit-exact with the PSP
+	FLog2,  // vlog2, bit-exact with the PSP
+	FHalfToFloat,  // vh2f of the lower (src2 = 0) or upper (src2 = 1) half of src1
+	FSinCos,  // dest = sin(src1), dest + 1 = cos(src1), from one argument reduction
 
 	// Fake/System instructions
 	Interpret,

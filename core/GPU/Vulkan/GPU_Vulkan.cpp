@@ -90,7 +90,7 @@ GPU_Vulkan::GPU_Vulkan(GraphicsContext *gfxCtx, Draw::DrawContext *draw)
 	if (discID.size()) {
 		File::CreateFullPath(GetSysDirectory(DIRECTORY_APP_CACHE));
 		shaderCachePath_ = GetSysDirectory(DIRECTORY_APP_CACHE) / (discID + ".vkshadercache");
-		LoadCache(shaderCachePath_);
+		LoadCache(shaderCachePath_, true);
 	}
 
 	InitDeviceObjects();
@@ -101,7 +101,7 @@ void GPU_Vulkan::FinishInitOnMainThread() {
 	framebufferManagerVulkan_->Init(msaaLevel_);
 }
 
-void GPU_Vulkan::LoadCache(const Path &filename) {
+void GPU_Vulkan::LoadCache(const Path &filename, bool waitForPipelines) {
 	_dbg_assert_(draw_);
 	if (!g_Config.bShaderCache) {
 		WARN_LOG(Log::G3D, "Shader cache disabled. Not loading.");
@@ -134,13 +134,15 @@ void GPU_Vulkan::LoadCache(const Path &filename) {
 	}
 	fclose(f);
 
-	// Now, since we're on the loader thread, we can just block here until all pipelines are actually created.
-	// This makes it so that the on-screen spinner keeps spinning until we are done.
-	double start = time_now_d();
-	VulkanRenderManager *rm = (VulkanRenderManager *)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
-	int maxTasksSeen = rm->WaitForPipelines();
-	double seconds = time_now_d() - start;
-	INFO_LOG(Log::G3D, "Waited %0.1fms for at least %d pipeline tasks to finish compiling.", seconds * 1000.0, maxTasksSeen);
+	if (waitForPipelines) {
+		// Now, since we're on the loader thread, we can just block here until all pipelines are actually created.
+		// This makes it so that the on-screen spinner keeps spinning until we are done.
+		double start = time_now_d();
+		VulkanRenderManager *rm = (VulkanRenderManager *)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
+		int maxTasksSeen = rm->WaitForPipelines();
+		double seconds = time_now_d() - start;
+		INFO_LOG(Log::G3D, "Waited %0.1fms for at least %d pipeline tasks to finish compiling.", seconds * 1000.0, maxTasksSeen);
+	}
 
 	if (!result) {
 		WARN_LOG(Log::G3D, "Incompatible Vulkan pipeline cache - rebuilding.");
@@ -171,6 +173,9 @@ void GPU_Vulkan::SaveCache(const Path &filename) {
 	pipelineManager_->SavePipelineCache(f, false, shaderManagerVulkan_, draw_);
 	INFO_LOG(Log::G3D, "Saved Vulkan pipeline cache");
 	fclose(f);
+
+	// And the fixed shaders the GPU compiled along the way.
+	g_spirvCache.SaveIfDirty();
 }
 
 GPU_Vulkan::~GPU_Vulkan() {
@@ -255,8 +260,10 @@ void GPU_Vulkan::BeginHostFrame(const DisplayLayoutConfig &config) {
 		WARN_LOG(Log::G3D, "Shader use flags changed, clearing all shaders and depth buffers");
 		// TODO: Not all shaders need to be recompiled. In fact, quite few? Of course, depends on
 		// the use flag change.. This is a major frame rate hitch in the start of a race in Outrun.
-		shaderManager_->ClearShaders();
+		// Pipelines first: their deletion callbacks block on in-flight compiles, which use the shader modules
+		// that the shaders' own (later) deletion callbacks free.
 		pipelineManager_->Clear();
+		shaderManager_->ClearShaders();
 		framebufferManager_->ClearAllDepthBuffers();
 		gstate_c.useFlagsChanged = false;
 	}
@@ -397,6 +404,12 @@ void GPU_Vulkan::DeviceRestore(Draw::DrawContext *draw) {
 	pipelineManager_->DeviceRestore(vulkan);
 
 	InitDeviceObjects();
+
+	// DeviceLost saved the cache and then threw everything away. Load it again, or the next save would
+	// overwrite the file with only what gets drawn from now on.
+	if (shaderCachePath_.Valid()) {
+		LoadCache(shaderCachePath_, false);
+	}
 }
 
 void GPU_Vulkan::GetStats(StringWriter &w) {

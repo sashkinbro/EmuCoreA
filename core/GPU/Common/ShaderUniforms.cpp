@@ -12,6 +12,7 @@
 #include "GPU/GPUState.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
 #include "GPU/Common/GPUStateUtils.h"
+#include "GPU/Common/TransformCommon.h"
 #include "GPU/Math3D.h"
 
 using namespace Lin;
@@ -32,6 +33,26 @@ void UpdateRotation(float rotMatrix[4], bool useBufferedRendering) {
 	}
 }
 
+void CalcTexClamp(float texClamp[4], float texClampOffset[2]) {
+	const float invW = 1.0f / (float)gstate_c.curTextureWidth;
+	const float invH = 1.0f / (float)gstate_c.curTextureHeight;
+	int w = gstate.getTextureWidth(0);
+	int h = gstate.getTextureHeight(0);
+	if (gstate_c.textureIsVideo) {
+		// Only the video frame itself, whatever is in memory around it may be garbage.
+		w = std::min(w, 480);
+		h = std::min(h, 272);
+	}
+
+	// First wrap xy, then half texel xy (for clamp.)
+	texClamp[0] = (float)w * invW;
+	texClamp[1] = (float)h * invH;
+	texClamp[2] = invW * 0.5f;
+	texClamp[3] = invH * 0.5f;
+	texClampOffset[0] = gstate_c.curTextureXOffset * invW;
+	texClampOffset[1] = gstate_c.curTextureYOffset * invH;
+}
+
 void BaseUpdateUniforms(UB_VS_FS_Base *ub, uint64_t dirtyUniforms, bool useBufferedRendering, bool pixelMapped) {
 	if (dirtyUniforms & DIRTY_TEXENV) {
 		Uint8x3ToFloat3(ub->texEnvColor, gstate.texenvcolor);
@@ -50,20 +71,7 @@ void BaseUpdateUniforms(UB_VS_FS_Base *ub, uint64_t dirtyUniforms, bool useBuffe
 		Uint8x3ToFloat3(ub->blendFixB, gstate.getFixB());
 	}
 	if (dirtyUniforms & DIRTY_TEXCLAMP) {
-		const float invW = 1.0f / (float)gstate_c.curTextureWidth;
-		const float invH = 1.0f / (float)gstate_c.curTextureHeight;
-		const int w = gstate.getTextureWidth(0);
-		const int h = gstate.getTextureHeight(0);
-		const float widthFactor = (float)w * invW;
-		const float heightFactor = (float)h * invH;
-
-		// First wrap xy, then half texel xy (for clamp.)
-		ub->texClamp[0] = widthFactor;
-		ub->texClamp[1] = heightFactor;
-		ub->texClamp[2] = invW * 0.5f;
-		ub->texClamp[3] = invH * 0.5f;
-		ub->texClampOffset[0] = gstate_c.curTextureXOffset * invW;
-		ub->texClampOffset[1] = gstate_c.curTextureYOffset * invH;
+		CalcTexClamp(ub->texClamp, ub->texClampOffset);
 	}
 
 	if (dirtyUniforms & DIRTY_MIPBIAS) {
@@ -215,7 +223,7 @@ void LightUpdateUniforms(UB_VS_Lights *ub, uint64_t dirtyUniforms) {
 		Uint8x3ToFloat4(ub->materialDiffuse, gstate.materialdiffuse);
 	}
 	if (dirtyUniforms & DIRTY_MATSPECULAR) {
-		Uint8x3ToFloat4_Alpha(ub->materialSpecular, gstate.materialspecular, std::max(0.0f, getFloat24(gstate.materialspecularcoef)));
+		Uint8x3ToFloat4_Alpha(ub->materialSpecular, gstate.materialspecular, std::max(0.0f, PSPSpecularCoef(getFloat24(gstate.materialspecularcoef))));
 	}
 	if (dirtyUniforms & DIRTY_MATEMISSIVE) {
 		// We're not touching the fourth f32 here, because we store an u32 of control bits in it.

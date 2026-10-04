@@ -44,18 +44,20 @@ enum {
 };
 
 DrawEngineCommon::DrawEngineCommon() : decoderMap_(32) {
-	if (g_Config.bVertexDecoderJit && (g_Config.iCpuCore == (int)CPUCore::JIT || g_Config.iCpuCore == (int)CPUCore::JIT_IR)) {
+	if (g_Config.bVertexDecoderJit && PSP_CoreParameter().bUseVertexDecoderJit) {
 		decJitCache_ = new VertexDecoderJitCache();
 	}
 	transformed_ = (TransformedVertex *)AllocateMemoryPages(TRANSFORMED_VERTEX_BUFFER_SIZE, MEM_PROT_READ | MEM_PROT_WRITE);
 	transformedExpanded_ = (TransformedVertex *)AllocateMemoryPages(3 * TRANSFORMED_VERTEX_BUFFER_SIZE, MEM_PROT_READ | MEM_PROT_WRITE);
 	decoded_ = (u8 *)AllocateMemoryPages(DECODED_VERTEX_BUFFER_SIZE, MEM_PROT_READ | MEM_PROT_WRITE);
 	decIndex_ = (u16 *)AllocateMemoryPages(DECODED_INDEX_BUFFER_SIZE, MEM_PROT_READ | MEM_PROT_WRITE);
+	bboxScratch_ = (u8 *)AllocateMemoryPages(BBOX_SCRATCH_SIZE, MEM_PROT_READ | MEM_PROT_WRITE);
 
 	_dbg_assert_(transformed_);
 	_dbg_assert_(transformedExpanded_);
 	_dbg_assert_(decoded_);
 	_dbg_assert_(decIndex_);
+	_dbg_assert_(bboxScratch_);
 
 	indexGen.Setup(decIndex_);
 
@@ -65,6 +67,7 @@ DrawEngineCommon::DrawEngineCommon() : decoderMap_(32) {
 DrawEngineCommon::~DrawEngineCommon() {
 	FreeMemoryPages(decoded_, DECODED_VERTEX_BUFFER_SIZE);
 	FreeMemoryPages(decIndex_, DECODED_INDEX_BUFFER_SIZE);
+	FreeMemoryPages(bboxScratch_, BBOX_SCRATCH_SIZE);
 	FreeMemoryPages(transformed_, TRANSFORMED_VERTEX_BUFFER_SIZE);
 	FreeMemoryPages(transformedExpanded_, 3 * TRANSFORMED_VERTEX_BUFFER_SIZE);
 	ShutdownDepthRaster();
@@ -183,15 +186,14 @@ void DrawEngineCommon::DispatchSubmitImm(GEPrimitiveType prim, TransformedVertex
 //   - Less accurate, but..
 //   - Only requires six plane evaluations then.
 bool DrawEngineCommon::TestBoundingBox(const void *vdata, const void *inds, int vertexCount, const VertexDecoder *dec, u32 vertType) {
-	// Grab temp buffer space from large offsets in decoded_. Not exactly safe for large draws.
-	// Although this may lead to drawing that shouldn't happen, the viewport is more complex on VR.
-	// Let's always say objects are within bounds.
+	// The scratch buffer is sized for 1024 vertices. Although this may lead to drawing that shouldn't happen,
+	// the viewport is more complex on VR. Let's always say objects are within bounds.
 	if (vertexCount > 1024 || gstate_c.Use(GPU_USE_VIRTUAL_REALITY)) {
 		return true;
 	}
 
-	SimpleVertex *corners = (SimpleVertex *)(decoded_ + 65536 * 12);
-	float *verts = (float *)(decoded_ + 65536 * 18);
+	SimpleVertex *corners = (SimpleVertex *)(bboxScratch_ + BBOX_SCRATCH_CORNERS_OFFSET);
+	float *verts = (float *)(bboxScratch_ + BBOX_SCRATCH_VERTS_OFFSET);
 
 	// Try to skip NormalizeVertices if it's pure positions. No need to bother with a vertex decoder
 	// and a large vertex format.
@@ -218,7 +220,7 @@ bool DrawEngineCommon::TestBoundingBox(const void *vdata, const void *inds, int 
 		}
 	} else {
 		// Simplify away indices, bones, and morph before proceeding.
-		u8 *temp_buffer = decoded_ + 65536 * 24;
+		u8 *temp_buffer = bboxScratch_ + BBOX_SCRATCH_TEMP_OFFSET;
 
 		if ((inds || (vertType & (GE_VTYPE_WEIGHT_MASK | GE_VTYPE_MORPHCOUNT_MASK)))) {
 			// Need for Speed Carbon ends up on this path! With a single bone weight.
@@ -392,7 +394,8 @@ static bool TestBoundingBoxFast(const float *cullMatrix, const void *vdata, cons
 		}
 		case GE_VTYPE_IDX_32BIT:
 		{
-			u32 idx = ((u32 *)idata)[i];
+			// The PSP ignores the upper 16 bits.
+			u16 idx = (u16)((u32 *)idata)[i];
 			data = (const s8 *)srcdata + idx * stride;
 			break;
 		}
@@ -729,6 +732,17 @@ int DrawEngineCommon::ComputeNumVertsToDecode() const {
 
 
 
+// How many vertices software transform turns a prim into, for the prims it expands to quads.
+static int ExpandedVertexCount(GEPrimitiveType prim, int vertexCount) {
+	switch (prim) {
+	case GE_PRIM_POINTS: return vertexCount * 4;
+	case GE_PRIM_LINES: return (vertexCount / 2) * 4;
+	case GE_PRIM_LINE_STRIP: return vertexCount > 1 ? (vertexCount - 1) * 4 : 0;
+	case GE_PRIM_RECTANGLES: return (vertexCount / 2) * 4;
+	default: return 0;
+	}
+}
+
 // Takes a list of consecutive PRIM opcodes, and extends the current draw call to include them.
 // This is just a performance optimization. NOTE: This isn't compatible with really accurate culling,
 // unless we refactor things a bit.
@@ -759,9 +773,11 @@ int DrawEngineCommon::ExtendNonIndexedPrim(const uint32_t *cmd, const uint32_t *
 		if (IsTrianglePrim(newPrim) != isTriangle)
 			break;
 		int vertexCount = data & 0xFFFF;
-		if (numDrawInds >= MAX_DEFERRED_DRAW_INDS || vertexCountInDrawCalls_ + offset + vertexCount > VERTEX_BUFFER_MAX) {
+		const int expanded = ExpandedVertexCount(newPrim, vertexCount);
+		if (numDrawInds >= MAX_DEFERRED_DRAW_INDS || vertexCountInDrawCalls_ + offset + vertexCount > VERTEX_BUFFER_MAX || numVertsToDecode_ + (offset - dv.vertexCount) + vertexCount > VERTEX_BUFFER_MAX || expandedVertsInDrawCalls_ + expanded > VERTEX_BUFFER_MAX) {
 			break;
 		}
+		expandedVertsInDrawCalls_ += expanded;
 		DeferredInds &di = drawInds_[numDrawInds++];
 		di.indexType = 0;
 		di.prim = newPrim;
@@ -780,6 +796,7 @@ int DrawEngineCommon::ExtendNonIndexedPrim(const uint32_t *cmd, const uint32_t *
 	dv.vertexCount = offset;
 	dv.indexUpperBound = dv.vertexCount - 1;
 	vertexCountInDrawCalls_ += totalCount;
+	numVertsToDecode_ += totalCount;
 	*bytesRead = totalCount * dec->VertexSize();
 	return cmd - start;
 }
@@ -805,7 +822,42 @@ void DrawEngineCommon::SkipPrim(GEPrimitiveType prim, int vertexCount, const Ver
 
 // vertTypeID is the vertex type but with the UVGen mode smashed into the top bits.
 bool DrawEngineCommon::SubmitPrim(const void *verts, const void *inds, GEPrimitiveType prim, int vertexCount, const VertexDecoder *dec, u32 vertTypeID, bool clockwise, int *bytesRead, ClipInfoFlags clipInfoFlags) {
-	if (!indexGen.PrimCompatible(prevPrim_, prim) || numDrawVerts_ >= MAX_DEFERRED_DRAW_VERTS || numDrawInds_ >= MAX_DEFERRED_DRAW_INDS || vertexCountInDrawCalls_ + vertexCount > VERTEX_BUFFER_MAX) {
+	const GEPrimitiveType realPrim = prim != GE_PRIM_KEEP_PREVIOUS ? prim : (prevPrim_ == GE_PRIM_INVALID ? GE_PRIM_POINTS : prevPrim_);
+	const int expanded = ExpandedVertexCount(realPrim, vertexCount);
+	if (expanded > VERTEX_BUFFER_MAX) {
+		// Software transform can't expand this many in one draw, so submit it in parts. Points, lines
+		// and rectangles are independent of each other; consecutive parts of a line strip share a vertex.
+		const bool strip = realPrim == GE_PRIM_LINE_STRIP;
+		const int partSize = (realPrim == GE_PRIM_POINTS || strip) ? VERTEX_BUFFER_MAX / 4 : VERTEX_BUFFER_MAX / 2;
+		static const int indexSizes[4] = { 0, 1, 2, 4 };
+		const int indexSize = indexSizes[(vertTypeID & GE_VTYPE_IDX_MASK) >> GE_VTYPE_IDX_SHIFT];
+		bool any = false;
+		for (int start = 0; start < vertexCount - (strip ? 1 : 0); start += partSize) {
+			const int count = std::min(partSize + (strip ? 1 : 0), vertexCount - start);
+			const void *partVerts = inds ? verts : (const void *)((const u8 *)verts + start * dec->VertexSize());
+			const void *partInds = inds ? (const void *)((const u8 *)inds + start * indexSize) : nullptr;
+			int partBytesRead = 0;
+			any = SubmitPrim(partVerts, partInds, realPrim, count, dec, vertTypeID, clockwise, &partBytesRead, clipInfoFlags) || any;
+		}
+		*bytesRead = vertexCount * dec->VertexSize();
+		return any;
+	}
+
+	// The index count doesn't bound how many vertices DecodeVerts will produce (the index range can be
+	// sparse), so track that separately, as the growth of the range to decode.
+	u16 lowerBound = 0;
+	u16 upperBound = 0;
+	int decodeGrowth = 0;
+	if (vertexCount > 0) {
+		GetIndexBounds(inds, vertexCount, vertTypeID, &lowerBound, &upperBound);
+		decodeGrowth = upperBound - lowerBound + 1;
+		if (CanExtendDecode(verts, inds, dec)) {
+			const DeferredVerts &last = drawVerts_[numDrawVerts_ - 1];
+			decodeGrowth = std::max(upperBound, last.indexUpperBound) - std::min(lowerBound, last.indexLowerBound) - (last.indexUpperBound - last.indexLowerBound);
+		}
+	}
+
+	if (!indexGen.PrimCompatible(prevPrim_, prim) || numDrawVerts_ >= MAX_DEFERRED_DRAW_VERTS || numDrawInds_ >= MAX_DEFERRED_DRAW_INDS || vertexCountInDrawCalls_ + vertexCount > VERTEX_BUFFER_MAX || numVertsToDecode_ + decodeGrowth > VERTEX_BUFFER_MAX || expandedVertsInDrawCalls_ + expanded > VERTEX_BUFFER_MAX) {
 		Flush();
 	}
 
@@ -855,6 +907,7 @@ bool DrawEngineCommon::SubmitPrim(const void *verts, const void *inds, GEPrimiti
 		const int rem = vertexCount % 3;
 		if (rem != 0) {
 			vertexCount -= rem;
+			GetIndexBounds(inds, vertexCount, vertTypeID, &lowerBound, &upperBound);
 		}
 	}
 
@@ -881,17 +934,16 @@ bool DrawEngineCommon::SubmitPrim(const void *verts, const void *inds, GEPrimiti
 
 	_dbg_assert_(numDrawVerts <= MAX_DEFERRED_DRAW_VERTS);
 
-	if (inds && numDrawVerts > decodeVertsCounter_ && drawVerts_[numDrawVerts - 1].verts == verts && !applySkin) {
+	if (CanExtendDecode(verts, inds, dec_)) {
 		// Same vertex pointer as a previous un-decoded draw call - let's just extend the decode!
 		di.vertDecodeIndex = numDrawVerts - 1;
-		u16 lb;
-		u16 ub;
-		GetIndexBounds(inds, vertexCount, vertTypeID, &lb, &ub);
 		DeferredVerts &dv = drawVerts_[numDrawVerts - 1];
-		if (lb < dv.indexLowerBound)
-			dv.indexLowerBound = lb;
-		if (ub > dv.indexUpperBound)
-			dv.indexUpperBound = ub;
+		const int oldCount = dv.indexUpperBound - dv.indexLowerBound + 1;
+		if (lowerBound < dv.indexLowerBound)
+			dv.indexLowerBound = lowerBound;
+		if (upperBound > dv.indexUpperBound)
+			dv.indexUpperBound = upperBound;
+		numVertsToDecode_ += dv.indexUpperBound - dv.indexLowerBound + 1 - oldCount;
 	} else {
 		// Record a new draw, and a new index gen.
 		DeferredVerts &dv = drawVerts_[numDrawVerts];
@@ -899,11 +951,13 @@ bool DrawEngineCommon::SubmitPrim(const void *verts, const void *inds, GEPrimiti
 		dv.verts = verts;
 		dv.vertexCount = vertexCount;
 		dv.uvScale = LoadUVScaleOffset(gstate);
-		// Does handle the unindexed case.
-		GetIndexBounds(inds, vertexCount, vertTypeID, &dv.indexLowerBound, &dv.indexUpperBound);
+		dv.indexLowerBound = lowerBound;
+		dv.indexUpperBound = upperBound;
+		numVertsToDecode_ += upperBound - lowerBound + 1;
 	}
 
 	vertexCountInDrawCalls_ += vertexCount;
+	expandedVertsInDrawCalls_ += ExpandedVertexCount(prim, vertexCount);
 	seenPrims_ |= (1 << prim);
 
 	if (prim == GE_PRIM_RECTANGLES && (gstate.getTextureAddress(0) & 0x3FFFFFFF) == (gstate.getFrameBufAddress() & 0x3FFFFFFF)) {
@@ -930,8 +984,9 @@ void DrawEngineCommon::DecodeVerts(const VertexDecoder *dec, u8 *dest) {
 		drawVertexOffsets_[i] = numDecodedVerts - indexLowerBound;
 		const int indexUpperBound = dv.indexUpperBound;
 		const int count = indexUpperBound - indexLowerBound + 1;
-		if (count + numDecodedVerts >= VERTEX_BUFFER_MAX) {
-			// Hit our limit! Stop decoding in this draw.
+		if (count + numDecodedVerts > VERTEX_BUFFER_MAX) {
+			// SubmitPrim flushes before this can happen.
+			_dbg_assert_(false);
 			break;
 		}
 

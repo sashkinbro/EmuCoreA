@@ -28,6 +28,7 @@
 class FramebufferManagerCommon;
 class TextureCacheCommon;
 class DrawEngineCommon;
+class VertexDecoder;
 class GraphicsContext;
 struct PspGeListArgs;
 struct GEState;
@@ -55,6 +56,8 @@ inline bool IsTrianglePrim(GEPrimitiveType prim) {
 struct TransformStats;
 class GPUCommon {
 public:
+	GPUCommon(const GPUCommon &) = delete;
+	GPUCommon &operator=(const GPUCommon &) = delete;
 	// The constructor might run on the loader thread.
 	GPUCommon(GraphicsContext *gfxCtx, Draw::DrawContext *draw);
 	virtual ~GPUCommon() = default;
@@ -162,6 +165,10 @@ public:
 	virtual void PerformWriteFormattedFromMemory(u32 addr, int size, int width, GEBufferFormat format);
 	virtual bool PerformWriteStencilFromMemory(u32 dest, int size, WriteStencil flags);
 
+	// Tells the texture cache that a block copy moved pixels, so it can carry "this is video" from
+	// the source to the destination. Cheap and safe to call for any copy.
+	void NotifyVideoCopy(u32 dest, u32 src, int size);
+
 	virtual void ExecuteOp(u32 op, u32 diff) = 0;
 
 	void Execute_OffsetAddr(u32 op, u32 diff);
@@ -183,6 +190,25 @@ public:
 	void Execute_Unknown(u32 op, u32 diff);
 
 	static int EstimatePerVertexCost();
+	// Fill time for a through-mode rectangle draw textured from a decoded video frame, or (when
+	// enabled) a clear. Zero for anything else. We don't model fill rate in general, but a movie
+	// player can be paced by it.
+	int EstimateFillCycles(GEPrimitiveType prim, const void *verts, const void *inds, int count, const VertexDecoder *dec, u32 vertType) const;
+
+	// Memory a video decoder has written a frame into recently (PerformWriteFormattedFromMemory),
+	// or a copy of such a frame (NotifyVideoCopy). An entry ages out a few flips after its last write.
+	struct VideoInfo {
+		u32 addr;
+		u32 size;
+		int flips;
+	};
+	bool IsVideo(u32 addr) const;
+	bool VideoIsPlaying() const {
+		return !videos_.empty();
+	}
+	const std::vector<VideoInfo> &Videos() const {
+		return videos_;
+	}
 
 	virtual void Flush();
 
@@ -352,6 +378,10 @@ protected:
 	u64 drawCompleteTicks;
 	u64 busyTicks;
 
+	void NoteVideoRange(u32 addr, u32 size);
+	void DecimateVideos();
+	std::vector<VideoInfo> videos_;
+
 	int downcount;
 	u64 startingTicks;
 	u32 cycleLastPC;
@@ -424,5 +454,5 @@ protected:
 private:
 	void DoExecuteCall(u32 target);
 	void PopDLQueue();
-	void CheckDrawSync();
+	void CompleteFailedList(DisplayList &list);
 };

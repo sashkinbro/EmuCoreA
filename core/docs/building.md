@@ -21,6 +21,14 @@ $msbuild = "$installPath\MSBuild\Current\Bin\MSBuild.exe"
 
 (swap `/t:UnitTest` for `/t:PPSSPPWindows` or another project name as needed; drop it entirely to build the whole solution).
 
+On an ARM64 host, use `$installPath\MSBuild\Current\Bin\arm64\MSBuild.exe` instead. The MSBuild in
+`Bin\` itself runs emulated and picks the 32-bit x86-hosted compiler (`bin\HostX86\arm64\CL.exe`),
+which can't always map the precompiled headers into its address space. Builds then fail
+intermittently, every file of a project at line 1, with `C3859: Failed to create virtual memory for
+PCH` and `C1076: compiler limit: internal heap limit reached`. That looks like running out of
+memory, but lowering `/m` or `CL_MPCount` doesn't help, and `/p:PreferredToolArchitecture=arm64`
+has no effect. The build log's `CL.exe` path shows which host compiler ran.
+
 `<platform>` is `ARM64` or `x64` - whichever the machine actually is, so look it up rather than
 picking a default. The output directory follows it (`Windows\<platform>\<configuration>\`), which
 makes building one and running the other an easy mistake. It is easiest to make on Windows-on-ARM,
@@ -68,6 +76,15 @@ in that environment) but is very likely specific to that sandbox rather than a r
 bug, since CI runs the equivalent of `UnitTest.exe all` on every commit across multiple
 platforms without apparent issue. If `all`/`Jit` hangs in your environment, run every other
 test by name instead (skip `Jit`) to still get real coverage.
+
+## UWP build
+
+UWP has its own solution, `UWP\PPSSPP_UWP.sln`. Build the app with `/t:PPSSPP_UWP` (or a single
+library such as `/t:CoreUWP`), same MSBuild setup as above:
+
+```powershell
+& $msbuild "UWP\PPSSPP_UWP.sln" /t:PPSSPP_UWP /p:Configuration=Debug /p:Platform=<platform> /m
+```
 
 ## Android assets
 
@@ -146,6 +163,15 @@ we have: MSVC links an `inline` function defined in a .cpp anyway, clang correct
 build and pass on Windows and fail to link only on Android CI, with an undefined symbol pointing at a header
 line. Fix it by dropping the bogus `inline` from the definition, not by avoiding the call.
 
+The compilers also disagree about floating point contraction, which matters for any test asserting that a JIT
+is bit-identical to its C++ reference. Clang folds `a * b + c` into a single fused multiply-add by default;
+MSVC never does, under `/fp:precise`, in Debug or Release. So on arm64, where the JITs emit `FMLA`, a
+reference written as `a * b + c` matches on Mac, Linux and Android and is off by one ULP on Windows on ARM.
+Don't leave it to the compiler: write `fmaf(a, b, c)` when the fused result is wanted (MSVC compiles it to a
+single `fmadd`), and `a * b + c` when it isn't. `PrescaleUV` in `GPU/Common/VertexDecoderCommon.cpp` picks per
+architecture, matching what each JIT does. x86 doesn't have the problem, since the SSE2 baseline has no FMA
+instruction to contract into.
+
 pspautotests are a large set of tests of the PSP OS's API surface, and thus tests our HLE implementation.
 
 **To check for regressions, run them exactly the way CI does** (see `.github/workflows/build.yml`):
@@ -164,6 +190,26 @@ Note the runner prints a debug-CRT "Detected memory leaks!" dump after the summa
 That's normal and not a test failure - read the `N tests passed, N tests failed` line, which comes before it.
 
 See docs/pspautotests.md for a workflow for running pspautotests and improving PPSSPP with the results.
+
+### LoongArch64 and RISC-V JITs under qemu
+
+CI tests these JITs by cross-building headless and running pspautotests under qemu-user, and you can do the
+same on Linux (packages: `gcc-14-loongarch64-linux-gnu g++-14-loongarch64-linux-gnu qemu-user`, or the riscv64
+equivalents):
+
+```bash
+./b.sh --loongarch64 PPSSPPHeadless     # builds into build-loongarch64/
+mkdir -p build-qemu
+printf '#!/bin/bash\nexec qemu-loongarch64 -L /usr/loongarch64-linux-gnu "$(dirname "$0")/../build-loongarch64/PPSSPPHeadless" "$@"\n' > build-qemu/PPSSPPHeadless
+chmod +x build-qemu/PPSSPPHeadless
+python3 test.py -g --graphics=software --cpu=jit-ir --timeout=60 --known-failures=loongarch64
+```
+
+`test.py` runs the most recently modified `build*/PPSSPPHeadless`, so `touch` the shim after rebuilding the real
+binary, or it runs your native build instead. The full suite takes a couple of minutes.
+
+qemu reports LSX and LASX as present, so CI only exercises the LoongArch vector paths.
+The scalar fallbacks never run here, so passing tells you nothing about them.
 
 ## Quick rebuild on Linux
 

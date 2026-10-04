@@ -105,13 +105,35 @@ ReplacedTexture::~ReplacedTexture() {
 		threadWaitable_ = nullptr;
 	}
 
+	ReleaseLevels();
+}
+
+void ReplacedTexture::ReleaseLevels() {
 	for (auto &level : levels_) {
-		// Null when replacement was switched off after we were cached - see NotifyConfigChanged.
-		if (vfs_) {
+		// vfs_ is null after Unload(), which has already released them.
+		if (vfs_ && level.fileRef) {
 			vfs_->ReleaseFile(level.fileRef);
 		}
 		level.fileRef = nullptr;
 	}
+	levels_.clear();
+}
+
+void ReplacedTexture::Unload() {
+	if (threadWaitable_) {
+		// The task holds its own copy of the VFS pointer, so it has to finish first.
+		threadWaitable_->WaitAndRelease();
+		threadWaitable_ = nullptr;
+	}
+
+	ReleaseLevels();
+	data_.clear();
+	fmt = Draw::DataFormat::UNDEFINED;
+	alphaStatus_ = TextureAlpha::Any;
+	if (State() != ReplacementState::UNLOADED) {
+		SetState(ReplacementState::UNLOADED);
+	}
+	vfs_ = nullptr;
 }
 
 void ReplacedTexture::PurgeIfNotUsedSinceTime(double t) {
@@ -138,7 +160,7 @@ void ReplacedTexture::PurgeIfNotUsedSinceTime(double t) {
 	}
 
 	data_.clear();
-	levels_.clear();
+	ReleaseLevels();
 	fmt = Draw::DataFormat::UNDEFINED;
 	alphaStatus_ = TextureAlpha::Any;
 
@@ -256,6 +278,14 @@ void ReplacedTexture::Prepare(VFSBackend *vfs) {
 		}
 
 		result = LoadLevelData(fileRef, desc_.filenames[i], i, &pixelFormat);
+		// A level that got loaded owns the reference. Otherwise (error, or nothing to load) it's ours to free.
+		bool kept = false;
+		for (const ReplacedTextureLevel &level : levels_) {
+			kept = kept || level.fileRef == fileRef;
+		}
+		if (!kept) {
+			vfs_->ReleaseFile(fileRef);
+		}
 		if (result == LoadLevelResult::DONE) {
 			// Loaded all the levels we're gonna get.
 			fmt = pixelFormat;
@@ -630,11 +660,12 @@ ReplacedTexture::LoadLevelResult ReplacedTexture::LoadLevelData(VFSFileReference
 				WARN_LOG(Log::TexReplacement, "DDS: Expected %d bytes, got %d", bytesToRead, (int)read_bytes);
 			}
 
+			if (i != 0) {
+				level.fileRef = nullptr;  // We only provide a fileref on level 0 if we have mipmaps.
+			}
 			levels_.push_back(level);
 			level.w = std::max(level.w / 2, 1);
 			level.h = std::max(level.h / 2, 1);
-			if (i != 0)
-				level.fileRef = nullptr;  // We only provide a fileref on level 0 if we have mipmaps.
 		}
 		vfs_->CloseFile(openFile);
 
@@ -707,6 +738,7 @@ ReplacedTexture::LoadLevelResult ReplacedTexture::LoadLevelData(VFSFileReference
 		}
 		if (png.width > (uint32_t)level.w || png.height > (uint32_t)level.h) {
 			ERROR_LOG(Log::TexReplacement, "Texture replacement changed since header read: %s", filename.c_str());
+			png_image_free(&png);
 			return LoadLevelResult::LOAD_ERROR;
 		}
 
