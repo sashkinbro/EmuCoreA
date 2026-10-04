@@ -56,6 +56,9 @@ internal fun isGenerated3dCover(coverPath: String?): Boolean =
     } == true
 
 private val imageLoadingSemaphore = Semaphore(4)
+private const val DEFAULT_COVER_DECODE_WIDTH = 720
+private const val DEFAULT_COVER_DECODE_HEIGHT = 1080
+
 @Composable
 fun GameCoverArt(
     coverPath: String?,
@@ -63,15 +66,29 @@ fun GameCoverArt(
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Fit,
     loadEnabled: Boolean = true,
-    matchImageAspectRatio: Boolean = false
+    matchImageAspectRatio: Boolean = false,
+    showTitleWhileLoading: Boolean = true,
+    shimmerWhileLoading: Boolean = true,
+    decodeWidth: Int = DEFAULT_COVER_DECODE_WIDTH,
+    decodeHeight: Int = DEFAULT_COVER_DECODE_HEIGHT
 ) {
     val context = LocalContext.current
-    var bitmap by remember(coverPath) { mutableStateOf(coverPath?.let(::getCachedBitmap)) }
-    var loadedPath by remember(coverPath) { mutableStateOf(coverPath?.takeIf { getCachedBitmap(it) != null }) }
+    val candidates = remember(coverPath) {
+        listOfNotNull(coverPath?.takeIf { it.isNotBlank() })
+    }
+    val cacheKey: (String) -> String = remember(decodeWidth, decodeHeight) {
+        { path -> "$path@${decodeWidth}x$decodeHeight" }
+    }
+    var bitmap by remember(coverPath, decodeWidth, decodeHeight) {
+        mutableStateOf(candidates.firstNotNullOfOrNull { getCachedBitmap(cacheKey(it)) })
+    }
+    var loadedPath by remember(coverPath, decodeWidth, decodeHeight) {
+        mutableStateOf(candidates.firstOrNull { getCachedBitmap(cacheKey(it)) != null })
+    }
     var isLoading by remember { mutableStateOf(false) }
 
-    LaunchedEffect(coverPath, loadEnabled) {
-        if (coverPath.isNullOrBlank()) {
+    LaunchedEffect(coverPath, loadEnabled, decodeWidth, decodeHeight) {
+        if (candidates.isEmpty()) {
             bitmap = null
             loadedPath = null
             isLoading = false
@@ -79,33 +96,42 @@ fun GameCoverArt(
         }
 
         if (!loadEnabled) {
-            bitmap = getCachedBitmap(coverPath)
-            loadedPath = coverPath.takeIf { bitmap != null }
+            bitmap = candidates.firstNotNullOfOrNull { getCachedBitmap(cacheKey(it)) }
+            loadedPath = candidates.firstOrNull { getCachedBitmap(cacheKey(it)) != null }
             isLoading = false
             return@LaunchedEffect
         }
 
-        if (loadedPath == coverPath && bitmap != null) {
+        if (loadedPath != null && bitmap != null) {
             isLoading = false
             return@LaunchedEffect
         }
 
-        getCachedBitmap(coverPath)?.let { cached ->
+        candidates.firstNotNullOfOrNull { getCachedBitmap(cacheKey(it)) }?.let { cached ->
             bitmap = cached
-            loadedPath = coverPath
+            loadedPath = candidates.first { getCachedBitmap(cacheKey(it)) != null }
             isLoading = false
             return@LaunchedEffect
         }
 
         isLoading = true
-        val loadedBitmap = withContext(Dispatchers.IO) {
-            imageLoadingSemaphore.withPermit {
-                loadBitmap(context, coverPath)
+        var loadedBitmap: Bitmap? = null
+        var loadedFrom: String? = null
+        for (candidate in candidates) {
+            val candidateBitmap = withContext(Dispatchers.IO) {
+                imageLoadingSemaphore.withPermit {
+                    loadBitmap(context, candidate, decodeWidth, decodeHeight)
+                }
+            }
+            if (candidateBitmap != null) {
+                putCachedBitmap(cacheKey(candidate), candidateBitmap)
+                loadedBitmap = candidateBitmap
+                loadedFrom = candidate
+                break
             }
         }
         if (loadedBitmap != null) {
-            putCachedBitmap(coverPath, loadedBitmap)
-            loadedPath = coverPath
+            loadedPath = loadedFrom
         }
         if (loadedBitmap != null || bitmap == null) {
             bitmap = loadedBitmap
@@ -129,21 +155,23 @@ fun GameCoverArt(
             modifier = imageModifier
                 .clip(neonShape(20.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                .shimmer(showShimmer = isLoading),
+                .shimmer(showShimmer = isLoading && shimmerWhileLoading),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = fallbackTitle,
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
-                textAlign = TextAlign.Center,
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp)
-                    .wrapContentSize(Alignment.Center)
-            )
+            if (!isLoading || showTitleWhileLoading) {
+                Text(
+                    text = fallbackTitle,
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                    textAlign = TextAlign.Center,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(12.dp)
+                        .wrapContentSize(Alignment.Center)
+                )
+            }
         }
     }
 }
@@ -160,7 +188,9 @@ fun clearCoverImageMemoryCache() {
 
 fun invalidateCoverImage(path: String?) {
     if (path.isNullOrBlank()) return
-    coverBitmapCache.remove(path)
+    coverBitmapCache.snapshot().keys
+        .filter { it == path || it.startsWith("$path@") }
+        .forEach { coverBitmapCache.remove(it) }
 }
 
 private fun getCachedBitmap(path: String): Bitmap? = coverBitmapCache.get(path)
@@ -171,11 +201,13 @@ private fun putCachedBitmap(path: String, bitmap: Bitmap) {
     }
 }
 
-private fun loadBitmap(context: android.content.Context, coverPath: String?): Bitmap? {
+private fun loadBitmap(
+    context: android.content.Context,
+    coverPath: String?,
+    reqWidth: Int = DEFAULT_COVER_DECODE_WIDTH,
+    reqHeight: Int = DEFAULT_COVER_DECODE_HEIGHT
+): Bitmap? {
     if (coverPath.isNullOrBlank()) return null
-
-    val reqWidth = 720
-    val reqHeight = 1080
 
     return runCatching {
         fun openStream() = when {

@@ -2310,6 +2310,10 @@
     <string name="profile_devices_title">Ваші пристрої</string>
     <string name="profile_display_name">Ім’я для відображення</string>
     <string name="profile_done">Готово.</string>
+    <string name="profile_duration_hours_minutes_format">%1$dг %2$02dхв</string>
+    <string name="profile_duration_hours_format">%1$,d год</string>
+    <string name="profile_duration_hours_compact_format">%1$s год</string>
+    <string name="profile_duration_minutes_format">%1$d хв</string>
     <string name="profile_edit_name">Змінити</string>
     <string name="profile_edit_name_description">Виберіть ім\'я, яке інші гравці бачитимуть у пошуку та таблицях лідерів.</string>
     <string name="profile_email">Email</string>

@@ -2328,6 +2328,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">Display name</string>
     <string name="profile_done">Done.</string>
+    <string name="profile_duration_hours_minutes_format">%1$dh %2$02dm</string>
+    <string name="profile_duration_hours_format">%1$,d h</string>
+    <string name="profile_duration_hours_compact_format">%1$s h</string>
+    <string name="profile_duration_minutes_format">%1$dm</string>
     <string name="profile_edit_name">Edit</string>
     <string name="profile_edit_name_description">Choose the name other players will see in search and leaderboards.</string>
     <string name="profile_email">Email</string>

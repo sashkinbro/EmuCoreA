@@ -2309,6 +2309,10 @@
     <string name="profile_devices_title">Ваши устройства</string>
     <string name="profile_display_name">Отображаемое имя</string>
     <string name="profile_done">Готово.</string>
+    <string name="profile_duration_hours_minutes_format">%1$dч %2$02dмин</string>
+    <string name="profile_duration_hours_format">%1$,d ч</string>
+    <string name="profile_duration_hours_compact_format">%1$s ч</string>
+    <string name="profile_duration_minutes_format">%1$d мин</string>
     <string name="profile_edit_name">Изменить</string>
     <string name="profile_edit_name_description">Выберите имя, которое другие игроки будут видеть в поиске и таблицах лидеров.</string>
     <string name="profile_email">Email</string>

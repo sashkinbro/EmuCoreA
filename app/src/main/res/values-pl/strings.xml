@@ -2326,6 +2326,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">Nazwa wyświetlana</string>
     <string name="profile_done">Gotowe.</string>
+    <string name="profile_duration_hours_minutes_format">%1$dg %2$02dmin</string>
+    <string name="profile_duration_hours_format">%1$,d godz.</string>
+    <string name="profile_duration_hours_compact_format">%1$s godz.</string>
+    <string name="profile_duration_minutes_format">%1$d min</string>
     <string name="profile_edit_name">Edytuj</string>
     <string name="profile_edit_name_description">Wybierz nazwę, którą inni gracze będą widzieć w wynikach wyszukiwania i rankingach.</string>
     <string name="profile_email">E-mail</string>

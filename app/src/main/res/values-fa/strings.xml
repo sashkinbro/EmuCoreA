@@ -2320,6 +2320,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">نام نمایشی</string>
     <string name="profile_done">انجام شد.</string>
+    <string name="profile_duration_hours_minutes_format">%1$dس %2$02dد</string>
+    <string name="profile_duration_hours_format">%1$,d ساعت</string>
+    <string name="profile_duration_hours_compact_format">%1$s ساعت</string>
+    <string name="profile_duration_minutes_format">%1$d دقیقه</string>
     <string name="profile_edit_name">ویرایش</string>
     <string name="profile_edit_name_description">نامی را که سایر بازیکنان در جستجو و تابلوهای امتیازات می‌بینند انتخاب کنید.</string>
     <string name="profile_email">ایمیل</string>

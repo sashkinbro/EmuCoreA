@@ -2304,6 +2304,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">표시 이름</string>
     <string name="profile_done">완료.</string>
+    <string name="profile_duration_hours_minutes_format">%1$d시간 %2$02d분</string>
+    <string name="profile_duration_hours_format">%1$,d시간</string>
+    <string name="profile_duration_hours_compact_format">%1$s시간</string>
+    <string name="profile_duration_minutes_format">%1$d분</string>
     <string name="profile_edit_name">수정</string>
     <string name="profile_edit_name_description">검색 및 리더보드에서 다른 플레이어에게 표시될 이름을 선택하세요.</string>
     <string name="profile_email">이메일</string>

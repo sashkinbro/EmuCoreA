@@ -2304,6 +2304,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">表示名</string>
     <string name="profile_done">完了。</string>
+    <string name="profile_duration_hours_minutes_format">%1$d時間%2$02d分</string>
+    <string name="profile_duration_hours_format">%1$,d時間</string>
+    <string name="profile_duration_hours_compact_format">%1$s時間</string>
+    <string name="profile_duration_minutes_format">%1$d分</string>
     <string name="profile_edit_name">編集</string>
     <string name="profile_edit_name_description">他のプレイヤーが検索やリーダーボードで見る名前を選択します。</string>
     <string name="profile_email">メールアドレス</string>

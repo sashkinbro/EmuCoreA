@@ -2326,6 +2326,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">Zobrazované jméno</string>
     <string name="profile_done">Hotovo.</string>
+    <string name="profile_duration_hours_minutes_format">%1$dh %2$02dmin</string>
+    <string name="profile_duration_hours_format">%1$,d h</string>
+    <string name="profile_duration_hours_compact_format">%1$s h</string>
+    <string name="profile_duration_minutes_format">%1$d min</string>
     <string name="profile_edit_name">Upravit</string>
     <string name="profile_edit_name_description">Vyberte jméno, které uvidí ostatní hráči ve vyhledávání a v žebříčcích.</string>
     <string name="profile_email">E-mail</string>

@@ -2313,6 +2313,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">اسم العرض</string>
     <string name="profile_done">تم.</string>
+    <string name="profile_duration_hours_minutes_format">%1$dس %2$02dد</string>
+    <string name="profile_duration_hours_format">%1$,d ساعة</string>
+    <string name="profile_duration_hours_compact_format">%1$s ساعة</string>
+    <string name="profile_duration_minutes_format">%1$d دقيقة</string>
     <string name="profile_edit_name">تعديل</string>
     <string name="profile_edit_name_description">اختر الاسم الذي سيراه اللاعبون الآخرون في البحث ولوحات الصدارة.</string>
     <string name="profile_email">البريد الإلكتروني</string>

@@ -2305,6 +2305,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">Görünen ad</string>
     <string name="profile_done">Bitti.</string>
+    <string name="profile_duration_hours_minutes_format">%1$dsa %2$02ddk</string>
+    <string name="profile_duration_hours_format">%1$,d sa</string>
+    <string name="profile_duration_hours_compact_format">%1$s sa</string>
+    <string name="profile_duration_minutes_format">%1$d dk</string>
     <string name="profile_edit_name">Düzenle</string>
     <string name="profile_edit_name_description">Diğer oyuncuların arama ve liderlik tablolarında göreceği adı seçin.</string>
     <string name="profile_email">E-posta</string>

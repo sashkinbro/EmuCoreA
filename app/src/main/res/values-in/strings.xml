@@ -2319,6 +2319,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">Nama tampilan</string>
     <string name="profile_done">Selesai.</string>
+    <string name="profile_duration_hours_minutes_format">%1$dj %2$02dmnt</string>
+    <string name="profile_duration_hours_format">%1$,d jam</string>
+    <string name="profile_duration_hours_compact_format">%1$s jam</string>
+    <string name="profile_duration_minutes_format">%1$d mnt</string>
     <string name="profile_edit_name">Edit</string>
     <string name="profile_edit_name_description">Pilih nama yang akan dilihat pemain lain dalam pencarian dan papan peringkat.</string>
     <string name="profile_email">Email</string>

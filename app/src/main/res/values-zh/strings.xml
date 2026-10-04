@@ -2306,6 +2306,10 @@
     <string name="profile_devices_title">Your devices</string>
     <string name="profile_display_name">显示名称</string>
     <string name="profile_done">完成。</string>
+    <string name="profile_duration_hours_minutes_format">%1$d小时%2$02d分</string>
+    <string name="profile_duration_hours_format">%1$,d小时</string>
+    <string name="profile_duration_hours_compact_format">%1$s小时</string>
+    <string name="profile_duration_minutes_format">%1$d分钟</string>
     <string name="profile_edit_name">编辑</string>
     <string name="profile_edit_name_description">设置其他玩家在搜索和排行榜中看到的昵称。</string>
     <string name="profile_email">电子邮件</string>
