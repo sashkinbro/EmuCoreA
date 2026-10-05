@@ -88,6 +88,9 @@ object NativePpsspp {
      */
     external fun nativeGetActiveRenderer(): Int
 
+    /** True once the asynchronous core boot (PSP_InitUpdate) has completed. */
+    external fun nativeIsBooted(): Boolean
+
     external fun nativeSetCheats(path: String)
 
     external fun nativeSetRewindEnabled(enabled: Boolean)
@@ -110,6 +113,12 @@ object NativePpsspp {
     external fun nativeSaveState(path: String): Boolean
 
     external fun nativeLoadState(path: String): Boolean
+
+    /** Save and return the exact core error (empty on success). Debug/tests. */
+    external fun nativeSaveStateDebug(path: String): String
+
+    /** Load and return the exact core error (empty on success). Debug/tests. */
+    external fun nativeLoadStateDebug(path: String): String
 
     external fun nativeGetFrameSize(): IntArray?
 

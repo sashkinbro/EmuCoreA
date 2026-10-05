@@ -5405,7 +5405,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             _uiState.value = _uiState.value.copy(
                 isActionInProgress = false,
                 actionLabel = null,
-                toastMessage = if (success) "loaded" else null
+                toastMessage = if (success) "loaded" else "load_failed"
             )
             delay(2000.milliseconds)
             _uiState.value = _uiState.value.copy(toastMessage = null)

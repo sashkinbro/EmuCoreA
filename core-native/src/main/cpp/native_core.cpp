@@ -99,6 +99,10 @@ GraphicsContext *g_graphicsContext = nullptr;
 StereoResampler g_resampler;
 AndroidAudioState *g_audioState = nullptr;
 bool g_audioStarted = false;
+// OpenSL frames per callback. 256 is PPSSPP's fallback, but the GL render
+// thread can delay audio pushes under load; a slightly larger buffer removes
+// the resulting crackle at the cost of ~10 ms of latency.
+int g_audioFramesPerBuffer = 512;
 bool g_booted = false;
 bool g_pendingBoot = false;
 bool g_renderReady = false;
@@ -283,7 +287,7 @@ void AudioRenderCallback(short *buffer, int numSamples, int sampleRateHz, void *
 
 void StartAudio() {
     if (g_audioState == nullptr) {
-        g_audioState = AndroidAudio_Init(AudioRenderCallback, 0, 44100);
+        g_audioState = AndroidAudio_Init(AudioRenderCallback, g_audioFramesPerBuffer, 44100);
     }
     if (!g_audioStarted && g_audioState != nullptr) {
         g_audioStarted = AndroidAudio_Resume(g_audioState);
@@ -707,8 +711,29 @@ bool CreateGraphicsContext() {
         return true;
     }
     if (requested == kRendererSoftware) {
-        NLOGW("Software rendering is not supported by the PSP core; using Vulkan instead");
+        // PPSSPP's software rasterizer still presents through a GPU context,
+        // but all rendering happens on the CPU. Vulkan is the most reliable
+        // presentation backend on Android. The internal resolution is forced
+        // to 1x exactly like the standalone app does.
+        g_activeRenderer = kRendererSoftware;
+        g_Config.bSoftwareRendering = true;
+        g_Config.iInternalResolution = 1;
+        g_graphicsContext = new VulkanGraphicsContext();
+        std::string deviceName;
+        std::string error;
+        if (!g_graphicsContext->InitAPI(nullptr, &deviceName, &error)) {
+            NLOGE("Vulkan InitAPI failed for software rendering: %s", error.c_str());
+            delete g_graphicsContext;
+            g_graphicsContext = nullptr;
+            g_Config.bSoftwareRendering = false;
+            return false;
+        }
+        Core_SetGraphicsContext(g_graphicsContext);
+        SetGPUBackend(GPUBackend::VULKAN);
+        NLOGI("Software renderer selected (presentation via Vulkan)");
+        return true;
     }
+    g_Config.bSoftwareRendering = false;
     g_activeRenderer = kRendererVulkan;
 
     g_graphicsContext = new VulkanGraphicsContext();
@@ -941,7 +966,13 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
     coreParam.startBreak = false;
     coreParam.headLess = false;
     coreParam.graphicsContext = g_graphicsContext;
-    coreParam.gpuCore = g_activeRenderer == kRendererOpenGL ? GPUCORE_GLES : GPUCORE_VULKAN;
+    coreParam.gpuCore = g_activeRenderer == kRendererOpenGL ? GPUCORE_GLES
+                        : g_activeRenderer == kRendererSoftware ? GPUCORE_SOFTWARE
+                                                                 : GPUCORE_VULKAN;
+    if (g_activeRenderer == kRendererSoftware) {
+        coreParam.renderWidth = 480;
+        coreParam.renderHeight = 272;
+    }
     coreParam.cpuCore = CPUCore::JIT;
     coreParam.bUseVertexDecoderJit = true;
 
@@ -1243,22 +1274,40 @@ void RunFrame() {
 #endif
 }
 
-bool SaveStateToFile(const std::string &path) {
+bool SaveStateToFile(const std::string &path, std::string *errorOut = nullptr) {
+    if (errorOut != nullptr) errorOut->clear();
     std::vector<u8> data;
-    if (SaveState::SaveToRam(data) != CChunkFileReader::ERROR_NONE) {
-        NLOGE("SaveToRam failed");
+    const CChunkFileReader::Error result = SaveState::SaveToRam(data);
+    if (result != CChunkFileReader::ERROR_NONE) {
+        NLOGE("SaveToRam failed: %d (path=%s)", (int)result, path.c_str());
+        if (errorOut != nullptr) *errorOut = "SaveToRam error " + std::to_string((int)result);
         return false;
     }
     FILE *file = File::OpenCFile(Path(path), "wb");
-    if (file == nullptr) return false;
+    if (file == nullptr) {
+        NLOGE("Unable to open state file for write: %s", path.c_str());
+        if (errorOut != nullptr) *errorOut = "Unable to open " + path + " for write";
+        return false;
+    }
     const size_t written = fwrite(data.data(), 1, data.size(), file);
     fclose(file);
-    return written == data.size();
+    if (written != data.size()) {
+        NLOGE("Short write on state file: %s (%zu/%zu)", path.c_str(), written, data.size());
+        if (errorOut != nullptr) *errorOut = "Short write";
+        return false;
+    }
+    NLOGI("Saved state: %s (%zu bytes)", path.c_str(), written);
+    return true;
 }
 
-bool LoadStateFromFile(const std::string &path) {
+bool LoadStateFromFile(const std::string &path, std::string *errorOut = nullptr) {
+    if (errorOut != nullptr) errorOut->clear();
     FILE *file = File::OpenCFile(Path(path), "rb");
-    if (file == nullptr) return false;
+    if (file == nullptr) {
+        NLOGE("Unable to open state file for read: %s", path.c_str());
+        if (errorOut != nullptr) *errorOut = "Unable to open " + path + " for read";
+        return false;
+    }
     std::vector<u8> data;
     std::array<u8, 65536> buffer;
     for (;;) {
@@ -1267,9 +1316,13 @@ bool LoadStateFromFile(const std::string &path) {
         if (n < buffer.size()) break;
     }
     fclose(file);
+    NLOGI("Loading state: %s (%zu bytes)", path.c_str(), data.size());
     std::string error;
     const bool ok = SaveState::LoadFromRam(data, &error) == CChunkFileReader::ERROR_NONE;
-    if (!ok) NLOGE("LoadFromRam failed: %s", error.c_str());
+    if (!ok) {
+        NLOGE("LoadFromRam failed: %s (path=%s)", error.c_str(), path.c_str());
+        if (errorOut != nullptr) *errorOut = error;
+    }
     return ok;
 }
 
@@ -1344,6 +1397,10 @@ void ShutdownCore() {
 // Mirrors NativeApp's handling of PPSSPP's own display settings.
 void ApplyInternalResolution() {
     if (!PSP_IsInited() || gpu == nullptr) return;
+    // The software rasterizer is locked to 1x, exactly like the standalone app.
+    if (g_Config.bSoftwareRendering) {
+        g_Config.iInternalResolution = 1;
+    }
     const int displayWidth = g_display.pixel_xres > 0 ? g_display.pixel_xres : g_displayWidth;
     const int displayHeight = g_display.pixel_yres > 0 ? g_display.pixel_yres : g_displayHeight;
     if (g_Config.iInternalResolution == 0) {
@@ -1446,6 +1503,41 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
     }
     if (key == "multi_threading") {
         if (hasBool) g_Config.bRenderMultiThreading = on;
+        return;
+    }
+    if (key == "fast_forward") {
+        // Used by the frontend's hold-to-fast-forward control; PPSSPP's frame
+        // timing returns an unlimited rate while this is set.
+        if (hasBool) PSP_CoreParameter().fastForward = on;
+        return;
+    }
+    if (key == "fps_limit") {
+        // 0 = the normal region rate; any other value clamps the frame rate
+        // (the app's "Frame limit / target FPS" setting).
+        if (ParseIntInRange(value, 0, 1000, &number)) {
+            g_Config.iFpsLimit1 = number;
+            PSP_CoreParameter().fpsLimit = number > 0 ? FPSLimit::CUSTOM1 : FPSLimit::NORMAL;
+            NLOGI("FPS limit: %d", number);
+        }
+        return;
+    }
+    if (key == "audio_buffer_ms") {
+        if (ParseIntInRange(value, 10, 500, &number)) {
+            // OpenSL runs one callback per buffer; cap it so latency stays sane
+            // even with the app's large request (150 ms by default).
+            const int frames = std::clamp(44100 * number / 1000, 64, 2048);
+            if (frames != g_audioFramesPerBuffer) {
+                NLOGI("Audio buffer: %d ms (%d frames)", number, frames);
+                g_audioFramesPerBuffer = frames;
+                if (g_audioState != nullptr) {
+                    // Rebuild the OpenSL player so the new buffer takes effect.
+                    StopAudio();
+                    AndroidAudio_Shutdown(g_audioState);
+                    g_audioState = nullptr;
+                    StartAudio();
+                }
+            }
+        }
         return;
     }
 
@@ -2068,6 +2160,14 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeGetActiveRenderer(JNIEnv *, jclas
     return g_activeRenderer;
 }
 
+// True once PSP_InitUpdate has completed. Save states can only be loaded after
+// that; the frontend waits for this before attempting a state load.
+JNIEXPORT jboolean JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeIsBooted(JNIEnv *, jclass) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    return g_booted ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCheats(JNIEnv *env, jclass, jstring path) {
     const std::string cheatPath = ToString(env, path);
@@ -2163,6 +2263,28 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeLoadState(JNIEnv *env, jclass, js
     if (!g_booted) return JNI_FALSE;
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     return LoadStateFromFile(ToString(env, path)) ? JNI_TRUE : JNI_FALSE;
+}
+
+// Debug helpers: perform the operation and return the exact core error string
+// (empty on success), so the frontend and tests can report why a state failed.
+JNIEXPORT jstring JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSaveStateDebug(JNIEnv *env, jclass, jstring path) {
+    std::string error = "core is not booted";
+    if (g_booted) {
+        std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+        SaveStateToFile(ToString(env, path), &error);
+    }
+    return env->NewStringUTF(error.c_str());
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeLoadStateDebug(JNIEnv *env, jclass, jstring path) {
+    std::string error = "core is not booted";
+    if (g_booted) {
+        std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+        LoadStateFromFile(ToString(env, path), &error);
+    }
+    return env->NewStringUTF(error.c_str());
 }
 
 JNIEXPORT jintArray JNICALL

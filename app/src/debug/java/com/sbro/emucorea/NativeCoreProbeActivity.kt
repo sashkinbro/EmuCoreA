@@ -47,6 +47,17 @@ class NativeCoreProbeActivity : Activity(), SurfaceHolder.Callback {
         if (rewindTest) {
             NativePpsspp.nativeSetRewindEnabled(true)
         }
+        // Optional save-state round trip with the exact core error logged.
+        val roundTripTest = intent.getBooleanExtra("roundtrip", false)
+        val roundTripPath = java.io.File(filesDir, "savestate-roundtrip.rstate").absolutePath
+        // Optional: load an existing core state file right after boot and log
+        // the exact core error.
+        val loadFile = intent.getStringExtra("loadFile")
+        // Optional app-path test: NativeApp.saveStateToSlot/loadStateFromSlot.
+        val appStateTest = intent.getBooleanExtra("appstate", false)
+        if (appStateTest) {
+            com.sbro.emucorea.core.NativeApp.setSaveStateIdentityPath(gamePath)
+        }
 
         val metrics = resources.displayMetrics
         val refresh = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -86,8 +97,52 @@ class NativeCoreProbeActivity : Activity(), SurfaceHolder.Callback {
             var rewindInitiated = false
             var emuUs = 0L
             var emuAtRewindStart = 0L
+            var roundTripPhase = 0
+            var roundTripEmuAtSave = 0L
             while (running) {
                 emuUs = NativePpsspp.nativeRunFrame()
+                if (appStateTest) {
+                    when {
+                        roundTripPhase == 0 && emuUs >= 8_000_000L -> {
+                            val path = com.sbro.emucorea.core.NativeApp.getCurrentSaveStatePath(1)
+                            val ok = com.sbro.emucorea.core.NativeApp.saveStateToSlot(1)
+                            Log.i(TAG, "APPSTATE save slot1 ok=$ok path=$path " +
+                                "size=${path?.let { java.io.File(it).length() }}")
+                            roundTripPhase = 1
+                        }
+                        roundTripPhase == 1 && emuUs >= 10_000_000L -> {
+                            val ok = com.sbro.emucorea.core.NativeApp.loadStateFromSlot(1)
+                            Log.i(TAG, "APPSTATE load slot1 ok=$ok")
+                            roundTripPhase = 2
+                        }
+                    }
+                }
+                if (roundTripTest) {
+                    when {
+                        roundTripPhase == 0 && emuUs >= 8_000_000L -> {
+                            roundTripEmuAtSave = emuUs
+                            if (loadFile != null) {
+                                val error = NativePpsspp.nativeLoadStateDebug(loadFile)
+                                Log.i(TAG, "ROUNDTRIP loadFile '$loadFile' error='$error'")
+                                roundTripPhase = 3
+                            } else {
+                                val error = NativePpsspp.nativeSaveStateDebug(roundTripPath)
+                                Log.i(TAG, "ROUNDTRIP save at emu=${emuUs / 1000}ms error='$error' " +
+                                    "size=${java.io.File(roundTripPath).length()}")
+                                roundTripPhase = 1
+                            }
+                        }
+                        roundTripPhase == 1 && emuUs >= roundTripEmuAtSave + 1_500_000L -> {
+                            val error = NativePpsspp.nativeLoadStateDebug(roundTripPath)
+                            Log.i(TAG, "ROUNDTRIP load at emu=${emuUs / 1000}ms error='$error'")
+                            roundTripPhase = 2
+                        }
+                        roundTripPhase == 2 && emuUs >= roundTripEmuAtSave + 3_000_000L -> {
+                            Log.i(TAG, "ROUNDTRIP finished, emu now ${emuUs / 1000}ms")
+                            roundTripPhase = 3
+                        }
+                    }
+                }
                 if (rewindTest && !rewindInitiated && emuUs >= 6_000_000L) {
                     rewindInitiated = true
                     emuAtRewindStart = emuUs

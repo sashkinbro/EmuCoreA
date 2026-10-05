@@ -113,7 +113,7 @@ object NativeApp {
         CoreRuntime.setAudioGain(volume, muted)
     // Audio buffering belongs to the native core (PPSSPP StereoResampler +
     // OpenSL), so the AAudio tuning surface is retained as a no-op.
-    @JvmStatic fun setAudioBufferMs(milliseconds: Int) = Unit
+    @JvmStatic fun setAudioBufferMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
     @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = Unit
     @JvmStatic fun setAudioLowLatency(enabled: Boolean) = Unit
     @JvmStatic fun setRewindEnabled(enabled: Boolean) =
@@ -558,10 +558,10 @@ object NativeApp {
         22 -> 5   // Right
         20 -> 6   // Down
         21 -> 7   // Left
-        104 -> 8  // L2
-        105 -> 9  // R2
-        102 -> 10 // L1
-        103 -> 11 // R1
+        102 -> 8  // L1 (CTRL_LTRIGGER, bit 8)
+        103 -> 9  // R1 (CTRL_RTRIGGER, bit 9)
+        104 -> 10 // L2 (CTRL_L2, bit 10)
+        105 -> 11 // R2 (CTRL_R2, bit 11)
         100 -> 12 // Triangle
         97 -> 13  // Circle
         96 -> 14  // Cross

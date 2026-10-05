@@ -40,6 +40,7 @@ internal object CoreRuntime {
     private const val SAVE_STATE_MAGIC = 0x54534345
     private const val SAVE_STATE_VERSION = 1
     private const val SAVE_STATE_HEADER_BYTES = 8
+    private const val DEFAULT_SAVE_STATE_BUFFER_BYTES = 256 * 1024
     // Holding rewind steps back through history at a steady pace.
     private const val REWIND_STEP_INTERVAL_NANOS = 500_000_000L
 
@@ -58,6 +59,7 @@ internal object CoreRuntime {
     @Volatile private var pendingGamePath: String? = null
     // Snapshot restored once the re-booted core reports ready (renderer switch).
     @Volatile private var pendingStateRestorePath: String? = null
+    @Volatile private var pendingStateRestoreAttempts = 0
     // SAF descriptor for a content:// game. Kept open for the whole session;
     // the native core duplicates the fd and owns only its own duplicate.
     private var pendingGameDescriptor: ParcelFileDescriptor? = null
@@ -292,6 +294,7 @@ internal object CoreRuntime {
         if (savedState && snapshot != null) {
             // The core needs its first frame before a state can be loaded, so
             // the frame loop picks this up and retries until it takes.
+            pendingStateRestoreAttempts = 0
             pendingStateRestorePath = snapshot.absolutePath
         } else if (snapshot != null) {
             snapshot.delete()
@@ -416,6 +419,17 @@ internal object CoreRuntime {
         NativePpsspp.nativeSetConfig("internal_resolution", scale.toString())
     }
 
+    /**
+     * Pushes the app's "Frame limit / target FPS" settings into the core.
+     * 0 means the normal region rate; a positive target limits the frame rate.
+     */
+    private fun pushFpsLimit() {
+        val enabled = settings["EmuCoreA/GS:FrameLimitEnable"]?.toBooleanStrictOrNull() ?: false
+        val target = settings["EmuCoreA/GS:TargetFps"]?.toIntOrNull() ?: 0
+        val limit = if (enabled && target > 0) target.coerceIn(20, 120) else 0
+        NativePpsspp.nativeSetConfig("fps_limit", limit.toString())
+    }
+
     private fun currentShaderEffect(): Int {
         val enabled = settings["EmuCoreA/GS:ShaderChainEnabled"]?.toBooleanStrictOrNull() == true
         if (!enabled) return RetroArchShaderEffects.NONE
@@ -506,12 +520,28 @@ internal object CoreRuntime {
 
     fun setTimeControl(mode: Int) {
         val normalized = mode.coerceIn(0, 2)
-        val wasRewinding = timeControlMode == 2
+        val previous = timeControlMode
+        if (normalized == previous) return
         timeControlMode = normalized
-        if (wasRewinding && normalized != 2) {
+        when {
+            normalized == 1 -> NativePpsspp.nativeSetConfig("fast_forward", "1")
+            previous == 1 -> NativePpsspp.nativeSetConfig("fast_forward", "0")
+        }
+        if (normalized == 2) {
+            // Hold-to-rewind must work even when the option was never toggled:
+            // start capturing snapshots right away (the first snapshot takes
+            // two seconds, then the control rewinds).
+            runCatching { NativePpsspp.nativeSetRewindEnabled(true) }
+        }
+        if (previous == 2 && normalized != 2) {
             // Rewinding pauses the core in stepping mode; release resumes it.
             runCatching { NativePpsspp.nativeRewindRelease() }
         }
+    }
+
+    /** OpenSL buffer size target in milliseconds. */
+    fun setAudioBufferMs(milliseconds: Int) {
+        NativePpsspp.nativeSetConfig("audio_buffer_ms", milliseconds.toString())
     }
 
     /** Effective value of a core option (user override or core default). */
@@ -588,7 +618,10 @@ internal object CoreRuntime {
             renderedFirstFrame = false
             sessionStartedAtNanos = 0L
             performanceMetricsSnapshot = null
-            pendingStateRestorePath?.let { File(it).delete() }
+            pendingStateRestorePath?.let {
+                File(it).delete()
+                File("$it.core").delete()
+            }
             pendingStateRestorePath = null
             _failure.value = null
         } finally {
@@ -606,6 +639,10 @@ internal object CoreRuntime {
     }
 
     fun saveState(path: String): Boolean {
+        if (!waitForCoreBoot(20_000L)) {
+            Log.e(TAG, "State save aborted: the core did not finish booting")
+            return false
+        }
         val target = File(path)
         target.parentFile?.mkdirs()
         val temporary = File(target.parentFile, ".${target.name}.saving")
@@ -621,25 +658,37 @@ internal object CoreRuntime {
         }
     }
 
+    /** True once the native core finished its asynchronous boot. */
+    fun isCoreBooted(): Boolean =
+        runCatching { NativePpsspp.nativeIsBooted() }.getOrDefault(false)
+
+    /**
+     * The native boot is asynchronous and takes a couple of seconds. A state
+     * can only be loaded after it completes, so wait for it (the frame loop
+     * keeps running during the wait) instead of failing instantly.
+     */
+    private fun waitForCoreBoot(timeoutMs: Long): Boolean {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000L
+        while (System.nanoTime() < deadline) {
+            if (isCoreBooted()) return true
+            if (!running && !booted) return false
+            Thread.sleep(50)
+        }
+        return isCoreBooted()
+    }
+
     fun loadState(path: String): Boolean = lifecycleLock.withLock lifecycle@{
         val file = File(path)
         if (!file.isFile) return@lifecycle false
+        if (!waitForCoreBoot(20_000L)) {
+            Log.e(TAG, "State load aborted: the core did not finish booting")
+            return@lifecycle false
+        }
         val wasPaused = paused
         paused = true
         try {
             val raw = File(file.parentFile, ".${file.name}.loading")
-            val prepared = runCatching {
-                val bytes = file.readBytes()
-                val payload = if (
-                    bytes.size > SAVE_STATE_HEADER_BYTES &&
-                    readSaveStateMagic(bytes) == SAVE_STATE_MAGIC
-                ) {
-                    bytes.copyOfRange(SAVE_STATE_HEADER_BYTES, bytes.size)
-                } else {
-                    bytes
-                }
-                raw.writeBytes(payload)
-            }.isSuccess
+            val prepared = extractCorePayload(file, raw)
             val loaded = prepared && runOnFrameThread {
                 sessionLock.withLock {
                     booted && NativePpsspp.nativeLoadState(raw.absolutePath)
@@ -653,6 +702,33 @@ internal object CoreRuntime {
         } finally {
             paused = wasPaused
         }
+    }
+
+    /**
+     * Copies the core payload out of an EmuCoreA state file into [destination]:
+     * the app container is 8 bytes (magic + version) followed by the raw core
+     * stream; anything without that header is copied verbatim. Streaming keeps
+     * the ~35 MB states off the Java heap.
+     */
+    internal fun extractCorePayload(source: File, destination: File): Boolean = runCatching {
+        source.inputStream().use { input ->
+            val header = ByteArray(SAVE_STATE_HEADER_BYTES)
+            var headerRead = 0
+            while (headerRead < header.size) {
+                val n = input.read(header, headerRead, header.size - headerRead)
+                if (n <= 0) break
+                headerRead += n
+            }
+            val isContainer = headerRead == header.size && readSaveStateMagic(header) == SAVE_STATE_MAGIC
+            destination.outputStream().use { output ->
+                if (!isContainer && headerRead > 0) output.write(header, 0, headerRead)
+                input.copyTo(output, DEFAULT_SAVE_STATE_BUFFER_BYTES)
+            }
+        }
+        true
+    }.getOrElse {
+        Log.e(TAG, "Unable to extract the core payload from ${source.name}", it)
+        false
     }
 
     /** Writes the EmuCoreA state container (magic + version + core payload). */
@@ -885,6 +961,11 @@ internal object CoreRuntime {
             NativePpsspp.nativeSetConfig("vsync", if (enabled) "1" else "0")
             return true
         }
+        if (section == "EmuCoreA/GS" && (key == "FrameLimitEnable" || key == "TargetFps")) {
+            settings["$section:$key"] = value
+            pushFpsLimit()
+            return true
+        }
         settings["$section:$key"] = value
         forwardCoreSetting(section, key, value)
         return true
@@ -1018,13 +1099,30 @@ internal object CoreRuntime {
                             running = false
                         }
                         pendingStateRestorePath?.let { restorePath ->
-                            // nativeLoadState fails until the core has finished
-                            // booting; keep the snapshot queued until it takes.
-                            if (NativePpsspp.nativeLoadState(restorePath)) {
+                            // The snapshot is an EmuCoreA container, so extract
+                            // the raw core payload first (once).
+                            val rawRestorePath = "$restorePath.core"
+                            val rawFile = File(rawRestorePath)
+                            if (!rawFile.isFile) {
+                                if (!extractCorePayload(File(restorePath), rawFile)) {
+                                    pendingStateRestorePath = null
+                                    File(restorePath).delete()
+                                    Log.e(TAG, "Renderer-switch snapshot could not be prepared")
+                                }
+                            } else if (!isCoreBooted()) {
+                                // The core is still booting; frames are not paced
+                                // yet, so waiting here does not burn attempts.
+                            } else if (NativePpsspp.nativeLoadState(rawRestorePath)) {
                                 pendingStateRestorePath = null
                                 File(restorePath).delete()
+                                rawFile.delete()
                                 renderedFirstFrame = false
                                 Log.i(TAG, "Renderer-switch snapshot restored")
+                            } else if (++pendingStateRestoreAttempts > 300) {
+                                pendingStateRestorePath = null
+                                File(restorePath).delete()
+                                rawFile.delete()
+                                Log.e(TAG, "Renderer-switch snapshot restore gave up")
                             }
                         }
                         NativePpsspp.nativeGetFrameSize()
