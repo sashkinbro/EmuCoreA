@@ -1165,13 +1165,20 @@ endif()
 if(ANDROID AND EMUCOREA_NATIVE)
 	# EmuCoreA's own native frontend: drives Core directly, with the same
 	# graphics/audio backends PPSSPP uses, but without ppsspp_ui or libretro.
+	# The achievements bridge is linked into the same library so it can read
+	# guest RAM straight from the core and reuse PPSSPP's ISO/PBP readers for
+	# RetroAchievements hashing.
 	add_library(emucorea_core SHARED
 		${EMUCOREA_NATIVE_DIR}/native_core.cpp
+		${EMUCOREA_NATIVE_DIR}/achievements_bridge.cpp
 		android/jni/AndroidAudio.cpp
 		android/jni/OpenSLContext.cpp
 	)
 	target_link_libraries(emucorea_core Core log EGL OpenSLES android)
-	target_include_directories(emucorea_core PRIVATE ${EMUCOREA_NATIVE_DIR})
+	target_include_directories(emucorea_core PRIVATE
+		${EMUCOREA_NATIVE_DIR}
+		${CMAKE_SOURCE_DIR}/ext/rcheevos/include
+	)
 	if(ARM64)
 		target_link_options(emucorea_core PRIVATE "-Wl,-z,max-page-size=16384")
 	endif()

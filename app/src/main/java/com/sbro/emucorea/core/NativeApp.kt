@@ -236,22 +236,43 @@ object NativeApp {
         CoreRuntime.setTextureReplacementsPathOverride(path)
     @JvmStatic fun hasDiscMedia(): Boolean = CoreRuntime.hasDiscMedia()
 
-    // RetroAchievements were backed by the retired libretro memory bridge. The
-    // native core does not expose rcheevos memory access yet, so the whole
-    // surface stays safe and empty instead of touching the core.
-    @JvmStatic fun achievementsSetEnabled(enabled: Boolean) = Unit
-    @JvmStatic fun achievementsSetHardcore(enabled: Boolean) = Unit
-    @JvmStatic fun achievementsSetUnofficial(enabled: Boolean) = Unit
-    @JvmStatic fun achievementsSetEncore(enabled: Boolean) = Unit
-    @JvmStatic fun achievementsLoginWithPassword(user: String, password: String): String? = null
-    @JvmStatic fun achievementsLoginWithToken(user: String, token: String): String? = null
-    @JvmStatic fun achievementsLogout() = Unit
-    @JvmStatic fun achievementsLoadGame(path: String) = Unit
-    @JvmStatic fun achievementsUnloadGame() = Unit
-    @JvmStatic fun achievementsPump() = Unit
-    @JvmStatic fun achievementsStateJson(): String = "{}"
-    @JvmStatic fun achievementsAchievementsJson(): String = "[]"
-    @JvmStatic fun achievementsPollEventsJson(): String = "[]"
+    // RetroAchievements run on rcheevos inside libemucorea_core through the
+    // achievements bridge (nativeAchievements*), reading guest RAM directly
+    // from the core's kernel memory base.
+    @JvmStatic fun achievementsSetEnabled(enabled: Boolean) {
+        if (hasNativeCore) NativePpsspp.nativeAchievementsSetEnabled(enabled)
+    }
+    @JvmStatic fun achievementsSetHardcore(enabled: Boolean) {
+        if (hasNativeCore) NativePpsspp.nativeAchievementsSetHardcore(enabled)
+    }
+    @JvmStatic fun achievementsSetUnofficial(enabled: Boolean) {
+        if (hasNativeCore) NativePpsspp.nativeAchievementsSetUnofficial(enabled)
+    }
+    @JvmStatic fun achievementsSetEncore(enabled: Boolean) {
+        if (hasNativeCore) NativePpsspp.nativeAchievementsSetEncore(enabled)
+    }
+    @JvmStatic fun achievementsLoginWithPassword(user: String, password: String): String? =
+        if (hasNativeCore) NativePpsspp.nativeAchievementsLoginWithPassword(user, password) else null
+    @JvmStatic fun achievementsLoginWithToken(user: String, token: String): String? =
+        if (hasNativeCore) NativePpsspp.nativeAchievementsLoginWithToken(user, token) else null
+    @JvmStatic fun achievementsLogout() {
+        if (hasNativeCore) NativePpsspp.nativeAchievementsLogout()
+    }
+    @JvmStatic fun achievementsLoadGame(path: String) {
+        if (hasNativeCore) NativePpsspp.nativeAchievementsLoadGame(path)
+    }
+    @JvmStatic fun achievementsUnloadGame() {
+        if (hasNativeCore) NativePpsspp.nativeAchievementsUnloadGame()
+    }
+    @JvmStatic fun achievementsPump() {
+        if (hasNativeCore) NativePpsspp.nativeAchievementsPump()
+    }
+    @JvmStatic fun achievementsStateJson(): String =
+        if (hasNativeCore) NativePpsspp.nativeAchievementsStateJson() else "{}"
+    @JvmStatic fun achievementsAchievementsJson(): String =
+        if (hasNativeCore) NativePpsspp.nativeAchievementsAchievementsJson() else "[]"
+    @JvmStatic fun achievementsPollEventsJson(): String =
+        if (hasNativeCore) NativePpsspp.nativeAchievementsPollEventsJson() else "[]"
     @JvmStatic fun onNativeSurfaceCreated() = Unit
     @JvmStatic fun onNativeSurfaceChanged(surface: Surface, width: Int, height: Int) = CoreRuntime.attachSurface(surface, width, height)
     @JvmStatic fun hasAttachedSurface(surface: Surface, width: Int, height: Int): Boolean =

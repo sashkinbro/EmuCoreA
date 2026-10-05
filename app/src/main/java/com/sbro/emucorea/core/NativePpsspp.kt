@@ -60,5 +60,35 @@ object NativePpsspp {
 
     external fun nativeGetFrameSize(): IntArray?
 
+    external fun nativeGetMemoryPointer(): Long
+
+    external fun nativeGetMemorySize(): Long
+
+    external fun nativeAchievementsSetEnabled(enabled: Boolean)
+
+    external fun nativeAchievementsSetHardcore(enabled: Boolean)
+
+    external fun nativeAchievementsSetUnofficial(enabled: Boolean)
+
+    external fun nativeAchievementsSetEncore(enabled: Boolean)
+
+    external fun nativeAchievementsLoginWithPassword(user: String, password: String): String?
+
+    external fun nativeAchievementsLoginWithToken(user: String, token: String): String?
+
+    external fun nativeAchievementsLogout()
+
+    external fun nativeAchievementsLoadGame(path: String)
+
+    external fun nativeAchievementsUnloadGame()
+
+    external fun nativeAchievementsPump()
+
+    external fun nativeAchievementsStateJson(): String
+
+    external fun nativeAchievementsAchievementsJson(): String
+
+    external fun nativeAchievementsPollEventsJson(): String
+
     external fun nativeShutdown()
 }

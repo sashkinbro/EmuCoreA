@@ -18,12 +18,15 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdio>
+#include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
 
 #include "Common/CPUDetect.h"
+#include "Common/Crypto/md5.h"
 #include "Common/File/FileUtil.h"
 #include "Common/File/Path.h"
 #include "Common/File/VFS/VFS.h"
@@ -40,9 +43,14 @@
 #include "Core/Config.h"
 #include "Core/Core.h"
 #include "Core/CoreParameter.h"
+#include "Core/FileSystems/BlockDevices.h"
+#include "Core/FileSystems/ISOFileSystem.h"
 #include "Core/HLE/sceCtrl.h"
 #include "Core/HLE/sceDisplay.h"
+#include "Core/HLE/sceKernelMemory.h"
 #include "Core/HW/StereoResampler.h"
+#include "Core/Loaders.h"
+#include "Core/MemMap.h"
 #include "Core/SaveState.h"
 #include "Core/System.h"
 #include "GPU/GPUCommon.h"
@@ -53,6 +61,11 @@
 #define NLOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
 #define NLOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define NLOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+
+// Implemented by achievements_bridge.cpp (compiled into the same library).
+extern "C" void EmuCoreAAchievementsSetJavaVm(JavaVM *vm);
+extern "C" void EmuCoreAAchievementsInitializeJava(JNIEnv *env);
+extern "C" void EmuCoreAAchievementsOnFrame();
 
 namespace {
 
@@ -107,6 +120,102 @@ void StopAudio() {
 }
 
 }  // namespace
+
+// ---------------------------------------------------------------------------
+// RetroAchievements support. The achievements bridge (same shared library)
+// reads guest RAM through these helpers and asks the core to hash a game the
+// same way PPSSPP's own achievements integration does.
+// ---------------------------------------------------------------------------
+extern "C" void *EmuCoreANativeMemoryPointer() {
+    return reinterpret_cast<void *>(Memory::GetPointerWriteUnchecked(PSP_GetKernelMemoryBase()));
+}
+
+extern "C" size_t EmuCoreANativeMemorySize() {
+    return static_cast<size_t>(Memory::g_MemorySize);
+}
+
+namespace {
+
+std::string FormatMd5Hash(const u8 digest[16]) {
+    char hash[33];
+    snprintf(hash, sizeof(hash), "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+             digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
+             digest[8], digest[9], digest[10], digest[11], digest[12], digest[13], digest[14], digest[15]);
+    return std::string(hash);
+}
+
+bool HashIsoMember(ISOFileSystem *fs, const std::string &member, md5_context *md5) {
+    const int handle = fs->OpenFile(member, FILEACCESS_READ);
+    if (handle < 0) return false;
+    const uint32_t size = static_cast<uint32_t>(fs->SeekFile(handle, 0, FILEMOVE_END));
+    fs->SeekFile(handle, 0, FILEMOVE_BEGIN);
+    if (size == 0) {
+        fs->CloseFile(handle);
+        return false;
+    }
+    auto buffer = std::make_unique<u8[]>(size);
+    const bool ok = fs->ReadFile(handle, buffer.get(), size) == size;
+    fs->CloseFile(handle);
+    if (!ok) return false;
+    ppsspp_md5_update(md5, buffer.get(), static_cast<int>(size));
+    return true;
+}
+
+}  // namespace
+
+extern "C" bool EmuCoreANativeAchievementHash(const char *path, char *hash) {
+    if (path == nullptr || *path == '\0' || hash == nullptr) return false;
+
+    FileLoader *loader = ConstructFileLoader(Path(path));
+    if (loader == nullptr) return false;
+    std::string error;
+    IdentifiedFileType fileType;
+    loader = ResolveFileLoaderTarget(loader, &fileType, &error);
+
+    std::string digest;
+    switch (fileType) {
+    case IdentifiedFileType::PSP_ISO:
+    case IdentifiedFileType::PSP_ISO_NP: {
+        std::shared_ptr<BlockDevice> blockDevice(ConstructBlockDevice(loader, &error));
+        if (blockDevice) {
+            md5_context md5;
+            ppsspp_md5_starts(&md5);
+            SequentialHandleAllocator alloc;
+            auto fs = std::make_unique<ISOFileSystem>(&alloc, blockDevice);
+            if (HashIsoMember(fs.get(), "PSP_GAME/PARAM.SFO", &md5) &&
+                HashIsoMember(fs.get(), "PSP_GAME/SYSDIR/EBOOT.BIN", &md5)) {
+                u8 out[16];
+                ppsspp_md5_finish(&md5, out);
+                digest = FormatMd5Hash(out);
+            }
+        }
+        break;
+    }
+    case IdentifiedFileType::PSP_PBP:
+    case IdentifiedFileType::PSP_PBP_DIRECTORY:
+    case IdentifiedFileType::PSP_ELF: {
+        md5_context md5;
+        ppsspp_md5_starts(&md5);
+        const size_t fileSize = static_cast<size_t>(std::min((s64)(1024 * 1024 * 64), loader->FileSize()));
+        std::vector<u8> buffer(fileSize);
+        loader->ReadAt(0, fileSize, buffer.data(), FileLoader::Flags::NONE);
+        ppsspp_md5_update(&md5, buffer.data(), static_cast<int>(buffer.size()));
+        u8 out[16];
+        ppsspp_md5_finish(&md5, out);
+        digest = FormatMd5Hash(out);
+        break;
+    }
+    default:
+        NLOGW("Unsupported file type for RetroAchievements hashing: %s", path);
+        break;
+    }
+
+    delete loader;
+    if (digest.empty()) return false;
+    std::memcpy(hash, digest.c_str(), 32);
+    hash[32] = '\0';
+    return true;
+}
 
 // JNI helpers the core's Android text renderer expects from the platform layer.
 JNIEnv *getEnv() {
@@ -347,6 +456,7 @@ void RunFrame() {
     }
     g_graphicsContext->Poll();
     SaveState::Process();
+    EmuCoreAAchievementsOnFrame();
 }
 
 bool SaveStateToFile(const std::string &path) {
@@ -414,6 +524,11 @@ extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
     g_vm = vm;
+    EmuCoreAAchievementsSetJavaVm(vm);
+    JNIEnv *env = nullptr;
+    if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_OK) {
+        EmuCoreAAchievementsInitializeJava(env);
+    }
     NLOGI("emucorea native core loaded");
     return JNI_VERSION_1_6;
 }
@@ -567,6 +682,16 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeGetFrameSize(JNIEnv *env, jclass)
     jintArray result = env->NewIntArray(2);
     if (result != nullptr) env->SetIntArrayRegion(result, 0, 2, values);
     return result;
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeGetMemoryPointer(JNIEnv *, jclass) {
+    return reinterpret_cast<jlong>(Memory::GetPointerWriteUnchecked(PSP_GetKernelMemoryBase()));
+}
+
+JNIEXPORT jlong JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeGetMemorySize(JNIEnv *, jclass) {
+    return static_cast<jlong>(Memory::g_MemorySize);
 }
 
 }  // extern "C"
