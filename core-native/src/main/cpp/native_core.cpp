@@ -39,6 +39,7 @@
 #include "Common/System/System.h"
 #include "Common/Thread/ThreadManager.h"
 #include "Common/Thread/ThreadUtil.h"
+#include "Common/TimeUtil.h"
 
 #include "Core/Config.h"
 #include "Core/Core.h"
@@ -57,6 +58,7 @@
 #include "GPU/GPUCommon.h"
 
 #include "android/jni/AndroidAudio.h"
+#include "fd_file_loader.h"
 
 #define LOG_TAG "EmuCoreA-Native"
 #define NLOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -363,12 +365,22 @@ bool CreateGraphicsContext() {
     return true;
 }
 
-bool BootGame(const std::string &gamePath) {
-    if (g_graphicsContext == nullptr) return false;
+// Takes ownership of preOpenedLoader: on success the core deletes it during
+// CPU_Shutdown, on failure it is deleted here so a failed boot cannot leak the
+// (possibly pre-opened) loader.
+bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
+    if (g_graphicsContext == nullptr) {
+        delete preOpenedLoader;
+        return false;
+    }
 
     CoreParameter coreParam{};
     coreParam.enableSound = true;
     coreParam.fileToStart = Path(gamePath);
+    coreParam.fileLoader = preOpenedLoader;
+    if (preOpenedLoader != nullptr && coreParam.fileToStart.empty()) {
+        coreParam.fileToStart = preOpenedLoader->GetPath();
+    }
     coreParam.startBreak = false;
     coreParam.headLess = false;
     coreParam.graphicsContext = g_graphicsContext;
@@ -381,11 +393,14 @@ bool BootGame(const std::string &gamePath) {
     // once the surface (and with it the draw context) is ready.
     if (!PSP_InitStart(coreParam)) {
         NLOGE("PSP_InitStart failed: %s", coreParam.errorString.c_str());
+        // PSP_InitStart only fails before it adopts the parameter, so the
+        // loader is still ours to release.
+        delete preOpenedLoader;
         return false;
     }
     g_bootError.clear();
     g_pendingBoot = true;
-    NLOGI("Game boot started: %s", gamePath.c_str());
+    NLOGI("Game boot started: %s", coreParam.fileToStart.c_str());
     return true;
 }
 
@@ -560,6 +575,23 @@ void ShutdownCore() {
     if (g_booted) {
         PSP_Shutdown(true);
         g_booted = false;
+    } else if (g_pendingBoot) {
+        // A boot request was started but never reached PSP_InitUpdate. Let the
+        // loader thread finish so the core takes over (and later frees) the
+        // pre-opened FileLoader, then tear the half-booted core down. Without
+        // this the SAF descriptor's duplicate would stay open for the life of
+        // the process.
+        BootState state = PollBootState();
+        while (state == BootState::Booting) {
+            sleep_ms(5, "emucorea-shutdown-wait");
+            state = PollBootState();
+        }
+        std::string bootError;
+        PSP_InitUpdate(&bootError);
+        g_pendingBoot = false;
+        if (state == BootState::Complete) {
+            PSP_Shutdown(true);
+        }
     }
     if (g_graphicsContext != nullptr) {
         if (g_renderReady) {
@@ -643,7 +675,34 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeBoot(JNIEnv *env, jclass, jstring
         return JNI_FALSE;
     }
     StartAudio();
-    return BootGame(game) ? JNI_TRUE : JNI_FALSE;
+    return BootGame(game, nullptr) ? JNI_TRUE : JNI_FALSE;
+}
+
+// Boots a game that the frontend opened through Android's Storage Access
+// Framework. The caller keeps ownership of its fd: FdFileLoader duplicates it,
+// and the duplicate is closed by the core when the session shuts down. The
+// pathHint only names the container (its extension drives Identify_File) and
+// must not be used to reopen the file.
+JNIEXPORT jboolean JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeBootFd(JNIEnv *env, jclass, jint fd,
+                                                      jstring pathHint) {
+    if (fd < 0) {
+        NLOGW("nativeBootFd called with an invalid descriptor");
+        return JNI_FALSE;
+    }
+    if (!g_renderReady) {
+        NLOGE("nativeBootFd called before the surface was attached");
+        return JNI_FALSE;
+    }
+    const std::string hint = ToString(env, pathHint);
+    auto *loader = new FdFileLoader(fd, hint);
+    if (!loader->Exists()) {
+        NLOGE("nativeBootFd: descriptor is not a readable regular file");
+        delete loader;
+        return JNI_FALSE;
+    }
+    StartAudio();
+    return BootGame(hint, loader) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT jboolean JNICALL

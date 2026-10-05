@@ -4,7 +4,9 @@ package com.sbro.emucorea.core
 
 import android.content.Context
 import android.graphics.Rect
+import android.net.Uri
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.Process
 import android.util.Log
 import android.view.Surface
@@ -54,6 +56,9 @@ internal object CoreRuntime {
     @Volatile private var sessionActive = false
     @Volatile private var booted = false
     @Volatile private var pendingGamePath: String? = null
+    // SAF descriptor for a content:// game. Kept open for the whole session;
+    // the native core duplicates the fd and owns only its own duplicate.
+    private var pendingGameDescriptor: ParcelFileDescriptor? = null
     @Volatile private var worker: Thread? = null
 
     private var systemDirectory = ""
@@ -525,6 +530,9 @@ internal object CoreRuntime {
                 sessionActive = false
                 booted = false
             }
+            // Safe to close now: the native core only ever reads through its own
+            // duplicate, and nativeShutdown has already released that one.
+            closeGameDescriptor()
             pendingGamePath = null
             paused = false
             renderedFirstFrame = false
@@ -723,13 +731,55 @@ internal object CoreRuntime {
     private fun bootPendingIfReadyLocked() {
         if (booted || !nativeSurfaceReady || !nativeInitialized) return
         val path = pendingGamePath ?: return
-        if (NativePpsspp.nativeBoot(path)) {
+        if (path.startsWith("content://")) {
+            val descriptor = openGameDescriptor(path)
+            val started = descriptor != null &&
+                NativePpsspp.nativeBootFd(descriptor.fd, safPathHint(path))
+            if (!started) closeGameDescriptor()
+            finishBoot(path, started)
+        } else {
+            finishBoot(path, NativePpsspp.nativeBoot(path))
+        }
+    }
+
+    private fun finishBoot(path: String, started: Boolean) {
+        if (started) {
             booted = true
             Log.i(TAG, "Native game boot started")
         } else {
             Log.e(TAG, "nativeBoot failed for $path")
             reportFailure("The native core could not boot $path")
         }
+    }
+
+    /**
+     * Opens the document descriptor for a content:// game. The descriptor is
+     * kept open until the session ends; the native loader duplicates the fd, so
+     * closing it here only releases the frontend's own reference.
+     */
+    private fun openGameDescriptor(path: String): ParcelFileDescriptor? {
+        closeGameDescriptor()
+        val app = context ?: return null
+        return runCatching {
+            app.contentResolver.openFileDescriptor(Uri.parse(path), "r")
+        }.onFailure {
+            Log.e(TAG, "Unable to open SAF descriptor for $path", it)
+        }.getOrNull()?.also { pendingGameDescriptor = it }
+    }
+
+    private fun closeGameDescriptor() {
+        val descriptor = pendingGameDescriptor ?: return
+        pendingGameDescriptor = null
+        runCatching { descriptor.close() }
+    }
+
+    /** File name hint for the native loader, so Identify_File sees the extension. */
+    private fun safPathHint(path: String): String {
+        val app = context ?: return DocumentPathResolver.getFallbackDisplayName(path)
+        return runCatching { DocumentPathResolver.getDisplayName(app, path) }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
+            ?: DocumentPathResolver.getFallbackDisplayName(path)
     }
 
     fun hasAttachedSurface(value: Surface, width: Int, height: Int): Boolean =
@@ -997,12 +1047,9 @@ internal object CoreRuntime {
 
     private fun prepareLaunchPath(gamePath: String): String? {
         context?.let(PspStorageBridge::removeLegacyImageCache)
-        return if (gamePath.startsWith("content://")) {
-            val app = context ?: return null
-            PspStorageBridge.prepare(app, gamePath)
-        } else {
-            gamePath
-        }
+        // content:// games are opened as a raw descriptor at boot time, without
+        // copying or mounting them anywhere, so the URI stays the launch path.
+        return gamePath
     }
 
     fun hasDiscMedia(): Boolean = booted || pendingGamePath != null

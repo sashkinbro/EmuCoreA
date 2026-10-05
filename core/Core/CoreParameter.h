@@ -64,6 +64,12 @@ struct CoreParameter {
 
 	Path fileToStart;
 
+	// Optional, pre-constructed loader for fileToStart (for example an Android
+	// SAF descriptor-backed loader). When non-null the boot thread resolves and
+	// adopts this loader instead of opening fileToStart itself. Ownership passes
+	// to the core once PSP_InitStart() succeeds; CPU_Shutdown() deletes it.
+	FileLoader *fileLoader = nullptr;
+
 	Path mountIso;  // If non-empty, and fileToStart is an ELF or PBP, will mount this ISO in the background to umd1:.
 	Path mountRoot;  // If non-empty, and fileToStart is an ELF or PBP, mount this as host0:.
 

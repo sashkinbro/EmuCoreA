@@ -44,6 +44,17 @@ object NativePpsspp {
 
     external fun nativeBoot(gamePath: String): Boolean
 
+    /**
+     * Boots a game opened through Android's Storage Access Framework.
+     *
+     * The core duplicates [fd] and reads through pread64; the caller keeps
+     * ownership of [fd] and must keep it open for the whole session. The core
+     * closes its duplicate when the session shuts down. [pathHint] names the
+     * container (for example the SAF display name) so the core can detect the
+     * image format from the extension; it is never used to reopen the file.
+     */
+    external fun nativeBootFd(fd: Int, pathHint: String): Boolean
+
     external fun nativeSetSurface(surface: Surface?, width: Int, height: Int): Boolean
 
     external fun nativeRunFrame(): Long

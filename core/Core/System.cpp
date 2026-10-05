@@ -656,6 +656,11 @@ void CPU_Shutdown(bool success) {
 	delete g_loadedFile;
 	g_loadedFile = nullptr;
 
+	// g_loadedFile may be a loader derived from CoreParameter::fileLoader (or a
+	// replacement, in the zip/PBP-directory cases). Clear the parameter so no
+	// dangling pointer survives into the next boot.
+	g_CoreParameter.fileLoader = nullptr;
+
 	delete g_CoreParameter.mountIsoLoader;
 	g_CoreParameter.mountIsoLoader = nullptr;
 	delete g_symbolMap;
@@ -752,7 +757,15 @@ bool PSP_InitStart(const CoreParameter &coreParam) {
 		Path filename = g_CoreParameter.fileToStart;
 
 		IdentifiedFileType fileType;
-		FileLoader *loadedFile = ResolveFileLoaderTarget(ConstructFileLoader(filename), &fileType, errorString);
+		FileLoader *loadedFile = nullptr;
+		if (g_CoreParameter.fileLoader != nullptr) {
+			// The frontend already opened the game, for example through an Android SAF
+			// descriptor, and handed the loader over in CoreParameter. CPU_Shutdown()
+			// takes care of deleting it.
+			loadedFile = ResolveFileLoaderTarget(g_CoreParameter.fileLoader, &fileType, errorString);
+		} else {
+			loadedFile = ResolveFileLoaderTarget(ConstructFileLoader(filename), &fileType, errorString);
+		}
 
 		if (System_GetPropertyBool(SYSPROP_ENOUGH_RAM_FOR_FULL_ISO)) {
 			if (g_Config.bCacheFullIsoInRam) {
