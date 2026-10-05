@@ -24,6 +24,10 @@
 -keepclasseswithmembers,includedescriptorclasses class com.sbro.emucorea.discord.DiscordNative {
     native <methods>;
 }
+# The core resolves these by name from the native side: TextRenderer draws the
+# PPGe dialogs and PspStorageBridge opens SAF descriptors.
+-keep class org.ppsspp.ppsspp.TextRenderer { *; }
+-keep class com.sbro.emucorea.core.PspStorageBridge { *; }
 
 # --- RetroAchievements ------------------------------------------------------
 # achievements_bridge.cpp resolves the HTTP bridge object, its static request
