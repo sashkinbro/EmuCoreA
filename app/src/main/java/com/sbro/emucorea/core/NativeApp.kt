@@ -19,8 +19,6 @@ import kotlinx.coroutines.flow.asStateFlow
 object NativeApp {
 
     private const val TAG = "NativeApp"
-    @JvmStatic
-    val hasNativeTools: Boolean
 
     @JvmStatic
     val loadedCoreLibraryName: String
@@ -38,7 +36,6 @@ object NativeApp {
             .also { loaded ->
                 if (!loaded) Log.e(TAG, "Unable to load $loadedCoreLibraryName")
             }
-        hasNativeTools = false
     }
 
     @Volatile private var currentGamePath: String = ""
@@ -113,7 +110,7 @@ object NativeApp {
         CoreRuntime.setAudioGain(volume, muted)
     // Audio buffering belongs to the native core (PPSSPP StereoResampler plus
     // the AAudio/OpenSL output), so both entry points land on the same knob.
-    @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
+    @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = CoreRuntime.setAudioOutputLatencyMs(milliseconds)
     @JvmStatic fun setAudioLowLatency(enabled: Boolean) = CoreRuntime.setAudioLowLatency(enabled)
     @JvmStatic fun setAudioBackend(backend: Int) = CoreRuntime.setAudioBackend(backend)
     @JvmStatic fun setRewindEnabled(enabled: Boolean) =
@@ -254,7 +251,6 @@ object NativeApp {
     }
     @JvmStatic fun restartRenderer(renderer: Int): Boolean = CoreRuntime.restartWithRenderer(renderer)
     @JvmStatic fun changeDisc(path: String): Boolean = CoreRuntime.changeDisc(path)
-    @JvmStatic fun runBootSmokeProbe(path: String, steps: Int): Int = 0
     @JvmStatic fun pause() = CoreRuntime.pause()
     @JvmStatic fun resume() = CoreRuntime.resume()
     @JvmStatic fun shutdown() = CoreRuntime.shutdown()
@@ -294,8 +290,6 @@ object NativeApp {
     }
     @JvmStatic fun getCurrentSaveStatePath(slot: Int): String? =
         getSaveStatePathForFile(saveStatePathSource(), slot)
-    @JvmStatic fun getSaveStateScreenshot(path: String): ByteArray? = null
-    @JvmStatic fun convertIsoToChd(inputIsoPath: String): Int = -1
     @JvmStatic fun startJitProfiler() { profilerActive = true }
     @JvmStatic fun stopJitProfiler() { profilerActive = false }
     @JvmStatic fun isJitProfilerActive(): Boolean = profilerActive
@@ -533,11 +527,11 @@ object NativeApp {
     }
 
     /**
-     * Mirrors the SwanStation "Use Analog Sticks for D-Pad in Digital Mode"
-     * option in the frontend input layer. The core option only applies to an
-     * emulated DualShock in digital mode, while the app attaches a plain
-     * digital pad unless analog mode is requested, so the left stick needs to
-     * drive the D-pad buttons here for the setting to have any effect.
+     * Mirrors the "Use Analog Sticks for D-Pad in Digital Mode" option in the
+     * frontend input layer. The core option only applies to an emulated pad in
+     * digital mode, while the app attaches a plain digital pad unless analog
+     * mode is requested, so the left stick needs to drive the D-pad buttons
+     * here for the setting to have any effect.
      */
     private fun updateDerivedDpadButtons(padIndex: Int, lx: Int, ly: Int) {
         var derived = DPAD_ALL_RELEASED

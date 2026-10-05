@@ -10,7 +10,6 @@ import android.util.Log
 import android.view.PixelCopy
 import android.view.Surface
 import com.sbro.emucorea.data.AppPreferences
-import com.sbro.emucorea.data.DisplayCrop
 import com.sbro.emucorea.ui.common.invalidateCoverImage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,12 +38,11 @@ object EmulatorBridge {
     const val VULKAN_RENDERER = RendererDefaults.VULKAN
     private const val ANGLE_EGL_LIBRARY_NAME = "libEGL_angle.so"
     private const val ANGLE_GLES_LIBRARY_NAME = "libGLESv2_angle.so"
-    private const val BOOT_SMOKE_PROBE_STEPS = 67_108_864
     private const val AUTO_PROGRESSIVE_SCAN_PAD_INDEX = 0
     private const val AUTO_PROGRESSIVE_SCAN_CROSS = 96
     private const val AUTO_PROGRESSIVE_SCAN_TRIANGLE = 100
     // Games probe the boot combo at different points; Criterion titles can do so well after
-    // the PS2 logo. Keep it held through the boot sequence, matching the real-console action.
+    // the PSP boot logo. Keep it held through the boot sequence, matching the real-console action.
     private const val AUTO_PROGRESSIVE_SCAN_HOLD_MS = 30_000L
 
     private val aspectRatioSettingValues = mapOf(
@@ -338,142 +336,26 @@ object EmulatorBridge {
         gpuHardwareProfile: Int = GpuHardwareProfiles.ADRENO,
         mediatekAngleOpenGl: Boolean = false,
         aspectRatio: Int = 1,
-        localMultiplayerMode: Int = AppPreferences.LOCAL_MULTIPLAYER_OFF,
         audioVolume: Int = AudioDefaults.VOLUME_DEFAULT,
         audioFastForwardVolume: Int = AudioDefaults.VOLUME_DEFAULT,
         audioMuted: Boolean = false,
-        audioInterpolation: Int = AudioDefaults.INTERPOLATION_DEFAULT,
-        audioSyncMode: Int = AudioDefaults.SYNC_DEFAULT,
-        audioLightweightSpu2: Boolean = AudioDefaults.LIGHTWEIGHT_SPU2_DEFAULT,
         audioBackend: Int = AudioDefaults.BACKEND_DEFAULT,
-        audioBufferMs: Int = AudioDefaults.BUFFER_MS_DEFAULT,
         audioOutputLatencyMs: Int = AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT,
         audioMinimalOutputLatency: Boolean = AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT,
-        enableEeRecompiler: Boolean = true,
-        enableIopRecompiler: Boolean = true,
-        enableVu0Recompiler: Boolean = true,
-        enableVu1Recompiler: Boolean = true,
-        eeFpuRoundMode: Int = AppPreferences.DEFAULT_EE_FPU_ROUND_MODE,
-        vu0RoundMode: Int = AppPreferences.DEFAULT_VU_ROUND_MODE,
-        vu1RoundMode: Int = AppPreferences.DEFAULT_VU_ROUND_MODE,
-        eeFpuClampingMode: Int = AppPreferences.DEFAULT_EE_FPU_CLAMPING_MODE,
-        vu0ClampingMode: Int = AppPreferences.DEFAULT_VU0_CLAMPING_MODE,
-        vu1ClampingMode: Int = AppPreferences.DEFAULT_VU1_CLAMPING_MODE,
-        enableGameFixes: Boolean = true,
-        eeTimingHack: Boolean = false,
-        enableFastmem: Boolean = true,
-        waitLoopSpeedhack: Boolean = true,
-        intcStatSpeedhack: Boolean = true,
-        vuFlagHack: Boolean = true,
-        instantVu1: Boolean = true,
-        mtvu: Boolean = true,
-        enableThreadPinning: Boolean = AppPreferences.DEFAULT_THREAD_PINNING,
-        enableFastBoot: Boolean = true,
-        fastCdvd: Boolean = false,
-        enableCheats: Boolean = false,
-        hwDownloadMode: Int = GsHackDefaults.HW_DOWNLOAD_MODE_DEFAULT,
-        eeCycleRate: Int = 0,
-        eeCycleSkip: Int = 0,
-        frameSkip: Int = 0,
-        skipDuplicateFrames: Boolean = true,
         frameLimitEnabled: Boolean = true,
         vSyncEnabled: Boolean = false,
-        fastForwardSpeed: Float = AppPreferences.DEFAULT_FAST_FORWARD_SPEED,
         targetFps: Int = 0,
         ntscFramerate: Float = AppPreferences.DEFAULT_NTSC_FRAMERATE,
         palFramerate: Float = AppPreferences.DEFAULT_PAL_FRAMERATE,
-        textureFiltering: Int = GsHackDefaults.BILINEAR_FILTERING_DEFAULT,
-        trilinearFiltering: Int = GsHackDefaults.TRILINEAR_FILTERING_DEFAULT,
-        blendingAccuracy: Int = GsHackDefaults.BLENDING_ACCURACY_DEFAULT,
-        texturePreloading: Int = GsHackDefaults.TEXTURE_PRELOADING_DEFAULT,
         shaderChainEnabled: Boolean = false,
         shaderChainPreset: String = "",
-        enableFxaa: Boolean = false,
-        casMode: Int = 0,
-        sgsrMode: Int = 0,
-        casSharpness: Int = 50,
-        tvShader: Int = GsHackDefaults.TV_SHADER_DEFAULT,
-        shadeBoostEnabled: Boolean = false,
-        shadeBoostBrightness: Int = 50,
-        shadeBoostContrast: Int = 50,
-        shadeBoostSaturation: Int = 50,
-        shadeBoostGamma: Int = 50,
-        deinterlaceMode: Int = GsHackDefaults.DEINTERLACE_MODE_DEFAULT,
-        dithering: Int = GsHackDefaults.DITHERING_DEFAULT,
-        anisotropicFiltering: Int = 0,
-        enableHwMipmapping: Boolean = GsHackDefaults.HW_MIPMAPPING_DEFAULT,
-        antiBlur: Boolean = GsHackDefaults.ANTI_BLUR_DEFAULT,
-        widescreenPatches: Boolean = false,
-        noInterlacingPatches: Boolean = false,
-        cpuSpriteRenderSize: Int = GsHackDefaults.CPU_SPRITE_RENDER_SIZE_DEFAULT,
-        cpuSpriteRenderLevel: Int = GsHackDefaults.CPU_SPRITE_RENDER_LEVEL_DEFAULT,
-        softwareClutRender: Int = GsHackDefaults.SOFTWARE_CLUT_RENDER_DEFAULT,
-        gpuTargetClutMode: Int = GsHackDefaults.GPU_TARGET_CLUT_DEFAULT,
-        skipDrawStart: Int = 0,
-        skipDrawEnd: Int = 0,
-        autoFlushHardware: Int = GsHackDefaults.AUTO_FLUSH_DEFAULT,
-        cpuFramebufferConversion: Boolean = false,
-        disableDepthConversion: Boolean = false,
-        disableSafeFeatures: Boolean = false,
-        disableRenderFixes: Boolean = false,
-        preloadFrameData: Boolean = false,
-        disablePartialInvalidation: Boolean = false,
-        textureInsideRt: Int = GsHackDefaults.TEXTURE_INSIDE_RT_DEFAULT,
-        readTargetsOnClose: Boolean = false,
-        estimateTextureRegion: Boolean = false,
-        gpuPaletteConversion: Boolean = false,
-        halfPixelOffset: Int = GsHackDefaults.HALF_PIXEL_OFFSET_DEFAULT,
-        nativeScaling: Int = GsHackDefaults.NATIVE_SCALING_DEFAULT,
-        roundSprite: Int = GsHackDefaults.ROUND_SPRITE_DEFAULT,
-        bilinearUpscale: Int = GsHackDefaults.BILINEAR_UPSCALE_DEFAULT,
-        textureOffsetX: Int = 0,
-        textureOffsetY: Int = 0,
-        alignSprite: Boolean = false,
-        mergeSprite: Boolean = false,
-        forceEvenSpritePosition: Boolean = false,
-        nativePaletteDraw: Boolean = false,
-        pressureModifierAmount: Int = AppPreferences.DEFAULT_PRESSURE_MODIFIER_AMOUNT,
-        memoryCardSlot1: String? = null,
-        memoryCardSlot2: String? = null,
-        autotestMode: Boolean = false,
-        fpuCorrectAddSub: Boolean = true,
-        enableIcacheEmulation: Boolean = false,
-        enableDisableStalls: Boolean = false,
-        enablePreciseExceptions: Boolean = false,
-        enableTurboCd: Boolean = false,
-        cdReadAhead: Int = 0,
-        enableCddaAudio: Boolean = true,
-        enableXaDecoding: Boolean = true,
-        enableSpuReverb: Boolean = true,
-        enableSpuThread: Boolean = false,
-        spuTempo: Int = 0,
-        neonEnhancement: Boolean = false,
-        neonEnhancementSpeedHack: Boolean = false,
-        neonEnhancementTexAdj: Boolean = true,
-        neonInterlace: Int = -1,
-        gpuThreadRendering: Int = -1,
-        showOverscan: Boolean = false,
-        screenCentering: Int = 0,
-        screenCenteringX: Int = 0,
-        screenCenteringY: Int = 0,
-        screenCenteringHAdj: Int = 0,
-        enableFractionalFramerate: Boolean = false,
-        altFlipMode: Int = 0,
-        enableRgb32Output: Boolean = false,
-        enableScaleHires: Boolean = false,
-        multitapMode: Int = 0,
-        analogAxisModifier: Int = 0,
-        dualshockToggleCombo: Int = 0
     ) = withContext(serialDispatcher) {
         if (!isNativeLoaded) return@withContext
 
         val context = getContext() ?: return@withContext
         val resolvedRenderer = normalizeRenderer(renderer)
-        val preparedBios = DocumentPathResolver.prepareBiosSelection(context, biosPath)
-        val resolvedBiosPath = preparedBios?.directoryPath
-            ?: biosPath?.let(DocumentPathResolver::resolveDirectoryPath)
-        val preferredBiosFile = preparedBios?.fileName
-            ?: DocumentPathResolver.findPreferredBiosFileName(resolvedBiosPath)
+        // Materializes a SAF-selected firmware so the BIOS validator can see it.
+        DocumentPathResolver.prepareBiosSelection(context, biosPath)
         // Keep the native layer on the same data root as the runtime directories;
         // saves and memory cards previously ignored the configured location.
         NativeApp.reloadDataRoot(emulatorDataPath ?: "")
@@ -482,35 +364,6 @@ object EmulatorBridge {
         // and the memstick root is the same emulator data root the manager
         // writes to, so the two share one tree without a path override.
         NativeApp.setTextureReplacementsPathOverride(runtimeDirectories.textures.absolutePath)
-        val manualHardwareFixes = GsHackDefaults.shouldEnableManualHardwareFixes(
-            cpuSpriteRenderSize = cpuSpriteRenderSize,
-            cpuSpriteRenderLevel = cpuSpriteRenderLevel,
-            softwareClutRender = softwareClutRender,
-            gpuTargetClutMode = gpuTargetClutMode,
-            skipDrawStart = skipDrawStart,
-            skipDrawEnd = skipDrawEnd,
-            autoFlushHardware = autoFlushHardware,
-            cpuFramebufferConversion = cpuFramebufferConversion,
-            disableDepthConversion = disableDepthConversion,
-            disableSafeFeatures = disableSafeFeatures,
-            disableRenderFixes = disableRenderFixes,
-            preloadFrameData = preloadFrameData,
-            disablePartialInvalidation = disablePartialInvalidation,
-            textureInsideRt = textureInsideRt,
-            readTargetsOnClose = readTargetsOnClose,
-            estimateTextureRegion = estimateTextureRegion,
-            gpuPaletteConversion = gpuPaletteConversion,
-            halfPixelOffset = halfPixelOffset,
-            nativeScaling = nativeScaling,
-            roundSprite = roundSprite,
-            bilinearUpscale = bilinearUpscale,
-            textureOffsetX = textureOffsetX,
-            textureOffsetY = textureOffsetY,
-            alignSprite = alignSprite,
-            mergeSprite = mergeSprite,
-            forceEvenSpritePosition = forceEvenSpritePosition,
-            nativePaletteDraw = nativePaletteDraw
-        )
 
         val normalizedGpuHardwareProfile = GpuHardwareProfiles.normalize(gpuHardwareProfile)
         val gpuHardwareProfileOverride = GpuHardwareProfiles.coreOverrideFor(normalizedGpuHardwareProfile)
@@ -531,21 +384,17 @@ object EmulatorBridge {
         } else {
             ""
         }
-        val directMtvu = mtvu && enableVu1Recompiler
         Log.i(
             "EmuCoreA",
             "applyRuntimeConfig renderer=${rendererName(resolvedRenderer)}($resolvedRenderer) driverType=$effectiveGpuDriverType"
         )
         NativeApp.logCrashBreadcrumb(
-            "applyRuntimeConfig renderer=${rendererName(resolvedRenderer)}($resolvedRenderer) driverType=$effectiveGpuDriverType requestedDriverType=$gpuDriverType mtvu=$directMtvu fastmem=$enableFastmem"
+            "applyRuntimeConfig renderer=${rendererName(resolvedRenderer)}($resolvedRenderer) driverType=$effectiveGpuDriverType requestedDriverType=$gpuDriverType"
         )
         val prefs = AppPreferences(context)
-        val effectiveEnableCheats = enableCheats
         val effectiveFrameLimitEnabled = frameLimitEnabled
         val rewindEnabled = prefs.rewindEnabled.first()
         val textureReplacementsEnabled = prefs.textureReplacementsEnabled.first()
-        val textureReplacementsAsync = prefs.textureReplacementsAsync.first()
-        val textureReplacementsPrecache = prefs.textureReplacementsPrecache.first()
         val textureDumpingEnabled = prefs.textureDumpingEnabled.first()
         val runtimeApplied = performRuntimeOps(
             buildList {
@@ -567,7 +416,7 @@ object EmulatorBridge {
                 add(settingOp("EmuCoreA/GS", "RewindEnabled", "bool", rewindEnabled.toString()))
                 add(settingOp("EmuCoreA/GS", "VsyncEnable", "bool", vSyncEnabled.toString()))
                 addAll(targetFpsOps(targetFps, ntscFramerate, palFramerate))
-                add(settingOp("EmuCoreA/GS", "filter", "int", textureFiltering.toString()))
+                add(settingOp("EmuCoreA/GS", "filter", "int", "0"))
                 add(settingOp("EmuCoreA/GS", "ShaderChainEnabled", "bool", (shaderChainEnabled && shaderChainPreset.isNotBlank()).toString()))
                 add(settingOp("EmuCoreA/GS", "ShaderChainPreset", "string", shaderChainPreset.trim()))
                 add(settingOp("EmuCoreA/GS", "LoadTextureReplacements", "bool", textureReplacementsEnabled.toString()))
@@ -615,18 +464,10 @@ object EmulatorBridge {
                 isVmActive = true
                 shutdownRequested = false
                 var result = try {
-                    NativeApp.logCrashBreadcrumb(
-                        "startEmulation entering native ${
-                            if (bootSmokeProbe) "runBootSmokeProbe" else "runVMThread"
-                        }"
-                    )
+                    NativeApp.logCrashBreadcrumb("startEmulation entering native runVMThread")
                     // The core identifies ELF/PRX/PLF homebrew itself through
                     // Identify_File, so every supported format boots the same way.
-                    if (bootSmokeProbe) {
-                        NativeApp.runBootSmokeProbe(path, BOOT_SMOKE_PROBE_STEPS) != 0
-                    } else {
-                        NativeApp.runVMThread(path)
-                    }
+                    NativeApp.runVMThread(path)
                 } catch (error: Exception) {
                     NativeApp.logCrashBreadcrumb("startEmulation exception before native start returned")
                     Log.e(TAG, "startEmulation native call failed", error)
@@ -1062,8 +903,8 @@ object EmulatorBridge {
     }
 
     /**
-     * Replaces the mounted PS2 disc without restarting the VM. Native code performs
-     * the CDVD mutation on the CPU thread and restores the previous image on failure.
+     * Replaces the mounted PSP disc without restarting the VM. Native code performs
+     * the disc mutation on the CPU thread and restores the previous image on failure.
      */
     suspend fun changeDisc(path: String): Boolean {
         if (!isNativeLoaded || !isVmActive || path.isBlank()) return false
@@ -1157,10 +998,6 @@ object EmulatorBridge {
 
     suspend fun setVSyncEnabled(enabled: Boolean) {
         setSetting("EmuCoreA/GS", "VsyncEnable", "bool", enabled.toString())
-    }
-
-    suspend fun setFastForwardSpeed(value: Float) {
-        setSetting("Framerate", "TurboScalar", "float", sanitizeFastForwardSpeed(value).toString())
     }
 
     suspend fun setTargetFps(
@@ -1359,13 +1196,5 @@ object EmulatorBridge {
 
     private fun sanitizeFramerate(value: Float, fallback: Float): Float {
         return if (value.isFinite()) value.coerceIn(20f, 120f) else fallback
-    }
-
-    private fun sanitizeFastForwardSpeed(value: Float): Float {
-        return if (value.isFinite()) {
-            value.coerceIn(AppPreferences.MIN_FAST_FORWARD_SPEED, AppPreferences.MAX_FAST_FORWARD_SPEED)
-        } else {
-            AppPreferences.DEFAULT_FAST_FORWARD_SPEED
-        }
     }
 }

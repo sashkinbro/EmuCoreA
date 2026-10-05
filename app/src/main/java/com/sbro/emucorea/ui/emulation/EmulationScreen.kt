@@ -175,7 +175,6 @@ import com.sbro.emucorea.core.upscaleMultiplierValue
 import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.AppPreferences.Companion.FPS_OVERLAY_MODE_DETAILED
 import com.sbro.emucorea.data.AppPreferences.Companion.FPS_OVERLAY_MODE_SIMPLE
-import com.sbro.emucorea.data.DisplayCrop
 import com.sbro.emucorea.data.OverlayControlLayout
 import com.sbro.emucorea.data.OverlayLayoutSnapshot
 import com.sbro.emucorea.data.PerformanceOverlayMetrics
@@ -332,25 +331,6 @@ private fun fpsOverlayMetricLiveOptions(): List<Pair<Int, String>> = listOf(
     PerformanceOverlayMetrics.AUDIO to stringResource(R.string.settings_fps_metric_audio)
 )
 
-@Composable
-private fun eeCycleRateLiveOptions(): List<LiveSelectionOption> = listOf(
-    LiveSelectionOption(-3, "50%"),
-    LiveSelectionOption(-2, "60%"),
-    LiveSelectionOption(-1, "75%"),
-    LiveSelectionOption(0, "100%"),
-    LiveSelectionOption(1, "130%"),
-    LiveSelectionOption(2, "180%"),
-    LiveSelectionOption(3, "300%")
-)
-
-@Composable
-private fun eeCycleSkipLiveOptions(): List<LiveSelectionOption> = listOf(
-    LiveSelectionOption(0, stringResource(R.string.settings_ee_cycle_disabled)),
-    LiveSelectionOption(1, stringResource(R.string.settings_ee_cycle_mild)),
-    LiveSelectionOption(2, stringResource(R.string.settings_ee_cycle_moderate)),
-    LiveSelectionOption(3, stringResource(R.string.settings_ee_cycle_maximum))
-)
-
 private fun Int.toOverlayAlignment(): Alignment = when (this) {
     AppPreferences.FPS_OVERLAY_CORNER_TOP_LEFT -> Alignment.TopStart
     AppPreferences.FPS_OVERLAY_CORNER_BOTTOM_LEFT -> Alignment.BottomStart
@@ -381,12 +361,6 @@ fun EmulationScreen(
     bootSmokeProbe: Boolean = false,
     saveSlot: Int? = null,
     autotestMode: Boolean = false,
-    enableEeRecompilerOverride: Boolean? = null,
-    enableIopRecompilerOverride: Boolean? = null,
-    enableVu0RecompilerOverride: Boolean? = null,
-    enableVu1RecompilerOverride: Boolean? = null,
-    enableFastmemOverride: Boolean? = null,
-    enableMtvuOverride: Boolean? = null,
     rendererOverride: Int? = null,
     gsDumpFrames: Int? = null,
     gsDumpDelayMs: Int? = null,
@@ -759,12 +733,6 @@ fun EmulationScreen(
         bootToBios,
         bootSmokeProbe,
         autotestMode,
-        enableEeRecompilerOverride,
-        enableIopRecompilerOverride,
-        enableVu0RecompilerOverride,
-        enableVu1RecompilerOverride,
-        enableFastmemOverride,
-        enableMtvuOverride,
         rendererOverride,
         gsDumpFrames,
         gsDumpDelayMs,
@@ -777,12 +745,6 @@ fun EmulationScreen(
             bootToBios = bootToBios,
             bootSmokeProbe = bootSmokeProbe,
             autotestMode = autotestMode,
-            enableEeRecompilerOverride = enableEeRecompilerOverride,
-            enableIopRecompilerOverride = enableIopRecompilerOverride,
-            enableVu0RecompilerOverride = enableVu0RecompilerOverride,
-            enableVu1RecompilerOverride = enableVu1RecompilerOverride,
-            enableFastmemOverride = enableFastmemOverride,
-            enableMtvuOverride = enableMtvuOverride,
             rendererOverride = rendererOverride,
             gsDumpFrames = gsDumpFrames,
             gsDumpDelayMs = gsDumpDelayMs
@@ -3795,7 +3757,7 @@ private fun EmulationSidebarMenu(
 
                         // Internal resolution belongs to the app-level per-game
                         // upscale setting (uiState.upscale). Binding this row to
-                        // the raw core option (swanstation_GPU_ResolutionScale)
+                        // the raw core option (ppsspp_internal_resolution)
                         // persisted changes to the global core-option store, so
                         // they leaked into every game and never appeared in the
                         // game manager.

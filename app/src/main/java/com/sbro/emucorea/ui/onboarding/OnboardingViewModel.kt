@@ -135,16 +135,9 @@ class OnboardingViewModel(application: Application) : AndroidViewModel(applicati
                 audioVolume = audioSettings.audioVolume,
                 audioFastForwardVolume = audioSettings.audioFastForwardVolume,
                 audioMuted = audioSettings.audioMuted,
-                audioInterpolation = audioSettings.audioInterpolation,
-                audioSyncMode = audioSettings.audioSyncMode,
-                audioLightweightSpu2 = audioSettings.audioLightweightSpu2,
                 audioBackend = audioSettings.audioBackend,
-                audioBufferMs = audioSettings.audioBufferMs,
                 audioOutputLatencyMs = audioSettings.audioOutputLatencyMs,
                 audioMinimalOutputLatency = audioSettings.audioMinimalOutputLatency,
-                enableFastmem = audioSettings.enableFastmem,
-                deinterlaceMode = audioSettings.deinterlaceMode,
-                dithering = audioSettings.dithering,
                 upscaleMultiplier = EmulatorBridge.getSetting("EmuCoreA", "UpscaleMultiplier", "float")?.toFloatOrNull()
                     ?: EmulatorBridge.getSetting("EmuCoreA", "UpscaleMultiplier", "int")?.toIntOrNull()?.toFloat()
                     ?: UPSCALE_DEFAULT

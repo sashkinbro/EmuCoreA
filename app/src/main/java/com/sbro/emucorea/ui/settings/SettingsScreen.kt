@@ -211,7 +211,6 @@ import com.sbro.emucorea.data.CoverArtRepository
 import com.sbro.emucorea.data.CustomThemeConfig
 import com.sbro.emucorea.data.CustomThemeLibrary
 import com.sbro.emucorea.data.CustomTouchControlLibrary
-import com.sbro.emucorea.data.DisplayCrop
 import com.sbro.emucorea.data.DrawerItemId
 import com.sbro.emucorea.data.DrawerVisualStyle
 import com.sbro.emucorea.data.EmulationSideArtwork
@@ -5330,11 +5329,6 @@ private fun fpsOverlayCornerOptions(): List<Pair<Int, String>> = listOf(
     AppPreferences.FPS_OVERLAY_CORNER_BOTTOM_LEFT to stringResource(R.string.settings_fps_overlay_corner_bottom_left),
     AppPreferences.FPS_OVERLAY_CORNER_BOTTOM_RIGHT to stringResource(R.string.settings_fps_overlay_corner_bottom_right)
 )
-
-@Composable
-private fun cpuSpriteRenderSizeOptions(): List<Pair<Int, String>> = (0..10).map { value ->
-    value to if (value == 0) stringResource(R.string.settings_disabled_short) else value.toString()
-}
 
 @Composable
 private fun fpsOverlayMetricOptions(): List<Pair<Int, String>> = listOf(

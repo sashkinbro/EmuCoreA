@@ -415,8 +415,8 @@ internal object CoreRuntime {
             forwardCoreOption("ppsspp_fast_memory", if (fastMemory) "enabled" else "disabled")
         }
         settings["EmuCoreA:EnableEERecompiler"]?.toBooleanStrictOrNull()?.let { jit ->
-            // The PSP has a single CPU recompiler; the app's PS1-era toggle maps
-            // to the closest CPU core choice.
+            // The app's legacy recompiler toggle maps to the closest CPU core
+            // choice the PSP core exposes.
             forwardCoreOption("ppsspp_cpu_core", if (jit) "JIT" else "IR JIT")
         }
         forwardCoreOption("ppsspp_texture_filtering", pspTextureFilterName())
@@ -493,8 +493,8 @@ internal object CoreRuntime {
     }
 
     private fun pspTextureFilterName(): String {
-        // The shared GS filter setting defaults to 0, which the PS1 mapping reads
-        // as Nearest. PPSSPP's own default is Auto, and forcing nearest turns
+        // The shared legacy GS filter setting defaults to 0, which the mapping
+        // reads as Nearest. PPSSPP's own default is Auto, and forcing nearest turns
         // low-resolution effects such as Tekken 6's title flame into blocks, so 0
         // means Auto here. An explicit choice in the PSP core options ("Texture
         // Filtering") is applied afterwards and still wins.
@@ -587,7 +587,7 @@ internal object CoreRuntime {
     private var audioBufferApplyJob: Job? = null
 
     /** Output buffer size target in milliseconds. */
-    fun setAudioBufferMs(milliseconds: Int) {
+    fun setAudioOutputLatencyMs(milliseconds: Int) {
         audioOutputLatencyMs = AudioDefaults.coerceOutputLatencyMs(milliseconds)
         audioBufferApplyJob?.cancel()
         audioBufferApplyJob = audioBufferScope.launch {

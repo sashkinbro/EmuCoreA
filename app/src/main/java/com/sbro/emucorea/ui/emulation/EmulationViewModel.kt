@@ -21,7 +21,6 @@ import com.sbro.emucorea.core.EmulatorStorage
 import com.sbro.emucorea.core.DeviceGpuInfoProvider
 import com.sbro.emucorea.core.GamepadManager
 import com.sbro.emucorea.core.GpuHardwareProfiles
-import com.sbro.emucorea.core.GsHackDefaults
 import com.sbro.emucorea.core.MobileSocNameMapper
 import com.sbro.emucorea.core.NativeApp
 import com.sbro.emucorea.core.RuntimeFailure
@@ -35,7 +34,6 @@ import com.sbro.emucorea.data.SettingsSnapshot
 import com.sbro.emucorea.data.AppPreferences.Companion.FPS_OVERLAY_MODE_SIMPLE
 import com.sbro.emucorea.data.AppPreferences.Companion.FPS_OVERLAY_MODE_DETAILED
 import com.sbro.emucorea.data.CheatBlock
-import com.sbro.emucorea.data.DisplayCrop
 import com.sbro.emucorea.data.OverlayControlLayout
 import com.sbro.emucorea.data.CheatRepository
 import com.sbro.emucorea.data.GameRepository
@@ -197,7 +195,6 @@ data class EmulationUiState(
     val gamepadRightStickDownToL2: Boolean = false,
     val gamepadButtonHaptics: Boolean = false,
     val gamepadBindingsByPad: Map<Int, Map<String, Int>> = emptyMap(),
-    val pressureModifierAmount: Int = AppPreferences.DEFAULT_PRESSURE_MODIFIER_AMOUNT,
     val stickSurfaceMode: Boolean = false,
     val controlLayouts: Map<String, OverlayControlLayout> = AppPreferences.defaultOverlayControlLayouts(),
     val fps: String = "0.0",
@@ -212,71 +209,11 @@ data class EmulationUiState(
     val upscale: Float = 1f,
     val aspectRatio: Int = 1,
     val localMultiplayerMode: Int = AppPreferences.LOCAL_MULTIPLAYER_OFF,
-    val displayCrop: DisplayCrop = DisplayCrop.None,
     val performancePreset: Int = PerformancePresets.CUSTOM,
-    val enableInstantVu1: Boolean = true,
-    val enableMtvu: Boolean = true,
-    val enableThreadPinning: Boolean = AppPreferences.DEFAULT_THREAD_PINNING,
-    val enableFastCdvd: Boolean = false,
-    val enableFastBoot: Boolean = true,
     val enableCheats: Boolean = false,
-    val hwDownloadMode: Int = GsHackDefaults.HW_DOWNLOAD_MODE_DEFAULT,
-    val eeCycleRate: Int = PerformanceProfiles.safeConfig.eeCycleRate,
-    val eeCycleSkip: Int = PerformanceProfiles.safeConfig.eeCycleSkip,
-    val frameSkip: Int = 0,
-    val skipDuplicateFrames: Boolean = true,
-    val textureFiltering: Int = GsHackDefaults.BILINEAR_FILTERING_DEFAULT,
-    val trilinearFiltering: Int = GsHackDefaults.TRILINEAR_FILTERING_DEFAULT,
-    val blendingAccuracy: Int = GsHackDefaults.BLENDING_ACCURACY_DEFAULT,
-    val texturePreloading: Int = GsHackDefaults.TEXTURE_PRELOADING_DEFAULT,
-    val enableFxaa: Boolean = false,
-    val casMode: Int = 0,
-    val sgsrMode: Int = 0,
-    val casSharpness: Int = 50,
-    val tvShader: Int = GsHackDefaults.TV_SHADER_DEFAULT,
-    val shadeBoostEnabled: Boolean = false,
-    val shadeBoostBrightness: Int = 50,
-    val shadeBoostContrast: Int = 50,
-    val shadeBoostSaturation: Int = 50,
-    val shadeBoostGamma: Int = 50,
-    val anisotropicFiltering: Int = 0,
-    val enableHwMipmapping: Boolean = GsHackDefaults.HW_MIPMAPPING_DEFAULT,
-    val antiBlur: Boolean = GsHackDefaults.ANTI_BLUR_DEFAULT,
-    val deinterlaceMode: Int = GsHackDefaults.DEINTERLACE_MODE_DEFAULT,
-    val dithering: Int = GsHackDefaults.DITHERING_DEFAULT,
-    val widescreenPatches: Boolean = false,
-    val noInterlacingPatches: Boolean = false,
-    val cpuSpriteRenderSize: Int = GsHackDefaults.CPU_SPRITE_RENDER_SIZE_DEFAULT,
-    val cpuSpriteRenderLevel: Int = GsHackDefaults.CPU_SPRITE_RENDER_LEVEL_DEFAULT,
-    val softwareClutRender: Int = GsHackDefaults.SOFTWARE_CLUT_RENDER_DEFAULT,
-    val gpuTargetClutMode: Int = GsHackDefaults.GPU_TARGET_CLUT_DEFAULT,
-    val skipDrawStart: Int = 0,
-    val skipDrawEnd: Int = 0,
-    val autoFlushHardware: Int = GsHackDefaults.AUTO_FLUSH_DEFAULT,
-    val cpuFramebufferConversion: Boolean = false,
-    val disableDepthConversion: Boolean = false,
-    val disableSafeFeatures: Boolean = false,
-    val disableRenderFixes: Boolean = false,
-    val preloadFrameData: Boolean = false,
-    val disablePartialInvalidation: Boolean = false,
-    val textureInsideRt: Int = GsHackDefaults.TEXTURE_INSIDE_RT_DEFAULT,
-    val readTargetsOnClose: Boolean = false,
-    val estimateTextureRegion: Boolean = false,
-    val gpuPaletteConversion: Boolean = false,
-    val halfPixelOffset: Int = GsHackDefaults.HALF_PIXEL_OFFSET_DEFAULT,
-    val nativeScaling: Int = GsHackDefaults.NATIVE_SCALING_DEFAULT,
-    val roundSprite: Int = GsHackDefaults.ROUND_SPRITE_DEFAULT,
-    val bilinearUpscale: Int = GsHackDefaults.BILINEAR_UPSCALE_DEFAULT,
-    val textureOffsetX: Int = 0,
-    val textureOffsetY: Int = 0,
-    val alignSprite: Boolean = false,
-    val mergeSprite: Boolean = false,
-    val forceEvenSpritePosition: Boolean = false,
-    val nativePaletteDraw: Boolean = false,
     val cheatsGameKey: String? = null,
     val availableCheats: List<CheatBlock> = emptyList(),
     val frameLimitEnabled: Boolean = true,
-    val fastForwardSpeed: Float = AppPreferences.DEFAULT_FAST_FORWARD_SPEED,
     val targetFps: Int = 0,
     val ntscFramerate: Float = AppPreferences.DEFAULT_NTSC_FRAMERATE,
     val palFramerate: Float = AppPreferences.DEFAULT_PAL_FRAMERATE,
@@ -296,43 +233,14 @@ data class EmulationUiState(
     val showDebugOptions: Boolean = false,
     val isJitProfilerActive: Boolean = false,
     val isHangTraceActive: Boolean = false,
-    val enableIcacheEmulation: Boolean = false,
-    val enableDisableStalls: Boolean = false,
-    val enablePreciseExceptions: Boolean = false,
-    val enableTurboCd: Boolean = false,
-    val cdReadAhead: Int = 0,
-    val enableCddaAudio: Boolean = true,
-    val enableXaDecoding: Boolean = true,
-    val enableSpuReverb: Boolean = true,
-    val enableSpuThread: Boolean = false,
-    val spuTempo: Int = 0,
     val audioVolume: Int = AudioDefaults.VOLUME_DEFAULT,
-    val audioMuted: Boolean = false,
-    val neonEnhancement: Boolean = false,
-    val neonEnhancementSpeedHack: Boolean = false,
-    val neonEnhancementTexAdj: Boolean = true,
-    val neonInterlace: Int = -1,
-    val gpuThreadRendering: Int = -1,
-    val showOverscan: Boolean = false,
-    val screenCentering: Int = 0,
-    val screenCenteringX: Int = 0,
-    val screenCenteringY: Int = 0,
-    val screenCenteringHAdj: Int = 0,
-    val enableFractionalFramerate: Boolean = false,
-    val altFlipMode: Int = 0,
-    val enableRgb32Output: Boolean = false,
-    val enableScaleHires: Boolean = false,
-    val multitapMode: Int = 0,
-    val analogAxisModifier: Int = 0,
-    val dualshockToggleCombo: Int = 0
+    val audioMuted: Boolean = false
 )
 
 private data class EmulationLaunchConfig(
     val performanceProfile: Int,
     val biosPath: String?,
     val emulatorDataPath: String?,
-    val memoryCardSlot1: String?,
-    val memoryCardSlot2: String?,
     val renderer: Int,
     val upscaleMultiplier: Float,
     val gpuDriverType: Int,
@@ -341,129 +249,20 @@ private data class EmulationLaunchConfig(
     val mediatekAngleOpenGl: Boolean,
     val aspectRatio: Int,
     val localMultiplayerMode: Int,
-    val displayCrop: DisplayCrop,
     val audioVolume: Int,
     val audioFastForwardVolume: Int,
     val audioMuted: Boolean,
-    val audioInterpolation: Int,
-    val audioSyncMode: Int,
-    val audioLightweightSpu2: Boolean,
     val audioBackend: Int,
-    val audioBufferMs: Int,
     val audioOutputLatencyMs: Int,
     val audioMinimalOutputLatency: Boolean,
-    val enableEeRecompiler: Boolean,
-    val enableIopRecompiler: Boolean,
-    val enableVu0Recompiler: Boolean,
-    val enableVu1Recompiler: Boolean,
-    val enableFastmem: Boolean,
-    val eeFpuRoundMode: Int,
-    val vu0RoundMode: Int,
-    val vu1RoundMode: Int,
-    val eeFpuClampingMode: Int,
-    val vu0ClampingMode: Int,
-    val vu1ClampingMode: Int,
-    val enableGameFixes: Boolean,
-    val eeTimingHack: Boolean,
-    val waitLoopSpeedhack: Boolean,
-    val intcStatSpeedhack: Boolean,
-    val vuFlagHack: Boolean,
-    val instantVu1: Boolean,
-    val mtvu: Boolean,
-    val enableThreadPinning: Boolean,
-    val fastCdvd: Boolean,
-    val enableFastBoot: Boolean,
     val enableCheats: Boolean,
-    val hwDownloadMode: Int,
-    val eeCycleRate: Int,
-    val eeCycleSkip: Int,
-    val frameSkip: Int,
-    val skipDuplicateFrames: Boolean,
     val frameLimitEnabled: Boolean,
     val vSyncEnabled: Boolean,
-    val fastForwardSpeed: Float,
     val targetFps: Int,
     val ntscFramerate: Float,
     val palFramerate: Float,
-    val textureFiltering: Int,
-    val trilinearFiltering: Int,
-    val blendingAccuracy: Int,
-    val texturePreloading: Int,
     val shaderChainEnabled: Boolean,
-    val shaderChainPreset: String,
-    val enableFxaa: Boolean,
-    val casMode: Int,
-    val sgsrMode: Int,
-    val casSharpness: Int,
-    val tvShader: Int,
-    val shadeBoostEnabled: Boolean,
-    val shadeBoostBrightness: Int,
-    val shadeBoostContrast: Int,
-    val shadeBoostSaturation: Int,
-    val shadeBoostGamma: Int,
-    val deinterlaceMode: Int,
-    val dithering: Int,
-    val anisotropicFiltering: Int,
-    val enableHwMipmapping: Boolean,
-    val antiBlur: Boolean,
-    val widescreenPatches: Boolean,
-    val noInterlacingPatches: Boolean,
-    val cpuSpriteRenderSize: Int,
-    val cpuSpriteRenderLevel: Int,
-    val softwareClutRender: Int,
-    val gpuTargetClutMode: Int,
-    val skipDrawStart: Int,
-    val skipDrawEnd: Int,
-    val autoFlushHardware: Int,
-    val cpuFramebufferConversion: Boolean,
-    val disableDepthConversion: Boolean,
-    val disableSafeFeatures: Boolean,
-    val disableRenderFixes: Boolean,
-    val preloadFrameData: Boolean,
-    val disablePartialInvalidation: Boolean,
-    val textureInsideRt: Int,
-    val readTargetsOnClose: Boolean,
-    val estimateTextureRegion: Boolean,
-    val gpuPaletteConversion: Boolean,
-    val halfPixelOffset: Int,
-    val nativeScaling: Int,
-    val roundSprite: Int,
-    val bilinearUpscale: Int,
-    val textureOffsetX: Int,
-    val textureOffsetY: Int,
-    val alignSprite: Boolean,
-    val mergeSprite: Boolean,
-    val forceEvenSpritePosition: Boolean,
-    val nativePaletteDraw: Boolean,
-    val pressureModifierAmount: Int,
-    val fpuCorrectAddSub: Boolean,
-    val enableIcacheEmulation: Boolean = false,
-    val enableDisableStalls: Boolean = false,
-    val enablePreciseExceptions: Boolean = false,
-    val enableTurboCd: Boolean = false,
-    val cdReadAhead: Int = 0,
-    val enableCddaAudio: Boolean = true,
-    val enableXaDecoding: Boolean = true,
-    val enableSpuReverb: Boolean = true,
-    val enableSpuThread: Boolean = false,
-    val spuTempo: Int = 0,
-    val neonEnhancement: Boolean = false,
-    val neonEnhancementSpeedHack: Boolean = false,
-    val neonEnhancementTexAdj: Boolean = true,
-    val neonInterlace: Int = -1,
-    val gpuThreadRendering: Int = -1,
-    val showOverscan: Boolean = false,
-    val screenCentering: Int = 0,
-    val screenCenteringX: Int = 0,
-    val screenCenteringY: Int = 0,
-    val screenCenteringHAdj: Int = 0,
-    val enableFractionalFramerate: Boolean = false,
-    val altFlipMode: Int = 0,
-    val enableRgb32Output: Boolean = false,
-    val enableScaleHires: Boolean = false,
-    val multitapMode: Int = 0,
-    val analogAxisModifier: Int = 0,
-    val dualshockToggleCombo: Int = 0
+    val shaderChainPreset: String
 )
 
 private data class LiveRuntimeSnapshot(
@@ -475,21 +274,9 @@ private data class LiveRuntimeSnapshot(
     val upscale: Float,
     val aspectRatio: Int,
     val localMultiplayerMode: Int,
-    val displayCrop: DisplayCrop,
     val performancePreset: Int,
-    val enableInstantVu1: Boolean,
-    val enableMtvu: Boolean,
-    val enableThreadPinning: Boolean,
-    val enableFastCdvd: Boolean,
-    val enableFastBoot: Boolean,
     val enableCheats: Boolean,
-    val hwDownloadMode: Int,
-    val eeCycleRate: Int,
-    val eeCycleSkip: Int,
-    val frameSkip: Int,
-    val skipDuplicateFrames: Boolean,
     val frameLimitEnabled: Boolean,
-    val fastForwardSpeed: Float,
     val racingMode: Boolean,
     val stickyButtons: Set<String>,
     val touchscreenRightStick: Boolean,
@@ -511,87 +298,11 @@ private data class LiveRuntimeSnapshot(
     val gamepadLeftStickSensitivity: Int,
     val gamepadRightStickSensitivity: Int,
     val gamepadBindingsByPad: Map<Int, Map<String, Int>>,
-    val pressureModifierAmount: Int,
     val autoSaveOnExit: Boolean,
     val autoLoadOnStart: Boolean,
     val targetFps: Int,
     val ntscFramerate: Float,
-    val palFramerate: Float,
-    val textureFiltering: Int,
-    val trilinearFiltering: Int,
-    val blendingAccuracy: Int,
-    val texturePreloading: Int,
-    val enableFxaa: Boolean,
-    val casMode: Int,
-    val sgsrMode: Int,
-    val casSharpness: Int,
-    val tvShader: Int,
-    val shadeBoostEnabled: Boolean,
-    val shadeBoostBrightness: Int,
-    val shadeBoostContrast: Int,
-    val shadeBoostSaturation: Int,
-    val shadeBoostGamma: Int,
-    val anisotropicFiltering: Int,
-    val enableHwMipmapping: Boolean,
-    val antiBlur: Boolean,
-    val deinterlaceMode: Int,
-    val dithering: Int,
-    val widescreenPatches: Boolean,
-    val noInterlacingPatches: Boolean,
-    val cpuSpriteRenderSize: Int,
-    val cpuSpriteRenderLevel: Int,
-    val softwareClutRender: Int,
-    val gpuTargetClutMode: Int,
-    val skipDrawStart: Int,
-    val skipDrawEnd: Int,
-    val autoFlushHardware: Int,
-    val cpuFramebufferConversion: Boolean,
-    val disableDepthConversion: Boolean,
-    val disableSafeFeatures: Boolean,
-    val disableRenderFixes: Boolean,
-    val preloadFrameData: Boolean,
-    val disablePartialInvalidation: Boolean,
-    val textureInsideRt: Int,
-    val readTargetsOnClose: Boolean,
-    val estimateTextureRegion: Boolean,
-    val gpuPaletteConversion: Boolean,
-    val halfPixelOffset: Int,
-    val nativeScaling: Int,
-    val roundSprite: Int,
-    val bilinearUpscale: Int,
-    val textureOffsetX: Int,
-    val textureOffsetY: Int,
-    val alignSprite: Boolean,
-    val mergeSprite: Boolean,
-    val forceEvenSpritePosition: Boolean,
-    val nativePaletteDraw: Boolean,
-    val enableIcacheEmulation: Boolean = false,
-    val enableDisableStalls: Boolean = false,
-    val enablePreciseExceptions: Boolean = false,
-    val enableTurboCd: Boolean = false,
-    val cdReadAhead: Int = 0,
-    val enableCddaAudio: Boolean = true,
-    val enableXaDecoding: Boolean = true,
-    val enableSpuReverb: Boolean = true,
-    val enableSpuThread: Boolean = false,
-    val spuTempo: Int = 0,
-    val neonEnhancement: Boolean = false,
-    val neonEnhancementSpeedHack: Boolean = false,
-    val neonEnhancementTexAdj: Boolean = true,
-    val neonInterlace: Int = -1,
-    val gpuThreadRendering: Int = -1,
-    val showOverscan: Boolean = false,
-    val screenCentering: Int = 0,
-    val screenCenteringX: Int = 0,
-    val screenCenteringY: Int = 0,
-    val screenCenteringHAdj: Int = 0,
-    val enableFractionalFramerate: Boolean = false,
-    val altFlipMode: Int = 0,
-    val enableRgb32Output: Boolean = false,
-    val enableScaleHires: Boolean = false,
-    val multitapMode: Int = 0,
-    val analogAxisModifier: Int = 0,
-    val dualshockToggleCombo: Int = 0
+    val palFramerate: Float
 )
 
 class EmulationViewModel(application: Application) : AndroidViewModel(application) {
@@ -658,7 +369,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     private val playTimeSyncMutex = Mutex()
     init {
         viewModelScope.launch {
-            preferences.cleanupLegacyClampingPreferencesIfNeeded()
             preferences.migrateOverlayLayoutIfNeeded()
         }
         viewModelScope.launch {
@@ -898,11 +608,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         viewModelScope.launch {
-            preferences.pressureModifierAmount.collect { amount ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(pressureModifierAmount = amount.coerceIn(1, 100)) }
-            }
-        }
-        viewModelScope.launch {
             preferences.confirmSaveLoadActions.collect { enabled ->
                 applyGlobalRuntimePreferenceUpdate { it.copy(confirmSaveLoadActions = enabled) }
             }
@@ -920,21 +625,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             preferences.performancePreset.collect { preset ->
                 applyGlobalRuntimePreferenceUpdate { it.copy(performancePreset = preset) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.hwDownloadMode.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(hwDownloadMode = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.eeCycleRate.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(eeCycleRate = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.eeCycleSkip.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(eeCycleSkip = value) }
             }
         }
         viewModelScope.launch {
@@ -958,289 +648,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         viewModelScope.launch {
-            preferences.displayCrop.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(displayCrop = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.enableInstantVu1.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(enableInstantVu1 = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.enableMtvu.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(enableMtvu = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.enableThreadPinning.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(enableThreadPinning = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.enableFastCdvd.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(enableFastCdvd = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.enableFastBoot.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(enableFastBoot = value) }
-            }
-        }
-        viewModelScope.launch {
             preferences.enableCheats.collect { value ->
                 applyGlobalRuntimePreferenceUpdate { it.copy(enableCheats = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.frameSkip.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(frameSkip = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.skipDuplicateFrames.collect { enabled ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(skipDuplicateFrames = enabled) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.textureFiltering.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(textureFiltering = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.trilinearFiltering.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(trilinearFiltering = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.blendingAccuracy.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(blendingAccuracy = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.texturePreloading.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(texturePreloading = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.enableFxaa.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(enableFxaa = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.casMode.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(casMode = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.sgsrMode.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(sgsrMode = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.casSharpness.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(casSharpness = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.tvShader.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(tvShader = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.shadeBoostEnabled.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(shadeBoostEnabled = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.shadeBoostBrightness.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(shadeBoostBrightness = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.shadeBoostContrast.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(shadeBoostContrast = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.shadeBoostSaturation.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(shadeBoostSaturation = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.shadeBoostGamma.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(shadeBoostGamma = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.anisotropicFiltering.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(anisotropicFiltering = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.enableHwMipmapping.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(enableHwMipmapping = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.antiBlur.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(antiBlur = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.enableWidescreenPatches.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(widescreenPatches = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.enableNoInterlacingPatches.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(noInterlacingPatches = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.patchDatabaseRevision
-                .distinctUntilChanged()
-                .drop(1)
-                .collect {
-                    val state = _uiState.value
-                    if (state.isRunning || state.isPaused) {
-                        withContext(Dispatchers.IO) { syncCheatsForCurrentGame() }
-                    }
-                }
-        }
-        viewModelScope.launch {
-            preferences.cpuSpriteRenderSize.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(cpuSpriteRenderSize = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.cpuSpriteRenderLevel.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(cpuSpriteRenderLevel = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.softwareClutRender.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(softwareClutRender = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.gpuTargetClutMode.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(gpuTargetClutMode = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.skipDrawStart.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(skipDrawStart = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.skipDrawEnd.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(skipDrawEnd = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.autoFlushHardware.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(autoFlushHardware = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.cpuFramebufferConversion.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(cpuFramebufferConversion = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.disableDepthConversion.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(disableDepthConversion = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.disableSafeFeatures.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(disableSafeFeatures = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.disableRenderFixes.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(disableRenderFixes = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.preloadFrameData.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(preloadFrameData = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.disablePartialInvalidation.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(disablePartialInvalidation = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.textureInsideRt.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(textureInsideRt = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.readTargetsOnClose.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(readTargetsOnClose = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.estimateTextureRegion.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(estimateTextureRegion = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.gpuPaletteConversion.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(gpuPaletteConversion = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.halfPixelOffset.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(halfPixelOffset = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.nativeScaling.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(nativeScaling = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.roundSprite.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(roundSprite = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.bilinearUpscale.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(bilinearUpscale = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.textureOffsetX.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(textureOffsetX = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.textureOffsetY.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(textureOffsetY = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.alignSprite.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(alignSprite = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.mergeSprite.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(mergeSprite = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.forceEvenSpritePosition.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(forceEvenSpritePosition = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.nativePaletteDraw.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(nativePaletteDraw = value) }
             }
         }
         viewModelScope.launch {
@@ -1251,11 +660,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             preferences.targetFps.collect { value ->
                 applyGlobalRuntimePreferenceUpdate { it.copy(targetFps = value) }
-            }
-        }
-        viewModelScope.launch {
-            preferences.fastForwardSpeed.collect { value ->
-                applyGlobalRuntimePreferenceUpdate { it.copy(fastForwardSpeed = value) }
             }
         }
         viewModelScope.launch {
@@ -1521,12 +925,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         bootToBios: Boolean = false,
         bootSmokeProbe: Boolean = false,
         autotestMode: Boolean = false,
-        enableEeRecompilerOverride: Boolean? = null,
-        enableIopRecompilerOverride: Boolean? = null,
-        enableVu0RecompilerOverride: Boolean? = null,
-        enableVu1RecompilerOverride: Boolean? = null,
-        enableFastmemOverride: Boolean? = null,
-        enableMtvuOverride: Boolean? = null,
         rendererOverride: Int? = null,
         gsDumpFrames: Int? = null,
         gsDumpDelayMs: Int? = null
@@ -1597,14 +995,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 val renderer = rendererOverride ?: config.renderer
                 Log.i(
                     TAG,
-                    "Launch config loaded bios=${config.biosPath} renderer=$renderer override=${rendererOverride != null} eeJit=${config.enableEeRecompiler} iopJit=${config.enableIopRecompiler}"
+                    "Launch config loaded bios=${config.biosPath} renderer=$renderer override=${rendererOverride != null}"
                 )
-                val enableEeRecompiler = enableEeRecompilerOverride ?: config.enableEeRecompiler
-                val enableIopRecompiler = enableIopRecompilerOverride ?: config.enableIopRecompiler
-                val enableVu0Recompiler = enableVu0RecompilerOverride ?: config.enableVu0Recompiler
-                val enableVu1Recompiler = enableVu1RecompilerOverride ?: config.enableVu1Recompiler
-                val enableFastmem = enableFastmemOverride ?: config.enableFastmem
-                val enableMtvu = enableMtvuOverride ?: config.mtvu
 
                 // PPSSPP boots without a firmware dump; a configured BIOS is
                 // staged by CoreRuntime when one is present and usable.
@@ -1617,8 +1009,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 EmulatorBridge.applyRuntimeConfig(
                     biosPath = config.biosPath,
                     emulatorDataPath = config.emulatorDataPath,
-                    memoryCardSlot1 = config.memoryCardSlot1,
-                    memoryCardSlot2 = config.memoryCardSlot2,
                     renderer = renderer,
                     upscaleMultiplier = config.upscaleMultiplier,
                     gpuDriverType = config.gpuDriverType,
@@ -1626,130 +1016,19 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     gpuHardwareProfile = config.gpuHardwareProfile,
                     mediatekAngleOpenGl = config.mediatekAngleOpenGl,
                     aspectRatio = config.aspectRatio,
-                    localMultiplayerMode = config.localMultiplayerMode,
                     audioVolume = config.audioVolume,
                     audioFastForwardVolume = config.audioFastForwardVolume,
                     audioMuted = config.audioMuted,
-                    audioInterpolation = config.audioInterpolation,
-                    audioSyncMode = config.audioSyncMode,
-                    audioLightweightSpu2 = config.audioLightweightSpu2,
                     audioBackend = config.audioBackend,
-                    audioBufferMs = config.audioBufferMs,
                     audioOutputLatencyMs = config.audioOutputLatencyMs,
                     audioMinimalOutputLatency = config.audioMinimalOutputLatency,
-                    enableEeRecompiler = enableEeRecompiler,
-                    enableIopRecompiler = enableIopRecompiler,
-                    enableVu0Recompiler = enableVu0Recompiler,
-                    enableVu1Recompiler = enableVu1Recompiler,
-                    eeFpuRoundMode = config.eeFpuRoundMode,
-                    vu0RoundMode = config.vu0RoundMode,
-                    vu1RoundMode = config.vu1RoundMode,
-                    eeFpuClampingMode = config.eeFpuClampingMode,
-                    vu0ClampingMode = config.vu0ClampingMode,
-                    vu1ClampingMode = config.vu1ClampingMode,
-                    enableGameFixes = config.enableGameFixes,
-                    eeTimingHack = config.eeTimingHack,
-                    enableFastmem = enableFastmem,
-                    waitLoopSpeedhack = config.waitLoopSpeedhack,
-                    intcStatSpeedhack = config.intcStatSpeedhack,
-                    vuFlagHack = config.vuFlagHack,
-                    instantVu1 = config.instantVu1,
-                    mtvu = enableMtvu,
-                    enableThreadPinning = config.enableThreadPinning,
-                    enableFastBoot = config.enableFastBoot,
-                    fastCdvd = config.fastCdvd,
-                    enableCheats = config.enableCheats,
-                    hwDownloadMode = config.hwDownloadMode,
-                    eeCycleRate = config.eeCycleRate,
-                    eeCycleSkip = config.eeCycleSkip,
-                    frameSkip = config.frameSkip,
-                    skipDuplicateFrames = config.skipDuplicateFrames,
                     frameLimitEnabled = config.frameLimitEnabled,
                     vSyncEnabled = config.vSyncEnabled,
-                    fastForwardSpeed = config.fastForwardSpeed,
                     targetFps = config.targetFps,
                     ntscFramerate = config.ntscFramerate,
                     palFramerate = config.palFramerate,
-                    textureFiltering = config.textureFiltering,
-                    trilinearFiltering = config.trilinearFiltering,
-                    blendingAccuracy = config.blendingAccuracy,
-                    texturePreloading = config.texturePreloading,
                     shaderChainEnabled = config.shaderChainEnabled,
                     shaderChainPreset = config.shaderChainPreset,
-                    enableFxaa = config.enableFxaa,
-                    casMode = config.casMode,
-                    sgsrMode = config.sgsrMode,
-                    casSharpness = config.casSharpness,
-                    tvShader = config.tvShader,
-                    shadeBoostEnabled = config.shadeBoostEnabled,
-                    shadeBoostBrightness = config.shadeBoostBrightness,
-                    shadeBoostContrast = config.shadeBoostContrast,
-                    shadeBoostSaturation = config.shadeBoostSaturation,
-                    shadeBoostGamma = config.shadeBoostGamma,
-                    deinterlaceMode = config.deinterlaceMode,
-                    dithering = config.dithering,
-                    anisotropicFiltering = config.anisotropicFiltering,
-                    enableHwMipmapping = config.enableHwMipmapping,
-                    antiBlur = config.antiBlur,
-                    widescreenPatches = config.widescreenPatches,
-                    noInterlacingPatches = config.noInterlacingPatches,
-                    cpuSpriteRenderSize = config.cpuSpriteRenderSize,
-                    cpuSpriteRenderLevel = config.cpuSpriteRenderLevel,
-                    softwareClutRender = config.softwareClutRender,
-                    gpuTargetClutMode = config.gpuTargetClutMode,
-                    skipDrawStart = config.skipDrawStart,
-                    skipDrawEnd = config.skipDrawEnd,
-                    autoFlushHardware = config.autoFlushHardware,
-                    cpuFramebufferConversion = config.cpuFramebufferConversion,
-                    disableDepthConversion = config.disableDepthConversion,
-                    disableSafeFeatures = config.disableSafeFeatures,
-                    disableRenderFixes = config.disableRenderFixes,
-                    preloadFrameData = config.preloadFrameData,
-                    disablePartialInvalidation = config.disablePartialInvalidation,
-                    textureInsideRt = config.textureInsideRt,
-                    readTargetsOnClose = config.readTargetsOnClose,
-                    estimateTextureRegion = config.estimateTextureRegion,
-                    gpuPaletteConversion = config.gpuPaletteConversion,
-                    halfPixelOffset = config.halfPixelOffset,
-                    nativeScaling = config.nativeScaling,
-                    roundSprite = config.roundSprite,
-                    bilinearUpscale = config.bilinearUpscale,
-                    textureOffsetX = config.textureOffsetX,
-                    textureOffsetY = config.textureOffsetY,
-                    alignSprite = config.alignSprite,
-                    mergeSprite = config.mergeSprite,
-                    forceEvenSpritePosition = config.forceEvenSpritePosition,
-                    nativePaletteDraw = config.nativePaletteDraw,
-                    pressureModifierAmount = config.pressureModifierAmount,
-                    autotestMode = autotestMode || bootSmokeProbe,
-                    fpuCorrectAddSub = config.fpuCorrectAddSub,
-                    enableIcacheEmulation = config.enableIcacheEmulation,
-                    enableDisableStalls = config.enableDisableStalls,
-                    enablePreciseExceptions = config.enablePreciseExceptions,
-                    enableTurboCd = config.enableTurboCd,
-                    cdReadAhead = config.cdReadAhead,
-                    enableCddaAudio = config.enableCddaAudio,
-                    enableXaDecoding = config.enableXaDecoding,
-                    enableSpuReverb = config.enableSpuReverb,
-                    enableSpuThread = config.enableSpuThread,
-                    spuTempo = config.spuTempo,
-                    neonEnhancement = config.neonEnhancement,
-                    neonEnhancementSpeedHack = config.neonEnhancementSpeedHack,
-                    neonEnhancementTexAdj = config.neonEnhancementTexAdj,
-                    neonInterlace = config.neonInterlace,
-                    gpuThreadRendering = config.gpuThreadRendering,
-                    showOverscan = config.showOverscan,
-                    screenCentering = config.screenCentering,
-                    screenCenteringX = config.screenCenteringX,
-                    screenCenteringY = config.screenCenteringY,
-                    screenCenteringHAdj = config.screenCenteringHAdj,
-                    enableFractionalFramerate = config.enableFractionalFramerate,
-                    altFlipMode = config.altFlipMode,
-                    enableRgb32Output = config.enableRgb32Output,
-                    enableScaleHires = config.enableScaleHires,
-                    multitapMode = config.multitapMode,
-                    analogAxisModifier = config.analogAxisModifier,
-                    dualshockToggleCombo = config.dualshockToggleCombo
                 )
 
                 _uiState.value = _uiState.value.copy(
@@ -1901,69 +1180,9 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     upscale = liveRuntime.upscale,
                     aspectRatio = liveRuntime.aspectRatio,
                     localMultiplayerMode = liveRuntime.localMultiplayerMode,
-                    displayCrop = liveRuntime.displayCrop,
                     performancePreset = liveRuntime.performancePreset,
-                    enableInstantVu1 = liveRuntime.enableInstantVu1,
-                    enableMtvu = liveRuntime.enableMtvu,
-                    enableThreadPinning = liveRuntime.enableThreadPinning,
-                    enableFastCdvd = liveRuntime.enableFastCdvd,
-                    enableFastBoot = liveRuntime.enableFastBoot,
                     enableCheats = liveRuntime.enableCheats,
-                    hwDownloadMode = liveRuntime.hwDownloadMode,
-                    eeCycleRate = liveRuntime.eeCycleRate,
-                    eeCycleSkip = liveRuntime.eeCycleSkip,
-                    frameSkip = liveRuntime.frameSkip,
-                    skipDuplicateFrames = liveRuntime.skipDuplicateFrames,
-                    textureFiltering = liveRuntime.textureFiltering,
-                    trilinearFiltering = liveRuntime.trilinearFiltering,
-                    blendingAccuracy = liveRuntime.blendingAccuracy,
-                    texturePreloading = liveRuntime.texturePreloading,
-                    enableFxaa = liveRuntime.enableFxaa,
-                    casMode = liveRuntime.casMode,
-                    sgsrMode = liveRuntime.sgsrMode,
-                    casSharpness = liveRuntime.casSharpness,
-                    tvShader = liveRuntime.tvShader,
-                    shadeBoostEnabled = liveRuntime.shadeBoostEnabled,
-                    shadeBoostBrightness = liveRuntime.shadeBoostBrightness,
-                    shadeBoostContrast = liveRuntime.shadeBoostContrast,
-                    shadeBoostSaturation = liveRuntime.shadeBoostSaturation,
-                    shadeBoostGamma = liveRuntime.shadeBoostGamma,
-                    anisotropicFiltering = liveRuntime.anisotropicFiltering,
-                    enableHwMipmapping = liveRuntime.enableHwMipmapping,
-                    antiBlur = liveRuntime.antiBlur,
-                    deinterlaceMode = liveRuntime.deinterlaceMode,
-                    dithering = liveRuntime.dithering,
-                    widescreenPatches = liveRuntime.widescreenPatches,
-                    noInterlacingPatches = liveRuntime.noInterlacingPatches,
-                    cpuSpriteRenderSize = liveRuntime.cpuSpriteRenderSize,
-                    cpuSpriteRenderLevel = liveRuntime.cpuSpriteRenderLevel,
-                    softwareClutRender = liveRuntime.softwareClutRender,
-                    gpuTargetClutMode = liveRuntime.gpuTargetClutMode,
-                    skipDrawStart = liveRuntime.skipDrawStart,
-                    skipDrawEnd = liveRuntime.skipDrawEnd,
-                    autoFlushHardware = liveRuntime.autoFlushHardware,
-                    cpuFramebufferConversion = liveRuntime.cpuFramebufferConversion,
-                    disableDepthConversion = liveRuntime.disableDepthConversion,
-                    disableSafeFeatures = liveRuntime.disableSafeFeatures,
-                    disableRenderFixes = liveRuntime.disableRenderFixes,
-                    preloadFrameData = liveRuntime.preloadFrameData,
-                    disablePartialInvalidation = liveRuntime.disablePartialInvalidation,
-                    textureInsideRt = liveRuntime.textureInsideRt,
-                    readTargetsOnClose = liveRuntime.readTargetsOnClose,
-                    estimateTextureRegion = liveRuntime.estimateTextureRegion,
-                    gpuPaletteConversion = liveRuntime.gpuPaletteConversion,
-                    halfPixelOffset = liveRuntime.halfPixelOffset,
-                    nativeScaling = liveRuntime.nativeScaling,
-                    roundSprite = liveRuntime.roundSprite,
-                    bilinearUpscale = liveRuntime.bilinearUpscale,
-                    textureOffsetX = liveRuntime.textureOffsetX,
-                    textureOffsetY = liveRuntime.textureOffsetY,
-                    alignSprite = liveRuntime.alignSprite,
-                    mergeSprite = liveRuntime.mergeSprite,
-                    forceEvenSpritePosition = liveRuntime.forceEvenSpritePosition,
-                    nativePaletteDraw = liveRuntime.nativePaletteDraw,
                     frameLimitEnabled = liveRuntime.frameLimitEnabled,
-                    fastForwardSpeed = liveRuntime.fastForwardSpeed,
                     racingMode = liveRuntime.racingMode,
                     stickyButtons = liveRuntime.stickyButtons,
                     touchscreenRightStick = liveRuntime.touchscreenRightStick,
@@ -1985,39 +1204,11 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     gamepadLeftStickSensitivity = liveRuntime.gamepadLeftStickSensitivity,
                     gamepadRightStickSensitivity = liveRuntime.gamepadRightStickSensitivity,
                     gamepadBindingsByPad = liveRuntime.gamepadBindingsByPad,
-                    pressureModifierAmount = liveRuntime.pressureModifierAmount,
                     autoSaveOnExit = liveRuntime.autoSaveOnExit,
                     autoLoadOnStart = liveRuntime.autoLoadOnStart,
                     targetFps = liveRuntime.targetFps,
                     ntscFramerate = liveRuntime.ntscFramerate,
-                    palFramerate = liveRuntime.palFramerate,
-                    enableIcacheEmulation = liveRuntime.enableIcacheEmulation,
-                    enableDisableStalls = liveRuntime.enableDisableStalls,
-                    enablePreciseExceptions = liveRuntime.enablePreciseExceptions,
-                    enableTurboCd = liveRuntime.enableTurboCd,
-                    cdReadAhead = liveRuntime.cdReadAhead,
-                    enableCddaAudio = liveRuntime.enableCddaAudio,
-                    enableXaDecoding = liveRuntime.enableXaDecoding,
-                    enableSpuReverb = liveRuntime.enableSpuReverb,
-                    enableSpuThread = liveRuntime.enableSpuThread,
-                    spuTempo = liveRuntime.spuTempo,
-                    neonEnhancement = liveRuntime.neonEnhancement,
-                    neonEnhancementSpeedHack = liveRuntime.neonEnhancementSpeedHack,
-                    neonEnhancementTexAdj = liveRuntime.neonEnhancementTexAdj,
-                    neonInterlace = liveRuntime.neonInterlace,
-                    gpuThreadRendering = liveRuntime.gpuThreadRendering,
-                    showOverscan = liveRuntime.showOverscan,
-                    screenCentering = liveRuntime.screenCentering,
-                    screenCenteringX = liveRuntime.screenCenteringX,
-                    screenCenteringY = liveRuntime.screenCenteringY,
-                    screenCenteringHAdj = liveRuntime.screenCenteringHAdj,
-                    enableFractionalFramerate = liveRuntime.enableFractionalFramerate,
-                    altFlipMode = liveRuntime.altFlipMode,
-                    enableRgb32Output = liveRuntime.enableRgb32Output,
-                    enableScaleHires = liveRuntime.enableScaleHires,
-                    multitapMode = liveRuntime.multitapMode,
-                    analogAxisModifier = liveRuntime.analogAxisModifier,
-                    dualshockToggleCombo = liveRuntime.dualshockToggleCombo
+                    palFramerate = liveRuntime.palFramerate
                 )
                 val overlayState = runtimeState.withOverlayLayoutSnapshot(overlaySnapshot)
                 _uiState.value = currentTouchControlsLayoutProfile?.let { overlayState.withTouchControlsLayout(it) } ?: overlayState
@@ -2325,7 +1516,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
-     * Applies a SwanStation core option while a game session is running.
+     * Applies a core option while a game session is running.
      *
      * Core options edited in-game belong to the running game, so they are stored
      * in that game's profile instead of the global core-option store. A change
@@ -2714,10 +1905,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             val normalizedUpscale = normalizeUpscale(upscale)
             // The in-game selector only offers Native/2x; keep the profile's
             // enhanced-resolution flag aligned with it.
-            val newState = markPerformancePresetCustom(_uiState.value).copy(
-                upscale = normalizedUpscale,
-                neonEnhancement = normalizedUpscale >= 1.5f
-            )
+            val newState = markPerformancePresetCustom(_uiState.value).copy(upscale = normalizedUpscale)
             persistRuntimeState(newState) {
                 preferences.setPerformancePreset(PerformancePresets.CUSTOM)
                 preferences.setUpscaleMultiplier(normalizedUpscale)
@@ -2875,15 +2063,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    private fun isShadeBoostActive(
-        brightness: Int,
-        contrast: Int,
-        saturation: Int,
-        gamma: Int
-    ): Boolean {
-        return brightness != 50 || contrast != 50 || saturation != 50 || gamma != 50
-    }
-
     fun setAudioVolume(value: Int) {
         viewModelScope.launch {
             val clamped = value.coerceIn(AudioDefaults.VOLUME_MIN, AudioDefaults.VOLUME_MAX)
@@ -2913,39 +2092,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         } else {
             state.copy(performancePreset = PerformancePresets.CUSTOM)
         }
-    }
-
-    private suspend fun refreshManualHardwareFixes(state: EmulationUiState = _uiState.value) {
-        val enabled = GsHackDefaults.shouldEnableManualHardwareFixes(
-            cpuSpriteRenderSize = state.cpuSpriteRenderSize,
-            cpuSpriteRenderLevel = state.cpuSpriteRenderLevel,
-            softwareClutRender = state.softwareClutRender,
-            gpuTargetClutMode = state.gpuTargetClutMode,
-            skipDrawStart = state.skipDrawStart,
-            skipDrawEnd = state.skipDrawEnd,
-            autoFlushHardware = state.autoFlushHardware,
-            cpuFramebufferConversion = state.cpuFramebufferConversion,
-            disableDepthConversion = state.disableDepthConversion,
-            disableSafeFeatures = state.disableSafeFeatures,
-            disableRenderFixes = state.disableRenderFixes,
-            preloadFrameData = state.preloadFrameData,
-            disablePartialInvalidation = state.disablePartialInvalidation,
-            textureInsideRt = state.textureInsideRt,
-            readTargetsOnClose = state.readTargetsOnClose,
-            estimateTextureRegion = state.estimateTextureRegion,
-            gpuPaletteConversion = state.gpuPaletteConversion,
-            halfPixelOffset = state.halfPixelOffset,
-            nativeScaling = state.nativeScaling,
-            roundSprite = state.roundSprite,
-            bilinearUpscale = state.bilinearUpscale,
-            textureOffsetX = state.textureOffsetX,
-            textureOffsetY = state.textureOffsetY,
-            alignSprite = state.alignSprite,
-            mergeSprite = state.mergeSprite,
-            forceEvenSpritePosition = state.forceEvenSpritePosition,
-            nativePaletteDraw = state.nativePaletteDraw
-        )
-        EmulatorBridge.setSetting("EmuCoreA/GS", "UserHacks", "bool", enabled.toString())
     }
 
     private fun applyOverlayLayoutSnapshot(snapshot: OverlayLayoutSnapshot) {
@@ -3263,10 +2409,9 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
 
     private suspend fun loadLaunchConfig(): EmulationLaunchConfig {
         val profile = activePerGameKey()?.let(perGameSettingsRepository::get)
-        // PPSSPP uses a directory-backed Memory Stick. PS1 .mcd slots must
-        // never be created or forwarded when launching a PSP title.
+        // PPSSPP uses a directory-backed Memory Stick; no memory-card slots are
+        // created or forwarded when launching a PSP title.
         val settings = preferences.settingsSnapshot.first()
-        val profileConfig = PerformanceProfiles.configFor(settings.performanceProfile)
         val savedGpuDriverType = settings.gpuDriverType
         val savedCustomDriverPath = settings.customDriverPath
         // Custom driver support is gone with the CPU-rasterizer-only core; a
@@ -3281,8 +2426,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             performanceProfile = settings.performanceProfile,
             biosPath = settings.biosPath,
             emulatorDataPath = settings.emulatorDataPath,
-            memoryCardSlot1 = null,
-            memoryCardSlot2 = null,
             renderer = settings.renderer,
             upscaleMultiplier = settings.upscaleMultiplier,
             gpuDriverType = resolvedGpuDriverType,
@@ -3291,129 +2434,20 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             mediatekAngleOpenGl = settings.mediatekAngleOpenGl,
             aspectRatio = settings.aspectRatio,
             localMultiplayerMode = settings.localMultiplayerMode,
-            displayCrop = settings.displayCrop,
             audioVolume = settings.audioVolume,
             audioFastForwardVolume = settings.audioFastForwardVolume,
             audioMuted = settings.audioMuted,
-            audioInterpolation = settings.audioInterpolation,
-            audioSyncMode = settings.audioSyncMode,
-            audioLightweightSpu2 = settings.audioLightweightSpu2,
             audioBackend = settings.audioBackend,
-            audioBufferMs = settings.audioBufferMs,
             audioOutputLatencyMs = settings.audioOutputLatencyMs,
             audioMinimalOutputLatency = settings.audioMinimalOutputLatency,
-            enableEeRecompiler = settings.enableEeRecompiler,
-            enableIopRecompiler = settings.enableIopRecompiler,
-            enableVu0Recompiler = settings.enableVu0Recompiler,
-            enableVu1Recompiler = settings.enableVu1Recompiler,
-            enableFastmem = settings.enableFastmem,
-            eeFpuRoundMode = settings.eeFpuRoundMode,
-            vu0RoundMode = settings.vu0RoundMode,
-            vu1RoundMode = settings.vu1RoundMode,
-            eeFpuClampingMode = settings.eeFpuClampingMode,
-            vu0ClampingMode = settings.vu0ClampingMode,
-            vu1ClampingMode = settings.vu1ClampingMode,
-            enableGameFixes = settings.enableGameFixes,
-            eeTimingHack = settings.enableEeTimingHack,
-            waitLoopSpeedhack = settings.enableWaitLoopSpeedhack,
-            intcStatSpeedhack = settings.enableIntcStatSpeedhack,
-            vuFlagHack = settings.enableVuFlagHack,
-            instantVu1 = settings.enableInstantVu1,
-            mtvu = settings.enableMtvu,
-            enableThreadPinning = settings.enableThreadPinning,
-            fastCdvd = settings.enableFastCdvd,
-            enableFastBoot = settings.enableFastBoot,
             enableCheats = settings.enableCheats,
-            hwDownloadMode = settings.hwDownloadMode,
-            eeCycleRate = settings.eeCycleRate,
-            eeCycleSkip = settings.eeCycleSkip,
-            frameSkip = settings.frameSkip,
-            skipDuplicateFrames = settings.skipDuplicateFrames,
             frameLimitEnabled = settings.frameLimitEnabled,
             vSyncEnabled = settings.vSyncEnabled,
-            fastForwardSpeed = settings.fastForwardSpeed,
             targetFps = settings.targetFps,
             ntscFramerate = settings.ntscFramerate,
             palFramerate = settings.palFramerate,
-            textureFiltering = settings.textureFiltering,
-            trilinearFiltering = settings.trilinearFiltering,
-            blendingAccuracy = settings.blendingAccuracy,
-            texturePreloading = settings.texturePreloading,
             shaderChainEnabled = settings.shaderChainEnabled,
-            shaderChainPreset = settings.shaderChainPreset,
-            enableFxaa = settings.enableFxaa,
-            casMode = settings.casMode,
-            sgsrMode = settings.sgsrMode,
-            casSharpness = settings.casSharpness,
-            tvShader = settings.tvShader,
-            shadeBoostEnabled = settings.shadeBoostEnabled,
-            shadeBoostBrightness = settings.shadeBoostBrightness,
-            shadeBoostContrast = settings.shadeBoostContrast,
-            shadeBoostSaturation = settings.shadeBoostSaturation,
-            shadeBoostGamma = settings.shadeBoostGamma,
-            deinterlaceMode = settings.deinterlaceMode,
-            dithering = settings.dithering,
-            anisotropicFiltering = settings.anisotropicFiltering,
-            enableHwMipmapping = settings.enableHwMipmapping,
-            antiBlur = settings.antiBlur,
-            widescreenPatches = settings.enableWidescreenPatches,
-            noInterlacingPatches = settings.enableNoInterlacingPatches,
-            cpuSpriteRenderSize = settings.cpuSpriteRenderSize,
-            cpuSpriteRenderLevel = settings.cpuSpriteRenderLevel,
-            softwareClutRender = settings.softwareClutRender,
-            gpuTargetClutMode = settings.gpuTargetClutMode,
-            skipDrawStart = settings.skipDrawStart,
-            skipDrawEnd = settings.skipDrawEnd,
-            autoFlushHardware = settings.autoFlushHardware,
-            cpuFramebufferConversion = settings.cpuFramebufferConversion,
-            disableDepthConversion = settings.disableDepthConversion,
-            disableSafeFeatures = settings.disableSafeFeatures,
-            disableRenderFixes = settings.disableRenderFixes,
-            preloadFrameData = settings.preloadFrameData,
-            disablePartialInvalidation = settings.disablePartialInvalidation,
-            textureInsideRt = settings.textureInsideRt,
-            readTargetsOnClose = settings.readTargetsOnClose,
-            estimateTextureRegion = settings.estimateTextureRegion,
-            gpuPaletteConversion = settings.gpuPaletteConversion,
-            halfPixelOffset = settings.halfPixelOffset,
-            nativeScaling = settings.nativeScaling,
-            roundSprite = settings.roundSprite,
-            bilinearUpscale = settings.bilinearUpscale,
-            textureOffsetX = settings.textureOffsetX,
-            textureOffsetY = settings.textureOffsetY,
-            alignSprite = settings.alignSprite,
-            mergeSprite = settings.mergeSprite,
-            forceEvenSpritePosition = settings.forceEvenSpritePosition,
-            nativePaletteDraw = settings.nativePaletteDraw,
-            pressureModifierAmount = settings.pressureModifierAmount,
-            fpuCorrectAddSub = profileConfig.fpuCorrectAddSub,
-            enableIcacheEmulation = settings.enableIcacheEmulation,
-            enableDisableStalls = settings.enableDisableStalls,
-            enablePreciseExceptions = settings.enablePreciseExceptions,
-            enableTurboCd = settings.enableTurboCd,
-            cdReadAhead = settings.cdReadAhead,
-            enableCddaAudio = settings.enableCddaAudio,
-            enableXaDecoding = settings.enableXaDecoding,
-            enableSpuReverb = settings.enableSpuReverb,
-            enableSpuThread = settings.enableSpuThread,
-            spuTempo = settings.spuTempo,
-            neonEnhancement = settings.neonEnhancement,
-            neonEnhancementSpeedHack = settings.neonEnhancementSpeedHack,
-            neonEnhancementTexAdj = settings.neonEnhancementTexAdj,
-            neonInterlace = settings.neonInterlace,
-            gpuThreadRendering = settings.gpuThreadRendering,
-            showOverscan = settings.showOverscan,
-            screenCentering = settings.screenCentering,
-            screenCenteringX = settings.screenCenteringX,
-            screenCenteringY = settings.screenCenteringY,
-            screenCenteringHAdj = settings.screenCenteringHAdj,
-            enableFractionalFramerate = settings.enableFractionalFramerate,
-            altFlipMode = settings.altFlipMode,
-            enableRgb32Output = settings.enableRgb32Output,
-            enableScaleHires = settings.enableScaleHires,
-            multitapMode = settings.multitapMode,
-            analogAxisModifier = settings.analogAxisModifier,
-            dualshockToggleCombo = settings.dualshockToggleCombo
+            shaderChainPreset = settings.shaderChainPreset
         ).applyProfile(profile)
         val mergedDriverPath = mergedConfig.customDriverPath?.takeIf { File(it).isFile }
         return mergedConfig.copy(
@@ -3434,21 +2468,9 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             upscale = settings.upscaleMultiplier,
             aspectRatio = settings.aspectRatio,
             localMultiplayerMode = settings.localMultiplayerMode,
-            displayCrop = settings.displayCrop,
             performancePreset = settings.performancePreset,
-            enableInstantVu1 = settings.enableInstantVu1,
-            enableMtvu = settings.enableMtvu,
-            enableThreadPinning = settings.enableThreadPinning,
-            enableFastCdvd = settings.enableFastCdvd,
-            enableFastBoot = settings.enableFastBoot,
             enableCheats = settings.enableCheats,
-            hwDownloadMode = settings.hwDownloadMode,
-            eeCycleRate = settings.eeCycleRate,
-            eeCycleSkip = settings.eeCycleSkip,
-            frameSkip = settings.frameSkip,
-            skipDuplicateFrames = settings.skipDuplicateFrames,
             frameLimitEnabled = settings.frameLimitEnabled,
-            fastForwardSpeed = settings.fastForwardSpeed,
             racingMode = settings.racingMode,
             stickyButtons = settings.stickyButtons,
             touchscreenRightStick = settings.touchscreenRightStick,
@@ -3470,87 +2492,11 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             gamepadLeftStickSensitivity = settings.gamepadLeftStickSensitivity,
             gamepadRightStickSensitivity = settings.gamepadRightStickSensitivity,
             gamepadBindingsByPad = settings.gamepadBindingsByPad,
-            pressureModifierAmount = settings.pressureModifierAmount,
             autoSaveOnExit = false,
             autoLoadOnStart = false,
             targetFps = settings.targetFps,
             ntscFramerate = settings.ntscFramerate,
-            palFramerate = settings.palFramerate,
-            textureFiltering = settings.textureFiltering,
-            trilinearFiltering = settings.trilinearFiltering,
-            blendingAccuracy = settings.blendingAccuracy,
-            texturePreloading = settings.texturePreloading,
-            enableFxaa = settings.enableFxaa,
-            casMode = settings.casMode,
-            sgsrMode = settings.sgsrMode,
-            casSharpness = settings.casSharpness,
-            tvShader = settings.tvShader,
-            shadeBoostEnabled = settings.shadeBoostEnabled,
-            shadeBoostBrightness = settings.shadeBoostBrightness,
-            shadeBoostContrast = settings.shadeBoostContrast,
-            shadeBoostSaturation = settings.shadeBoostSaturation,
-            shadeBoostGamma = settings.shadeBoostGamma,
-            anisotropicFiltering = settings.anisotropicFiltering,
-            enableHwMipmapping = settings.enableHwMipmapping,
-            antiBlur = settings.antiBlur,
-            deinterlaceMode = settings.deinterlaceMode,
-            dithering = settings.dithering,
-            widescreenPatches = settings.enableWidescreenPatches,
-            noInterlacingPatches = settings.enableNoInterlacingPatches,
-            cpuSpriteRenderSize = settings.cpuSpriteRenderSize,
-            cpuSpriteRenderLevel = settings.cpuSpriteRenderLevel,
-            softwareClutRender = settings.softwareClutRender,
-            gpuTargetClutMode = settings.gpuTargetClutMode,
-            skipDrawStart = settings.skipDrawStart,
-            skipDrawEnd = settings.skipDrawEnd,
-            autoFlushHardware = settings.autoFlushHardware,
-            cpuFramebufferConversion = settings.cpuFramebufferConversion,
-            disableDepthConversion = settings.disableDepthConversion,
-            disableSafeFeatures = settings.disableSafeFeatures,
-            disableRenderFixes = settings.disableRenderFixes,
-            preloadFrameData = settings.preloadFrameData,
-            disablePartialInvalidation = settings.disablePartialInvalidation,
-            textureInsideRt = settings.textureInsideRt,
-            readTargetsOnClose = settings.readTargetsOnClose,
-            estimateTextureRegion = settings.estimateTextureRegion,
-            gpuPaletteConversion = settings.gpuPaletteConversion,
-            halfPixelOffset = settings.halfPixelOffset,
-            nativeScaling = settings.nativeScaling,
-            roundSprite = settings.roundSprite,
-            bilinearUpscale = settings.bilinearUpscale,
-            textureOffsetX = settings.textureOffsetX,
-            textureOffsetY = settings.textureOffsetY,
-            alignSprite = settings.alignSprite,
-            mergeSprite = settings.mergeSprite,
-            forceEvenSpritePosition = settings.forceEvenSpritePosition,
-            nativePaletteDraw = settings.nativePaletteDraw,
-            enableIcacheEmulation = settings.enableIcacheEmulation,
-            enableDisableStalls = settings.enableDisableStalls,
-            enablePreciseExceptions = settings.enablePreciseExceptions,
-            enableTurboCd = settings.enableTurboCd,
-            cdReadAhead = settings.cdReadAhead,
-            enableCddaAudio = settings.enableCddaAudio,
-            enableXaDecoding = settings.enableXaDecoding,
-            enableSpuReverb = settings.enableSpuReverb,
-            enableSpuThread = settings.enableSpuThread,
-            spuTempo = settings.spuTempo,
-            neonEnhancement = settings.neonEnhancement,
-            neonEnhancementSpeedHack = settings.neonEnhancementSpeedHack,
-            neonEnhancementTexAdj = settings.neonEnhancementTexAdj,
-            neonInterlace = settings.neonInterlace,
-            gpuThreadRendering = settings.gpuThreadRendering,
-            showOverscan = settings.showOverscan,
-            screenCentering = settings.screenCentering,
-            screenCenteringX = settings.screenCenteringX,
-            screenCenteringY = settings.screenCenteringY,
-            screenCenteringHAdj = settings.screenCenteringHAdj,
-            enableFractionalFramerate = settings.enableFractionalFramerate,
-            altFlipMode = settings.altFlipMode,
-            enableRgb32Output = settings.enableRgb32Output,
-            enableScaleHires = settings.enableScaleHires,
-            multitapMode = settings.multitapMode,
-            analogAxisModifier = settings.analogAxisModifier,
-            dualshockToggleCombo = settings.dualshockToggleCombo
+            palFramerate = settings.palFramerate
         ).applyProfile(profile)
     }
 
@@ -3572,111 +2518,17 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             upscaleMultiplier = pick("upscaleMultiplier", upscaleMultiplier) { upscaleMultiplier },
             aspectRatio = pick("aspectRatio", aspectRatio) { aspectRatio },
             localMultiplayerMode = pick("localMultiplayerMode", localMultiplayerMode) { localMultiplayerMode },
-            displayCrop = pick("displayCrop", displayCrop) { displayCrop },
-            instantVu1 = pick("enableInstantVu1", instantVu1) { enableInstantVu1 },
-            mtvu = pick("enableMtvu", mtvu) { enableMtvu },
-            enableThreadPinning = pick("enableThreadPinning", enableThreadPinning) { enableThreadPinning },
-            fastCdvd = pick("enableFastCdvd", fastCdvd) { enableFastCdvd },
-            enableFastBoot = pick("enableFastBoot", enableFastBoot) { enableFastBoot },
             enableCheats = pick("enableCheats", enableCheats) { enableCheats },
-            enableGameFixes = pick("enableGameFixes", enableGameFixes) { enableGameFixes },
-            eeTimingHack = pick("enableEeTimingHack", eeTimingHack) { enableEeTimingHack },
-            eeFpuRoundMode = pick("eeFpuRoundMode", eeFpuRoundMode) { eeFpuRoundMode },
-            vu0RoundMode = pick("vu0RoundMode", vu0RoundMode) { vu0RoundMode },
-            vu1RoundMode = pick("vu1RoundMode", vu1RoundMode) { vu1RoundMode },
-            eeFpuClampingMode = pick("eeFpuClampingMode", eeFpuClampingMode) { eeFpuClampingMode },
-            vu0ClampingMode = pick("vu0ClampingMode", vu0ClampingMode) { vu0ClampingMode },
-            vu1ClampingMode = pick("vu1ClampingMode", vu1ClampingMode) { vu1ClampingMode },
-            hwDownloadMode = pick("hwDownloadMode", hwDownloadMode) { hwDownloadMode },
-            eeCycleRate = pick("eeCycleRate", eeCycleRate) { eeCycleRate },
-            eeCycleSkip = pick("eeCycleSkip", eeCycleSkip) { eeCycleSkip },
-            frameSkip = pick("frameSkip", frameSkip) { frameSkip },
-            skipDuplicateFrames = pick("skipDuplicateFrames", skipDuplicateFrames) { skipDuplicateFrames },
             frameLimitEnabled = pick("frameLimitEnabled", frameLimitEnabled) { frameLimitEnabled },
             targetFps = pick("targetFps", targetFps) { targetFps },
             ntscFramerate = pick("ntscFramerate", ntscFramerate) { ntscFramerate },
             palFramerate = pick("palFramerate", palFramerate) { palFramerate },
-            textureFiltering = pick("textureFiltering", textureFiltering) { textureFiltering },
-            trilinearFiltering = pick("trilinearFiltering", trilinearFiltering) { trilinearFiltering },
-            blendingAccuracy = pick("blendingAccuracy", blendingAccuracy) { blendingAccuracy },
-            texturePreloading = pick("texturePreloading", texturePreloading) { texturePreloading },
             shaderChainEnabled = resolvedShaderChain.enabled,
             shaderChainPreset = resolvedShaderChain.preset,
-            enableFxaa = pick("enableFxaa", enableFxaa) { enableFxaa },
-            casMode = pick("casMode", casMode) { casMode },
-            sgsrMode = pick("sgsrMode", sgsrMode) { sgsrMode },
-            casSharpness = pick("casSharpness", casSharpness) { casSharpness },
-            tvShader = pick("tvShader", tvShader) { tvShader },
-            shadeBoostEnabled = pick("shadeBoostEnabled", shadeBoostEnabled) { shadeBoostEnabled },
-            shadeBoostBrightness = pick("shadeBoostBrightness", shadeBoostBrightness) { shadeBoostBrightness },
-            shadeBoostContrast = pick("shadeBoostContrast", shadeBoostContrast) { shadeBoostContrast },
-            shadeBoostSaturation = pick("shadeBoostSaturation", shadeBoostSaturation) { shadeBoostSaturation },
-            shadeBoostGamma = pick("shadeBoostGamma", shadeBoostGamma) { shadeBoostGamma },
-            deinterlaceMode = pick("deinterlaceMode", deinterlaceMode) { deinterlaceMode },
-            dithering = pick("dithering", dithering) { dithering },
-            anisotropicFiltering = pick("anisotropicFiltering", anisotropicFiltering) { anisotropicFiltering },
-            enableHwMipmapping = pick("enableHwMipmapping", enableHwMipmapping) { enableHwMipmapping },
-            antiBlur = pick("antiBlur", antiBlur) { antiBlur },
-            widescreenPatches = pick("enableWidescreenPatches", widescreenPatches) { enableWidescreenPatches },
-            noInterlacingPatches = pick("enableNoInterlacingPatches", noInterlacingPatches) { enableNoInterlacingPatches },
-            cpuSpriteRenderSize = pick("cpuSpriteRenderSize", cpuSpriteRenderSize) { cpuSpriteRenderSize },
-            cpuSpriteRenderLevel = pick("cpuSpriteRenderLevel", cpuSpriteRenderLevel) { cpuSpriteRenderLevel },
-            softwareClutRender = pick("softwareClutRender", softwareClutRender) { softwareClutRender },
-            gpuTargetClutMode = pick("gpuTargetClutMode", gpuTargetClutMode) { gpuTargetClutMode },
-            skipDrawStart = pick("skipDrawStart", skipDrawStart) { skipDrawStart },
-            skipDrawEnd = pick("skipDrawEnd", skipDrawEnd) { skipDrawEnd },
-            autoFlushHardware = pick("autoFlushHardware", autoFlushHardware) { autoFlushHardware },
-            cpuFramebufferConversion = pick("cpuFramebufferConversion", cpuFramebufferConversion) { cpuFramebufferConversion },
-            disableDepthConversion = pick("disableDepthConversion", disableDepthConversion) { disableDepthConversion },
-            disableSafeFeatures = pick("disableSafeFeatures", disableSafeFeatures) { disableSafeFeatures },
-            disableRenderFixes = pick("disableRenderFixes", disableRenderFixes) { disableRenderFixes },
-            preloadFrameData = pick("preloadFrameData", preloadFrameData) { preloadFrameData },
-            disablePartialInvalidation = pick("disablePartialInvalidation", disablePartialInvalidation) { disablePartialInvalidation },
-            textureInsideRt = pick("textureInsideRt", textureInsideRt) { textureInsideRt },
-            readTargetsOnClose = pick("readTargetsOnClose", readTargetsOnClose) { readTargetsOnClose },
-            estimateTextureRegion = pick("estimateTextureRegion", estimateTextureRegion) { estimateTextureRegion },
-            gpuPaletteConversion = pick("gpuPaletteConversion", gpuPaletteConversion) { gpuPaletteConversion },
-            halfPixelOffset = pick("halfPixelOffset", halfPixelOffset) { halfPixelOffset },
-            nativeScaling = pick("nativeScaling", nativeScaling) { nativeScaling },
-            roundSprite = pick("roundSprite", roundSprite) { roundSprite },
-            bilinearUpscale = pick("bilinearUpscale", bilinearUpscale) { bilinearUpscale },
-            textureOffsetX = pick("textureOffsetX", textureOffsetX) { textureOffsetX },
-            textureOffsetY = pick("textureOffsetY", textureOffsetY) { textureOffsetY },
-            alignSprite = pick("alignSprite", alignSprite) { alignSprite },
-            mergeSprite = pick("mergeSprite", mergeSprite) { mergeSprite },
-            forceEvenSpritePosition = pick("forceEvenSpritePosition", forceEvenSpritePosition) { forceEvenSpritePosition },
-            pressureModifierAmount = pick("pressureModifierAmount", pressureModifierAmount) { pressureModifierAmount },
             audioVolume = pick("audioVolume", audioVolume) { audioVolume },
             audioMuted = pick("audioMuted", audioMuted) { audioMuted },
             audioOutputLatencyMs = pick("audioOutputLatencyMs", audioOutputLatencyMs) { audioOutputLatencyMs },
-            audioMinimalOutputLatency = pick("audioMinimalOutputLatency", audioMinimalOutputLatency) { audioMinimalOutputLatency },
-            enableIcacheEmulation = pick("enableIcacheEmulation", enableIcacheEmulation) { enableIcacheEmulation },
-            enableDisableStalls = pick("enableDisableStalls", enableDisableStalls) { enableDisableStalls },
-            enablePreciseExceptions = pick("enablePreciseExceptions", enablePreciseExceptions) { enablePreciseExceptions },
-            enableTurboCd = pick("enableTurboCd", enableTurboCd) { enableTurboCd },
-            cdReadAhead = pick("cdReadAhead", cdReadAhead) { cdReadAhead },
-            enableCddaAudio = pick("enableCddaAudio", enableCddaAudio) { enableCddaAudio },
-            enableXaDecoding = pick("enableXaDecoding", enableXaDecoding) { enableXaDecoding },
-            enableSpuReverb = pick("enableSpuReverb", enableSpuReverb) { enableSpuReverb },
-            enableSpuThread = pick("enableSpuThread", enableSpuThread) { enableSpuThread },
-            spuTempo = pick("spuTempo", spuTempo) { spuTempo },
-            neonEnhancement = pick("neonEnhancement", neonEnhancement) { neonEnhancement },
-            neonEnhancementSpeedHack = pick("neonEnhancementSpeedHack", neonEnhancementSpeedHack) { neonEnhancementSpeedHack },
-            neonEnhancementTexAdj = pick("neonEnhancementTexAdj", neonEnhancementTexAdj) { neonEnhancementTexAdj },
-            neonInterlace = pick("neonInterlace", neonInterlace) { neonInterlace },
-            gpuThreadRendering = pick("gpuThreadRendering", gpuThreadRendering) { gpuThreadRendering },
-            showOverscan = pick("showOverscan", showOverscan) { showOverscan },
-            screenCentering = pick("screenCentering", screenCentering) { screenCentering },
-            screenCenteringX = pick("screenCenteringX", screenCenteringX) { screenCenteringX },
-            screenCenteringY = pick("screenCenteringY", screenCenteringY) { screenCenteringY },
-            screenCenteringHAdj = pick("screenCenteringHAdj", screenCenteringHAdj) { screenCenteringHAdj },
-            enableFractionalFramerate = pick("enableFractionalFramerate", enableFractionalFramerate) { enableFractionalFramerate },
-            altFlipMode = pick("altFlipMode", altFlipMode) { altFlipMode },
-            enableRgb32Output = pick("enableRgb32Output", enableRgb32Output) { enableRgb32Output },
-            enableScaleHires = pick("enableScaleHires", enableScaleHires) { enableScaleHires },
-            multitapMode = pick("multitapMode", multitapMode) { multitapMode },
-            analogAxisModifier = pick("analogAxisModifier", analogAxisModifier) { analogAxisModifier },
-            dualshockToggleCombo = pick("dualshockToggleCombo", dualshockToggleCombo) { dualshockToggleCombo }
+            audioMinimalOutputLatency = pick("audioMinimalOutputLatency", audioMinimalOutputLatency) { audioMinimalOutputLatency }
         )
     }
 
@@ -3713,104 +2565,17 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             gamepadLeftStickSensitivity = pick("gamepadLeftStickSensitivity", gamepadLeftStickSensitivity) { gamepadLeftStickSensitivity },
             gamepadRightStickSensitivity = pick("gamepadRightStickSensitivity", gamepadRightStickSensitivity) { gamepadRightStickSensitivity },
             gamepadBindingsByPad = if (profile.providedKeys == null || "gamepadBindingsByPad" in profile.providedKeys) profile.gamepadBindingsByPad else gamepadBindingsByPad,
-            pressureModifierAmount = pick("pressureModifierAmount", pressureModifierAmount) { pressureModifierAmount },
             autoSaveOnExit = pick("autoSaveOnExit", autoSaveOnExit) { autoSaveOnExit },
             autoLoadOnStart = pick("autoLoadOnStart", autoLoadOnStart) { autoLoadOnStart },
             renderer = pick("renderer", renderer) { renderer },
             upscale = pick("upscaleMultiplier", upscale) { upscaleMultiplier },
             aspectRatio = pick("aspectRatio", aspectRatio) { aspectRatio },
             localMultiplayerMode = pick("localMultiplayerMode", localMultiplayerMode) { localMultiplayerMode },
-            displayCrop = pick("displayCrop", displayCrop) { displayCrop },
-            enableInstantVu1 = pick("enableInstantVu1", enableInstantVu1) { enableInstantVu1 },
-            enableMtvu = pick("enableMtvu", enableMtvu) { enableMtvu },
-            enableThreadPinning = pick("enableThreadPinning", enableThreadPinning) { enableThreadPinning },
-            enableFastCdvd = pick("enableFastCdvd", enableFastCdvd) { enableFastCdvd },
-            enableFastBoot = pick("enableFastBoot", enableFastBoot) { enableFastBoot },
             enableCheats = pick("enableCheats", enableCheats) { enableCheats },
-            hwDownloadMode = pick("hwDownloadMode", hwDownloadMode) { hwDownloadMode },
-            eeCycleRate = pick("eeCycleRate", eeCycleRate) { eeCycleRate },
-            eeCycleSkip = pick("eeCycleSkip", eeCycleSkip) { eeCycleSkip },
-            frameSkip = pick("frameSkip", frameSkip) { frameSkip },
-            skipDuplicateFrames = pick("skipDuplicateFrames", skipDuplicateFrames) { skipDuplicateFrames },
             frameLimitEnabled = pick("frameLimitEnabled", frameLimitEnabled) { frameLimitEnabled },
             targetFps = pick("targetFps", targetFps) { targetFps },
             ntscFramerate = pick("ntscFramerate", ntscFramerate) { ntscFramerate },
-            palFramerate = pick("palFramerate", palFramerate) { palFramerate },
-            textureFiltering = pick("textureFiltering", textureFiltering) { textureFiltering },
-            trilinearFiltering = pick("trilinearFiltering", trilinearFiltering) { trilinearFiltering },
-            blendingAccuracy = pick("blendingAccuracy", blendingAccuracy) { blendingAccuracy },
-            texturePreloading = pick("texturePreloading", texturePreloading) { texturePreloading },
-            enableFxaa = pick("enableFxaa", enableFxaa) { enableFxaa },
-            casMode = pick("casMode", casMode) { casMode },
-            sgsrMode = pick("sgsrMode", sgsrMode) { sgsrMode },
-            casSharpness = pick("casSharpness", casSharpness) { casSharpness },
-            tvShader = pick("tvShader", tvShader) { tvShader },
-            shadeBoostEnabled = pick("shadeBoostEnabled", shadeBoostEnabled) { shadeBoostEnabled },
-            shadeBoostBrightness = pick("shadeBoostBrightness", shadeBoostBrightness) { shadeBoostBrightness },
-            shadeBoostContrast = pick("shadeBoostContrast", shadeBoostContrast) { shadeBoostContrast },
-            shadeBoostSaturation = pick("shadeBoostSaturation", shadeBoostSaturation) { shadeBoostSaturation },
-            shadeBoostGamma = pick("shadeBoostGamma", shadeBoostGamma) { shadeBoostGamma },
-            anisotropicFiltering = pick("anisotropicFiltering", anisotropicFiltering) { anisotropicFiltering },
-            enableHwMipmapping = pick("enableHwMipmapping", enableHwMipmapping) { enableHwMipmapping },
-            antiBlur = pick("antiBlur", antiBlur) { antiBlur },
-            deinterlaceMode = pick("deinterlaceMode", deinterlaceMode) { deinterlaceMode },
-            dithering = pick("dithering", dithering) { dithering },
-            widescreenPatches = pick("enableWidescreenPatches", widescreenPatches) { enableWidescreenPatches },
-            noInterlacingPatches = pick("enableNoInterlacingPatches", noInterlacingPatches) { enableNoInterlacingPatches },
-            cpuSpriteRenderSize = pick("cpuSpriteRenderSize", cpuSpriteRenderSize) { cpuSpriteRenderSize },
-            cpuSpriteRenderLevel = pick("cpuSpriteRenderLevel", cpuSpriteRenderLevel) { cpuSpriteRenderLevel },
-            softwareClutRender = pick("softwareClutRender", softwareClutRender) { softwareClutRender },
-            gpuTargetClutMode = pick("gpuTargetClutMode", gpuTargetClutMode) { gpuTargetClutMode },
-            skipDrawStart = pick("skipDrawStart", skipDrawStart) { skipDrawStart },
-            skipDrawEnd = pick("skipDrawEnd", skipDrawEnd) { skipDrawEnd },
-            autoFlushHardware = pick("autoFlushHardware", autoFlushHardware) { autoFlushHardware },
-            cpuFramebufferConversion = pick("cpuFramebufferConversion", cpuFramebufferConversion) { cpuFramebufferConversion },
-            disableDepthConversion = pick("disableDepthConversion", disableDepthConversion) { disableDepthConversion },
-            disableSafeFeatures = pick("disableSafeFeatures", disableSafeFeatures) { disableSafeFeatures },
-            disableRenderFixes = pick("disableRenderFixes", disableRenderFixes) { disableRenderFixes },
-            preloadFrameData = pick("preloadFrameData", preloadFrameData) { preloadFrameData },
-            disablePartialInvalidation = pick("disablePartialInvalidation", disablePartialInvalidation) { disablePartialInvalidation },
-            textureInsideRt = pick("textureInsideRt", textureInsideRt) { textureInsideRt },
-            readTargetsOnClose = pick("readTargetsOnClose", readTargetsOnClose) { readTargetsOnClose },
-            estimateTextureRegion = pick("estimateTextureRegion", estimateTextureRegion) { estimateTextureRegion },
-            gpuPaletteConversion = pick("gpuPaletteConversion", gpuPaletteConversion) { gpuPaletteConversion },
-            halfPixelOffset = pick("halfPixelOffset", halfPixelOffset) { halfPixelOffset },
-            nativeScaling = pick("nativeScaling", nativeScaling) { nativeScaling },
-            roundSprite = pick("roundSprite", roundSprite) { roundSprite },
-            bilinearUpscale = pick("bilinearUpscale", bilinearUpscale) { bilinearUpscale },
-            textureOffsetX = pick("textureOffsetX", textureOffsetX) { textureOffsetX },
-            textureOffsetY = pick("textureOffsetY", textureOffsetY) { textureOffsetY },
-            alignSprite = pick("alignSprite", alignSprite) { alignSprite },
-            mergeSprite = pick("mergeSprite", mergeSprite) { mergeSprite },
-            forceEvenSpritePosition = pick("forceEvenSpritePosition", forceEvenSpritePosition) { forceEvenSpritePosition },
-            nativePaletteDraw = pick("nativePaletteDraw", nativePaletteDraw) { nativePaletteDraw },
-            enableIcacheEmulation = pick("enableIcacheEmulation", enableIcacheEmulation) { enableIcacheEmulation },
-            enableDisableStalls = pick("enableDisableStalls", enableDisableStalls) { enableDisableStalls },
-            enablePreciseExceptions = pick("enablePreciseExceptions", enablePreciseExceptions) { enablePreciseExceptions },
-            enableTurboCd = pick("enableTurboCd", enableTurboCd) { enableTurboCd },
-            cdReadAhead = pick("cdReadAhead", cdReadAhead) { cdReadAhead },
-            enableCddaAudio = pick("enableCddaAudio", enableCddaAudio) { enableCddaAudio },
-            enableXaDecoding = pick("enableXaDecoding", enableXaDecoding) { enableXaDecoding },
-            enableSpuReverb = pick("enableSpuReverb", enableSpuReverb) { enableSpuReverb },
-            enableSpuThread = pick("enableSpuThread", enableSpuThread) { enableSpuThread },
-            spuTempo = pick("spuTempo", spuTempo) { spuTempo },
-            neonEnhancement = pick("neonEnhancement", neonEnhancement) { neonEnhancement },
-            neonEnhancementSpeedHack = pick("neonEnhancementSpeedHack", neonEnhancementSpeedHack) { neonEnhancementSpeedHack },
-            neonEnhancementTexAdj = pick("neonEnhancementTexAdj", neonEnhancementTexAdj) { neonEnhancementTexAdj },
-            neonInterlace = pick("neonInterlace", neonInterlace) { neonInterlace },
-            gpuThreadRendering = pick("gpuThreadRendering", gpuThreadRendering) { gpuThreadRendering },
-            showOverscan = pick("showOverscan", showOverscan) { showOverscan },
-            screenCentering = pick("screenCentering", screenCentering) { screenCentering },
-            screenCenteringX = pick("screenCenteringX", screenCenteringX) { screenCenteringX },
-            screenCenteringY = pick("screenCenteringY", screenCenteringY) { screenCenteringY },
-            screenCenteringHAdj = pick("screenCenteringHAdj", screenCenteringHAdj) { screenCenteringHAdj },
-            enableFractionalFramerate = pick("enableFractionalFramerate", enableFractionalFramerate) { enableFractionalFramerate },
-            altFlipMode = pick("altFlipMode", altFlipMode) { altFlipMode },
-            enableRgb32Output = pick("enableRgb32Output", enableRgb32Output) { enableRgb32Output },
-            enableScaleHires = pick("enableScaleHires", enableScaleHires) { enableScaleHires },
-            multitapMode = pick("multitapMode", multitapMode) { multitapMode },
-            analogAxisModifier = pick("analogAxisModifier", analogAxisModifier) { analogAxisModifier },
-            dualshockToggleCombo = pick("dualshockToggleCombo", dualshockToggleCombo) { dualshockToggleCombo }
+            palFramerate = pick("palFramerate", palFramerate) { palFramerate }
         )
     }
 
@@ -3844,20 +2609,9 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             upscaleMultiplier = upscale,
             aspectRatio = aspectRatio,
             localMultiplayerMode = localMultiplayerMode,
-            displayCrop = displayCrop,
             showFps = showFps,
             fpsOverlayMode = fpsOverlayMode,
-            enableInstantVu1 = enableInstantVu1,
-            enableMtvu = enableMtvu,
-            enableThreadPinning = enableThreadPinning,
-            enableFastCdvd = enableFastCdvd,
-            enableFastBoot = enableFastBoot,
             enableCheats = enableCheats,
-            hwDownloadMode = hwDownloadMode,
-            eeCycleRate = eeCycleRate,
-            eeCycleSkip = eeCycleSkip,
-            frameSkip = frameSkip,
-            skipDuplicateFrames = skipDuplicateFrames,
             frameLimitEnabled = frameLimitEnabled,
             racingMode = racingMode,
             stickyButtons = stickyButtons,
@@ -3879,87 +2633,11 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             gamepadLeftStickSensitivity = gamepadLeftStickSensitivity,
             gamepadRightStickSensitivity = gamepadRightStickSensitivity,
             gamepadBindingsByPad = gamepadBindingsByPad,
-            pressureModifierAmount = pressureModifierAmount,
             autoSaveOnExit = autoSaveOnExit,
             autoLoadOnStart = autoLoadOnStart,
             targetFps = targetFps,
             ntscFramerate = ntscFramerate,
-            palFramerate = palFramerate,
-            textureFiltering = textureFiltering,
-            trilinearFiltering = trilinearFiltering,
-            blendingAccuracy = blendingAccuracy,
-            texturePreloading = texturePreloading,
-            enableFxaa = enableFxaa,
-            casMode = casMode,
-            sgsrMode = sgsrMode,
-            casSharpness = casSharpness,
-            tvShader = tvShader,
-            shadeBoostEnabled = shadeBoostEnabled,
-            shadeBoostBrightness = shadeBoostBrightness,
-            shadeBoostContrast = shadeBoostContrast,
-            shadeBoostSaturation = shadeBoostSaturation,
-            shadeBoostGamma = shadeBoostGamma,
-            anisotropicFiltering = anisotropicFiltering,
-            enableHwMipmapping = enableHwMipmapping,
-            antiBlur = antiBlur,
-            deinterlaceMode = deinterlaceMode,
-            dithering = dithering,
-            enableWidescreenPatches = widescreenPatches,
-            enableNoInterlacingPatches = noInterlacingPatches,
-            cpuSpriteRenderSize = cpuSpriteRenderSize,
-            cpuSpriteRenderLevel = cpuSpriteRenderLevel,
-            softwareClutRender = softwareClutRender,
-            gpuTargetClutMode = gpuTargetClutMode,
-            skipDrawStart = skipDrawStart,
-            skipDrawEnd = skipDrawEnd,
-            autoFlushHardware = autoFlushHardware,
-            cpuFramebufferConversion = cpuFramebufferConversion,
-            disableDepthConversion = disableDepthConversion,
-            disableSafeFeatures = disableSafeFeatures,
-            disableRenderFixes = disableRenderFixes,
-            preloadFrameData = preloadFrameData,
-            disablePartialInvalidation = disablePartialInvalidation,
-            textureInsideRt = textureInsideRt,
-            readTargetsOnClose = readTargetsOnClose,
-            estimateTextureRegion = estimateTextureRegion,
-            gpuPaletteConversion = gpuPaletteConversion,
-            halfPixelOffset = halfPixelOffset,
-            nativeScaling = nativeScaling,
-            roundSprite = roundSprite,
-            bilinearUpscale = bilinearUpscale,
-            textureOffsetX = textureOffsetX,
-            textureOffsetY = textureOffsetY,
-            alignSprite = alignSprite,
-            mergeSprite = mergeSprite,
-            forceEvenSpritePosition = forceEvenSpritePosition,
-            nativePaletteDraw = nativePaletteDraw,
-            enableIcacheEmulation = enableIcacheEmulation,
-            enableDisableStalls = enableDisableStalls,
-            enablePreciseExceptions = enablePreciseExceptions,
-            enableTurboCd = enableTurboCd,
-            cdReadAhead = cdReadAhead,
-            enableCddaAudio = enableCddaAudio,
-            enableXaDecoding = enableXaDecoding,
-            enableSpuReverb = enableSpuReverb,
-            enableSpuThread = enableSpuThread,
-            spuTempo = spuTempo,
-            neonEnhancement = neonEnhancement,
-            neonEnhancementSpeedHack = neonEnhancementSpeedHack,
-            neonEnhancementTexAdj = neonEnhancementTexAdj,
-            neonInterlace = neonInterlace,
-            gpuThreadRendering = gpuThreadRendering,
-            showOverscan = showOverscan,
-            screenCentering = screenCentering,
-            screenCenteringX = screenCenteringX,
-            screenCenteringY = screenCenteringY,
-            screenCenteringHAdj = screenCenteringHAdj,
-            enableFractionalFramerate = enableFractionalFramerate,
-            altFlipMode = altFlipMode,
-            enableRgb32Output = enableRgb32Output,
-            enableScaleHires = enableScaleHires,
-            multitapMode = multitapMode,
-            analogAxisModifier = analogAxisModifier,
-            dualshockToggleCombo = dualshockToggleCombo
+            palFramerate = palFramerate
         )
     }
 
@@ -3971,20 +2649,9 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         if (upscale != settings.upscaleMultiplier) add("upscaleMultiplier")
         if (aspectRatio != settings.aspectRatio) add("aspectRatio")
         if (localMultiplayerMode != settings.localMultiplayerMode) add("localMultiplayerMode")
-        if (displayCrop != settings.displayCrop) add("displayCrop")
         if (showFps != settings.showFps) add("showFps")
         if (fpsOverlayMode != settings.fpsOverlayMode) add("fpsOverlayMode")
-        if (enableInstantVu1 != settings.enableInstantVu1) add("enableInstantVu1")
-        if (enableMtvu != settings.enableMtvu) add("enableMtvu")
-        if (enableThreadPinning != settings.enableThreadPinning) add("enableThreadPinning")
-        if (enableFastCdvd != settings.enableFastCdvd) add("enableFastCdvd")
-        if (enableFastBoot != settings.enableFastBoot) add("enableFastBoot")
         if (enableCheats != settings.enableCheats) add("enableCheats")
-        if (hwDownloadMode != settings.hwDownloadMode) add("hwDownloadMode")
-        if (eeCycleRate != settings.eeCycleRate) add("eeCycleRate")
-        if (eeCycleSkip != settings.eeCycleSkip) add("eeCycleSkip")
-        if (profile.frameSkip != settings.frameSkip) add("frameSkip")
-        if (skipDuplicateFrames != settings.skipDuplicateFrames) add("skipDuplicateFrames")
         if (frameLimitEnabled != settings.frameLimitEnabled) add("frameLimitEnabled")
         if (racingMode != settings.racingMode) add("racingMode")
         if (stickyButtons != settings.stickyButtons) add("stickyButtons")
@@ -4008,87 +2675,11 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         if (gamepadLeftStickSensitivity != settings.gamepadLeftStickSensitivity) add("gamepadLeftStickSensitivity")
         if (gamepadRightStickSensitivity != settings.gamepadRightStickSensitivity) add("gamepadRightStickSensitivity")
         if (gamepadBindingsByPad.isNotEmpty()) add("gamepadBindingsByPad")
-        if (pressureModifierAmount != settings.pressureModifierAmount) add("pressureModifierAmount")
         if (autoSaveOnExit) add("autoSaveOnExit")
         if (autoLoadOnStart) add("autoLoadOnStart")
         if (targetFps != settings.targetFps) add("targetFps")
         if (ntscFramerate != settings.ntscFramerate) add("ntscFramerate")
         if (palFramerate != settings.palFramerate) add("palFramerate")
-        if (textureFiltering != settings.textureFiltering) add("textureFiltering")
-        if (trilinearFiltering != settings.trilinearFiltering) add("trilinearFiltering")
-        if (blendingAccuracy != settings.blendingAccuracy) add("blendingAccuracy")
-        if (texturePreloading != settings.texturePreloading) add("texturePreloading")
-        if (enableFxaa != settings.enableFxaa) add("enableFxaa")
-        if (casMode != settings.casMode) add("casMode")
-        if (sgsrMode != settings.sgsrMode) add("sgsrMode")
-        if (casSharpness != settings.casSharpness) add("casSharpness")
-        if (tvShader != settings.tvShader) add("tvShader")
-        if (shadeBoostEnabled != settings.shadeBoostEnabled) add("shadeBoostEnabled")
-        if (shadeBoostBrightness != settings.shadeBoostBrightness) add("shadeBoostBrightness")
-        if (shadeBoostContrast != settings.shadeBoostContrast) add("shadeBoostContrast")
-        if (shadeBoostSaturation != settings.shadeBoostSaturation) add("shadeBoostSaturation")
-        if (shadeBoostGamma != settings.shadeBoostGamma) add("shadeBoostGamma")
-        if (anisotropicFiltering != settings.anisotropicFiltering) add("anisotropicFiltering")
-        if (enableHwMipmapping != settings.enableHwMipmapping) add("enableHwMipmapping")
-        if (antiBlur != settings.antiBlur) add("antiBlur")
-        if (deinterlaceMode != settings.deinterlaceMode) add("deinterlaceMode")
-        if (dithering != settings.dithering) add("dithering")
-        if (profile.enableWidescreenPatches != settings.enableWidescreenPatches) add("enableWidescreenPatches")
-        if (profile.enableNoInterlacingPatches != settings.enableNoInterlacingPatches) add("enableNoInterlacingPatches")
-        if (cpuSpriteRenderSize != settings.cpuSpriteRenderSize) add("cpuSpriteRenderSize")
-        if (cpuSpriteRenderLevel != settings.cpuSpriteRenderLevel) add("cpuSpriteRenderLevel")
-        if (softwareClutRender != settings.softwareClutRender) add("softwareClutRender")
-        if (gpuTargetClutMode != settings.gpuTargetClutMode) add("gpuTargetClutMode")
-        if (skipDrawStart != settings.skipDrawStart) add("skipDrawStart")
-        if (skipDrawEnd != settings.skipDrawEnd) add("skipDrawEnd")
-        if (autoFlushHardware != settings.autoFlushHardware) add("autoFlushHardware")
-        if (cpuFramebufferConversion != settings.cpuFramebufferConversion) add("cpuFramebufferConversion")
-        if (disableDepthConversion != settings.disableDepthConversion) add("disableDepthConversion")
-        if (disableSafeFeatures != settings.disableSafeFeatures) add("disableSafeFeatures")
-        if (disableRenderFixes != settings.disableRenderFixes) add("disableRenderFixes")
-        if (preloadFrameData != settings.preloadFrameData) add("preloadFrameData")
-        if (disablePartialInvalidation != settings.disablePartialInvalidation) add("disablePartialInvalidation")
-        if (textureInsideRt != settings.textureInsideRt) add("textureInsideRt")
-        if (readTargetsOnClose != settings.readTargetsOnClose) add("readTargetsOnClose")
-        if (estimateTextureRegion != settings.estimateTextureRegion) add("estimateTextureRegion")
-        if (gpuPaletteConversion != settings.gpuPaletteConversion) add("gpuPaletteConversion")
-        if (halfPixelOffset != settings.halfPixelOffset) add("halfPixelOffset")
-        if (nativeScaling != settings.nativeScaling) add("nativeScaling")
-        if (roundSprite != settings.roundSprite) add("roundSprite")
-        if (bilinearUpscale != settings.bilinearUpscale) add("bilinearUpscale")
-        if (textureOffsetX != settings.textureOffsetX) add("textureOffsetX")
-        if (textureOffsetY != settings.textureOffsetY) add("textureOffsetY")
-        if (alignSprite != settings.alignSprite) add("alignSprite")
-        if (mergeSprite != settings.mergeSprite) add("mergeSprite")
-        if (forceEvenSpritePosition != settings.forceEvenSpritePosition) add("forceEvenSpritePosition")
-        if (nativePaletteDraw != settings.nativePaletteDraw) add("nativePaletteDraw")
-        if (enableIcacheEmulation != settings.enableIcacheEmulation) add("enableIcacheEmulation")
-        if (enableDisableStalls != settings.enableDisableStalls) add("enableDisableStalls")
-        if (enablePreciseExceptions != settings.enablePreciseExceptions) add("enablePreciseExceptions")
-        if (enableTurboCd != settings.enableTurboCd) add("enableTurboCd")
-        if (cdReadAhead != settings.cdReadAhead) add("cdReadAhead")
-        if (enableCddaAudio != settings.enableCddaAudio) add("enableCddaAudio")
-        if (enableXaDecoding != settings.enableXaDecoding) add("enableXaDecoding")
-        if (enableSpuReverb != settings.enableSpuReverb) add("enableSpuReverb")
-        if (enableSpuThread != settings.enableSpuThread) add("enableSpuThread")
-        if (spuTempo != settings.spuTempo) add("spuTempo")
-        if (neonEnhancement != settings.neonEnhancement) add("neonEnhancement")
-        if (neonEnhancementSpeedHack != settings.neonEnhancementSpeedHack) add("neonEnhancementSpeedHack")
-        if (neonEnhancementTexAdj != settings.neonEnhancementTexAdj) add("neonEnhancementTexAdj")
-        if (neonInterlace != settings.neonInterlace) add("neonInterlace")
-        if (gpuThreadRendering != settings.gpuThreadRendering) add("gpuThreadRendering")
-        if (showOverscan != settings.showOverscan) add("showOverscan")
-        if (screenCentering != settings.screenCentering) add("screenCentering")
-        if (screenCenteringX != settings.screenCenteringX) add("screenCenteringX")
-        if (screenCenteringY != settings.screenCenteringY) add("screenCenteringY")
-        if (screenCenteringHAdj != settings.screenCenteringHAdj) add("screenCenteringHAdj")
-        if (enableFractionalFramerate != settings.enableFractionalFramerate) add("enableFractionalFramerate")
-        if (altFlipMode != settings.altFlipMode) add("altFlipMode")
-        if (enableRgb32Output != settings.enableRgb32Output) add("enableRgb32Output")
-        if (enableScaleHires != settings.enableScaleHires) add("enableScaleHires")
-        if (multitapMode != settings.multitapMode) add("multitapMode")
-        if (analogAxisModifier != settings.analogAxisModifier) add("analogAxisModifier")
-        if (dualshockToggleCombo != settings.dualshockToggleCombo) add("dualshockToggleCombo")
     }
 
     private fun refreshCurrentGameCheats(
@@ -4527,20 +3118,9 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         NativeApp.setCrashContextString("emu_upscale", state.upscale.toString())
         NativeApp.setCrashContextInt("emu_aspect_ratio", state.aspectRatio)
         NativeApp.setCrashContextInt("emu_local_multiplayer_mode", state.localMultiplayerMode)
-        NativeApp.setCrashContextInt("emu_crop_left", state.displayCrop.left)
-        NativeApp.setCrashContextInt("emu_crop_top", state.displayCrop.top)
-        NativeApp.setCrashContextInt("emu_crop_right", state.displayCrop.right)
-        NativeApp.setCrashContextInt("emu_crop_bottom", state.displayCrop.bottom)
-        NativeApp.setCrashContextBool("emu_mtvu", state.enableMtvu)
-        NativeApp.setCrashContextBool("emu_thread_pinning", state.enableThreadPinning)
-        NativeApp.setCrashContextBool("emu_fast_cdvd", state.enableFastCdvd)
         NativeApp.setCrashContextBool("emu_enable_cheats", state.enableCheats)
-        NativeApp.setCrashContextInt("emu_hw_download_mode", state.hwDownloadMode)
-        NativeApp.setCrashContextInt("emu_frame_skip", state.frameSkip)
-        NativeApp.setCrashContextBool("emu_skip_duplicate_frames", state.skipDuplicateFrames)
         NativeApp.setCrashContextBool("emu_frame_limit_enabled", state.frameLimitEnabled)
         NativeApp.setCrashContextInt("emu_target_fps", state.targetFps)
-        NativeApp.setCrashContextInt("emu_texture_filtering", state.textureFiltering)
         NativeApp.setCrashContextString("emu_device_model", Build.MODEL.orEmpty())
         NativeApp.setCrashContextString("emu_soc_model", if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) Build.SOC_MODEL else "")
         NativeApp.setCrashContextBool("emu_running", state.isRunning)

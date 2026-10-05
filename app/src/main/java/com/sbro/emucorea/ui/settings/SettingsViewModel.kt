@@ -18,7 +18,6 @@ import com.sbro.emucorea.core.EmulatorStorage
 import com.sbro.emucorea.core.GpuHardwareProfiles
 import com.sbro.emucorea.core.RendererDefaults
 import com.sbro.emucorea.core.GamepadManager
-import com.sbro.emucorea.core.GsHackDefaults
 import com.sbro.emucorea.core.PerformanceProfiles
 import com.sbro.emucorea.core.PerformancePresets
 import com.sbro.emucorea.core.ProProductOffer
@@ -32,7 +31,6 @@ import com.sbro.emucorea.core.TvInterfaceMode
 import com.sbro.emucorea.core.UPSCALE_DEFAULT
 import com.sbro.emucorea.core.normalizeUpscale
 import com.sbro.emucorea.data.AppPreferences
-import com.sbro.emucorea.data.DisplayCrop
 import com.sbro.emucorea.data.AppFontChoice
 import com.sbro.emucorea.data.HomeBackgroundRepository
 import com.sbro.emucorea.data.HomeBackgroundPreset
@@ -121,15 +119,10 @@ data class SettingsUiState(
     val upscaleMultiplier: Float = UPSCALE_DEFAULT,
     val aspectRatio: Int = 1,
     val localMultiplayerMode: Int = AppPreferences.LOCAL_MULTIPLAYER_OFF,
-    val displayCrop: DisplayCrop = DisplayCrop.None,
     val audioVolume: Int = AudioDefaults.VOLUME_DEFAULT,
     val audioFastForwardVolume: Int = AudioDefaults.VOLUME_DEFAULT,
     val audioMuted: Boolean = false,
-    val audioInterpolation: Int = AudioDefaults.INTERPOLATION_DEFAULT,
-    val audioSyncMode: Int = AudioDefaults.SYNC_DEFAULT,
-    val audioLightweightSpu2: Boolean = AudioDefaults.LIGHTWEIGHT_SPU2_DEFAULT,
     val audioBackend: Int = AudioDefaults.BACKEND_DEFAULT,
-    val audioBufferMs: Int = AudioDefaults.BUFFER_MS_DEFAULT,
     val audioOutputLatencyMs: Int = AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT,
     val audioMinimalOutputLatency: Boolean = AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT,
     val autoProgressiveScan: Boolean = false,
@@ -162,82 +155,7 @@ data class SettingsUiState(
     val coreName: String = "PPSSPP",
     val coreVersion: String = "",
     val performanceProfile: Int = PerformanceProfiles.SAFE,
-    // Extended settings
-    val eeCycleRate: Int = 0,
-    val eeCycleSkip: Int = 0,
-    val enableEeRecompiler: Boolean = true,
-    val enableIopRecompiler: Boolean = true,
-    val enableVu0Recompiler: Boolean = true,
-    val enableVu1Recompiler: Boolean = true,
-    val enableFastmem: Boolean = true,
-    val eeFpuRoundMode: Int = AppPreferences.DEFAULT_EE_FPU_ROUND_MODE,
-    val vu0RoundMode: Int = AppPreferences.DEFAULT_VU_ROUND_MODE,
-    val vu1RoundMode: Int = AppPreferences.DEFAULT_VU_ROUND_MODE,
-    val eeFpuClampingMode: Int = AppPreferences.DEFAULT_EE_FPU_CLAMPING_MODE,
-    val vu0ClampingMode: Int = AppPreferences.DEFAULT_VU0_CLAMPING_MODE,
-    val vu1ClampingMode: Int = AppPreferences.DEFAULT_VU1_CLAMPING_MODE,
-    val enableGameFixes: Boolean = true,
-    val enableEeTimingHack: Boolean = false,
-    val enableWaitLoopSpeedhack: Boolean = true,
-    val enableIntcStatSpeedhack: Boolean = true,
-    val enableVuFlagHack: Boolean = true,
-    val enableInstantVu1: Boolean = true,
-    val enableMtvu: Boolean = true,
-    val enableThreadPinning: Boolean = AppPreferences.DEFAULT_THREAD_PINNING,
-    val enableFastBoot: Boolean = true,
-    val enableFastCdvd: Boolean = false,
     val enableCheats: Boolean = false,
-    val hwDownloadMode: Int = GsHackDefaults.HW_DOWNLOAD_MODE_DEFAULT,
-    val frameSkip: Int = 0,
-    val skipDuplicateFrames: Boolean = true,
-    val textureFiltering: Int = GsHackDefaults.BILINEAR_FILTERING_DEFAULT,
-    val trilinearFiltering: Int = GsHackDefaults.TRILINEAR_FILTERING_DEFAULT,
-    val blendingAccuracy: Int = GsHackDefaults.BLENDING_ACCURACY_DEFAULT,
-    val texturePreloading: Int = GsHackDefaults.TEXTURE_PRELOADING_DEFAULT,
-    val enableFxaa: Boolean = false,
-    val sgsrMode: Int = 0,
-    val casMode: Int = 0,
-    val casSharpness: Int = 50,
-    val tvShader: Int = GsHackDefaults.TV_SHADER_DEFAULT,
-    val shadeBoostEnabled: Boolean = false,
-    val shadeBoostBrightness: Int = 50,
-    val shadeBoostContrast: Int = 50,
-    val shadeBoostSaturation: Int = 50,
-    val shadeBoostGamma: Int = 50,
-    val enableWidescreenPatches: Boolean = false,
-    val enableNoInterlacingPatches: Boolean = false,
-    val deinterlaceMode: Int = GsHackDefaults.DEINTERLACE_MODE_DEFAULT,
-    val dithering: Int = GsHackDefaults.DITHERING_DEFAULT,
-    val anisotropicFiltering: Int = 0,
-    val enableHwMipmapping: Boolean = GsHackDefaults.HW_MIPMAPPING_DEFAULT,
-    val antiBlur: Boolean = GsHackDefaults.ANTI_BLUR_DEFAULT,
-    val cpuSpriteRenderSize: Int = GsHackDefaults.CPU_SPRITE_RENDER_SIZE_DEFAULT,
-    val cpuSpriteRenderLevel: Int = GsHackDefaults.CPU_SPRITE_RENDER_LEVEL_DEFAULT,
-    val softwareClutRender: Int = GsHackDefaults.SOFTWARE_CLUT_RENDER_DEFAULT,
-    val gpuTargetClutMode: Int = GsHackDefaults.GPU_TARGET_CLUT_DEFAULT,
-    val skipDrawStart: Int = 0,
-    val skipDrawEnd: Int = 0,
-    val autoFlushHardware: Int = GsHackDefaults.AUTO_FLUSH_DEFAULT,
-    val cpuFramebufferConversion: Boolean = false,
-    val disableDepthConversion: Boolean = false,
-    val disableSafeFeatures: Boolean = false,
-    val disableRenderFixes: Boolean = false,
-    val preloadFrameData: Boolean = false,
-    val disablePartialInvalidation: Boolean = false,
-    val textureInsideRt: Int = GsHackDefaults.TEXTURE_INSIDE_RT_DEFAULT,
-    val readTargetsOnClose: Boolean = false,
-    val estimateTextureRegion: Boolean = false,
-    val gpuPaletteConversion: Boolean = false,
-    val halfPixelOffset: Int = GsHackDefaults.HALF_PIXEL_OFFSET_DEFAULT,
-    val nativeScaling: Int = GsHackDefaults.NATIVE_SCALING_DEFAULT,
-    val roundSprite: Int = GsHackDefaults.ROUND_SPRITE_DEFAULT,
-    val bilinearUpscale: Int = GsHackDefaults.BILINEAR_UPSCALE_DEFAULT,
-    val textureOffsetX: Int = 0,
-    val textureOffsetY: Int = 0,
-    val alignSprite: Boolean = false,
-    val mergeSprite: Boolean = false,
-    val forceEvenSpritePosition: Boolean = false,
-    val nativePaletteDraw: Boolean = false,
     val performancePreset: Int = PerformancePresets.CUSTOM,
     // Overlay
     val overlayScale: Int = 100,
@@ -271,7 +189,6 @@ data class SettingsUiState(
     val gamepadRightStickUpToR2: Boolean = false,
     val gamepadRightStickDownToL2: Boolean = false,
     val gamepadButtonHaptics: Boolean = false,
-    val pressureModifierAmount: Int = AppPreferences.DEFAULT_PRESSURE_MODIFIER_AMOUNT,
     val gamepadBindings: Map<String, Int> = emptyMap(),
     val gamepadBindingsByPad: Map<Int, Map<String, Int>> = emptyMap(),
     val gpuDriverType: Int = 0,
@@ -281,38 +198,9 @@ data class SettingsUiState(
     val frameLimitEnabled: Boolean = true,
     val rewindEnabled: Boolean = false,
     val vSyncEnabled: Boolean = true,
-    val fastForwardSpeed: Float = AppPreferences.DEFAULT_FAST_FORWARD_SPEED,
     val targetFps: Int = 0,
     val ntscFramerate: Float = AppPreferences.DEFAULT_NTSC_FRAMERATE,
-    val palFramerate: Float = AppPreferences.DEFAULT_PAL_FRAMERATE,
-    // Core-specific emulation settings
-    val enableIcacheEmulation: Boolean = false,
-    val enableDisableStalls: Boolean = false,
-    val enablePreciseExceptions: Boolean = false,
-    val enableTurboCd: Boolean = false,
-    val enableCddaAudio: Boolean = true,
-    val enableXaDecoding: Boolean = true,
-    val enableSpuReverb: Boolean = true,
-    val enableSpuThread: Boolean = false,
-    val spuTempo: Int = 0,
-    val neonEnhancement: Boolean = false,
-    val neonEnhancementSpeedHack: Boolean = false,
-    val neonEnhancementTexAdj: Boolean = true,
-    val neonInterlace: Int = -1,
-    val gpuThreadRendering: Int = -1,
-    val showOverscan: Boolean = false,
-    val screenCentering: Int = 0,
-    val screenCenteringX: Int = 0,
-    val screenCenteringY: Int = 0,
-    val screenCenteringHAdj: Int = 0,
-    val enableFractionalFramerate: Boolean = false,
-    val altFlipMode: Int = 0,
-    val enableRgb32Output: Boolean = false,
-    val enableScaleHires: Boolean = false,
-    val multitapMode: Int = 0,
-    val analogAxisModifier: Int = 0,
-    val dualshockToggleCombo: Int = 0,
-    val cdReadAhead: Int = 0
+    val palFramerate: Float = AppPreferences.DEFAULT_PAL_FRAMERATE
 ) {
     // Derived views over proState. They keep the huge SettingsUiState data class below the
     // dex limit of 255 method parameters for the generated copy$default method.
@@ -356,7 +244,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         initializeAboutInfo()
         refreshShaderPresets()
         viewModelScope.launch {
-            preferences.cleanupLegacyClampingPreferencesIfNeeded()
             preferences.settingsSnapshot.collect { snapshot ->
                 applySettingsSnapshot(snapshot)
             }
@@ -430,15 +317,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             upscaleMultiplier = snapshot.upscaleMultiplier,
             aspectRatio = snapshot.aspectRatio,
             localMultiplayerMode = snapshot.localMultiplayerMode,
-            displayCrop = snapshot.displayCrop,
             audioVolume = snapshot.audioVolume,
             audioFastForwardVolume = snapshot.audioFastForwardVolume,
             audioMuted = snapshot.audioMuted,
-            audioInterpolation = snapshot.audioInterpolation,
-            audioSyncMode = snapshot.audioSyncMode,
-            audioLightweightSpu2 = snapshot.audioLightweightSpu2,
             audioBackend = snapshot.audioBackend,
-            audioBufferMs = snapshot.audioBufferMs,
             audioOutputLatencyMs = snapshot.audioOutputLatencyMs,
             audioMinimalOutputLatency = snapshot.audioMinimalOutputLatency,
             autoProgressiveScan = snapshot.autoProgressiveScan,
@@ -466,81 +348,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             coverArtStyle = snapshot.coverArtStyle,
             setupComplete = snapshot.setupComplete,
             performanceProfile = snapshot.performanceProfile,
-            eeCycleRate = snapshot.eeCycleRate,
-            eeCycleSkip = snapshot.eeCycleSkip,
-            enableEeRecompiler = snapshot.enableEeRecompiler,
-            enableIopRecompiler = snapshot.enableIopRecompiler,
-            enableVu0Recompiler = snapshot.enableVu0Recompiler,
-            enableVu1Recompiler = snapshot.enableVu1Recompiler,
-            enableFastmem = snapshot.enableFastmem,
-            eeFpuRoundMode = snapshot.eeFpuRoundMode,
-            vu0RoundMode = snapshot.vu0RoundMode,
-            vu1RoundMode = snapshot.vu1RoundMode,
-            eeFpuClampingMode = snapshot.eeFpuClampingMode,
-            vu0ClampingMode = snapshot.vu0ClampingMode,
-            vu1ClampingMode = snapshot.vu1ClampingMode,
-            enableGameFixes = snapshot.enableGameFixes,
-            enableEeTimingHack = snapshot.enableEeTimingHack,
-            enableWaitLoopSpeedhack = snapshot.enableWaitLoopSpeedhack,
-            enableIntcStatSpeedhack = snapshot.enableIntcStatSpeedhack,
-            enableVuFlagHack = snapshot.enableVuFlagHack,
-            enableInstantVu1 = snapshot.enableInstantVu1,
-            enableMtvu = snapshot.enableMtvu,
-            enableThreadPinning = snapshot.enableThreadPinning,
-            enableFastBoot = snapshot.enableFastBoot,
-            enableFastCdvd = snapshot.enableFastCdvd,
             enableCheats = snapshot.enableCheats,
-            hwDownloadMode = snapshot.hwDownloadMode,
-            frameSkip = snapshot.frameSkip,
-            skipDuplicateFrames = snapshot.skipDuplicateFrames,
-            textureFiltering = snapshot.textureFiltering,
-            trilinearFiltering = snapshot.trilinearFiltering,
-            blendingAccuracy = snapshot.blendingAccuracy,
-            texturePreloading = snapshot.texturePreloading,
-            enableFxaa = snapshot.enableFxaa,
-            sgsrMode = snapshot.sgsrMode,
-            casMode = snapshot.casMode,
-            casSharpness = snapshot.casSharpness,
-            tvShader = snapshot.tvShader,
-            shadeBoostEnabled = snapshot.shadeBoostEnabled,
-            shadeBoostBrightness = snapshot.shadeBoostBrightness,
-            shadeBoostContrast = snapshot.shadeBoostContrast,
-            shadeBoostSaturation = snapshot.shadeBoostSaturation,
-            shadeBoostGamma = snapshot.shadeBoostGamma,
-            enableWidescreenPatches = snapshot.enableWidescreenPatches,
-            enableNoInterlacingPatches = snapshot.enableNoInterlacingPatches,
-            deinterlaceMode = snapshot.deinterlaceMode,
-            dithering = snapshot.dithering,
-            anisotropicFiltering = snapshot.anisotropicFiltering,
-            enableHwMipmapping = snapshot.enableHwMipmapping,
-            antiBlur = snapshot.antiBlur,
-            cpuSpriteRenderSize = snapshot.cpuSpriteRenderSize,
-            cpuSpriteRenderLevel = snapshot.cpuSpriteRenderLevel,
-            softwareClutRender = snapshot.softwareClutRender,
-            gpuTargetClutMode = snapshot.gpuTargetClutMode,
-            skipDrawStart = snapshot.skipDrawStart,
-            skipDrawEnd = snapshot.skipDrawEnd,
-            autoFlushHardware = snapshot.autoFlushHardware,
-            cpuFramebufferConversion = snapshot.cpuFramebufferConversion,
-            disableDepthConversion = snapshot.disableDepthConversion,
-            disableSafeFeatures = snapshot.disableSafeFeatures,
-            disableRenderFixes = snapshot.disableRenderFixes,
-            preloadFrameData = snapshot.preloadFrameData,
-            disablePartialInvalidation = snapshot.disablePartialInvalidation,
-            textureInsideRt = snapshot.textureInsideRt,
-            readTargetsOnClose = snapshot.readTargetsOnClose,
-            estimateTextureRegion = snapshot.estimateTextureRegion,
-            gpuPaletteConversion = snapshot.gpuPaletteConversion,
-            halfPixelOffset = snapshot.halfPixelOffset,
-            nativeScaling = snapshot.nativeScaling,
-            roundSprite = snapshot.roundSprite,
-            bilinearUpscale = snapshot.bilinearUpscale,
-            textureOffsetX = snapshot.textureOffsetX,
-            textureOffsetY = snapshot.textureOffsetY,
-            alignSprite = snapshot.alignSprite,
-            mergeSprite = snapshot.mergeSprite,
-            forceEvenSpritePosition = snapshot.forceEvenSpritePosition,
-            nativePaletteDraw = snapshot.nativePaletteDraw,
             performancePreset = snapshot.performancePreset,
             overlayScale = snapshot.overlayScale,
             overlayOpacity = snapshot.overlayOpacity,
@@ -571,7 +379,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             gamepadRightStickUpToR2 = snapshot.gamepadRightStickUpToR2,
             gamepadRightStickDownToL2 = snapshot.gamepadRightStickDownToL2,
             gamepadButtonHaptics = snapshot.gamepadButtonHaptics,
-            pressureModifierAmount = snapshot.pressureModifierAmount,
             gamepadBindings = snapshot.gamepadBindings,
             gamepadBindingsByPad = snapshot.gamepadBindingsByPad,
             gpuDriverType = snapshot.gpuDriverType,
@@ -580,37 +387,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             frameLimitEnabled = snapshot.frameLimitEnabled,
             rewindEnabled = snapshot.rewindEnabled,
             vSyncEnabled = snapshot.vSyncEnabled,
-            fastForwardSpeed = snapshot.fastForwardSpeed,
             targetFps = snapshot.targetFps,
             ntscFramerate = snapshot.ntscFramerate,
-            palFramerate = snapshot.palFramerate,
-            enableIcacheEmulation = snapshot.enableIcacheEmulation,
-            enableDisableStalls = snapshot.enableDisableStalls,
-            enablePreciseExceptions = snapshot.enablePreciseExceptions,
-            enableTurboCd = snapshot.enableTurboCd,
-            enableCddaAudio = snapshot.enableCddaAudio,
-            enableXaDecoding = snapshot.enableXaDecoding,
-            enableSpuReverb = snapshot.enableSpuReverb,
-            enableSpuThread = snapshot.enableSpuThread,
-            spuTempo = snapshot.spuTempo,
-            neonEnhancement = snapshot.neonEnhancement,
-            neonEnhancementSpeedHack = snapshot.neonEnhancementSpeedHack,
-            neonEnhancementTexAdj = snapshot.neonEnhancementTexAdj,
-            neonInterlace = snapshot.neonInterlace,
-            gpuThreadRendering = snapshot.gpuThreadRendering,
-            showOverscan = snapshot.showOverscan,
-            screenCentering = snapshot.screenCentering,
-            screenCenteringX = snapshot.screenCenteringX,
-            screenCenteringY = snapshot.screenCenteringY,
-            screenCenteringHAdj = snapshot.screenCenteringHAdj,
-            enableFractionalFramerate = snapshot.enableFractionalFramerate,
-            altFlipMode = snapshot.altFlipMode,
-            enableRgb32Output = snapshot.enableRgb32Output,
-            enableScaleHires = snapshot.enableScaleHires,
-            multitapMode = snapshot.multitapMode,
-            analogAxisModifier = snapshot.analogAxisModifier,
-            dualshockToggleCombo = snapshot.dualshockToggleCombo,
-            cdReadAhead = snapshot.cdReadAhead
+            palFramerate = snapshot.palFramerate
         )
     }
 
@@ -1017,7 +796,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             val normalizedValue = normalizeUpscale(value)
             markPerformancePresetCustom()
             preferences.setUpscaleMultiplier(normalizedValue)
-            preferences.setNeonEnhancement(normalizedValue >= 1.5f)
             EmulatorBridge.setUpscaleMultiplier(normalizedValue)
         }
     }
@@ -1119,14 +897,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun setAudioBufferMs(value: Int) {
-        viewModelScope.launch {
-            val normalized = AudioDefaults.coerceBufferMs(value)
-            preferences.setAudioBufferMs(normalized)
-            EmulatorBridge.setSetting("SPU2/Output", "BufferMS", "int", normalized.toString())
-        }
-    }
-
     fun setAudioOutputLatencyMs(value: Int) {
         viewModelScope.launch {
             val normalized = AudioDefaults.coerceOutputLatencyMs(value)
@@ -1218,21 +988,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    // Extended settings
-    private suspend fun setEeFpuClampingModeCore(value: Int) {
-        EmulatorBridge.setSetting("EmuCoreA/CPU", "EEClampMode", "int", value.toString())
-        EmulatorBridge.setSetting("EmuCoreA/CPU/Recompiler", "fpuOverflow", "bool", (value >= AppPreferences.CLAMPING_NORMAL).toString())
-        EmulatorBridge.setSetting("EmuCoreA/CPU/Recompiler", "fpuExtraOverflow", "bool", (value >= AppPreferences.CLAMPING_EXTRA).toString())
-        EmulatorBridge.setSetting("EmuCoreA/CPU/Recompiler", "fpuFullMode", "bool", (value >= AppPreferences.CLAMPING_FULL).toString())
-    }
-
-    private suspend fun setVuClampingModeCore(modeKey: String, prefix: String, value: Int) {
-        EmulatorBridge.setSetting("EmuCoreA/CPU", modeKey, "int", value.toString())
-        EmulatorBridge.setSetting("EmuCoreA/CPU/Recompiler", "${prefix}Overflow", "bool", (value >= AppPreferences.CLAMPING_NORMAL).toString())
-        EmulatorBridge.setSetting("EmuCoreA/CPU/Recompiler", "${prefix}ExtraOverflow", "bool", (value >= AppPreferences.CLAMPING_EXTRA).toString())
-        EmulatorBridge.setSetting("EmuCoreA/CPU/Recompiler", "${prefix}SignOverflow", "bool", (value >= AppPreferences.CLAMPING_FULL).toString())
-    }
-
     fun setFrameLimitEnabled(enabled: Boolean) {
         viewModelScope.launch {
             preferences.setFrameLimitEnabled(enabled)
@@ -1254,13 +1009,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun setFastForwardSpeed(value: Float) {
-        viewModelScope.launch {
-            preferences.setFastForwardSpeed(value)
-            EmulatorBridge.setFastForwardSpeed(value)
-        }
-    }
-
     fun setTargetFps(value: Int) {
         viewModelScope.launch {
             preferences.setTargetFps(if (value <= 0) 0 else value)
@@ -1278,54 +1026,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun isShadeBoostActive(
-        brightness: Int,
-        contrast: Int,
-        saturation: Int,
-        gamma: Int
-    ): Boolean {
-        return brightness != 50 || contrast != 50 || saturation != 50 || gamma != 50
-    }
-
-    // Core-specific emulation settings
-
     private suspend fun markPerformancePresetCustom() {
         if (_uiState.value.performancePreset != PerformancePresets.CUSTOM) {
             preferences.setPerformancePreset(PerformancePresets.CUSTOM)
         }
-    }
-
-    private suspend fun refreshManualHardwareFixes(state: SettingsUiState = _uiState.value) {
-        val enabled = GsHackDefaults.shouldEnableManualHardwareFixes(
-            cpuSpriteRenderSize = state.cpuSpriteRenderSize,
-            cpuSpriteRenderLevel = state.cpuSpriteRenderLevel,
-            softwareClutRender = state.softwareClutRender,
-            gpuTargetClutMode = state.gpuTargetClutMode,
-            skipDrawStart = state.skipDrawStart,
-            skipDrawEnd = state.skipDrawEnd,
-            autoFlushHardware = state.autoFlushHardware,
-            cpuFramebufferConversion = state.cpuFramebufferConversion,
-            disableDepthConversion = state.disableDepthConversion,
-            disableSafeFeatures = state.disableSafeFeatures,
-            disableRenderFixes = state.disableRenderFixes,
-            preloadFrameData = state.preloadFrameData,
-            disablePartialInvalidation = state.disablePartialInvalidation,
-            textureInsideRt = state.textureInsideRt,
-            readTargetsOnClose = state.readTargetsOnClose,
-            estimateTextureRegion = state.estimateTextureRegion,
-            gpuPaletteConversion = state.gpuPaletteConversion,
-            halfPixelOffset = state.halfPixelOffset,
-            nativeScaling = state.nativeScaling,
-            roundSprite = state.roundSprite,
-            bilinearUpscale = state.bilinearUpscale,
-            textureOffsetX = state.textureOffsetX,
-            textureOffsetY = state.textureOffsetY,
-            alignSprite = state.alignSprite,
-            mergeSprite = state.mergeSprite,
-            forceEvenSpritePosition = state.forceEvenSpritePosition,
-            nativePaletteDraw = state.nativePaletteDraw
-        )
-        EmulatorBridge.setSetting("EmuCoreA/GS", "UserHacks", "bool", enabled.toString())
     }
 
     // Overlay
@@ -1360,8 +1064,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             EmulatorBridge.applyRuntimeConfig(
                 biosPath = uri.toString(),
                 emulatorDataPath = _uiState.value.emulatorDataPath,
-                memoryCardSlot1 = preferences.memoryCardSlot1.first(),
-                memoryCardSlot2 = preferences.memoryCardSlot2.first(),
                 renderer = _uiState.value.renderer,
                 upscaleMultiplier = _uiState.value.upscaleMultiplier,
                 gpuDriverType = _uiState.value.gpuDriverType,
@@ -1369,84 +1071,17 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 gpuHardwareProfile = GpuHardwareProfiles.detectHardwareProfile(),
                 mediatekAngleOpenGl = _uiState.value.mediatekAngleOpenGl,
                 aspectRatio = _uiState.value.aspectRatio,
-                localMultiplayerMode = _uiState.value.localMultiplayerMode,
                 audioVolume = _uiState.value.audioVolume,
                 audioFastForwardVolume = _uiState.value.audioFastForwardVolume,
                 audioMuted = _uiState.value.audioMuted,
-                audioInterpolation = _uiState.value.audioInterpolation,
-                audioSyncMode = _uiState.value.audioSyncMode,
-                audioLightweightSpu2 = _uiState.value.audioLightweightSpu2,
                 audioBackend = _uiState.value.audioBackend,
-                audioBufferMs = _uiState.value.audioBufferMs,
                 audioOutputLatencyMs = _uiState.value.audioOutputLatencyMs,
                 audioMinimalOutputLatency = _uiState.value.audioMinimalOutputLatency,
-                enableEeRecompiler = _uiState.value.enableEeRecompiler,
-                enableIopRecompiler = _uiState.value.enableIopRecompiler,
-                enableVu0Recompiler = _uiState.value.enableVu0Recompiler,
-                enableVu1Recompiler = _uiState.value.enableVu1Recompiler,
-                enableFastmem = _uiState.value.enableFastmem,
-                eeFpuRoundMode = _uiState.value.eeFpuRoundMode,
-                vu0RoundMode = _uiState.value.vu0RoundMode,
-                vu1RoundMode = _uiState.value.vu1RoundMode,
-                eeFpuClampingMode = _uiState.value.eeFpuClampingMode,
-                vu0ClampingMode = _uiState.value.vu0ClampingMode,
-                vu1ClampingMode = _uiState.value.vu1ClampingMode,
-                enableGameFixes = _uiState.value.enableGameFixes,
-                eeTimingHack = _uiState.value.enableEeTimingHack,
-                waitLoopSpeedhack = _uiState.value.enableWaitLoopSpeedhack,
-                intcStatSpeedhack = _uiState.value.enableIntcStatSpeedhack,
-                vuFlagHack = _uiState.value.enableVuFlagHack,
-                instantVu1 = _uiState.value.enableInstantVu1,
-                mtvu = _uiState.value.enableMtvu,
-                enableThreadPinning = _uiState.value.enableThreadPinning,
-                enableFastBoot = _uiState.value.enableFastBoot,
-                hwDownloadMode = _uiState.value.hwDownloadMode,
                 frameLimitEnabled = _uiState.value.frameLimitEnabled,
                 vSyncEnabled = _uiState.value.vSyncEnabled,
                 targetFps = _uiState.value.targetFps,
                 ntscFramerate = _uiState.value.ntscFramerate,
                 palFramerate = _uiState.value.palFramerate,
-                textureFiltering = _uiState.value.textureFiltering,
-                trilinearFiltering = _uiState.value.trilinearFiltering,
-                blendingAccuracy = _uiState.value.blendingAccuracy,
-                texturePreloading = _uiState.value.texturePreloading,
-                enableFxaa = _uiState.value.enableFxaa,
-                sgsrMode = _uiState.value.sgsrMode,
-                casMode = _uiState.value.casMode,
-                casSharpness = _uiState.value.casSharpness,
-                tvShader = _uiState.value.tvShader,
-                deinterlaceMode = _uiState.value.deinterlaceMode,
-                dithering = _uiState.value.dithering,
-                anisotropicFiltering = _uiState.value.anisotropicFiltering,
-                enableHwMipmapping = _uiState.value.enableHwMipmapping,
-                antiBlur = _uiState.value.antiBlur,
-                cpuSpriteRenderSize = _uiState.value.cpuSpriteRenderSize,
-                cpuSpriteRenderLevel = _uiState.value.cpuSpriteRenderLevel,
-                softwareClutRender = _uiState.value.softwareClutRender,
-                gpuTargetClutMode = _uiState.value.gpuTargetClutMode,
-                skipDrawStart = _uiState.value.skipDrawStart,
-                skipDrawEnd = _uiState.value.skipDrawEnd,
-                autoFlushHardware = _uiState.value.autoFlushHardware,
-                cpuFramebufferConversion = _uiState.value.cpuFramebufferConversion,
-                disableDepthConversion = _uiState.value.disableDepthConversion,
-                disableSafeFeatures = _uiState.value.disableSafeFeatures,
-                disableRenderFixes = _uiState.value.disableRenderFixes,
-                preloadFrameData = _uiState.value.preloadFrameData,
-                disablePartialInvalidation = _uiState.value.disablePartialInvalidation,
-                textureInsideRt = _uiState.value.textureInsideRt,
-                readTargetsOnClose = _uiState.value.readTargetsOnClose,
-                estimateTextureRegion = _uiState.value.estimateTextureRegion,
-                gpuPaletteConversion = _uiState.value.gpuPaletteConversion,
-                halfPixelOffset = _uiState.value.halfPixelOffset,
-                nativeScaling = _uiState.value.nativeScaling,
-                roundSprite = _uiState.value.roundSprite,
-                bilinearUpscale = _uiState.value.bilinearUpscale,
-                textureOffsetX = _uiState.value.textureOffsetX,
-                textureOffsetY = _uiState.value.textureOffsetY,
-                alignSprite = _uiState.value.alignSprite,
-                mergeSprite = _uiState.value.mergeSprite,
-                forceEvenSpritePosition = _uiState.value.forceEvenSpritePosition,
-                nativePaletteDraw = _uiState.value.nativePaletteDraw
             )
         }
     }

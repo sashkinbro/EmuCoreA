@@ -4,7 +4,6 @@ import android.content.Context
 import com.sbro.emucorea.core.AudioDefaults
 import com.sbro.emucorea.core.EmulatorBridge
 import com.sbro.emucorea.core.EmulatorStorage
-import com.sbro.emucorea.core.GsHackDefaults
 import com.sbro.emucorea.core.RendererDefaults
 import com.sbro.emucorea.core.UPSCALE_DEFAULT
 import com.sbro.emucorea.core.normalizeUpscale
@@ -23,7 +22,6 @@ data class PerGameSettings(
     val upscaleMultiplier: Float = UPSCALE_DEFAULT,
     val aspectRatio: Int = 1,
     val localMultiplayerMode: Int = AppPreferences.LOCAL_MULTIPLAYER_OFF,
-    val displayCrop: DisplayCrop = DisplayCrop.None,
     val showFps: Boolean = false,
     val fpsOverlayMode: Int = AppPreferences.FPS_OVERLAY_MODE_DETAILED,
     val racingMode: Boolean = false,
@@ -44,82 +42,15 @@ data class PerGameSettings(
     val gamepadLeftStickSensitivity: Int = AppPreferences.DEFAULT_GAMEPAD_STICK_SENSITIVITY,
     val gamepadRightStickSensitivity: Int = AppPreferences.DEFAULT_GAMEPAD_STICK_SENSITIVITY,
     val gamepadBindingsByPad: Map<Int, Map<String, Int>> = emptyMap(),
-    val pressureModifierAmount: Int = AppPreferences.DEFAULT_PRESSURE_MODIFIER_AMOUNT,
     val autoSaveOnExit: Boolean = false,
     val autoLoadOnStart: Boolean = false,
-    val enableFastBoot: Boolean = true,
-    val enableInstantVu1: Boolean = true,
-    val enableMtvu: Boolean = true,
-    val enableThreadPinning: Boolean = AppPreferences.DEFAULT_THREAD_PINNING,
-    val enableFastCdvd: Boolean = false,
     val enableCheats: Boolean = false,
-    val enableGameFixes: Boolean = true,
-    val enableEeTimingHack: Boolean = false,
-    val eeFpuRoundMode: Int = AppPreferences.DEFAULT_EE_FPU_ROUND_MODE,
-    val vu0RoundMode: Int = AppPreferences.DEFAULT_VU_ROUND_MODE,
-    val vu1RoundMode: Int = AppPreferences.DEFAULT_VU_ROUND_MODE,
-    val eeFpuClampingMode: Int = AppPreferences.DEFAULT_EE_FPU_CLAMPING_MODE,
-    val vu0ClampingMode: Int = AppPreferences.DEFAULT_VU0_CLAMPING_MODE,
-    val vu1ClampingMode: Int = AppPreferences.DEFAULT_VU1_CLAMPING_MODE,
-    val hwDownloadMode: Int = GsHackDefaults.HW_DOWNLOAD_MODE_DEFAULT,
-    val eeCycleRate: Int = 0,
-    val eeCycleSkip: Int = 0,
-    val frameSkip: Int = 0,
-    val skipDuplicateFrames: Boolean = true,
     val frameLimitEnabled: Boolean = true,
     val targetFps: Int = 0,
     val ntscFramerate: Float = AppPreferences.DEFAULT_NTSC_FRAMERATE,
     val palFramerate: Float = AppPreferences.DEFAULT_PAL_FRAMERATE,
-    val textureFiltering: Int = GsHackDefaults.BILINEAR_FILTERING_DEFAULT,
-    val trilinearFiltering: Int = GsHackDefaults.TRILINEAR_FILTERING_DEFAULT,
-    val blendingAccuracy: Int = GsHackDefaults.BLENDING_ACCURACY_DEFAULT,
-    val texturePreloading: Int = GsHackDefaults.TEXTURE_PRELOADING_DEFAULT,
     val shaderChainOverrideEnabled: Boolean? = null,
     val shaderChainPreset: String = "",
-    val enableFxaa: Boolean = false,
-    val casMode: Int = 0,
-    val sgsrMode: Int = 0,
-    val casSharpness: Int = 50,
-    val tvShader: Int = GsHackDefaults.TV_SHADER_DEFAULT,
-    val shadeBoostEnabled: Boolean = false,
-    val shadeBoostBrightness: Int = 50,
-    val shadeBoostContrast: Int = 50,
-    val shadeBoostSaturation: Int = 50,
-    val shadeBoostGamma: Int = 50,
-    val anisotropicFiltering: Int = 0,
-    val enableHwMipmapping: Boolean = GsHackDefaults.HW_MIPMAPPING_DEFAULT,
-    val antiBlur: Boolean = GsHackDefaults.ANTI_BLUR_DEFAULT,
-    val deinterlaceMode: Int = GsHackDefaults.DEINTERLACE_MODE_DEFAULT,
-    val dithering: Int = GsHackDefaults.DITHERING_DEFAULT,
-    val enableWidescreenPatches: Boolean = false,
-    val enableNoInterlacingPatches: Boolean = false,
-    val cpuSpriteRenderSize: Int = GsHackDefaults.CPU_SPRITE_RENDER_SIZE_DEFAULT,
-    val cpuSpriteRenderLevel: Int = GsHackDefaults.CPU_SPRITE_RENDER_LEVEL_DEFAULT,
-    val softwareClutRender: Int = GsHackDefaults.SOFTWARE_CLUT_RENDER_DEFAULT,
-    val gpuTargetClutMode: Int = GsHackDefaults.GPU_TARGET_CLUT_DEFAULT,
-    val skipDrawStart: Int = 0,
-    val skipDrawEnd: Int = 0,
-    val autoFlushHardware: Int = GsHackDefaults.AUTO_FLUSH_DEFAULT,
-    val cpuFramebufferConversion: Boolean = false,
-    val disableDepthConversion: Boolean = false,
-    val disableSafeFeatures: Boolean = false,
-    val disableRenderFixes: Boolean = false,
-    val preloadFrameData: Boolean = false,
-    val disablePartialInvalidation: Boolean = false,
-    val textureInsideRt: Int = GsHackDefaults.TEXTURE_INSIDE_RT_DEFAULT,
-    val readTargetsOnClose: Boolean = false,
-    val estimateTextureRegion: Boolean = false,
-    val gpuPaletteConversion: Boolean = false,
-    val halfPixelOffset: Int = GsHackDefaults.HALF_PIXEL_OFFSET_DEFAULT,
-    val nativeScaling: Int = GsHackDefaults.NATIVE_SCALING_DEFAULT,
-    val roundSprite: Int = GsHackDefaults.ROUND_SPRITE_DEFAULT,
-    val bilinearUpscale: Int = GsHackDefaults.BILINEAR_UPSCALE_DEFAULT,
-    val textureOffsetX: Int = 0,
-    val textureOffsetY: Int = 0,
-    val alignSprite: Boolean = false,
-    val mergeSprite: Boolean = false,
-    val forceEvenSpritePosition: Boolean = false,
-    val nativePaletteDraw: Boolean = false,
     val touchControlVisualStyle: TouchControlVisualStyle? = null,
     val touchControlPressEffect: TouchControlPressEffect? = null,
     val touchControlsLayout: TouchControlsLayoutProfile? = null,
@@ -128,34 +59,7 @@ data class PerGameSettings(
     val audioMuted: Boolean = false,
     val audioOutputLatencyMs: Int = AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT,
     val audioMinimalOutputLatency: Boolean = AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT,
-    val enableIcacheEmulation: Boolean = false,
-    val enableDisableStalls: Boolean = false,
-    val enablePreciseExceptions: Boolean = false,
-    val enableTurboCd: Boolean = false,
-    val enableCddaAudio: Boolean = true,
-    val enableXaDecoding: Boolean = true,
-    val enableSpuReverb: Boolean = true,
-    val enableSpuThread: Boolean = false,
-    val spuTempo: Int = 0,
-    val neonEnhancement: Boolean = false,
-    val neonEnhancementSpeedHack: Boolean = false,
-    val neonEnhancementTexAdj: Boolean = true,
-    val neonInterlace: Int = -1,
-    val gpuThreadRendering: Int = -1,
-    val showOverscan: Boolean = false,
-    val screenCentering: Int = 0,
-    val screenCenteringX: Int = 0,
-    val screenCenteringY: Int = 0,
-    val screenCenteringHAdj: Int = 0,
-    val enableFractionalFramerate: Boolean = false,
-    val altFlipMode: Int = 0,
-    val enableRgb32Output: Boolean = false,
-    val enableScaleHires: Boolean = false,
-    val multitapMode: Int = 0,
-    val analogAxisModifier: Int = 0,
-    val dualshockToggleCombo: Int = 0,
-    val cdReadAhead: Int = 0,
-    /** Per-game SwanStation libretro core option overrides (key -> value). */
+    /** Per-game libretro core option overrides (key -> value). */
     val coreOptions: Map<String, String> = emptyMap(),
     val providedKeys: Set<String>? = null,
     val updatedAt: Long = System.currentTimeMillis()
@@ -308,14 +212,6 @@ private fun JSONObject.toPerGameSettings(): PerGameSettings {
             "localMultiplayerMode",
             AppPreferences.LOCAL_MULTIPLAYER_OFF
         ).let(::sanitizeLocalMultiplayerMode),
-        displayCrop = optJSONObject("displayCrop")?.let { crop ->
-            DisplayCrop(
-                left = crop.optInt("left", 0),
-                top = crop.optInt("top", 0),
-                right = crop.optInt("right", 0),
-                bottom = crop.optInt("bottom", 0)
-            ).sanitized()
-        } ?: DisplayCrop.None,
         showFps = optBoolean("showFps", false),
         fpsOverlayMode = optInt("fpsOverlayMode", AppPreferences.FPS_OVERLAY_MODE_DETAILED),
         racingMode = optBoolean("racingMode", false),
@@ -353,32 +249,9 @@ private fun JSONObject.toPerGameSettings(): PerGameSettings {
         gamepadRightStickSensitivity = optInt("gamepadRightStickSensitivity", AppPreferences.DEFAULT_GAMEPAD_STICK_SENSITIVITY)
             .coerceIn(50, 200),
         gamepadBindingsByPad = decodeGamepadBindingsByPerGameJson(optJSONObject("gamepadBindingsByPad")),
-        pressureModifierAmount = optInt("pressureModifierAmount", AppPreferences.DEFAULT_PRESSURE_MODIFIER_AMOUNT).coerceIn(1, 100),
         autoSaveOnExit = optBoolean("autoSaveOnExit", false),
         autoLoadOnStart = optBoolean("autoLoadOnStart", false),
-        enableFastBoot = optBoolean("enableFastBoot", true),
-        enableInstantVu1 = optBoolean("enableInstantVu1", true),
-        enableMtvu = optBoolean("enableMtvu", true),
-        enableThreadPinning = optBoolean("enableThreadPinning", AppPreferences.DEFAULT_THREAD_PINNING),
-        enableFastCdvd = optBoolean("enableFastCdvd", false),
         enableCheats = optBoolean("enableCheats", false),
-        enableGameFixes = optBoolean("enableGameFixes", true),
-        enableEeTimingHack = optBoolean("enableEeTimingHack", false),
-        eeFpuRoundMode = sanitizeFloatRoundMode(optInt("eeFpuRoundMode", AppPreferences.DEFAULT_EE_FPU_ROUND_MODE), AppPreferences.DEFAULT_EE_FPU_ROUND_MODE),
-        vu0RoundMode = sanitizeFloatRoundMode(optInt("vu0RoundMode", AppPreferences.DEFAULT_VU_ROUND_MODE), AppPreferences.DEFAULT_VU_ROUND_MODE),
-        vu1RoundMode = sanitizeFloatRoundMode(optInt("vu1RoundMode", AppPreferences.DEFAULT_VU_ROUND_MODE), AppPreferences.DEFAULT_VU_ROUND_MODE),
-        eeFpuClampingMode = sanitizeClampingMode(optInt("eeFpuClampingMode", AppPreferences.DEFAULT_EE_FPU_CLAMPING_MODE), AppPreferences.DEFAULT_EE_FPU_CLAMPING_MODE),
-        vu0ClampingMode = sanitizeClampingMode(optInt("vu0ClampingMode", AppPreferences.DEFAULT_VU0_CLAMPING_MODE), AppPreferences.DEFAULT_VU0_CLAMPING_MODE),
-        vu1ClampingMode = sanitizeClampingMode(optInt("vu1ClampingMode", AppPreferences.DEFAULT_VU1_CLAMPING_MODE), AppPreferences.DEFAULT_VU1_CLAMPING_MODE),
-        hwDownloadMode = GsHackDefaults.coerceHardwareDownloadMode(
-            optInt("hwDownloadMode", GsHackDefaults.HW_DOWNLOAD_MODE_DEFAULT)
-        ),
-        eeCycleRate = optInt("eeCycleRate", 0),
-        eeCycleSkip = optInt("eeCycleSkip", 0),
-        frameSkip = GsHackDefaults.coerceFrameSkip(
-            optInt("frameSkip", GsHackDefaults.FRAME_SKIP_DEFAULT)
-        ),
-        skipDuplicateFrames = optBoolean("skipDuplicateFrames", true),
         frameLimitEnabled = optBoolean("frameLimitEnabled", true),
         targetFps = optInt("targetFps", 0).let { if (it <= 0) 0 else it.coerceIn(20, 120) },
         ntscFramerate = sanitizeRegionFramerate(
@@ -389,79 +262,12 @@ private fun JSONObject.toPerGameSettings(): PerGameSettings {
             optDouble("palFramerate", AppPreferences.DEFAULT_PAL_FRAMERATE.toDouble()).toFloat(),
             AppPreferences.DEFAULT_PAL_FRAMERATE
         ),
-        textureFiltering = GsHackDefaults.coerceBilinearFiltering(
-            optInt("textureFiltering", GsHackDefaults.BILINEAR_FILTERING_DEFAULT)
-        ),
-        trilinearFiltering = readTrilinearFiltering(),
-        blendingAccuracy = GsHackDefaults.coerceBlendingAccuracy(
-            optInt("blendingAccuracy", GsHackDefaults.BLENDING_ACCURACY_DEFAULT)
-        ),
-        texturePreloading = GsHackDefaults.coerceTexturePreloading(
-            optInt("texturePreloading", GsHackDefaults.TEXTURE_PRELOADING_DEFAULT)
-        ),
         shaderChainOverrideEnabled = if (has("shaderChainOverrideEnabled")) {
             optBoolean("shaderChainOverrideEnabled", false)
         } else {
             null
         },
         shaderChainPreset = optString("shaderChainPreset").trim(),
-        enableFxaa = optBoolean("enableFxaa", false),
-        casMode = optInt("casMode", 0),
-        sgsrMode = optInt("sgsrMode", 0).coerceIn(0, 3),
-        casSharpness = optInt("casSharpness", 50),
-        tvShader = optInt("tvShader", GsHackDefaults.TV_SHADER_DEFAULT).let(GsHackDefaults::coerceTvShader),
-        shadeBoostEnabled = optBoolean("shadeBoostEnabled", false) || isShadeBoostActive(
-            brightness = optInt("shadeBoostBrightness", 50).coerceIn(1, 100),
-            contrast = optInt("shadeBoostContrast", 50).coerceIn(1, 100),
-            saturation = optInt("shadeBoostSaturation", 50).coerceIn(1, 100),
-            gamma = optInt("shadeBoostGamma", 50).coerceIn(1, 100)
-        ),
-        shadeBoostBrightness = optInt("shadeBoostBrightness", 50).coerceIn(1, 100),
-        shadeBoostContrast = optInt("shadeBoostContrast", 50).coerceIn(1, 100),
-        shadeBoostSaturation = optInt("shadeBoostSaturation", 50).coerceIn(1, 100),
-        shadeBoostGamma = optInt("shadeBoostGamma", 50).coerceIn(1, 100),
-        anisotropicFiltering = GsHackDefaults.coerceAnisotropicFiltering(
-            optInt("anisotropicFiltering", GsHackDefaults.ANISOTROPIC_FILTERING_DEFAULT)
-        ),
-        enableHwMipmapping = optBoolean("enableHwMipmapping", GsHackDefaults.HW_MIPMAPPING_DEFAULT),
-        antiBlur = optBoolean("antiBlur", GsHackDefaults.ANTI_BLUR_DEFAULT),
-        deinterlaceMode = GsHackDefaults.coerceDeinterlaceMode(
-            optInt("deinterlaceMode", GsHackDefaults.DEINTERLACE_MODE_DEFAULT)
-        ),
-        dithering = GsHackDefaults.coerceDithering(
-            optInt("dithering", GsHackDefaults.DITHERING_DEFAULT)
-        ),
-        enableWidescreenPatches = optBoolean("enableWidescreenPatches", false),
-        enableNoInterlacingPatches = optBoolean("enableNoInterlacingPatches", false),
-        cpuSpriteRenderSize = optInt("cpuSpriteRenderSize", GsHackDefaults.CPU_SPRITE_RENDER_SIZE_DEFAULT),
-        cpuSpriteRenderLevel = optInt("cpuSpriteRenderLevel", GsHackDefaults.CPU_SPRITE_RENDER_LEVEL_DEFAULT),
-        softwareClutRender = optInt("softwareClutRender", GsHackDefaults.SOFTWARE_CLUT_RENDER_DEFAULT),
-        gpuTargetClutMode = optInt("gpuTargetClutMode", GsHackDefaults.GPU_TARGET_CLUT_DEFAULT),
-        skipDrawStart = optInt("skipDrawStart", 0),
-        skipDrawEnd = optInt("skipDrawEnd", 0),
-        autoFlushHardware = optInt("autoFlushHardware", GsHackDefaults.AUTO_FLUSH_DEFAULT),
-        cpuFramebufferConversion = optBoolean("cpuFramebufferConversion", false),
-        disableDepthConversion = optBoolean("disableDepthConversion", false),
-        disableSafeFeatures = optBoolean("disableSafeFeatures", false),
-        disableRenderFixes = optBoolean("disableRenderFixes", false),
-        preloadFrameData = optBoolean("preloadFrameData", false),
-        disablePartialInvalidation = optBoolean("disablePartialInvalidation", false),
-        textureInsideRt = optInt("textureInsideRt", GsHackDefaults.TEXTURE_INSIDE_RT_DEFAULT),
-        readTargetsOnClose = optBoolean("readTargetsOnClose", false),
-        estimateTextureRegion = optBoolean("estimateTextureRegion", false),
-        gpuPaletteConversion = optBoolean("gpuPaletteConversion", false),
-        halfPixelOffset = optInt("halfPixelOffset", GsHackDefaults.HALF_PIXEL_OFFSET_DEFAULT),
-        nativeScaling = GsHackDefaults.coerceNativeScaling(
-            optInt("nativeScaling", GsHackDefaults.NATIVE_SCALING_DEFAULT)
-        ),
-        roundSprite = optInt("roundSprite", GsHackDefaults.ROUND_SPRITE_DEFAULT),
-        bilinearUpscale = optInt("bilinearUpscale", GsHackDefaults.BILINEAR_UPSCALE_DEFAULT),
-        textureOffsetX = optInt("textureOffsetX", 0),
-        textureOffsetY = optInt("textureOffsetY", 0),
-        alignSprite = optBoolean("alignSprite", false),
-        mergeSprite = optBoolean("mergeSprite", false),
-        forceEvenSpritePosition = optBoolean("forceEvenSpritePosition", false),
-        nativePaletteDraw = optBoolean("nativePaletteDraw", false),
         audioVolume = AudioDefaults.coerceVolume(
             optInt("audioVolume", AudioDefaults.VOLUME_DEFAULT)
         ),
@@ -473,33 +279,6 @@ private fun JSONObject.toPerGameSettings(): PerGameSettings {
             "audioMinimalOutputLatency",
             AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT
         ),
-        enableIcacheEmulation = optBoolean("enableIcacheEmulation", false),
-        enableDisableStalls = optBoolean("enableDisableStalls", false),
-        enablePreciseExceptions = optBoolean("enablePreciseExceptions", false),
-        enableTurboCd = optBoolean("enableTurboCd", false),
-        enableCddaAudio = optBoolean("enableCddaAudio", true),
-        enableXaDecoding = optBoolean("enableXaDecoding", true),
-        enableSpuReverb = optBoolean("enableSpuReverb", true),
-        enableSpuThread = optBoolean("enableSpuThread", false),
-        spuTempo = optInt("spuTempo", 0),
-        neonEnhancement = optBoolean("neonEnhancement", false),
-        neonEnhancementSpeedHack = optBoolean("neonEnhancementSpeedHack", false),
-        neonEnhancementTexAdj = optBoolean("neonEnhancementTexAdj", true),
-        neonInterlace = optInt("neonInterlace", -1).coerceIn(-1, 1),
-        gpuThreadRendering = optInt("gpuThreadRendering", -1).coerceIn(-1, 1),
-        showOverscan = optBoolean("showOverscan", false),
-        screenCentering = optInt("screenCentering", 0).coerceIn(0, 3),
-        screenCenteringX = optInt("screenCenteringX", 0).coerceIn(-16, 16),
-        screenCenteringY = optInt("screenCenteringY", 0).coerceIn(-16, 16),
-        screenCenteringHAdj = optInt("screenCenteringHAdj", 0).coerceIn(-64, 0),
-        enableFractionalFramerate = optBoolean("enableFractionalFramerate", false),
-        altFlipMode = optInt("altFlipMode", 0).coerceIn(0, 2),
-        enableRgb32Output = optBoolean("enableRgb32Output", false),
-        enableScaleHires = optBoolean("enableScaleHires", false),
-        multitapMode = optInt("multitapMode", 0).coerceIn(0, 3),
-        analogAxisModifier = optInt("analogAxisModifier", 0).coerceIn(0, 1),
-        dualshockToggleCombo = optInt("dualshockToggleCombo", 0).coerceIn(0, 5),
-        cdReadAhead = optInt("cdReadAhead", 0).coerceIn(0, 333000),
         touchControlVisualStyle = if (has("touchControlVisualStyle")) {
             TouchControlVisualStyle.fromPreference(optInt("touchControlVisualStyle"))
         } else {
@@ -542,13 +321,6 @@ private fun PerGameSettings.toJson(): JSONObject {
         if (shouldWrite("localMultiplayerMode")) {
             put("localMultiplayerMode", sanitizeLocalMultiplayerMode(localMultiplayerMode))
         }
-        if (shouldWrite("displayCrop")) put("displayCrop", JSONObject().apply {
-            val crop = displayCrop.sanitized()
-            put("left", crop.left)
-            put("top", crop.top)
-            put("right", crop.right)
-            put("bottom", crop.bottom)
-        })
         if (shouldWrite("showFps")) put("showFps", showFps)
         if (shouldWrite("fpsOverlayMode")) put("fpsOverlayMode", fpsOverlayMode)
         if (shouldWrite("racingMode")) put("racingMode", racingMode)
@@ -573,115 +345,21 @@ private fun PerGameSettings.toJson(): JSONObject {
         if (shouldWrite("gamepadBindingsByPad") && gamepadBindingsByPad.isNotEmpty()) {
             put("gamepadBindingsByPad", encodeGamepadBindingsPerGameJson(gamepadBindingsByPad))
         }
-        if (shouldWrite("pressureModifierAmount")) put("pressureModifierAmount", pressureModifierAmount.coerceIn(1, 100))
         if (shouldWrite("autoSaveOnExit")) put("autoSaveOnExit", autoSaveOnExit)
         if (shouldWrite("autoLoadOnStart")) put("autoLoadOnStart", autoLoadOnStart)
-        if (shouldWrite("enableFastBoot")) put("enableFastBoot", enableFastBoot)
-        if (shouldWrite("enableInstantVu1")) put("enableInstantVu1", enableInstantVu1)
-        if (shouldWrite("enableMtvu")) put("enableMtvu", enableMtvu)
-        if (shouldWrite("enableThreadPinning")) put("enableThreadPinning", enableThreadPinning)
-        if (shouldWrite("enableFastCdvd")) put("enableFastCdvd", enableFastCdvd)
         if (shouldWrite("enableCheats")) put("enableCheats", enableCheats)
-        if (shouldWrite("enableGameFixes")) put("enableGameFixes", enableGameFixes)
-        if (shouldWrite("enableEeTimingHack")) put("enableEeTimingHack", enableEeTimingHack)
-        if (shouldWrite("eeFpuRoundMode")) put("eeFpuRoundMode", sanitizeFloatRoundMode(eeFpuRoundMode, AppPreferences.DEFAULT_EE_FPU_ROUND_MODE))
-        if (shouldWrite("vu0RoundMode")) put("vu0RoundMode", sanitizeFloatRoundMode(vu0RoundMode, AppPreferences.DEFAULT_VU_ROUND_MODE))
-        if (shouldWrite("vu1RoundMode")) put("vu1RoundMode", sanitizeFloatRoundMode(vu1RoundMode, AppPreferences.DEFAULT_VU_ROUND_MODE))
-        if (shouldWrite("eeFpuClampingMode")) put("eeFpuClampingMode", sanitizeClampingMode(eeFpuClampingMode, AppPreferences.DEFAULT_EE_FPU_CLAMPING_MODE))
-        if (shouldWrite("vu0ClampingMode")) put("vu0ClampingMode", sanitizeClampingMode(vu0ClampingMode, AppPreferences.DEFAULT_VU0_CLAMPING_MODE))
-        if (shouldWrite("vu1ClampingMode")) put("vu1ClampingMode", sanitizeClampingMode(vu1ClampingMode, AppPreferences.DEFAULT_VU1_CLAMPING_MODE))
-        if (shouldWrite("hwDownloadMode")) put("hwDownloadMode", GsHackDefaults.coerceHardwareDownloadMode(hwDownloadMode))
-        if (shouldWrite("eeCycleRate")) put("eeCycleRate", eeCycleRate)
-        if (shouldWrite("eeCycleSkip")) put("eeCycleSkip", eeCycleSkip)
-        if (shouldWrite("frameSkip")) put("frameSkip", GsHackDefaults.coerceFrameSkip(frameSkip))
-        if (shouldWrite("skipDuplicateFrames")) put("skipDuplicateFrames", skipDuplicateFrames)
         if (shouldWrite("frameLimitEnabled")) put("frameLimitEnabled", frameLimitEnabled)
         if (shouldWrite("targetFps")) put("targetFps", targetFps)
         if (shouldWrite("ntscFramerate")) put("ntscFramerate", ntscFramerate.toDouble())
         if (shouldWrite("palFramerate")) put("palFramerate", palFramerate.toDouble())
-        if (shouldWrite("textureFiltering")) put("textureFiltering", GsHackDefaults.coerceBilinearFiltering(textureFiltering))
-        if (shouldWrite("trilinearFiltering")) put("trilinearFiltering", GsHackDefaults.coerceTrilinearFiltering(trilinearFiltering))
-        if (shouldWrite("blendingAccuracy")) put("blendingAccuracy", GsHackDefaults.coerceBlendingAccuracy(blendingAccuracy))
-        if (shouldWrite("texturePreloading")) put("texturePreloading", GsHackDefaults.coerceTexturePreloading(texturePreloading))
         shaderChainOverrideEnabled?.let { overrideEnabled ->
             put("shaderChainOverrideEnabled", overrideEnabled)
             put("shaderChainPreset", shaderChainPreset.trim())
         }
-        if (shouldWrite("enableFxaa")) put("enableFxaa", enableFxaa)
-        if (shouldWrite("casMode")) put("casMode", casMode)
-        if (shouldWrite("sgsrMode")) put("sgsrMode", sgsrMode.coerceIn(0, 3))
-        if (shouldWrite("casSharpness")) put("casSharpness", casSharpness)
-        if (shouldWrite("tvShader")) put("tvShader", GsHackDefaults.coerceTvShader(tvShader))
-        if (shouldWrite("shadeBoostEnabled")) put("shadeBoostEnabled", shadeBoostEnabled)
-        if (shouldWrite("shadeBoostBrightness")) put("shadeBoostBrightness", shadeBoostBrightness)
-        if (shouldWrite("shadeBoostContrast")) put("shadeBoostContrast", shadeBoostContrast)
-        if (shouldWrite("shadeBoostSaturation")) put("shadeBoostSaturation", shadeBoostSaturation)
-        if (shouldWrite("shadeBoostGamma")) put("shadeBoostGamma", shadeBoostGamma)
-        if (shouldWrite("anisotropicFiltering")) put("anisotropicFiltering", GsHackDefaults.coerceAnisotropicFiltering(anisotropicFiltering))
-        if (shouldWrite("enableHwMipmapping")) put("enableHwMipmapping", enableHwMipmapping)
-        if (shouldWrite("antiBlur")) put("antiBlur", antiBlur)
-        if (shouldWrite("deinterlaceMode")) put("deinterlaceMode", GsHackDefaults.coerceDeinterlaceMode(deinterlaceMode))
-        if (shouldWrite("dithering")) put("dithering", GsHackDefaults.coerceDithering(dithering))
-        if (shouldWrite("enableWidescreenPatches")) put("enableWidescreenPatches", enableWidescreenPatches)
-        if (shouldWrite("enableNoInterlacingPatches")) put("enableNoInterlacingPatches", enableNoInterlacingPatches)
-        if (shouldWrite("cpuSpriteRenderSize")) put("cpuSpriteRenderSize", cpuSpriteRenderSize)
-        if (shouldWrite("cpuSpriteRenderLevel")) put("cpuSpriteRenderLevel", cpuSpriteRenderLevel)
-        if (shouldWrite("softwareClutRender")) put("softwareClutRender", softwareClutRender)
-        if (shouldWrite("gpuTargetClutMode")) put("gpuTargetClutMode", gpuTargetClutMode)
-        if (shouldWrite("skipDrawStart")) put("skipDrawStart", skipDrawStart)
-        if (shouldWrite("skipDrawEnd")) put("skipDrawEnd", skipDrawEnd)
-        if (shouldWrite("autoFlushHardware")) put("autoFlushHardware", autoFlushHardware)
-        if (shouldWrite("cpuFramebufferConversion")) put("cpuFramebufferConversion", cpuFramebufferConversion)
-        if (shouldWrite("disableDepthConversion")) put("disableDepthConversion", disableDepthConversion)
-        if (shouldWrite("disableSafeFeatures")) put("disableSafeFeatures", disableSafeFeatures)
-        if (shouldWrite("disableRenderFixes")) put("disableRenderFixes", disableRenderFixes)
-        if (shouldWrite("preloadFrameData")) put("preloadFrameData", preloadFrameData)
-        if (shouldWrite("disablePartialInvalidation")) put("disablePartialInvalidation", disablePartialInvalidation)
-        if (shouldWrite("textureInsideRt")) put("textureInsideRt", textureInsideRt)
-        if (shouldWrite("readTargetsOnClose")) put("readTargetsOnClose", readTargetsOnClose)
-        if (shouldWrite("estimateTextureRegion")) put("estimateTextureRegion", estimateTextureRegion)
-        if (shouldWrite("gpuPaletteConversion")) put("gpuPaletteConversion", gpuPaletteConversion)
-        if (shouldWrite("halfPixelOffset")) put("halfPixelOffset", halfPixelOffset)
-        if (shouldWrite("nativeScaling")) put("nativeScaling", GsHackDefaults.coerceNativeScaling(nativeScaling))
-        if (shouldWrite("roundSprite")) put("roundSprite", roundSprite)
-        if (shouldWrite("bilinearUpscale")) put("bilinearUpscale", bilinearUpscale)
-        if (shouldWrite("textureOffsetX")) put("textureOffsetX", textureOffsetX)
-        if (shouldWrite("textureOffsetY")) put("textureOffsetY", textureOffsetY)
-        if (shouldWrite("alignSprite")) put("alignSprite", alignSprite)
-        if (shouldWrite("mergeSprite")) put("mergeSprite", mergeSprite)
-        if (shouldWrite("forceEvenSpritePosition")) put("forceEvenSpritePosition", forceEvenSpritePosition)
-        if (shouldWrite("nativePaletteDraw")) put("nativePaletteDraw", nativePaletteDraw)
         if (shouldWrite("audioVolume")) put("audioVolume", audioVolume)
         if (shouldWrite("audioMuted")) put("audioMuted", audioMuted)
         if (shouldWrite("audioOutputLatencyMs")) put("audioOutputLatencyMs", audioOutputLatencyMs)
         if (shouldWrite("audioMinimalOutputLatency")) put("audioMinimalOutputLatency", audioMinimalOutputLatency)
-        if (shouldWrite("enableIcacheEmulation")) put("enableIcacheEmulation", enableIcacheEmulation)
-        if (shouldWrite("enableDisableStalls")) put("enableDisableStalls", enableDisableStalls)
-        if (shouldWrite("enablePreciseExceptions")) put("enablePreciseExceptions", enablePreciseExceptions)
-        if (shouldWrite("enableTurboCd")) put("enableTurboCd", enableTurboCd)
-        if (shouldWrite("enableCddaAudio")) put("enableCddaAudio", enableCddaAudio)
-        if (shouldWrite("enableXaDecoding")) put("enableXaDecoding", enableXaDecoding)
-        if (shouldWrite("enableSpuReverb")) put("enableSpuReverb", enableSpuReverb)
-        if (shouldWrite("enableSpuThread")) put("enableSpuThread", enableSpuThread)
-        if (shouldWrite("spuTempo")) put("spuTempo", spuTempo)
-        if (shouldWrite("neonEnhancement")) put("neonEnhancement", neonEnhancement)
-        if (shouldWrite("neonEnhancementSpeedHack")) put("neonEnhancementSpeedHack", neonEnhancementSpeedHack)
-        if (shouldWrite("neonEnhancementTexAdj")) put("neonEnhancementTexAdj", neonEnhancementTexAdj)
-        if (shouldWrite("neonInterlace")) put("neonInterlace", neonInterlace)
-        if (shouldWrite("gpuThreadRendering")) put("gpuThreadRendering", gpuThreadRendering)
-        if (shouldWrite("showOverscan")) put("showOverscan", showOverscan)
-        if (shouldWrite("screenCentering")) put("screenCentering", screenCentering)
-        if (shouldWrite("screenCenteringX")) put("screenCenteringX", screenCenteringX)
-        if (shouldWrite("screenCenteringY")) put("screenCenteringY", screenCenteringY)
-        if (shouldWrite("screenCenteringHAdj")) put("screenCenteringHAdj", screenCenteringHAdj)
-        if (shouldWrite("enableFractionalFramerate")) put("enableFractionalFramerate", enableFractionalFramerate)
-        if (shouldWrite("altFlipMode")) put("altFlipMode", altFlipMode)
-        if (shouldWrite("enableRgb32Output")) put("enableRgb32Output", enableRgb32Output)
-        if (shouldWrite("enableScaleHires")) put("enableScaleHires", enableScaleHires)
-        if (shouldWrite("multitapMode")) put("multitapMode", multitapMode)
-        if (shouldWrite("analogAxisModifier")) put("analogAxisModifier", analogAxisModifier)
-        if (shouldWrite("dualshockToggleCombo")) put("dualshockToggleCombo", dualshockToggleCombo)
-        if (shouldWrite("cdReadAhead")) put("cdReadAhead", cdReadAhead)
         if (coreOptions.isNotEmpty()) {
             put("coreOptions", JSONObject().apply {
                 coreOptions.forEach { (optionKey, optionValue) -> put(optionKey, optionValue) }
@@ -814,22 +492,6 @@ private fun sanitizeLocalMultiplayerMode(value: Int): Int {
     )
 }
 
-private fun sanitizeFloatRoundMode(value: Int, fallback: Int): Int {
-    return if (value in AppPreferences.FLOAT_ROUND_NEAREST..AppPreferences.FLOAT_ROUND_CHOP) {
-        value
-    } else {
-        fallback
-    }
-}
-
-private fun sanitizeClampingMode(value: Int, fallback: Int): Int {
-    return if (value in AppPreferences.CLAMPING_NONE..AppPreferences.CLAMPING_FULL) {
-        value
-    } else {
-        fallback
-    }
-}
-
 private fun sanitizeRegionFramerate(value: Float, fallback: Float): Float {
     return if (value.isFinite()) value.coerceIn(20f, 120f) else fallback
 }
@@ -841,21 +503,6 @@ private fun JSONObject.readUpscaleMultiplier(): Float {
         has("upscaleMultiplier") -> optInt("upscaleMultiplier", UPSCALE_DEFAULT.toInt()).toFloat()
         else -> UPSCALE_DEFAULT
     }.let(::normalizeUpscale)
-}
-
-private fun JSONObject.readTrilinearFiltering(): Int {
-    return GsHackDefaults.coerceTrilinearFiltering(
-        optInt("trilinearFiltering", GsHackDefaults.TRILINEAR_FILTERING_DEFAULT)
-    )
-}
-
-private fun isShadeBoostActive(
-    brightness: Int,
-    contrast: Int,
-    saturation: Int,
-    gamma: Int
-): Boolean {
-    return brightness != 50 || contrast != 50 || saturation != 50 || gamma != 50
 }
 
 private fun decodeGamepadBindingsByPerGameJson(json: JSONObject?): Map<Int, Map<String, Int>> {

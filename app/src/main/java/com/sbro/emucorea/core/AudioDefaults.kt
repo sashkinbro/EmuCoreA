@@ -6,28 +6,12 @@ object AudioDefaults {
     const val VOLUME_MIN = 0
     const val VOLUME_MAX = 100
 
-    const val INTERPOLATION_NEAREST = 0
-    const val INTERPOLATION_LINEAR = 1
-    const val INTERPOLATION_GAUSSIAN = 2
-    const val INTERPOLATION_CUBIC = 3
-    const val INTERPOLATION_DEFAULT = INTERPOLATION_GAUSSIAN
-
-    const val SYNC_DISABLED = 0
-    const val SYNC_TIME_STRETCH = 1
-    const val SYNC_DEFAULT = SYNC_TIME_STRETCH
-
-    const val LIGHTWEIGHT_SPU2_DEFAULT = false
-
     // Audio backend selection (Android-specific)
     // BACKEND_AAUDIO   → the native frontend's own AAudio output
     // BACKEND_OPENSLES → PPSSPP's OpenSL ES backend (android/jni/OpenSLContext.cpp)
     const val BACKEND_AAUDIO = 0
     const val BACKEND_OPENSLES = 1
     const val BACKEND_DEFAULT = BACKEND_AAUDIO
-
-    const val BUFFER_MS_DEFAULT = 150
-    const val BUFFER_MS_MIN = 10
-    const val BUFFER_MS_MAX = 500
 
     // Mixer queue target, matching PPSSPP's extra audio buffering (80 ms).
     // Larger values absorb more frame-time jitter at the cost of audio
@@ -41,19 +25,6 @@ object AudioDefaults {
 
     fun coerceVolume(value: Int): Int = value.coerceIn(VOLUME_MIN, VOLUME_MAX)
 
-    fun coerceInterpolation(value: Int): Int = when (value) {
-        INTERPOLATION_NEAREST,
-        INTERPOLATION_LINEAR,
-        INTERPOLATION_GAUSSIAN,
-        INTERPOLATION_CUBIC -> value
-        else -> INTERPOLATION_DEFAULT
-    }
-
-    fun coerceSyncMode(value: Int): Int = when (value) {
-        SYNC_DISABLED, SYNC_TIME_STRETCH -> value
-        else -> SYNC_DEFAULT
-    }
-
     fun coerceBackend(value: Int): Int = when (value) {
         BACKEND_AAUDIO, BACKEND_OPENSLES -> value
         else -> BACKEND_DEFAULT
@@ -64,8 +35,6 @@ object AudioDefaults {
         BACKEND_OPENSLES -> "OpenSL ES"
         else -> "AAudio"
     }
-
-    fun coerceBufferMs(value: Int): Int = value.coerceIn(BUFFER_MS_MIN, BUFFER_MS_MAX)
 
     fun coerceOutputLatencyMs(value: Int): Int =
         value.coerceIn(OUTPUT_LATENCY_MS_MIN, OUTPUT_LATENCY_MS_MAX)
