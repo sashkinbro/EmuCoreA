@@ -48,6 +48,7 @@
 #include "Core/Config.h"
 #include "Core/Core.h"
 #include "Core/CoreParameter.h"
+#include "Core/CoreTiming.h"
 #include "Core/ELF/ParamSFO.h"
 #include "Core/FileSystems/BlockDevices.h"
 #include "Core/FileSystems/ISOFileSystem.h"
@@ -819,7 +820,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetSurface(JNIEnv *env, jclass, j
 JNIEXPORT jlong JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeRunFrame(JNIEnv *, jclass) {
     RunFrame();
-    return 0;
+    return g_booted ? static_cast<jlong>(CoreTiming::GetGlobalTimeUs()) : 0;
 }
 
 JNIEXPORT void JNICALL
@@ -849,6 +850,12 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetConfig(JNIEnv *env, jclass, js
     const bool on = v == "1" || v == "true";
     if (k == "internal_resolution") {
         g_Config.iInternalResolution = std::clamp(atoi(v.c_str()), 1, 10);
+        // The render size is captured into CoreParameter at boot; update it so
+        // a session restart picks the new resolution up.
+        PSP_CoreParameter().renderWidth = 480 * g_Config.iInternalResolution;
+        PSP_CoreParameter().renderHeight = 272 * g_Config.iInternalResolution;
+        PSP_CoreParameter().pixelWidth = PSP_CoreParameter().renderWidth;
+        PSP_CoreParameter().pixelHeight = PSP_CoreParameter().renderHeight;
     } else if (k == "frameskip") {
         g_Config.iFrameSkip = atoi(v.c_str());
     } else if (k == "auto_frameskip") {
