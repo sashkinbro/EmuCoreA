@@ -24,7 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sbro.emucorea.R
 import com.sbro.emucorea.core.PpssppCoreOptions
-import com.sbro.emucorea.core.SwanStationOptions
+import com.sbro.emucorea.core.CoreOptionStore
 import com.sbro.emucorea.data.PspMemoryStickRepository
 import com.sbro.emucorea.data.PspSavedGame
 import com.sbro.emucorea.ui.common.AppAlertDialog
@@ -48,7 +48,7 @@ fun PspMemoryStickScreen(onBackClick: () -> Unit) {
     val repository = remember(context) { PspMemoryStickRepository(context) }
     val scope = rememberCoroutineScope()
     val sizeOption = remember { requireNotNull(PpssppCoreOptions.option("ppsspp_memstick_size")) }
-    var selectedSize by remember { mutableStateOf(SwanStationOptions.value(sizeOption.key) ?: "16") }
+    var selectedSize by remember { mutableStateOf(CoreOptionStore.value(sizeOption.key) ?: "16") }
     var saves by remember { mutableStateOf<List<PspSavedGame>>(emptyList()) }
     var cardExists by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(true) }
@@ -129,7 +129,7 @@ fun PspMemoryStickScreen(onBackClick: () -> Unit) {
                         isWorking = true
                         val created = withContext(Dispatchers.IO) { repository.ensureMemoryStick() }
                         if (created) {
-                            SwanStationOptions.set(sizeOption.key, pendingSize)
+                            CoreOptionStore.set(sizeOption.key, pendingSize)
                             selectedSize = pendingSize
                         }
                         isWorking = false

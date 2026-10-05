@@ -98,7 +98,6 @@ object EmulatorBridge {
     private val settingsCache = HashMap<String, String>()
     private var audioVolumeSetting: Int = AudioDefaults.VOLUME_DEFAULT
     private var audioMutedSetting: Boolean = false
-    private var audioBufferMsSetting: Int = AudioDefaults.BUFFER_MS_DEFAULT
 
     init {
         isNativeLoaded = NativeApp.hasNativeCore
@@ -119,8 +118,6 @@ object EmulatorBridge {
         RuntimeOp("setting", listOf(section, key, type, value))
 
     private fun upscaleOp(value: Float) = RuntimeOp("upscale", listOf(value.toString()))
-
-    private fun frameSkipOp(value: Int) = RuntimeOp("frame_skip", listOf(value.coerceIn(0, 4).toString()))
 
     private fun normalizeAspectRatio(type: Int): Int {
         return if (type in aspectRatioSettingValues.keys) type else 1
@@ -188,44 +185,35 @@ object EmulatorBridge {
         if (!isNativeLoaded || ops.isEmpty()) return true
         return runSerial {
             var succeeded = true
-            NativeApp.beginSettingsBatch()
-            try {
-                ops.forEach { op ->
-                    when (op.kind) {
-                        "setting" -> {
-                            val section = op.fields.getOrNull(0) ?: return@forEach
-                            val key = op.fields.getOrNull(1) ?: return@forEach
-                            val type = op.fields.getOrNull(2) ?: return@forEach
-                            val value = op.fields.getOrNull(3) ?: return@forEach
-                            if (!applyAudioOutputSetting(section, key, value) &&
-                                !NativeApp.setSetting(section, key, type, value)
-                            ) succeeded = false
-                        }
-                        "upscale" -> {
-                            val value = op.fields.firstOrNull()?.toFloatOrNull() ?: return@forEach
-                            NativeApp.renderUpscalemultiplier(normalizeUpscale(value))
-                        }
-                        "frame_skip" -> {
-                            val value = op.fields.firstOrNull()?.toIntOrNull() ?: return@forEach
-                            NativeApp.setFrameSkip(value.coerceIn(0, 4))
-                        }
-                        "aspect" -> {
-                            val type = op.fields.firstOrNull()?.toIntOrNull() ?: return@forEach
-                            NativeApp.setAspectRatio(type)
-                            if (!NativeApp.setSetting(
-                                "EmuCoreA/GS",
-                                "AspectRatio",
-                                "string",
-                                op.fields.getOrNull(1) ?: aspectRatioSettingValues.getValue(1)
-                            )) succeeded = false
-                        }
-                        "custom_driver" -> {
-                            NativeApp.setCustomDriverPath(op.fields.firstOrNull().orEmpty())
-                        }
+            ops.forEach { op ->
+                when (op.kind) {
+                    "setting" -> {
+                        val section = op.fields.getOrNull(0) ?: return@forEach
+                        val key = op.fields.getOrNull(1) ?: return@forEach
+                        val type = op.fields.getOrNull(2) ?: return@forEach
+                        val value = op.fields.getOrNull(3) ?: return@forEach
+                        if (!applyAudioOutputSetting(section, key, value) &&
+                            !NativeApp.setSetting(section, key, type, value)
+                        ) succeeded = false
+                    }
+                    "upscale" -> {
+                        val value = op.fields.firstOrNull()?.toFloatOrNull() ?: return@forEach
+                        NativeApp.renderUpscalemultiplier(normalizeUpscale(value))
+                    }
+                    "aspect" -> {
+                        val type = op.fields.firstOrNull()?.toIntOrNull() ?: return@forEach
+                        NativeApp.setAspectRatio(type)
+                        if (!NativeApp.setSetting(
+                            "EmuCoreA/GS",
+                            "AspectRatio",
+                            "string",
+                            op.fields.getOrNull(1) ?: aspectRatioSettingValues.getValue(1)
+                        )) succeeded = false
+                    }
+                    "custom_driver" -> {
+                        NativeApp.setCustomDriverPath(op.fields.firstOrNull().orEmpty())
                     }
                 }
-            } finally {
-                NativeApp.endSettingsBatch()
             }
             succeeded
         }
@@ -251,12 +239,6 @@ object EmulatorBridge {
                     "fast_forward_volume",
                     volume.coerceIn(AudioDefaults.VOLUME_MIN, AudioDefaults.VOLUME_MAX).toString()
                 )
-                return true
-            }
-            "BufferMS", "AudioBufferMs" -> {
-                val milliseconds = value.toIntOrNull() ?: return false
-                audioBufferMsSetting = AudioDefaults.coerceBufferMs(milliseconds)
-                NativeApp.setAudioBufferMs(audioBufferMsSetting)
                 return true
             }
             "OutputLatencyMS", "AudioOutputLatencyMs" -> {
@@ -327,7 +309,6 @@ object EmulatorBridge {
         }
 
         try {
-            NativeApp.setNativeLibraryDir(context.applicationInfo.nativeLibraryDir ?: "")
             // The persisted emulator data root has to be known before the native
             // core is initialized: its memStickDirectory is set from it.
             val (preferEnglishTitles, emulatorDataPath) = runBlocking {
@@ -338,8 +319,6 @@ object EmulatorBridge {
             NativeApp.initializeOnce(context.applicationContext)
             NativeApp.setSetting("EmuCoreA", "AppVersion", "string", appVersionName(context.applicationContext))
             NativeApp.setSetting("UI", "PreferEnglishGameTitles", "bool", preferEnglishTitles.toString())
-            val jitSmokeOk = runCatching { NativeApp.runJitExecutableMemorySmokeTest() }.getOrDefault(false)
-            Log.i(TAG, "JIT executable-memory smoke result=$jitSmokeOk")
             Log.i(TAG, "initializeOnce completed")
         } catch (error: Exception) {
             Log.e(TAG, "initializeOnce failed", error)
@@ -1184,14 +1163,6 @@ object EmulatorBridge {
         setSetting("Framerate", "TurboScalar", "float", sanitizeFastForwardSpeed(value).toString())
     }
 
-    suspend fun setSkipDuplicateFrames(enabled: Boolean) {
-        setSetting("EmuCoreA/GS", "SkipDuplicateFrames", "bool", enabled.toString())
-    }
-
-    suspend fun setFrameSkip(value: Int) {
-        performRuntimeOps(listOf(frameSkipOp(value)))
-    }
-
     suspend fun setTargetFps(
         targetFps: Int,
         ntscFramerate: Float = AppPreferences.DEFAULT_NTSC_FRAMERATE,
@@ -1269,14 +1240,6 @@ object EmulatorBridge {
         Log.i(TAG, "onSurfaceCreated: generation=$generation")
         NativeApp.setCrashContextString("emu_surface_state", "created")
         NativeApp.logCrashBreadcrumb("surfaceCreated")
-        launchSerial {
-            try {
-                NativeApp.onNativeSurfaceCreated()
-                Log.i(TAG, "onSurfaceCreated: native callback done")
-            } catch (e: Exception) {
-                Log.e(TAG, "onSurfaceCreated: native callback failed", e)
-            }
-        }
     }
 
     fun onSurfaceChanged(surface: Surface, width: Int, height: Int, generation: Long) {

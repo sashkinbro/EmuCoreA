@@ -223,8 +223,6 @@ import com.sbro.emucorea.data.HomeBackgroundPreset
 import com.sbro.emucorea.data.HomeBackgroundRepository
 import com.sbro.emucorea.data.HomeBackgroundType
 import com.sbro.emucorea.data.OverlayLayoutSnapshot
-import com.sbro.emucorea.data.PatchDatabaseDownloader
-import com.sbro.emucorea.data.PatchDatabaseInstallStage
 import com.sbro.emucorea.data.PerGameSettingsRepository
 import com.sbro.emucorea.data.PerformanceOverlayMetrics
 import com.sbro.emucorea.data.RetroArchShaderPreset

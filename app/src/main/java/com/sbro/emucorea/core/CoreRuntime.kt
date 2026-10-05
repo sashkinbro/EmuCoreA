@@ -165,7 +165,7 @@ internal object CoreRuntime {
         // off into Android/data while the app reads the chosen folder.
         externalDataDirectory = externalDataRoot?.takeIf { it.isNotBlank() }
             ?: (context.getExternalFilesDir(null) ?: context.filesDir).absolutePath
-        SwanStationOptions.initialize(context.applicationContext)
+        CoreOptionStore.initialize(context.applicationContext)
         runCatching {
             extractCoreAssets(context.applicationContext)
             ensureNativeCoreLocked()
@@ -430,7 +430,7 @@ internal object CoreRuntime {
         // what the UI shows. Options the app manages itself (backend/software
         // rendering/internal resolution) are filtered by translateCoreOption.
         PpssppCoreOptions.all().forEach { option ->
-            val stored = SwanStationOptions.value(option.key)
+            val stored = CoreOptionStore.value(option.key)
             val value = stored ?: when (option.key) {
                 // The legacy app-level GS filter still derives the default.
                 "ppsspp_texture_filtering" -> pspTextureFilterName()
@@ -439,7 +439,7 @@ internal object CoreRuntime {
             forwardCoreOption(option.key, value)
         }
         // Full catalogue overrides win over the derived defaults as well.
-        SwanStationOptions.persistedEntries().forEach { (key, value) ->
+        CoreOptionStore.persistedEntries().forEach { (key, value) ->
             forwardCoreOption(key, value)
         }
         // Internal resolution is owned by the app's per-game upscale setting, so
@@ -554,7 +554,7 @@ internal object CoreRuntime {
 
     /** Persists and forwards a PPSSPP core option. */
     fun setCoreOption(key: String, value: String) {
-        SwanStationOptions.set(key, value)
+        CoreOptionStore.set(key, value)
         forwardCoreOption(key, value)
     }
 
@@ -633,7 +633,7 @@ internal object CoreRuntime {
 
     /** Effective value of a core option (user override or core default). */
     fun coreOptionValue(key: String): String? =
-        SwanStationOptions.value(key) ?: PpssppCoreOptions.option(key)?.defaultValue
+        CoreOptionStore.value(key) ?: PpssppCoreOptions.option(key)?.defaultValue
 
     /**
      * Forwards a core option without persisting it. Used for per-game overrides

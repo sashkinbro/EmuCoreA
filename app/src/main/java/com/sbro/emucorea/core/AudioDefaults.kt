@@ -49,28 +49,10 @@ object AudioDefaults {
         else -> INTERPOLATION_DEFAULT
     }
 
-    fun interpolationCoreName(value: Int): String = when (coerceInterpolation(value)) {
-        INTERPOLATION_NEAREST -> "Nearest"
-        INTERPOLATION_LINEAR -> "Linear"
-        INTERPOLATION_CUBIC -> "Cubic"
-        else -> "Gaussian"
-    }
-
     fun coerceSyncMode(value: Int): Int = when (value) {
         SYNC_DISABLED, SYNC_TIME_STRETCH -> value
         else -> SYNC_DEFAULT
     }
-
-    fun syncModeCoreName(value: Int): String = when (coerceSyncMode(value)) {
-        SYNC_DISABLED -> "Disabled"
-        else -> "TimeStretch"
-    }
-
-    fun effectiveInterpolation(value: Int, lightweightSpu2: Boolean): Int =
-        if (lightweightSpu2) INTERPOLATION_LINEAR else coerceInterpolation(value)
-
-    fun effectiveSyncMode(value: Int, lightweightSpu2: Boolean): Int =
-        if (lightweightSpu2) SYNC_DISABLED else coerceSyncMode(value)
 
     fun coerceBackend(value: Int): Int = when (value) {
         BACKEND_AAUDIO, BACKEND_OPENSLES -> value

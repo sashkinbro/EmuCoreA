@@ -55,7 +55,7 @@ import com.sbro.emucorea.core.upscaleMultiplierKey
 import com.sbro.emucorea.core.PpssppCoreOptions
 import com.sbro.emucorea.core.ppssppCoreOptionHelpRes
 import com.sbro.emucorea.core.PpssppCoreOptionLocalization
-import com.sbro.emucorea.core.SwanStationOptions
+import com.sbro.emucorea.core.CoreOptionStore
 import androidx.compose.material.icons.rounded.Tune
 import com.sbro.emucorea.ui.common.AppAlertDialog as AlertDialog
 import androidx.compose.material3.Button
@@ -1293,7 +1293,7 @@ private fun CoreOptionManagerRows(
     options.forEach { option ->
         val values = option.choices.map { it.value }
         val current = draft.coreOptions[option.key]
-            ?: SwanStationOptions.value(option.key)
+            ?: CoreOptionStore.value(option.key)
             ?: option.defaultValue
         val index = values.indexOf(current).let { if (it >= 0) it else 0 }
         val localized = PpssppCoreOptionLocalization.resolve(context, option)

@@ -59,8 +59,6 @@ object NativeApp {
     private var profilerActive = false
     private var hangTraceActive = false
 
-    @JvmStatic fun initialize(path: String, apiVer: Int) = Unit
-
     @JvmStatic fun reloadDataRoot(path: String) {
         dataRootOverride = path.takeIf(String::isNotBlank)
         val appContext = contextRef?.get() ?: return
@@ -71,7 +69,6 @@ object NativeApp {
     @JvmStatic fun setSaveStateIdentityPath(path: String?) {
         saveStateIdentityPath = path?.takeIf(String::isNotBlank)
     }
-    @JvmStatic fun setSystemCaBundlePath(path: String) = Unit
     @JvmStatic fun getGameTitle(path: String): String? {
         val fallback = if (path.startsWith("content://")) {
             contextRef?.get()?.let { DocumentPathResolver.getDisplayName(it, path) }
@@ -116,7 +113,6 @@ object NativeApp {
         CoreRuntime.setAudioGain(volume, muted)
     // Audio buffering belongs to the native core (PPSSPP StereoResampler plus
     // the AAudio/OpenSL output), so both entry points land on the same knob.
-    @JvmStatic fun setAudioBufferMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
     @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
     @JvmStatic fun setAudioLowLatency(enabled: Boolean) = CoreRuntime.setAudioLowLatency(enabled)
     @JvmStatic fun setAudioBackend(backend: Int) = CoreRuntime.setAudioBackend(backend)
@@ -182,17 +178,15 @@ object NativeApp {
     }
     @JvmStatic fun setAspectRatio(type: Int) { CoreRuntime.setDisplayAspectRatio(type) }
     @JvmStatic fun renderUpscalemultiplier(value: Float) { setSetting("EmuCoreA/Display", "Upscale", "float", value.toString()) }
+    @JvmStatic fun setFrameLimitEnabled(enabled: Boolean) =
+        CoreRuntime.updateSetting("EmuCoreA/GS", "FrameLimitEnable", enabled.toString())
     // The software renderer is a CPU rasterizer: the only real internal
     // resolution increase is the 2x "enhanced resolution" buffer.
     @JvmStatic fun getMaxUpscaleMultiplier(renderer: Int): Int =
         if (RendererDefaults.toCoreRenderer(renderer) == RendererDefaults.CORE_SOFTWARE) 1 else UPSCALE_MAX.toInt()
-    @JvmStatic fun renderGpu(value: Int) = Unit
     @JvmStatic fun setCustomDriverPath(path: String) {
         CoreRuntime.updateSetting("EmuCoreA/GPU", "CustomDriverPath", path)
     }
-    @JvmStatic fun setNativeLibraryDir(path: String) = Unit
-    @JvmStatic fun beginSettingsBatch() = Unit
-    @JvmStatic fun endSettingsBatch() = Unit
     @JvmStatic fun setSetting(section: String, key: String, type: String, value: String): Boolean =
         CoreRuntime.updateSetting(section, key, value)
     @JvmStatic fun getSetting(section: String, key: String, type: String): String? = CoreRuntime.settings["$section:$key"]
@@ -205,20 +199,6 @@ object NativeApp {
         invalidateAnalogDpadOptionCache(key, value)
         CoreRuntime.applyCoreOption(key, value)
     }
-    @JvmStatic fun setFrameSkip(frames: Int) {
-        val clamped = frames.coerceIn(0, 4)
-        CoreRuntime.updateSetting("EmuCoreA/GS", "FrameSkip", clamped.toString())
-        // PPSSPP's frameskip skips GPU draw work, which is what actually saves
-        // frame time. The native core owns the skip counter.
-        runCatching {
-            CoreRuntime.applyCoreOption(
-                "ppsspp_frameskip",
-                if (clamped == 0) "disabled" else clamped.toString()
-            )
-        }
-    }
-    @JvmStatic fun setFrameLimitEnabled(enabled: Boolean) =
-        CoreRuntime.updateSetting("EmuCoreA/GS", "FrameLimitEnable", enabled.toString())
     @JvmStatic fun reloadPatches() = CoreRuntime.reloadCheats()
     @JvmStatic fun loadCheats(path: String) = CoreRuntime.loadCheats(path)
     @JvmStatic fun clearCheats() = CoreRuntime.clearCheats()
@@ -264,7 +244,6 @@ object NativeApp {
         if (hasNativeCore) NativePpsspp.nativeAchievementsAchievementsJson() else "[]"
     @JvmStatic fun achievementsPollEventsJson(): String =
         if (hasNativeCore) NativePpsspp.nativeAchievementsPollEventsJson() else "[]"
-    @JvmStatic fun onNativeSurfaceCreated() = Unit
     @JvmStatic fun onNativeSurfaceChanged(surface: Surface, width: Int, height: Int) = CoreRuntime.attachSurface(surface, width, height)
     @JvmStatic fun hasAttachedSurface(surface: Surface, width: Int, height: Int): Boolean =
         CoreRuntime.hasAttachedSurface(surface, width, height)
@@ -276,8 +255,6 @@ object NativeApp {
     @JvmStatic fun restartRenderer(renderer: Int): Boolean = CoreRuntime.restartWithRenderer(renderer)
     @JvmStatic fun changeDisc(path: String): Boolean = CoreRuntime.changeDisc(path)
     @JvmStatic fun runBootSmokeProbe(path: String, steps: Int): Int = 0
-    @JvmStatic fun runJitExecutableMemorySmokeTest(): Boolean = false
-    @JvmStatic fun runEeFpuDivRoundingSelfTest(): String = "not applicable to R3000A"
     @JvmStatic fun pause() = CoreRuntime.pause()
     @JvmStatic fun resume() = CoreRuntime.resume()
     @JvmStatic fun shutdown() = CoreRuntime.shutdown()
@@ -325,7 +302,6 @@ object NativeApp {
     @JvmStatic fun startHangTrace() { hangTraceActive = true }
     @JvmStatic fun stopHangTrace() { hangTraceActive = false }
     @JvmStatic fun isHangTraceActive(): Boolean = hangTraceActive
-    @JvmStatic fun setNativeCrashLogFilePath(path: String) = Unit
 
     @JvmStatic
     fun initializeOnce(context: Context) {
