@@ -3,12 +3,6 @@ package com.sbro.emucorea.core
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
-import android.os.CombinedVibration
-import android.os.SystemClock
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
-import android.util.Log
 import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -81,34 +75,8 @@ object GamepadManager {
         val releaseR2PadKey: Int?
     )
 
-    private data class RumbleState(
-        var lastAmplitude: Int = 0,
-        var lastUpdateElapsedMs: Long = 0L
-    )
-
-    private data class FallbackRumbleState(
-        val amplitude: Int,
-        val durationMs: Long,
-        val expiresAtElapsedMs: Long
-    )
-
-    private data class ResolvedVibrationTarget(
-        val target: VibrationTarget,
-        val isSystemFallback: Boolean
-    )
-
-    private sealed class VibrationTarget {
-        data class Single(val vibrator: Vibrator) : VibrationTarget()
-        data class Managed(val manager: VibratorManager) : VibrationTarget()
-    }
-
     private const val TAG = "GamepadManager"
     private const val MAX_PAD_SLOTS = 2
-    private const val RUMBLE_UPDATE_INTERVAL_MS = 40L
-    private const val RUMBLE_PULSE_DURATION_MS = 80L
-    private const val PHONE_SMALL_MOTOR_WEIGHT = 0.35f
-    private const val TEST_RUMBLE_DURATION_MS = 260L
-    private const val MISSING_VIBRATOR_LOG_INTERVAL_MS = 1500L
     const val ACTION_QUICK_SAVE = "quick_save"
     const val ACTION_QUICK_LOAD = "quick_load"
     const val ACTION_FAST_FORWARD = "fast_forward"
@@ -182,12 +150,6 @@ object GamepadManager {
     @Volatile
     private var bindingCaptureState: BindingCaptureState? = null
     @Volatile
-    private var vibrationEnabled = true
-    @Volatile
-    private var vibrationStrength = AppPreferences.DEFAULT_PAD_VIBRATION_STRENGTH / 100f
-    @Volatile
-    private var vibrationFallbackEnabled = true
-    @Volatile
     private var buttonHapticsEnabled = false
     @Volatile
     private var buttonHapticsStrength = AppPreferences.DEFAULT_TOUCH_HAPTICS_STRENGTH
@@ -237,9 +199,6 @@ object GamepadManager {
     private var appContext: Context? = null
     private val deviceToPadIndex = linkedMapOf<Int, Int>()
     private val analogStatesByDeviceId = mutableMapOf<Int, AnalogState>()
-    private val rumbleStatesByPad = mutableMapOf<Int, RumbleState>()
-    private val fallbackRumbleStatesByPad = mutableMapOf<Int, FallbackRumbleState>()
-    private var lastMissingVibratorLogElapsedMs = 0L
 
     @Suppress("ConstPropertyName")
     private object PadKey {
@@ -325,27 +284,6 @@ object GamepadManager {
                     }.toMap()
                 }
                 resetChangedBindingStates(previousBindingsByPad, bindingsByPad)
-            }
-        }
-        scope.launch {
-            preferences.padVibration.collectLatest { enabled ->
-                vibrationEnabled = enabled
-                if (!enabled) {
-                    stopAllGamepadVibrations()
-                }
-            }
-        }
-        scope.launch {
-            preferences.padVibrationStrength.collectLatest { value ->
-                vibrationStrength = value.coerceIn(0, 150) / 100f
-            }
-        }
-        scope.launch {
-            preferences.padVibrationFallback.collectLatest { enabled ->
-                vibrationFallbackEnabled = enabled
-                if (!enabled) {
-                    stopAllGamepadVibrations()
-                }
             }
         }
         scope.launch {
@@ -512,7 +450,6 @@ object GamepadManager {
         emulationInputEnabled = enabled
         if (!enabled) {
             resetAnalogState()
-            stopAllGamepadVibrations()
             EmulatorBridge.resetKeyStatus()
         }
     }
@@ -718,43 +655,8 @@ object GamepadManager {
         return true
     }
 
-    fun onPadVibration(padIndex: Int, largeMotor: Float, smallMotor: Float) {
-        if (!emulationInputEnabled) {
-            stopPadVibration(padIndex)
-            return
-        }
-        playPadVibration(
-            padIndex = padIndex,
-            largeMotor = largeMotor,
-            smallMotor = smallMotor,
-            strengthOverride = null,
-            durationMs = RUMBLE_PULSE_DURATION_MS,
-            respectEnabledSetting = true
-        )
-    }
-
-    fun testPadVibration(
-        padIndex: Int = 0,
-        strengthPercent: Int? = null,
-        durationMs: Long = TEST_RUMBLE_DURATION_MS
-    ) {
-        playPadVibration(
-            padIndex = padIndex,
-            largeMotor = 1f,
-            smallMotor = 1f,
-            strengthOverride = strengthPercent?.coerceIn(0, 150)?.div(100f),
-            durationMs = durationMs.coerceIn(40L, 600L),
-            respectEnabledSetting = false
-        )
-    }
-
     private fun playGamepadButtonHaptic() {
         if (!buttonHapticsEnabled) return
-        val now = SystemClock.elapsedRealtime()
-        val systemFallbackRumbleActive = synchronized(connectionLock) {
-            fallbackRumbleStatesByPad.values.any { it.expiresAtElapsedMs > now }
-        }
-        if (systemFallbackRumbleActive) return
         val context = appContext ?: return
         AndroidTouchHaptics.playButton(
             context = context,
@@ -762,68 +664,6 @@ object GamepadManager {
             preset = buttonHapticsPreset,
             phase = AndroidTouchHaptics.ButtonPhase.PRESS
         )
-    }
-
-    private fun playPadVibration(
-        padIndex: Int,
-        largeMotor: Float,
-        smallMotor: Float,
-        strengthOverride: Float?,
-        durationMs: Long,
-        respectEnabledSetting: Boolean
-    ) {
-        val normalizedPadIndex = normalizePadIndex(padIndex)
-        if (respectEnabledSetting && !vibrationEnabled) {
-            stopPadVibration(normalizedPadIndex)
-            return
-        }
-
-        val largeIntensity = largeMotor.coerceIn(0f, 1f)
-        val smallIntensity = smallMotor.coerceIn(0f, 1f)
-        if (largeIntensity <= 0f && smallIntensity <= 0f) {
-            stopPadVibration(normalizedPadIndex)
-            return
-        }
-
-        val connectedGamepad = connectedGamepads().firstOrNull { it.padIndex == normalizedPadIndex }
-        val resolvedTarget = resolveVibrationTarget(connectedGamepad, normalizedPadIndex)
-        if (resolvedTarget == null) {
-            stopPadVibration(normalizedPadIndex)
-            logMissingVibrationTarget(normalizedPadIndex)
-            return
-        }
-
-        val intensity = resolveRumbleIntensity(
-            largeMotor = largeIntensity,
-            smallMotor = smallIntensity,
-            strength = (strengthOverride ?: vibrationStrength).coerceIn(0f, 1.5f),
-            systemFallback = resolvedTarget.isSystemFallback
-        )
-        val amplitude = (intensity * 255f).roundToInt().coerceIn(0, 255)
-        if (amplitude <= 0) {
-            stopPadVibration(normalizedPadIndex)
-            return
-        }
-
-        val now = SystemClock.elapsedRealtime()
-        val shouldUpdate = synchronized(connectionLock) {
-            val state = rumbleStatesByPad.getOrPut(normalizedPadIndex) { RumbleState() }
-            if (state.lastAmplitude == amplitude && (now - state.lastUpdateElapsedMs) < RUMBLE_UPDATE_INTERVAL_MS) {
-                false
-            } else {
-                state.lastAmplitude = amplitude
-                state.lastUpdateElapsedMs = now
-                true
-            }
-        }
-        if (!shouldUpdate) return
-
-        if (resolvedTarget.isSystemFallback) {
-            updateFallbackPadVibration(normalizedPadIndex, amplitude, durationMs)
-        } else {
-            clearFallbackPadVibration(normalizedPadIndex)
-            vibrate(resolvedTarget.target, amplitude, durationMs)
-        }
     }
 
     private fun dispatchAnalogStick(
@@ -1076,7 +916,6 @@ object GamepadManager {
             previousAssignments.forEach { (deviceId, padIndex) ->
                 if (updatedAssignments[deviceId] != padIndex) {
                     analogStatesByDeviceId.remove(deviceId)
-                    rumbleStatesByPad.remove(padIndex)
                     releasedAssignments += (padIndex to deviceId)
                 }
             }
@@ -1105,9 +944,7 @@ object GamepadManager {
             snapshot
         }
 
-        releasedAssignments.forEach { (padIndex, deviceId) ->
-            stopPhysicalGamepadVibrationForDevice(deviceId)
-            clearFallbackPadVibration(padIndex)
+        releasedAssignments.forEach { (padIndex, _) ->
             if (emulationInputEnabled) {
                 EmulatorBridge.resetPadState(padIndex)
             }
@@ -1120,175 +957,7 @@ object GamepadManager {
     private fun resetAnalogState() {
         synchronized(connectionLock) {
             analogStatesByDeviceId.clear()
-            rumbleStatesByPad.clear()
         }
-    }
-
-    private fun stopAllGamepadVibrations() {
-        val deviceIds = connectedGamepads().map { it.deviceId }
-        deviceIds.forEach(::stopPhysicalGamepadVibrationForDevice)
-        getSystemVibrationTarget()?.cancel()
-        synchronized(connectionLock) {
-            rumbleStatesByPad.clear()
-            fallbackRumbleStatesByPad.clear()
-        }
-    }
-
-    private fun stopPadVibration(padIndex: Int) {
-        val normalizedPadIndex = normalizePadIndex(padIndex)
-        val deviceId = synchronized(connectionLock) {
-            rumbleStatesByPad.remove(normalizedPadIndex)
-            deviceToPadIndex.entries.firstOrNull { it.value == normalizedPadIndex }?.key
-        }
-        if (deviceId != null) {
-            stopPhysicalGamepadVibrationForDevice(deviceId)
-        }
-        clearFallbackPadVibration(normalizedPadIndex)
-    }
-
-    @Suppress("DEPRECATION")
-    private fun getGamepadVibrationTarget(deviceId: Int): VibrationTarget? {
-        val device = InputDevice.getDevice(deviceId) ?: return null
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            VibrationTarget.Managed(device.vibratorManager)
-        } else {
-            VibrationTarget.Single(device.vibrator)
-        }
-    }
-
-    private fun resolveVibrationTarget(
-        connectedGamepad: ConnectedGamepad?,
-        padIndex: Int
-    ): ResolvedVibrationTarget? {
-        val gamepadTarget = connectedGamepad?.let { getGamepadVibrationTarget(it.deviceId) }
-        if (gamepadTarget?.hasVibrator() == true) {
-            return ResolvedVibrationTarget(gamepadTarget, isSystemFallback = false)
-        }
-        // Without a physical controller only the touch player's pad may use the phone.
-        // Controllers without their own motors share the phone through the mixer below.
-        if (!vibrationFallbackEnabled || (connectedGamepad == null && padIndex != 0)) {
-            return null
-        }
-        val systemTarget = getSystemVibrationTarget()?.takeIf { it.hasVibrator() } ?: return null
-        return ResolvedVibrationTarget(systemTarget, isSystemFallback = true)
-    }
-
-    @Suppress("DEPRECATION")
-    private fun getSystemVibrationTarget(): VibrationTarget? {
-        val context = appContext ?: return null
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            context.getSystemService(VibratorManager::class.java)?.let(VibrationTarget::Managed)
-        } else {
-            (context.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator)?.let(VibrationTarget::Single)
-        }
-    }
-
-    @SuppressLint("NewApi")
-    private fun VibrationTarget.hasVibrator(): Boolean {
-        return when (this) {
-            is VibrationTarget.Single -> vibrator.hasVibrator()
-            is VibrationTarget.Managed -> {
-                manager.defaultVibrator.hasVibrator() || manager.vibratorIds.isNotEmpty()
-            }
-        }
-    }
-
-    private fun VibrationTarget.cancel() {
-        when (this) {
-            is VibrationTarget.Single -> vibrator.cancel()
-            is VibrationTarget.Managed -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    manager.cancel()
-                }
-            }
-        }
-    }
-
-    @Suppress("DEPRECATION")
-    private fun vibrate(target: VibrationTarget, amplitude: Int, durationMs: Long) {
-        when (target) {
-            is VibrationTarget.Single -> {
-                val resolvedAmplitude = if (target.vibrator.hasAmplitudeControl()) {
-                    amplitude
-                } else {
-                    VibrationEffect.DEFAULT_AMPLITUDE
-                }
-                target.vibrator.vibrate(VibrationEffect.createOneShot(durationMs, resolvedAmplitude))
-            }
-            is VibrationTarget.Managed -> {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    val effect = VibrationEffect.createOneShot(durationMs, amplitude)
-                    target.manager.vibrate(CombinedVibration.createParallel(effect))
-                }
-            }
-        }
-    }
-
-    private fun updateFallbackPadVibration(padIndex: Int, amplitude: Int, durationMs: Long) {
-        val now = SystemClock.elapsedRealtime()
-        val mixedState = synchronized(connectionLock) {
-            fallbackRumbleStatesByPad.entries.removeAll { it.value.expiresAtElapsedMs <= now }
-            fallbackRumbleStatesByPad[padIndex] = FallbackRumbleState(
-                amplitude = amplitude,
-                durationMs = durationMs,
-                expiresAtElapsedMs = now + durationMs
-            )
-            fallbackRumbleStatesByPad.values.maxByOrNull { it.amplitude }
-        } ?: return
-        val target = getSystemVibrationTarget()?.takeIf { it.hasVibrator() } ?: return
-        vibrate(target, mixedState.amplitude, mixedState.durationMs)
-    }
-
-    private fun clearFallbackPadVibration(padIndex: Int) {
-        val now = SystemClock.elapsedRealtime()
-        val (removed, mixedState) = synchronized(connectionLock) {
-            val removed = fallbackRumbleStatesByPad.remove(padIndex) != null
-            fallbackRumbleStatesByPad.entries.removeAll { it.value.expiresAtElapsedMs <= now }
-            removed to fallbackRumbleStatesByPad.values.maxByOrNull { it.amplitude }
-        }
-        if (!removed) return
-        val target = getSystemVibrationTarget()?.takeIf { it.hasVibrator() } ?: return
-        if (mixedState == null) {
-            target.cancel()
-        } else {
-            vibrate(target, mixedState.amplitude, mixedState.durationMs)
-        }
-    }
-
-    private fun stopPhysicalGamepadVibrationForDevice(deviceId: Int) {
-        val target = getGamepadVibrationTarget(deviceId)?.takeIf { it.hasVibrator() } ?: return
-        target.cancel()
-    }
-
-    private fun logMissingVibrationTarget(padIndex: Int) {
-        val now = SystemClock.elapsedRealtime()
-        if ((now - lastMissingVibratorLogElapsedMs) < MISSING_VIBRATOR_LOG_INTERVAL_MS) {
-            return
-        }
-        lastMissingVibratorLogElapsedMs = now
-        Log.w(TAG, "No vibration target available for pad $padIndex")
-    }
-
-    /**
-     * A phone has one low-frequency actuator, while a DualShock 2 has separate large and small
-     * motors. Mapping the binary small motor at full strength turns sustained road/engine effects
-     * into an unnecessarily harsh continuous buzz. Physical controllers retain the original
-     * two-motor intensity; only the phone fallback attenuates the small motor.
-     */
-    internal fun resolveRumbleIntensity(
-        largeMotor: Float,
-        smallMotor: Float,
-        strength: Float,
-        systemFallback: Boolean
-    ): Float {
-        val large = largeMotor.coerceIn(0f, 1f)
-        val small = smallMotor.coerceIn(0f, 1f)
-        val mixed = if (systemFallback) {
-            maxOf(large, small * PHONE_SMALL_MOTOR_WEIGHT)
-        } else {
-            maxOf(large, small)
-        }
-        return (mixed * strength.coerceIn(0f, 1.5f)).coerceIn(0f, 1.5f)
     }
 
     internal fun assignConnectedGamepadSlots(

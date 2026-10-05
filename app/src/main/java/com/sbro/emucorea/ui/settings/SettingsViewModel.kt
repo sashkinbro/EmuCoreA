@@ -143,9 +143,6 @@ data class SettingsUiState(
     val audioOutputLatencyMs: Int = AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT,
     val audioMinimalOutputLatency: Boolean = AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT,
     val autoProgressiveScan: Boolean = false,
-    val padVibration: Boolean = true,
-    val padVibrationStrength: Int = AppPreferences.DEFAULT_PAD_VIBRATION_STRENGTH,
-    val padVibrationFallback: Boolean = true,
     val showFps: Boolean = true,
     val fpsOverlayMode: Int = FPS_OVERLAY_MODE_DETAILED,
     val fpsOverlayCorner: Int = AppPreferences.FPS_OVERLAY_CORNER_TOP_RIGHT,
@@ -457,9 +454,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             audioOutputLatencyMs = snapshot.audioOutputLatencyMs,
             audioMinimalOutputLatency = snapshot.audioMinimalOutputLatency,
             autoProgressiveScan = snapshot.autoProgressiveScan,
-            padVibration = snapshot.padVibration,
-            padVibrationStrength = snapshot.padVibrationStrength,
-            padVibrationFallback = snapshot.padVibrationFallback,
             showFps = snapshot.showFps,
             fpsOverlayMode = snapshot.fpsOverlayMode,
             fpsOverlayCorner = snapshot.fpsOverlayCorner,
@@ -1114,10 +1108,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun setDisplayCrop(value: DisplayCrop) {
+        // Crop/overscan has no native core support; keep the value for profiles.
         viewModelScope.launch {
-            val crop = value.sanitized()
-            preferences.setDisplayCrop(crop)
-            EmulatorBridge.setDisplayCrop(crop)
+            preferences.setDisplayCrop(value.sanitized())
         }
     }
 
@@ -1125,37 +1118,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             preferences.setAutoProgressiveScan(enabled)
         }
-    }
-
-    fun setPadVibration(enabled: Boolean) {
-        viewModelScope.launch {
-            preferences.setPadVibration(enabled)
-            EmulatorBridge.setPadVibration(enabled)
-        }
-    }
-
-    fun setPadVibrationStrength(value: Int) {
-        viewModelScope.launch {
-            preferences.setPadVibrationStrength(value)
-        }
-    }
-
-    fun setPadVibrationFallback(enabled: Boolean) {
-        viewModelScope.launch {
-            preferences.setPadVibrationFallback(enabled)
-        }
-    }
-
-    fun testPadVibration(
-        strengthPercent: Int = _uiState.value.padVibrationStrength,
-        durationMs: Long = 260L
-    ) {
-        GamepadManager.ensureInitialized(getApplication())
-        GamepadManager.testPadVibration(
-            padIndex = 0,
-            strengthPercent = strengthPercent,
-            durationMs = durationMs
-        )
     }
 
     fun setGamepadBinding(padIndex: Int, actionId: String, keyCode: Int) {
@@ -2572,10 +2534,5 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                 EmulatorBridge.setCustomDriverPath("")
             }
         }
-    }
-
-    private companion object {
-        const val CORE_NAME = "SwanStation"
-        const val CORE_VERSION = "1.0.0"
     }
 }

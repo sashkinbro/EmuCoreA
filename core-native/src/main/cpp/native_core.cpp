@@ -9,7 +9,7 @@
 //   * System_* callbacks the core expects from its platform layer
 //   * Vulkan graphics context bound to an Android Surface
 //   * Core boot (PSP_Init), per-frame emulation loop and presentation
-//   * Audio output through PPSSPP's StereoResampler + OpenSL backend
+//   * Audio output through PPSSPP's StereoResampler with an AAudio or OpenSL ES backend
 //   * Input, save states, shutdown
 #include <jni.h>
 #include <android/log.h>
@@ -860,7 +860,7 @@ int64_t System_GetPropertyInt(SystemProperty prop) {
     case SYSPROP_AUDIO_SAMPLE_RATE:
         return AudioOutputSampleRate();
     case SYSPROP_AUDIO_FRAMES_PER_BUFFER:
-        // StereoResampler sizes its ring so one OpenSL callback never
+        // StereoResampler sizes its ring so one output callback never
         // underruns; without this it stays at 1680 samples, pads silence on
         // every larger callback and the padding is audible as crackle.
         return AudioOutputFramesPerBuffer();
@@ -1887,6 +1887,12 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         }
         return;
     }
+    if (key == "fast_forward_volume") {
+        // PPSSPP's alternate (fast-forward) speed volume. 0..100, matching the
+        // frontend's volume scale; -1 means "keep the normal volume".
+        if (ParseIntInRange(value, 0, 100, &number)) g_Config.iAltSpeedVolume = number;
+        return;
+    }
     if (key == "audio_low_latency") {
         // Off by default: the low-latency path uses a tiny device buffer that
         // leaves no room for frame-time spikes. Only enable it on request.
@@ -2528,7 +2534,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetConfig(JNIEnv *env, jclass, js
 }
 
 // Android output properties from AudioManager (optimal sample rate and frames
-// per buffer). The core uses them for the OpenSL track and lets
+// per buffer). The core uses them for the output stream and lets
 // StereoResampler size its ring to the real callback size, like PPSSPP.
 JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeSetAudioDeviceInfo(JNIEnv *, jclass, jint sampleRate,

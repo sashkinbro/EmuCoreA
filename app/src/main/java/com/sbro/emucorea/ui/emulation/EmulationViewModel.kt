@@ -708,7 +708,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             strengthPercent = state.touchHapticsStrength,
             preset = state.touchHapticsPreset
         )
-        NativeApp.setPadPressureModifierAmount(state.pressureModifierAmount.coerceIn(1, 100))
     }
 
     private fun stopHiddenDebugTools(state: EmulationUiState) {
@@ -1628,7 +1627,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     mediatekAngleOpenGl = config.mediatekAngleOpenGl,
                     aspectRatio = config.aspectRatio,
                     localMultiplayerMode = config.localMultiplayerMode,
-                    displayCrop = config.displayCrop,
                     audioVolume = config.audioVolume,
                     audioFastForwardVolume = config.audioFastForwardVolume,
                     audioMuted = config.audioMuted,
@@ -2138,16 +2136,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     NativeApp.applyCoreOption(coreKey, coreValue)
                 }
                 syncPadAnalogModeForLaunch()
-            }
-            if (started && gsDumpFrames != null && gsDumpFrames > 0) {
-                val delayMs = gsDumpDelayMs?.coerceAtLeast(0) ?: 0
-                viewModelScope.launch(Dispatchers.IO) {
-                    delay(delayMs.milliseconds)
-                    if (EmulatorBridge.hasValidVm()) {
-                        Log.i(TAG, "Queueing GS dump frames=$gsDumpFrames delayMs=$delayMs")
-                        NativeApp.queueGsDump(gsDumpFrames)
-                    }
-                }
             }
             updateCrashContext(
                 launchState = if (started) "running" else "launch_failed",
@@ -2777,12 +2765,12 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun setDisplayCrop(value: DisplayCrop) {
+        // Crop/overscan has no native core support; keep the value for profiles.
         viewModelScope.launch {
             val crop = value.sanitized()
             persistRuntimeState(_uiState.value.copy(displayCrop = crop)) {
                 preferences.setDisplayCrop(crop)
             }
-            EmulatorBridge.setDisplayCrop(crop)
             updateCrashContext()
         }
     }

@@ -10,9 +10,11 @@ import java.io.File
 
 object BiosValidator {
 
-    private val biosImageExtensions = setOf("bin", "rom")
-    private val fileNameHints = listOf("scph", "ps1", "psx", "bios")
-    private const val BIOS_IMAGE_SIZE = 512L * 1024L
+    // PPSSPP firmware: an EBOOT.PBP update or a dumped flash0 tree. There is no
+    // fixed-size single-file PSP BIOS, so no size validation is applied.
+    private val firmwareExtensions = setOf("pbp", "bin", "rom")
+    private val firmwareDirectoryNames = setOf("flash0", "kd", "vsh")
+    private val fileNameHints = listOf("bios", "firmware", "flash0", "psp update")
     private const val MAX_BIOS_PROBE_FILES = 24
     private const val MAX_BIOS_PROBE_DIRECTORIES = 96
 
@@ -33,9 +35,18 @@ object BiosValidator {
             val file = File(rawPath)
             when {
                 file.isFile -> isValidLocalBios(file)
-                file.isDirectory -> file.walkTopDown().maxDepth(2).any(::isValidLocalBios)
+                file.isDirectory -> isFirmwareDirectory(file) ||
+                    file.walkTopDown().maxDepth(2).any { it.isFile && isValidLocalBios(it) }
                 else -> false
             }
+        }
+    }
+
+    /** A folder that holds a PSP firmware dump (flash0 or its kd/vsh subfolders). */
+    private fun isFirmwareDirectory(directory: File): Boolean {
+        if (!directory.isDirectory) return false
+        return firmwareDirectoryNames.any { name ->
+            File(directory, name).isDirectory
         }
     }
 
@@ -46,8 +57,7 @@ object BiosValidator {
         } else {
             val single = DocumentFile.fromSingleUri(context, uri) ?: return@documentCheckOrFalse false
             val displayName = documentDisplayName(context, single)
-            val fileSize = runCatching { single.length() }.getOrDefault(0L)
-            isBiosCandidate(displayName, fileSize) && isValidContentBios(context, single.uri, displayName, fileSize)
+            isBiosCandidate(displayName) && isValidContentBios(context, single.uri, displayName)
         }
     }
 
@@ -65,6 +75,7 @@ object BiosValidator {
         for (child in children) {
             val mimeType = runCatching { child.type }.getOrNull()
             val displayName = documentDisplayName(context, child)
+            if (displayName.lowercase() in firmwareDirectoryNames) return true
             when (classifyDocumentEntry(mimeType, displayName)) {
                 DocumentEntryKind.DIRECTORY,
                 DocumentEntryKind.UNKNOWN -> {
@@ -74,9 +85,8 @@ object BiosValidator {
                 }
                 DocumentEntryKind.BIOS_FILE -> {
                     if (!budget.tryCheckFile()) return false
-                    val fileSize = runCatching { child.length() }.getOrDefault(0L)
-                    if (isBiosCandidate(displayName, fileSize) &&
-                        isValidContentBios(context, child.uri, displayName, fileSize)
+                    if (isBiosCandidate(displayName) &&
+                        isValidContentBios(context, child.uri, displayName)
                     ) {
                         return true
                     }
@@ -106,39 +116,38 @@ object BiosValidator {
     }
 
     private fun isValidLocalBios(file: File): Boolean {
-        if (!file.isFile || !isBiosCandidate(file.name, file.length())) return false
-        val knownValidShape = isUsableMainBiosImage(file.name, file.length()) && file.canRead()
-        if (!NativeApp.hasNativeCore) return knownValidShape
-        return runCatching { NativeApp.isBiosPath(file.absolutePath) }.getOrDefault(false) || knownValidShape
+        if (!file.isFile || !isBiosCandidate(file.name)) return false
+        val readable = file.canRead()
+        if (!NativeApp.hasNativeCore) return readable
+        return runCatching { NativeApp.isBiosPath(file.absolutePath) }.getOrDefault(false) || readable
     }
 
-    private fun isValidContentBios(context: Context, uri: Uri, displayName: String, fileSize: Long): Boolean {
-        if (!isBiosCandidate(displayName, fileSize)) return false
-        val knownValidShape = isUsableMainBiosImage(displayName, fileSize) && isReadable(context, uri)
-        if (!NativeApp.hasNativeCore) return knownValidShape
+    private fun isValidContentBios(context: Context, uri: Uri, displayName: String): Boolean {
+        if (!isBiosCandidate(displayName)) return false
+        val readable = isReadable(context, uri)
+        if (!NativeApp.hasNativeCore) return readable
 
         val descriptor = runCatching { context.contentResolver.openFileDescriptor(uri, "r") }.getOrNull()
-            ?: return knownValidShape
+            ?: return readable
         var detachedFd = -1
         return try {
             detachedFd = descriptor.detachFd()
-            NativeApp.isBiosFd(detachedFd) || knownValidShape
+            NativeApp.isBiosFd(detachedFd) || readable
         } catch (_: RuntimeException) {
             if (detachedFd >= 0) {
                 runCatching { ParcelFileDescriptor.adoptFd(detachedFd).close() }
             }
-            knownValidShape
+            readable
         } finally {
             runCatching { descriptor.close() }
         }
     }
 
-    private fun isBiosCandidate(name: String?, fileSize: Long): Boolean =
-        isBiosCandidateName(name) && (fileSize <= 0L || fileSize == BIOS_IMAGE_SIZE)
+    private fun isBiosCandidate(name: String?): Boolean = isBiosCandidateName(name)
 
     private fun isBiosCandidateName(name: String?): Boolean {
         val extension = name.orEmpty().substringAfterLast('.', "").lowercase()
-        return extension in biosImageExtensions
+        return extension in firmwareExtensions
     }
 
     fun isLikelyBiosLibraryEntry(
@@ -150,36 +159,20 @@ object BiosValidator {
         val lowerFileName = fileName.lowercase()
         val lowerTitle = title.orEmpty().lowercase()
         val combined = "$lowerFileName $lowerTitle"
-        val ext = lowerFileName.substringAfterLast('.', "")
-        val titleLooksLikeBios = lowerTitle.contains("playstation bios") ||
-            lowerTitle.contains("playstation 1 bios") || lowerTitle == "ps1 bios" ||
-            lowerTitle == "psx bios"
-        val serialLooksLikeBios = serial.orEmpty().lowercase().contains("bios")
-        val biosHint = isLikelyBiosName(fileName)
-        val likelyBiosSizedBlob = ext in biosImageExtensions && fileSize == BIOS_IMAGE_SIZE
-
-        return titleLooksLikeBios ||
-            (serialLooksLikeBios && (biosHint || lowerTitle.contains("playstation") || lowerTitle.contains("ps1") || lowerTitle.contains("psx"))) ||
-            biosHint ||
-            (likelyBiosSizedBlob && (combined.contains("playstation") || combined.contains("ps1") || combined.contains("psx") || combined.contains("scph")))
+        return fileNameHints.any(combined::contains) ||
+            combined.contains("playstation firmware") ||
+            lowerFileName.startsWith("flash0") ||
+            serial.orEmpty().lowercase().contains("firmware")
     }
 
     fun isLikelyBiosName(name: String?): Boolean {
         val fileName = name?.lowercase() ?: return false
         val ext = fileName.substringAfterLast('.', "")
-        return ext in biosImageExtensions && fileNameHints.any(fileName::contains)
+        return ext in firmwareExtensions && fileNameHints.any(fileName::contains)
     }
 
-    private fun isLikelyMainBiosName(name: String?): Boolean {
-        val fileName = name?.lowercase() ?: return false
-        val ext = fileName.substringAfterLast('.', "")
-        return ext in biosImageExtensions && fileNameHints.any(fileName::contains)
-    }
-
-    internal fun isUsableMainBiosImage(name: String?, fileSize: Long): Boolean {
-        if (!isBiosCandidateName(name)) return false
-        return if (fileSize > 0L) fileSize == BIOS_IMAGE_SIZE else isLikelyMainBiosName(name)
-    }
+    internal fun isUsableMainBiosImage(name: String?, fileSize: Long): Boolean =
+        isBiosCandidateName(name)
 
     private class ProbeBudget {
         private var checkedFiles = 0

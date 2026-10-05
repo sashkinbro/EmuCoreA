@@ -1451,7 +1451,7 @@ private fun SettingsContent(
                             title = stringResource(R.string.settings_touch_haptics_test),
                             subtitle = stringResource(R.string.settings_touch_haptics_test_desc),
                             actionIcon = Icons.Rounded.PlayArrow,
-                            actionLabel = stringResource(R.string.settings_pad_vibration_test_action),
+                            actionLabel = stringResource(R.string.settings_action_test),
                             onClick = {
                                 viewModel.testTouchHaptics(
                                     strengthPercent = uiState.touchHapticsStrength,
@@ -1616,51 +1616,12 @@ private fun SettingsContent(
                         )
                         ToggleItem(
                             icon = Icons.Rounded.Vibration,
-                            title = stringResource(R.string.settings_pad_vibration),
-                            subtitle = stringResource(R.string.settings_pad_vibration_desc),
-                            checked = uiState.padVibration,
-                            onCheckedChange = viewModel::setPadVibration,
-                            helpText = stringResource(R.string.settings_help_pad_vibration),
-                            onResetToDefault = { viewModel.setPadVibration(defaults.padVibration) }
-                        )
-                        ToggleItem(
-                            icon = Icons.Rounded.Vibration,
                             title = stringResource(R.string.settings_gamepad_button_haptics),
                             subtitle = stringResource(R.string.settings_gamepad_button_haptics_desc),
                             checked = uiState.gamepadButtonHaptics,
                             onCheckedChange = viewModel::setGamepadButtonHaptics,
                             helpText = stringResource(R.string.settings_help_gamepad_button_haptics),
                             onResetToDefault = { viewModel.setGamepadButtonHaptics(defaults.gamepadButtonHaptics) }
-                        )
-                        SliderItem(
-                            icon = Icons.Rounded.Vibration,
-                            title = stringResource(R.string.settings_pad_vibration_strength),
-                            subtitle = "${uiState.padVibrationStrength}%",
-                            valueLabel = { "${it.roundToInt()}%" },
-                            value = uiState.padVibrationStrength.toFloat(),
-                            range = 0f..150f,
-                            steps = 0,
-                            onValueChange = { viewModel.setPadVibrationStrength(it.toInt()) },
-                            helpText = stringResource(R.string.settings_help_pad_vibration_strength),
-                            onResetToDefault = { viewModel.setPadVibrationStrength(defaults.padVibrationStrength) }
-                        )
-                        ActionItem(
-                            icon = Icons.Rounded.Vibration,
-                            title = stringResource(R.string.settings_pad_vibration_test),
-                            subtitle = stringResource(R.string.settings_pad_vibration_test_desc),
-                            actionIcon = Icons.Rounded.PlayArrow,
-                            actionLabel = stringResource(R.string.settings_pad_vibration_test_action),
-                            onClick = { viewModel.testPadVibration(uiState.padVibrationStrength, 320L) },
-                            helpText = stringResource(R.string.settings_help_pad_vibration_test)
-                        )
-                        ToggleItem(
-                            icon = Icons.Rounded.Vibration,
-                            title = stringResource(R.string.settings_pad_vibration_fallback),
-                            subtitle = stringResource(R.string.settings_pad_vibration_fallback_desc),
-                            checked = uiState.padVibrationFallback,
-                            onCheckedChange = viewModel::setPadVibrationFallback,
-                            helpText = stringResource(R.string.settings_help_pad_vibration_fallback),
-                            onResetToDefault = { viewModel.setPadVibrationFallback(defaults.padVibrationFallback) }
                         )
                         SliderItem(
                             icon = Icons.Rounded.Tune,
@@ -3918,10 +3879,6 @@ private fun rememberSettingsSearchEntries(): List<SettingsSearchEntry> {
         entry(SettingsTab.Controls, R.string.settings_gamepad_stick_deadzone),
         entry(SettingsTab.Controls, R.string.settings_gamepad_left_stick_sensitivity),
         entry(SettingsTab.Controls, R.string.settings_gamepad_right_stick_sensitivity),
-        entry(SettingsTab.Controls, R.string.settings_pad_vibration),
-        entry(SettingsTab.Controls, R.string.settings_pad_vibration_strength),
-        entry(SettingsTab.Controls, R.string.settings_pad_vibration_test),
-        entry(SettingsTab.Controls, R.string.settings_pad_vibration_fallback),
         entry(SettingsTab.Library, R.string.settings_game_path),
         entry(SettingsTab.Library, R.string.emulator_data_location_title),
         entry(SettingsTab.Library, R.string.settings_cover_art_style),

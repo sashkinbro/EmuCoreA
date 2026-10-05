@@ -162,8 +162,6 @@ object EmulatorBridge {
             isBundledAngleAvailable()
     }
 
-    private fun refreshBiosOp() = RuntimeOp("refresh_bios", emptyList())
-
     private fun regionFramerateOps(ntscFramerate: Float, palFramerate: Float): List<RuntimeOp> {
         val ntsc = sanitizeFramerate(ntscFramerate, AppPreferences.DEFAULT_NTSC_FRAMERATE)
         val pal = sanitizeFramerate(palFramerate, AppPreferences.DEFAULT_PAL_FRAMERATE)
@@ -171,36 +169,6 @@ object EmulatorBridge {
             settingOp("EmuCoreA/GS", "FramerateNTSC", "float", ntsc.toString()),
             settingOp("EmuCoreA/GS", "FrameratePAL", "float", pal.toString())
         )
-    }
-
-    private fun sanitizeFloatRoundMode(value: Int, fallback: Int): Int {
-        return if (value in AppPreferences.FLOAT_ROUND_NEAREST..AppPreferences.FLOAT_ROUND_CHOP) value else fallback
-    }
-
-    private fun sanitizeClampingMode(value: Int, fallback: Int): Int {
-        return if (value in AppPreferences.CLAMPING_NONE..AppPreferences.CLAMPING_FULL) value else fallback
-    }
-
-    private fun eeFpuClampingOps(value: Int): List<RuntimeOp> = listOf(
-        settingOp("EmuCoreA/CPU", "EEClampMode", "int", value.toString()),
-        settingOp("EmuCoreA/CPU/Recompiler", "fpuOverflow", "bool", (value >= AppPreferences.CLAMPING_NORMAL).toString()),
-        settingOp("EmuCoreA/CPU/Recompiler", "fpuExtraOverflow", "bool", (value >= AppPreferences.CLAMPING_EXTRA).toString()),
-        settingOp("EmuCoreA/CPU/Recompiler", "fpuFullMode", "bool", (value >= AppPreferences.CLAMPING_FULL).toString())
-    )
-
-    private fun vuClampingOps(vu0Value: Int, vu1Value: Int): List<RuntimeOp> = buildList {
-        add(settingOp("EmuCoreA/CPU", "VU0ClampMode", "int", vu0Value.toString()))
-        add(settingOp("EmuCoreA/CPU", "VU1ClampMode", "int", vu1Value.toString()))
-        add(vuClampingFlagOp("vu0", vu0Value, "Overflow", AppPreferences.CLAMPING_NORMAL))
-        add(vuClampingFlagOp("vu0", vu0Value, "ExtraOverflow", AppPreferences.CLAMPING_EXTRA))
-        add(vuClampingFlagOp("vu0", vu0Value, "SignOverflow", AppPreferences.CLAMPING_FULL))
-        add(vuClampingFlagOp("vu1", vu1Value, "Overflow", AppPreferences.CLAMPING_NORMAL))
-        add(vuClampingFlagOp("vu1", vu1Value, "ExtraOverflow", AppPreferences.CLAMPING_EXTRA))
-        add(vuClampingFlagOp("vu1", vu1Value, "SignOverflow", AppPreferences.CLAMPING_FULL))
-    }
-
-    private fun vuClampingFlagOp(prefix: String, value: Int, suffix: String, threshold: Int): RuntimeOp {
-        return settingOp("EmuCoreA/CPU/Recompiler", "$prefix$suffix", "bool", (value >= threshold).toString())
     }
 
     private fun rendererExecutionOps(renderer: Int): List<RuntimeOp> {
@@ -254,9 +222,6 @@ object EmulatorBridge {
                         "custom_driver" -> {
                             NativeApp.setCustomDriverPath(op.fields.firstOrNull().orEmpty())
                         }
-                        "refresh_bios" -> {
-                            NativeApp.refreshBIOS()
-                        }
                     }
                 }
             } finally {
@@ -279,6 +244,14 @@ object EmulatorBridge {
             }
             "OutputMuted", "Mute" -> {
                 audioMutedSetting = value.toBooleanStrictOrNull() ?: return false
+            }
+            "FastForwardVolume" -> {
+                val volume = value.toIntOrNull() ?: return false
+                NativePpsspp.nativeSetConfig(
+                    "fast_forward_volume",
+                    volume.coerceIn(AudioDefaults.VOLUME_MIN, AudioDefaults.VOLUME_MAX).toString()
+                )
+                return true
             }
             "BufferMS", "AudioBufferMs" -> {
                 val milliseconds = value.toIntOrNull() ?: return false
@@ -387,7 +360,6 @@ object EmulatorBridge {
         mediatekAngleOpenGl: Boolean = false,
         aspectRatio: Int = 1,
         localMultiplayerMode: Int = AppPreferences.LOCAL_MULTIPLAYER_OFF,
-        displayCrop: DisplayCrop = DisplayCrop.None,
         audioVolume: Int = AudioDefaults.VOLUME_DEFAULT,
         audioFastForwardVolume: Int = AudioDefaults.VOLUME_DEFAULT,
         audioMuted: Boolean = false,
@@ -527,9 +499,9 @@ object EmulatorBridge {
         // saves and memory cards previously ignored the configured location.
         NativeApp.reloadDataRoot(emulatorDataPath ?: "")
         val runtimeDirectories = EmulatorStorage.runtimeDirectories(context, emulatorDataPath)
-        // PPSSPP reads replacements from <memstick>/PSP/TEXTURES/<disc-id>.
-        // The native bridge maps this final texture directory back to the
-        // configured memstick root, so the manager and emulator share one tree.
+        // PPSSPP reads replacements from <memstick>/PSP/TEXTURES/<disc-id>,
+        // and the memstick root is the same emulator data root the manager
+        // writes to, so the two share one tree without a path override.
         NativeApp.setTextureReplacementsPathOverride(runtimeDirectories.textures.absolutePath)
         val manualHardwareFixes = GsHackDefaults.shouldEnableManualHardwareFixes(
             cpuSpriteRenderSize = cpuSpriteRenderSize,
@@ -581,24 +553,17 @@ object EmulatorBridge {
             ""
         }
         val directMtvu = mtvu && enableVu1Recompiler
-        val directEeFpuRoundMode = sanitizeFloatRoundMode(eeFpuRoundMode, AppPreferences.DEFAULT_EE_FPU_ROUND_MODE)
-        val directVu0RoundMode = sanitizeFloatRoundMode(vu0RoundMode, AppPreferences.DEFAULT_VU_ROUND_MODE)
-        val directVu1RoundMode = sanitizeFloatRoundMode(vu1RoundMode, AppPreferences.DEFAULT_VU_ROUND_MODE)
-        val directEeFpuClampingMode = sanitizeClampingMode(eeFpuClampingMode, AppPreferences.DEFAULT_EE_FPU_CLAMPING_MODE)
-        val directVu0ClampingMode = sanitizeClampingMode(vu0ClampingMode, AppPreferences.DEFAULT_VU0_CLAMPING_MODE)
-        val directVu1ClampingMode = sanitizeClampingMode(vu1ClampingMode, AppPreferences.DEFAULT_VU1_CLAMPING_MODE)
         Log.i(
             "EmuCoreA",
-            "android jit: requested={ee:$enableEeRecompiler iop:$enableIopRecompiler vu0:$enableVu0Recompiler vu1:$enableVu1Recompiler fastmem:$enableFastmem} speedhacks={waitLoop:$waitLoopSpeedhack intcStat:$intcStatSpeedhack vuFlag:$vuFlagHack mtvu:$mtvu instantVu1:$instantVu1} direct={ee:$enableEeRecompiler iop:$enableIopRecompiler vu0:$enableVu0Recompiler vu1:$enableVu1Recompiler mtvu:$directMtvu instantVu1:$instantVu1 fastmem:$enableFastmem} round={ee:$directEeFpuRoundMode vu0:$directVu0RoundMode vu1:$directVu1RoundMode} clamp={ee:$directEeFpuClampingMode vu0:$directVu0ClampingMode vu1:$directVu1ClampingMode}"
+            "applyRuntimeConfig renderer=${rendererName(resolvedRenderer)}($resolvedRenderer) driverType=$effectiveGpuDriverType"
         )
         NativeApp.logCrashBreadcrumb(
-            "applyRuntimeConfig renderer=${rendererName(resolvedRenderer)}($resolvedRenderer) driverType=$effectiveGpuDriverType requestedDriverType=$gpuDriverType hwDownload=$hwDownloadMode directJit={ee:$enableEeRecompiler iop:$enableIopRecompiler vu0:$enableVu0Recompiler vu1:$enableVu1Recompiler mtvu:$directMtvu instantVu1:$instantVu1 fastmem:$enableFastmem} speedhacks={waitLoop:$waitLoopSpeedhack intcStat:$intcStatSpeedhack vuFlag:$vuFlagHack fastBoot:$enableFastBoot fastCdvd:$fastCdvd} round={ee:$directEeFpuRoundMode vu0:$directVu0RoundMode vu1:$directVu1RoundMode} clamp={ee:$directEeFpuClampingMode vu0:$directVu0ClampingMode vu1:$directVu1ClampingMode} gameFixes={auto:$enableGameFixes eeTiming:$eeTimingHack} jitRequested={ee:$enableEeRecompiler iop:$enableIopRecompiler vu0:$enableVu0Recompiler vu1:$enableVu1Recompiler fastmem:$enableFastmem}"
+            "applyRuntimeConfig renderer=${rendererName(resolvedRenderer)}($resolvedRenderer) driverType=$effectiveGpuDriverType requestedDriverType=$gpuDriverType mtvu=$directMtvu fastmem=$enableFastmem"
         )
         val prefs = AppPreferences(context)
         val effectiveEnableCheats = enableCheats
         val effectiveFrameLimitEnabled = frameLimitEnabled
         val rewindEnabled = prefs.rewindEnabled.first()
-        val padVibrationEnabled = prefs.padVibration.first()
         val textureReplacementsEnabled = prefs.textureReplacementsEnabled.first()
         val textureReplacementsAsync = prefs.textureReplacementsAsync.first()
         val textureReplacementsPrecache = prefs.textureReplacementsPrecache.first()
@@ -606,203 +571,34 @@ object EmulatorBridge {
         val runtimeApplied = performRuntimeOps(
             buildList {
                 addAll(rendererExecutionOps(resolvedRenderer))
-                val pressureAmount = pressureModifierAmount.coerceIn(1, 100) / 100.0f
-                add(settingOp("Pad1", "PressureModifier", "float", pressureAmount.toString()))
-                add(settingOp("Pad2", "PressureModifier", "float", pressureAmount.toString()))
                 add(upscaleOp(upscaleMultiplier))
                 add(aspectOp(aspectRatio))
-                add(
-                    settingOp(
-                        "EmuCoreA/GS",
-                        "LocalMultiplayerMode",
-                        "int",
-                        localMultiplayerMode.coerceIn(
-                            AppPreferences.LOCAL_MULTIPLAYER_OFF,
-                            AppPreferences.LOCAL_MULTIPLAYER_HORIZONTAL_CROP_SWAPPED
-                        ).toString()
-                    )
-                )
                 add(settingOp("SPU2/Output", "StandardVolume", "int", AudioDefaults.coerceVolume(audioVolume).toString()))
                 add(settingOp("SPU2/Output", "FastForwardVolume", "int", AudioDefaults.coerceVolume(audioFastForwardVolume).toString()))
                 add(settingOp("SPU2/Output", "OutputMuted", "bool", audioMuted.toString()))
-                add(settingOp("SPU2/Output", "LightweightMode", "bool", audioLightweightSpu2.toString()))
-                add(settingOp("SPU2/Output", "InterpolationMode", "string", AudioDefaults.interpolationCoreName(
-                    AudioDefaults.effectiveInterpolation(audioInterpolation, audioLightweightSpu2)
-                )))
-                add(settingOp("SPU2/Output", "SyncMode", "string", AudioDefaults.syncModeCoreName(
-                    AudioDefaults.effectiveSyncMode(audioSyncMode, audioLightweightSpu2)
-                )))
+                // The PPSSPP core has a single resampler with no interpolation,
+                // sync-mode or lightweight-SPU switches, so those legacy
+                // options are not forwarded. Output latency is the one buffer
+                // control; the old "BufferMS" value would only fight it.
                 add(settingOp("SPU2/Output", "Backend", "string", AudioDefaults.backendCoreName(audioBackend)))
-                add(settingOp("SPU2/Output", "BufferMS", "int", AudioDefaults.coerceBufferMs(audioBufferMs).toString()))
                 add(settingOp("SPU2/Output", "OutputLatencyMS", "int", AudioDefaults.coerceOutputLatencyMs(audioOutputLatencyMs).toString()))
                 add(settingOp("SPU2/Output", "OutputLatencyMinimal", "bool", audioMinimalOutputLatency.toString()))
-                add(settingOp("Folders", "Bios", "string", resolvedBiosPath.orEmpty()))
-                add(settingOp("Folders", "Savestates", "string", runtimeDirectories.saveStates.absolutePath))
-                add(settingOp("Folders", "MemoryCards", "string", runtimeDirectories.memoryCards.absolutePath))
-                add(settingOp("Folders", "Textures", "string", runtimeDirectories.textures.absolutePath))
-                add(settingOp("Folders", "Cheats", "string", runtimeDirectories.cheats.absolutePath))
-                add(settingOp("Folders", "Patches", "string", runtimeDirectories.patches.absolutePath))
-                add(settingOp("Folders", "Logs", "string", runtimeDirectories.logs.absolutePath))
-                add(settingOp("Filenames", "BIOS", "string", preferredBiosFile.orEmpty()))
-                add(refreshBiosOp())
-                add(settingOp("EmuCoreA", "OpenGLTextureDebugLog", "bool", (resolvedRenderer == 12).toString()))
-                add(settingOp("EmuCoreA/CPU/Recompiler", "EnableEE", "bool", enableEeRecompiler.toString()))
-                add(settingOp("EmuCoreA/CPU/Recompiler", "EnableIOP", "bool", enableIopRecompiler.toString()))
-                add(settingOp("EmuCoreA/CPU/Recompiler", "EnableVU0", "bool", enableVu0Recompiler.toString()))
-                add(settingOp("EmuCoreA/CPU/Recompiler", "EnableVU1", "bool", enableVu1Recompiler.toString()))
-                add(settingOp("EmuCoreA/CPU/Recompiler", "EnableFastmem", "bool", enableFastmem.toString()))
-                add(settingOp("EmuCoreA/CPU", "FPU.Roundmode", "int", directEeFpuRoundMode.toString()))
-                add(settingOp("EmuCoreA/CPU", "VU0.Roundmode", "int", directVu0RoundMode.toString()))
-                add(settingOp("EmuCoreA/CPU", "VU1.Roundmode", "int", directVu1RoundMode.toString()))
-                addAll(eeFpuClampingOps(directEeFpuClampingMode))
-                addAll(vuClampingOps(directVu0ClampingMode, directVu1ClampingMode))
-                add(settingOp("EmuCoreA", "EnableGameFixes", "bool", enableGameFixes.toString()))
-                add(settingOp("EmuCoreA/Gamefixes", "EETimingHack", "bool", eeTimingHack.toString()))
-                add(settingOp("EmuCoreA/Speedhacks", "WaitLoop", "bool", waitLoopSpeedhack.toString()))
-                add(settingOp("EmuCoreA/Speedhacks", "IntcStat", "bool", intcStatSpeedhack.toString()))
-                add(settingOp("EmuCoreA/Speedhacks", "vuFlagHack", "bool", vuFlagHack.toString()))
-                add(settingOp("EmuCoreA/Speedhacks", "vuThread", "bool", directMtvu.toString()))
-                add(settingOp("EmuCoreA/Speedhacks", "vu1Instant", "bool", instantVu1.toString()))
-                add(settingOp("EmuCoreA", "EnableThreadPinning", "bool", enableThreadPinning.toString()))
-                add(settingOp("EmuCoreA", "EnableFastBoot", "bool", enableFastBoot.toString()))
-                add(settingOp("EmuCoreA/Speedhacks", "fastCDVD", "bool", fastCdvd.toString()))
-                add(settingOp("EmuCoreA", "EnableCheats", "bool", effectiveEnableCheats.toString()))
-                add(settingOp("EmuCoreA/GS", "HWDownloadMode", "int", hwDownloadMode.toString()))
-                add(settingOp("EmuCoreA/GS", "deinterlace_mode", "int", GsHackDefaults.coerceDeinterlaceMode(deinterlaceMode).toString()))
-                add(settingOp("EmuCoreA/GS", "dithering_ps2", "int", GsHackDefaults.coerceDithering(dithering).toString()))
-                add(settingOp("EmuCoreA/GS", "AndroidGpuProfileOverride", "string", gpuHardwareProfileOverride))
-                add(settingOp("EmuCoreA/GS", "AndroidUseAngleOpenGL", "bool", effectiveMediatekAngleOpenGl.toString()))
-                add(settingOp("EmuCoreA/GS", "OsdShowSpeed", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowFPS", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowVPS", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowResolution", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowGSStats", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowCPU", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowGPU", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowGPUDebug", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowIndicators", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowFrameTimes", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowHardwareInfo", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowVersion", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowSettings", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowInputs", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowVideoCapture", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowInputRec", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdShowTextureReplacements", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "OsdMessagesPos", "int", "0"))
-                add(settingOp("EmuCoreA/GS", "OsdPerformancePos", "int", "0"))
-                add(settingOp("EmuCoreA/Speedhacks", "EECycleRate", "int", eeCycleRate.toString()))
-                add(settingOp("EmuCoreA/Speedhacks", "EECycleSkip", "int", eeCycleSkip.toString()))
+                add(settingOp("EmuCoreA", "Renderer", "int", resolvedRenderer.toString()))
                 add(settingOp("EmuCoreA/GS", "FrameLimitEnable", "bool", effectiveFrameLimitEnabled.toString()))
                 add(settingOp("EmuCoreA/GS", "RewindEnabled", "bool", rewindEnabled.toString()))
                 add(settingOp("EmuCoreA/GS", "VsyncEnable", "bool", vSyncEnabled.toString()))
                 addAll(targetFpsOps(targetFps, ntscFramerate, palFramerate))
-                add(settingOp("Framerate", "NominalScalar", "float", "1.0"))
-                add(settingOp("Framerate", "TurboScalar", "float", sanitizeFastForwardSpeed(fastForwardSpeed).toString()))
-                add(settingOp("EmuCoreA/CPU/Recompiler", "fpuCorrectAddSub", "bool", fpuCorrectAddSub.toString()))
-                add(settingOp("EmuCoreA/GS", "SkipDuplicateFrames", "bool", skipDuplicateFrames.toString()))
                 add(settingOp("EmuCoreA/GS", "filter", "int", textureFiltering.toString()))
-                add(settingOp("EmuCoreA/GS", "TriFilter", "int", trilinearFiltering.toString()))
-                add(settingOp("EmuCoreA/GS", "accurate_blending_unit", "int", blendingAccuracy.toString()))
-                add(settingOp("EmuCoreA/GS", "texture_preloading", "int", texturePreloading.toString()))
                 add(settingOp("EmuCoreA/GS", "ShaderChainEnabled", "bool", (shaderChainEnabled && shaderChainPreset.isNotBlank()).toString()))
                 add(settingOp("EmuCoreA/GS", "ShaderChainPreset", "string", shaderChainPreset.trim()))
                 add(settingOp("EmuCoreA/GS", "LoadTextureReplacements", "bool", textureReplacementsEnabled.toString()))
-                add(settingOp("EmuCoreA/GS", "LoadTextureReplacementsAsync", "bool", textureReplacementsAsync.toString()))
-                add(settingOp("EmuCoreA/GS", "PrecacheTextureReplacements", "bool", textureReplacementsPrecache.toString()))
                 add(settingOp("EmuCoreA/GS", "DumpReplaceableTextures", "bool", textureDumpingEnabled.toString()))
-                add(settingOp("EmuCoreA/GS", "DumpTexturesWithFMVActive", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "DisableShaderCache", "bool", "false"))
-                add(settingOp("EmuCoreA/GS", "fxaa", "bool", enableFxaa.toString()))
-                add(settingOp("EmuCoreA/GS", "CASMode", "int", casMode.toString()))
-                add(settingOp("EmuCoreA/GS", "SGSRMode", "int", sgsrMode.coerceIn(0, 3).toString()))
-                add(settingOp("EmuCoreA/GS", "CASSharpness", "int", casSharpness.toString()))
-                add(settingOp("EmuCoreA/GS", "TVShader", "int", GsHackDefaults.coerceTvShader(tvShader).toString()))
-                add(settingOp("EmuCoreA/GS", "ShadeBoost", "bool", shadeBoostEnabled.toString()))
-                add(settingOp("EmuCoreA/GS", "ShadeBoost_Brightness", "int", shadeBoostBrightness.toString()))
-                add(settingOp("EmuCoreA/GS", "ShadeBoost_Contrast", "int", shadeBoostContrast.toString()))
-                add(settingOp("EmuCoreA/GS", "ShadeBoost_Saturation", "int", shadeBoostSaturation.toString()))
-                add(settingOp("EmuCoreA/GS", "ShadeBoost_Gamma", "int", shadeBoostGamma.toString()))
-                add(settingOp("EmuCoreA/GS", "MaxAnisotropy", "int", anisotropicFiltering.toString()))
-                add(settingOp("EmuCoreA/GS", "hw_mipmap", "bool", enableHwMipmapping.toString()))
-                add(settingOp("EmuCoreA/GS", "pcrtc_antiblur", "bool", antiBlur.toString()))
-                add(settingOp("EmuCoreA", "EnableWideScreenPatches", "bool", widescreenPatches.toString()))
-                add(settingOp("EmuCoreA", "EnableNoInterlacingPatches", "bool", noInterlacingPatches.toString()))
-                add(settingOp("EmuCoreA/GS", "UserHacks", "bool", manualHardwareFixes.toString()))
-                if (manualHardwareFixes) {
-                    // Leave per-game GameIndex GS fixes as the only hack layer unless manual fixes are explicitly active.
-                    add(settingOp("EmuCoreA/GS", "UserHacks_CPUSpriteRenderBW", "int", cpuSpriteRenderSize.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_CPUSpriteRenderLevel", "int", cpuSpriteRenderLevel.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_CPUCLUTRender", "int", softwareClutRender.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_GPUTargetCLUTMode", "int", gpuTargetClutMode.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_SkipDraw_Start", "int", skipDrawStart.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_SkipDraw_End", "int", skipDrawEnd.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_AutoFlushLevel", "int", autoFlushHardware.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_CPU_FB_Conversion", "bool", cpuFramebufferConversion.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_DisableDepthSupport", "bool", disableDepthConversion.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_Disable_Safe_Features", "bool", disableSafeFeatures.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_DisableRenderFixes", "bool", disableRenderFixes.toString()))
-                    add(settingOp("EmuCoreA/GS", "preload_frame_with_gs_data", "bool", preloadFrameData.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_DisablePartialInvalidation", "bool", disablePartialInvalidation.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_TextureInsideRt", "int", textureInsideRt.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_ReadTCOnClose", "bool", readTargetsOnClose.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_EstimateTextureRegion", "bool", estimateTextureRegion.toString()))
-                    add(settingOp("EmuCoreA/GS", "paltex", "bool", gpuPaletteConversion.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_HalfPixelOffset", "int", halfPixelOffset.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_native_scaling", "int", nativeScaling.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_round_sprite_offset", "int", roundSprite.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_BilinearHack", "int", bilinearUpscale.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_TCOffsetX", "int", textureOffsetX.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_TCOffsetY", "int", textureOffsetY.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_align_sprite_X", "bool", alignSprite.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_merge_pp_sprite", "bool", mergeSprite.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_ForceEvenSpritePosition", "bool", forceEvenSpritePosition.toString()))
-                    add(settingOp("EmuCoreA/GS", "UserHacks_NativePaletteDraw", "bool", nativePaletteDraw.toString()))
-                }
-                add(settingOp("EmuCoreA", "BiosSource", "string", biosPath.orEmpty()))
                 add(settingOp("EmuCoreA", "Renderer", "int", resolvedRenderer.toString()))
                 add(settingOp("EmuCoreA", "UpscaleMultiplier", "float", upscaleMultiplier.toString()))
                 add(settingOp("EmuCoreA", "GpuHardwareProfile", "int", normalizedGpuHardwareProfile.toString()))
-                add(settingOp("EmuCoreA", "HasContext", "bool", (context.applicationContext != null).toString()))
-                add(settingOp("EmuCoreA", "AutotestMode", "bool", autotestMode.toString()))
-                add(settingOp("EmuCoreA", "DebugLogcatGS", "bool", prefs.debugLogcatGsSync().toString()))
-                add(settingOp("EmuCoreA", "ProfilerLogcat", "bool", prefs.profilerLogcatSync().toString()))
-                add(settingOp("EmuCoreA", "AppVersion", "string", appVersionName(context)))
-                add(settingOp("EmuCoreA", "WarnAboutUnsafeSettings", "bool", "false"))
-                add(settingOp("InputSources", "PadVibration", "bool", padVibrationEnabled.toString()))
-                add(settingOp("EmuCoreA/CPU", "enableIcacheEmulation", "bool", enableIcacheEmulation.toString()))
-                add(settingOp("EmuCoreA/CPU", "enableDisableStalls", "bool", enableDisableStalls.toString()))
-                add(settingOp("EmuCoreA/CPU", "enablePreciseExceptions", "bool", enablePreciseExceptions.toString()))
-                add(settingOp("EmuCoreA/CPU", "enableTurboCd", "bool", enableTurboCd.toString()))
-                add(settingOp("EmuCoreA/CPU", "cdReadAhead", "int", cdReadAhead.toString()))
-                add(settingOp("EmuCoreA/Audio", "enableCddaAudio", "bool", enableCddaAudio.toString()))
-                add(settingOp("EmuCoreA/Audio", "enableXaDecoding", "bool", enableXaDecoding.toString()))
-                add(settingOp("EmuCoreA/Audio", "enableSpuReverb", "bool", enableSpuReverb.toString()))
-                add(settingOp("EmuCoreA/Audio", "enableSpuThread", "bool", enableSpuThread.toString()))
-                add(settingOp("EmuCoreA/Audio", "spuTempo", "int", spuTempo.toString()))
-                add(settingOp("EmuCoreA/GPU", "neonEnhancement", "bool", neonEnhancement.toString()))
-                add(settingOp("EmuCoreA/GPU", "neonEnhancementSpeedHack", "bool", neonEnhancementSpeedHack.toString()))
-                add(settingOp("EmuCoreA/GPU", "neonEnhancementTexAdj", "bool", neonEnhancementTexAdj.toString()))
-                add(settingOp("EmuCoreA/GPU", "neonInterlace", "int", neonInterlace.toString()))
-                add(settingOp("EmuCoreA/GPU", "gpuThreadRendering", "int", gpuThreadRendering.toString()))
-                add(settingOp("EmuCoreA/GPU", "showOverscan", "bool", showOverscan.toString()))
-                add(settingOp("EmuCoreA/GPU", "screenCentering", "int", screenCentering.toString()))
-                add(settingOp("EmuCoreA/GPU", "screenCenteringX", "int", screenCenteringX.toString()))
-                add(settingOp("EmuCoreA/GPU", "screenCenteringY", "int", screenCenteringY.toString()))
-                add(settingOp("EmuCoreA/GPU", "screenCenteringHAdj", "int", screenCenteringHAdj.toString()))
-                add(settingOp("EmuCoreA/GPU", "enableFractionalFramerate", "bool", enableFractionalFramerate.toString()))
-                add(settingOp("EmuCoreA/GPU", "altFlipMode", "int", altFlipMode.toString()))
-                add(settingOp("EmuCoreA/GPU", "enableRgb32Output", "bool", enableRgb32Output.toString()))
-                add(settingOp("EmuCoreA/GPU", "enableScaleHires", "bool", enableScaleHires.toString()))
-                add(settingOp("EmuCoreA/Input", "multitapMode", "int", multitapMode.toString()))
-                add(settingOp("EmuCoreA/Input", "analogAxisModifier", "int", analogAxisModifier.toString()))
-                add(settingOp("EmuCoreA/Input", "dualshockToggleCombo", "int", dualshockToggleCombo.toString()))
                 add(customDriverOp(resolvedCustomDriverPath))
             }
         )
-        // Crop is applied by the frontend presenter, not the core option set,
-        // so it is pushed straight to the native bridge.
-        NativeApp.setDisplayCrop(displayCrop.sanitized())
         if (runtimeApplied) {
             settingsCache["EmuCoreA/GS:Renderer"] = resolvedRenderer.toString()
         }
@@ -825,35 +621,6 @@ object EmulatorBridge {
         // Save-state files are named after the path the user launched, not the
         // core's prepared/materialized path, so writes and listings agree.
         NativeApp.setSaveStateIdentityPath(saveStateIdentityPath ?: path)
-        val isElf = when {
-            path.substringAfterLast('.', "").equals("elf", ignoreCase = true) -> true
-            path.startsWith("content://") -> {
-                val context = getContext()
-                val displayName = context?.let { DocumentPathResolver.getDisplayName(it, path) }.orEmpty()
-                displayName.substringAfterLast('.', "").equals("elf", ignoreCase = true)
-            }
-            else -> false
-        }
-        val isIrx = when {
-            path.substringAfterLast('.', "").equals("irx", ignoreCase = true) -> true
-            path.startsWith("content://") -> {
-                val context = getContext()
-                val displayName = context?.let { DocumentPathResolver.getDisplayName(it, path) }.orEmpty()
-                displayName.substringAfterLast('.', "").equals("irx", ignoreCase = true)
-            }
-            else -> false
-        }
-        val isExeExecutable = when {
-            path.substringAfterLast('.', "").let { it.equals("exe", true) || it.equals("psexe", true) || it.equals("cpe", true) } -> true
-            path.startsWith("content://") -> {
-                val context = getContext()
-                val displayName = context?.let { DocumentPathResolver.getDisplayName(it, path) }.orEmpty()
-                displayName.substringAfterLast('.', "").let {
-                    it.equals("exe", true) || it.equals("psexe", true) || it.equals("cpe", true)
-                }
-            }
-            else -> false
-        }
         val pathType = when {
             path.startsWith("content://") -> "content"
             path.isBlank() -> "bios"
@@ -871,26 +638,22 @@ object EmulatorBridge {
                 var result = try {
                     NativeApp.logCrashBreadcrumb(
                         "startEmulation entering native ${
-                            when {
-                                bootSmokeProbe -> "runBootSmokeProbe"
-                                isElf -> "bootElf"
-                                isIrx -> "bootIrx"
-                                else -> "runVMThread"
-                            }
+                            if (bootSmokeProbe) "runBootSmokeProbe" else "runVMThread"
                         }"
                     )
-                    when {
-                        bootSmokeProbe -> NativeApp.runBootSmokeProbe(path, BOOT_SMOKE_PROBE_STEPS) != 0
-                        isElf -> NativeApp.bootElf(path)
-                        isIrx -> NativeApp.bootIrx(path)
-                        else -> NativeApp.runVMThread(path)
+                    // The core identifies ELF/PRX/PLF homebrew itself through
+                    // Identify_File, so every supported format boots the same way.
+                    if (bootSmokeProbe) {
+                        NativeApp.runBootSmokeProbe(path, BOOT_SMOKE_PROBE_STEPS) != 0
+                    } else {
+                        NativeApp.runVMThread(path)
                     }
                 } catch (error: Exception) {
                     NativeApp.logCrashBreadcrumb("startEmulation exception before native start returned")
                     Log.e(TAG, "startEmulation native call failed", error)
                     false
                 }
-                if (result && !bootSmokeProbe && !allowBiosBoot && !isElf && !isIrx && !isExeExecutable && !path.isBlank()) {
+                if (result && !bootSmokeProbe && !allowBiosBoot && !path.isBlank()) {
                     // The bundled core silently boots the BIOS when a disc image
                     // cannot be opened. Surface that as a failed launch instead of
                     // leaving the user on a misleading BIOS screen.
@@ -1081,15 +844,6 @@ object EmulatorBridge {
         // A status read never performs teardown. The native handle can outlive
         // a failed worker and still needs its audio/session/descriptors released.
         return isVmActive || (isNativeLoaded && NativeApp.hasOwnedVm())
-    }
-
-    fun getPadRumble(port: Int): FloatArray? {
-        if (!isNativeLoaded) return null
-        return try {
-            NativeApp.getPadRumble(port)
-        } catch (_: Exception) {
-            null
-        }
     }
 
     fun getGameTitle(path: String): String = getGameMetadata(path).title
@@ -1383,15 +1137,6 @@ object EmulatorBridge {
         performRuntimeOps(listOf(aspectOp(normalizedType)))
     }
 
-    suspend fun setDisplayCrop(value: DisplayCrop) {
-        val crop = value.sanitized()
-        settingsCache["EmuCoreA/GS:CropLeft"] = crop.left.toString()
-        settingsCache["EmuCoreA/GS:CropTop"] = crop.top.toString()
-        settingsCache["EmuCoreA/GS:CropRight"] = crop.right.toString()
-        settingsCache["EmuCoreA/GS:CropBottom"] = crop.bottom.toString()
-        NativeApp.setDisplayCrop(crop)
-    }
-
     suspend fun setLocalMultiplayerMode(mode: Int) {
         val normalized = mode.coerceIn(
             AppPreferences.LOCAL_MULTIPLAYER_OFF,
@@ -1485,10 +1230,6 @@ object EmulatorBridge {
                 NativeApp.resetPadState(padIndex)
             } catch (_: Exception) { }
         }
-    }
-
-    suspend fun setPadVibration(enabled: Boolean) {
-        setSetting("InputSources", "PadVibration", "bool", enabled.toString())
     }
 
     /** True while the native core has a live presentation surface. */

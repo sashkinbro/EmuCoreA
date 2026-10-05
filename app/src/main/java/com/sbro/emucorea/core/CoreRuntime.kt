@@ -324,11 +324,11 @@ internal object CoreRuntime {
             reportFailure("The renderer restart failed")
             return@withLock false
         }
-        if (savedState && snapshot != null) {
+        if (savedState) {
             // The core needs its first frame before a state can be loaded, so
             // the frame loop picks this up and retries until it takes.
             pendingStateRestoreAttempts = 0
-            pendingStateRestorePath = snapshot.absolutePath
+            pendingStateRestorePath = snapshot?.absolutePath
         } else if (snapshot != null) {
             snapshot.delete()
         }
@@ -477,8 +477,8 @@ internal object CoreRuntime {
     }
 
     /**
-     * Stores the frontend's shader selection in the native core. The values are
-     * not rendered yet; a future presentation hook consumes them.
+     * Publishes the frontend's shader selection to the native core, which
+     * builds the librashader Vulkan presentation chain from the preset.
      */
     private fun pushShaderEffect() {
         runCatching { NativePpsspp.nativeSetShaderEffect(currentShaderEffect()) }
@@ -581,12 +581,12 @@ internal object CoreRuntime {
 
     @Volatile private var audioOutputLatencyMs = AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT
     @Volatile private var audioLowLatency = false
-    // Rebuilding the OpenSL player is expensive, so dragging the latency slider
+    // Rebuilding the output stream is expensive, so dragging the latency slider
     // coalesces into a single apply shortly after the user stops.
     private val audioBufferScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var audioBufferApplyJob: Job? = null
 
-    /** OpenSL buffer size target in milliseconds. */
+    /** Output buffer size target in milliseconds. */
     fun setAudioBufferMs(milliseconds: Int) {
         audioOutputLatencyMs = AudioDefaults.coerceOutputLatencyMs(milliseconds)
         audioBufferApplyJob?.cancel()
@@ -929,8 +929,6 @@ internal object CoreRuntime {
         return null
     }
 
-    fun getPadRumble(port: Int): FloatArray? = null
-
     fun attachSurface(value: Surface, width: Int, height: Int) {
         if (width <= 0 || height <= 0) return
         val previous = surface
@@ -1110,8 +1108,7 @@ internal object CoreRuntime {
                 val scale = Math.round(it).coerceIn(1, 10)
                 "ppsspp_internal_resolution" to "${480 * scale}x${272 * scale}"
             }
-            "EmuCoreA/GS:VsyncEnable" ->
-                bool?.let { "ppsspp_vsync" to if (it) "enabled" else "disabled" }
+            // VsyncEnable is handled directly in updateSetting (native "vsync").
             "EmuCoreA/GS:LoadTextureReplacements" ->
                 bool?.let { "ppsspp_texture_replacement" to if (it) "enabled" else "disabled" }
             "EmuCoreA/GS:DumpReplaceableTextures" ->

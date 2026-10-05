@@ -76,7 +76,7 @@ object NativePpsspp {
     /**
      * Android audio device properties from [android.media.AudioManager]
      * (PROPERTY_OUTPUT_SAMPLE_RATE / PROPERTY_OUTPUT_FRAMES_PER_BUFFER).
-     * The core sizes the OpenSL track and its resampler ring from these,
+     * The core sizes the output stream and its resampler ring from these,
      * exactly like PPSSPP's own Android audio init. Zero means "unknown".
      */
     external fun nativeSetAudioDeviceInfo(sampleRate: Int, framesPerBuffer: Int)

@@ -29,7 +29,7 @@
     <string name="home_shelf_games_counter">%1$d of %2$d</string>
     <string name="home_shelf_enable_3d_title">Use 3D covers in carousel</string>
     <string name="home_shelf_enable_3d_action">Enable</string>
-    <string name="home_choose_bios">Choose BIOS</string>
+    <string name="home_choose_bios">Choose firmware</string>
     <string name="home_sort_title_asc">Title A-Z</string>
     <string name="home_sort_title_desc">Title Z-A</string>
     <string name="home_sort_recent_desc">Recently updated</string>
@@ -292,9 +292,9 @@
     <string name="settings_aspect_ratio_169">16:9</string>
     <string name="settings_aspect_ratio_107">10:7</string>
     <string name="settings_paths">Files</string>
-    <string name="settings_bios_path">BIOS File</string>
-    <string name="settings_bios_picker_title">Choose BIOS File</string>
-    <string name="settings_bios_picker_desc">Choose a folder containing a clean 512 KiB PSP BIOS dump in .bin or .rom format.</string>
+    <string name="settings_bios_path">Firmware</string>
+    <string name="settings_bios_picker_title">Choose PSP Firmware</string>
+    <string name="settings_bios_picker_desc">Choose PSP firmware: a flash0 folder or the official EBOOT.PBP update. Firmware is optional; PPSSPP plays without it.</string>
     <string name="settings_bios_picker_current">Current BIOS file</string>
     <string name="settings_bios_picker_action">Select File</string>
     <string name="settings_game_path">Game folders</string>
@@ -353,8 +353,8 @@
     <string name="settings_pad_vibration_test_action">Test</string>
     <string name="settings_pad_vibration_fallback">Use device vibration fallback</string>
     <string name="settings_pad_vibration_fallback_desc">Vibrate the handheld or phone body when the controller does not expose its own motor.</string>
-    <string name="settings_touch_haptics">Touch control haptics</string>
-    <string name="settings_touch_haptics_desc">Play a short haptic tick when pressing on-screen controls.</string>
+    <string name="settings_action_test">Test</string>
+    <string name="settings_touch_haptics">Touch control haptics</string>    <string name="settings_touch_haptics_desc">Play a short haptic tick when pressing on-screen controls.</string>
     <string name="settings_gamepad_button_haptics">Gamepad button haptics</string>
     <string name="settings_gamepad_button_haptics_desc">Play a short vibration tick when pressing physical gamepad buttons.</string>
     <string name="settings_back_button_exits_game">Use Back button to exit game</string>
@@ -400,7 +400,7 @@
     <string name="settings_help_recent_games">Shows a quick-access row for the games you played last. Good if you bounce between a few titles often; turn it off if you want a cleaner home screen.</string>
     <string name="settings_help_home_search">Shows the library search bar directly on the home screen. Leave it on for big libraries; turn it off if you prefer a cleaner layout and rarely search by name.</string>
     <string name="settings_help_prefer_english_game_titles">Uses English titles from EmuCoreA\'s GameIndex database for games that ship with Japanese or other regional names. This mainly helps imported releases read more clearly in the library, while games without an English database title keep their normal name.</string>
-    <string name="settings_help_bios_path">Points EmuCoreA to a clean BIOS dump from your own PSP. The image must be exactly 512 KiB and use the .bin or .rom extension.</string>
+    <string name="settings_help_bios_path">Points EmuCoreA to a firmware dump from your own PSP: select the flash0 folder or the official EBOOT.PBP update. Firmware is optional and only improves font/MPEG compatibility.</string>
     <string name="settings_help_game_path">Adds folders to the game library. EmuCoreA scans every selected folder recursively and merges the results without duplicate file paths. Tap a listed folder to remove it. The current core supports .cue and .bin disc images.</string>
     <string name="settings_help_cover_art_style">Chooses the default cover type used when downloading artwork. Flat covers match the classic front-box look, while 3D Box uses angled box renders when the source provides them. 3D covers can look more dramatic, but availability may be slightly worse than flat art.</string>
     <string name="settings_help_cover_download_url">Overrides the built-in cover source used for automatic downloads. The URL should point directly to a folder that contains JPG covers named by game serial, for example SLUS-20312.jpg. Change this only if you host your own mirror or want to use a different compatible cover library.</string>
@@ -699,8 +699,8 @@
     <string name="settings_mediatek_notice_message">MediaTek support is still experimental. Crashes, visual artifacts, and unstable behavior may occur while we continue improving compatibility and performance.\n\nIf you experience graphics issues, try OpenGL with ANGLE enabled. If the issues persist, use the Software renderer.</string>
     <string name="onboarding_title">Get ready to play</string>
     <string name="onboarding_subtitle">Choose your PSP game folders and grant file access.</string>
-    <string name="onboarding_bios_title">Choose BIOS File</string>
-    <string name="onboarding_bios_desc">Select a folder containing a clean 512 KiB PSP BIOS dump in .bin or .rom format.</string>
+    <string name="onboarding_bios_title">Choose PSP Firmware</string>
+    <string name="onboarding_bios_desc">Select PSP firmware: a flash0 folder or the official EBOOT.PBP update. This step is optional.</string>
     <string name="onboarding_games_title">Add game folders</string>
     <string name="onboarding_games_desc">Add one or more folders that contain your games.</string>
     <string name="onboarding_games_selected_count">%1$d folders selected. Tap to add another.</string>

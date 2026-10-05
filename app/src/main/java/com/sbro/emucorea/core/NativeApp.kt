@@ -4,7 +4,6 @@ package com.sbro.emucorea.core
 import android.content.Context
 import android.util.Log
 import android.view.Surface
-import org.json.JSONArray
 import java.io.File
 import java.io.FileInputStream
 import java.lang.ref.WeakReference
@@ -12,7 +11,6 @@ import androidx.core.net.toUri
 import android.os.ParcelFileDescriptor
 import android.os.Handler
 import android.os.Looper
-import org.json.JSONObject
 import java.security.MessageDigest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -91,20 +89,19 @@ object NativeApp {
         }
         return fallback
     }
-    @JvmStatic fun isBiosPath(path: String): Boolean = File(path).let { it.isFile && it.length() == BIOS_SIZE_BYTES }
+    @JvmStatic fun isBiosPath(path: String): Boolean = runCatching {
+        val file = File(path)
+        if (file.isDirectory) {
+            BIOS_FIRMWARE_DIRECTORIES.any { File(file, it).isDirectory }
+        } else {
+            file.isFile && file.canRead() && file.extension.lowercase() in BIOS_FIRMWARE_EXTENSIONS
+        }
+    }.getOrDefault(false)
     /** Takes ownership of [fd] and always closes it before returning. */
     @JvmStatic fun isBiosFd(fd: Int): Boolean = runCatching {
         ParcelFileDescriptor.adoptFd(fd).use { descriptor ->
             FileInputStream(descriptor.fileDescriptor).use { input ->
-                var total = 0L
-                val buffer = ByteArray(16 * 1024)
-                while (true) {
-                    val read = input.read(buffer)
-                    if (read < 0) break
-                    total += read
-                    if (total > BIOS_SIZE_BYTES) break
-                }
-                total == BIOS_SIZE_BYTES
+                input.read(ByteArray(1)) >= 0
             }
         }
     }.getOrDefault(false)
@@ -117,15 +114,14 @@ object NativeApp {
     @JvmStatic fun getCoreVersion(): String? = null
     @JvmStatic fun setAudioOutputGain(volume: Int, muted: Boolean) =
         CoreRuntime.setAudioGain(volume, muted)
-    // Audio buffering belongs to the native core (PPSSPP StereoResampler +
-    // OpenSL), so the AAudio tuning surface is retained as a no-op.
+    // Audio buffering belongs to the native core (PPSSPP StereoResampler plus
+    // the AAudio/OpenSL output), so both entry points land on the same knob.
     @JvmStatic fun setAudioBufferMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
     @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
     @JvmStatic fun setAudioLowLatency(enabled: Boolean) = CoreRuntime.setAudioLowLatency(enabled)
     @JvmStatic fun setAudioBackend(backend: Int) = CoreRuntime.setAudioBackend(backend)
     @JvmStatic fun setRewindEnabled(enabled: Boolean) =
         CoreRuntime.updateSetting("EmuCoreA/GS", "RewindEnabled", enabled.toString())
-    @JvmStatic fun queueGsDump(frames: Int) = Unit
     @JvmStatic @Synchronized fun setPadButton(padIndex: Int, index: Int, range: Int, pressed: Boolean) {
         if (padIndex !in 0..1) return
         if (index == PAD_START || index == PAD_SELECT || index == PAD_FAST_FORWARD || index == PAD_REWIND) {
@@ -156,17 +152,9 @@ object NativeApp {
         else padButtons[padIndex] or (1 shl bit)
         CoreRuntime.setPadButtons(padIndex, effectivePadButtons(padIndex))
     }
-    @JvmStatic fun setInternetLinkTransportReady(ready: Boolean) = Unit
-    @JvmStatic fun resetInternetLinkTransport() = Unit
-    @JvmStatic fun pushInternetLinkFrame(frame: ByteArray): Boolean = false
-    @JvmStatic fun pollInternetLinkFrame(): ByteArray? = null
-    @JvmStatic fun setPadPressureModifierAmount(amountPercent: Int) = Unit
     @JvmStatic fun onHostKeyEvent(keyCode: Int, pressed: Boolean) {
         setPadButton(0, keyCode, 0, pressed)
     }
-    @JvmStatic fun onHostMousePosition(x: Float, y: Float) = Unit
-    @JvmStatic fun onHostMouseButton(button: Int, pressed: Boolean) = Unit
-    @JvmStatic fun onHostMouseWheel(deltaX: Float, deltaY: Float) = Unit
     @JvmStatic fun resetKeyStatus() { resetPadState(0); resetPadState(1) }
     @JvmStatic @Synchronized fun resetPadState(padIndex: Int) {
         if (padIndex !in 0..1) return
@@ -229,10 +217,6 @@ object NativeApp {
             )
         }
     }
-    @JvmStatic fun setDisplayCrop(crop: com.sbro.emucorea.data.DisplayCrop) {
-        // Crop/overscan is not exposed by the native core config surface.
-        crop.sanitized()
-    }
     @JvmStatic fun setFrameLimitEnabled(enabled: Boolean) =
         CoreRuntime.updateSetting("EmuCoreA/GS", "FrameLimitEnable", enabled.toString())
     @JvmStatic fun reloadPatches() = CoreRuntime.reloadCheats()
@@ -294,12 +278,9 @@ object NativeApp {
     @JvmStatic fun runBootSmokeProbe(path: String, steps: Int): Int = 0
     @JvmStatic fun runJitExecutableMemorySmokeTest(): Boolean = false
     @JvmStatic fun runEeFpuDivRoundingSelfTest(): String = "not applicable to R3000A"
-    @JvmStatic fun bootElf(path: String): Boolean = false
-    @JvmStatic fun bootIrx(path: String): Boolean = false
     @JvmStatic fun pause() = CoreRuntime.pause()
     @JvmStatic fun resume() = CoreRuntime.resume()
     @JvmStatic fun shutdown() = CoreRuntime.shutdown()
-    @JvmStatic fun refreshBIOS() = Unit
     @JvmStatic fun hasValidVm(): Boolean = CoreRuntime.isRunning()
     /** Ownership remains after a worker failure until explicit shutdown completes. */
     @JvmStatic fun hasOwnedVm(): Boolean = CoreRuntime.hasSession()
@@ -337,26 +318,6 @@ object NativeApp {
     @JvmStatic fun getCurrentSaveStatePath(slot: Int): String? =
         getSaveStatePathForFile(saveStatePathSource(), slot)
     @JvmStatic fun getSaveStateScreenshot(path: String): ByteArray? = null
-    @JvmStatic fun listMemoryCards(): String? {
-        val context = getContext() ?: return "[]"
-        val directory = EmulatorStorage.memoryCardsDir(context, dataRootOverride).apply { mkdirs() }
-        return JSONArray().apply {
-            directory.listFiles().orEmpty().filter(File::isFile).forEach { file ->
-                put(JSONObject()
-                    .put("name", file.name)
-                    .put("path", file.absolutePath)
-                    .put("modifiedTime", file.lastModified())
-                    .put("type", 1)
-                    .put("fileType", if (file.length() == PS1_MEMORY_CARD_SIZE_BYTES) 1 else 0)
-                    .put("sizeBytes", file.length())
-                    .put("formatted", file.length() == PS1_MEMORY_CARD_SIZE_BYTES))
-            }
-        }.toString()
-    }
-    @JvmStatic fun createMemoryCard(name: String, type: Int, fileType: Int): Boolean {
-        // Memory card images are owned by the native PPSSPP core.
-        return false
-    }
     @JvmStatic fun convertIsoToChd(inputIsoPath: String): Int = -1
     @JvmStatic fun startJitProfiler() { profilerActive = true }
     @JvmStatic fun stopJitProfiler() { profilerActive = false }
@@ -365,30 +326,6 @@ object NativeApp {
     @JvmStatic fun stopHangTrace() { hangTraceActive = false }
     @JvmStatic fun isHangTraceActive(): Boolean = hangTraceActive
     @JvmStatic fun setNativeCrashLogFilePath(path: String) = Unit
-
-    @JvmStatic
-    fun parseMemoryCardList(raw: String?): List<NativeMemoryCardInfo> {
-        if (raw.isNullOrBlank()) return emptyList()
-        return runCatching {
-            val array = JSONArray(raw)
-            buildList {
-                for (index in 0 until array.length()) {
-                    val item = array.optJSONObject(index) ?: continue
-                    add(
-                        NativeMemoryCardInfo(
-                            name = item.optString("name"),
-                            path = item.optString("path"),
-                            modifiedTime = item.optLong("modifiedTime"),
-                            type = item.optInt("type"),
-                            fileType = item.optInt("fileType"),
-                            sizeBytes = item.optLong("sizeBytes"),
-                            formatted = item.optBoolean("formatted")
-                        )
-                    )
-                }
-            }
-        }.getOrDefault(emptyList())
-    }
 
     @JvmStatic
     fun initializeOnce(context: Context) {
@@ -401,9 +338,9 @@ object NativeApp {
     }
 
     /**
-     * Hands the Android output properties to the core so the OpenSL track runs
-     * at the device's native rate and the resampler sizes its ring for the
-     * actual OpenSL buffer. Without this the core forces 44.1 kHz and keeps a
+     * Hands the Android output properties to the core so the output runs at the
+     * device's native rate and the resampler sizes its ring for the actual
+     * device buffer. Without this the core forces 44.1 kHz and keeps a
      * 1680-sample ring even when the buffer is larger, which underruns on every
      * callback and is heard as a light crackle.
      */
@@ -424,14 +361,6 @@ object NativeApp {
 
     @JvmStatic
     fun getContext(): Context? = contextRef?.get()
-
-    @JvmStatic
-    fun onPadVibration(index: Int, largeMotor: Float, smallMotor: Float) {
-        GamepadManager.onPadVibration(index, largeMotor, smallMotor)
-    }
-
-    @JvmStatic
-    fun getPadRumble(index: Int): FloatArray? = null
 
     @JvmStatic
     fun setCrashContextString(key: String, value: String?) {
@@ -685,7 +614,8 @@ object NativeApp {
         .digest(toByteArray())
         .joinToString("") { byte -> "%02x".format(byte) }
 
-    private const val BIOS_SIZE_BYTES = 512L * 1024L
+    private val BIOS_FIRMWARE_EXTENSIONS = setOf("pbp", "bin", "rom")
+    private val BIOS_FIRMWARE_DIRECTORIES = setOf("flash0", "kd", "vsh")
     private const val PAD_ANALOG_TOGGLE = 125
     private const val PAD_FAST_FORWARD = 126
     private const val PAD_REWIND = 127
@@ -693,7 +623,6 @@ object NativeApp {
     private const val PAD_SELECT = 109
     private const val TIME_CONTROL_HOLD_MS = 450L
     private const val TIME_CONTROL_TAP_MS = 60L
-    private const val PS1_MEMORY_CARD_SIZE_BYTES = 128L * 1024L
     private const val DPAD_ALL_RELEASED = 0xFFFF
     private const val ANALOG_DPAD_THRESHOLD = 64
     private const val PS1_BUTTON_UP = 4
@@ -701,13 +630,3 @@ object NativeApp {
     private const val PS1_BUTTON_DOWN = 6
     private const val PS1_BUTTON_LEFT = 7
 }
-
-data class NativeMemoryCardInfo(
-    val name: String,
-    val path: String,
-    val modifiedTime: Long,
-    val type: Int,
-    val fileType: Int,
-    val sizeBytes: Long,
-    val formatted: Boolean
-)

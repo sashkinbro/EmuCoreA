@@ -1262,9 +1262,6 @@ object PpssppCoreOptions {
 
     private val optionsByKey: Map<String, Option> by lazy { optionList.associateBy { it.key } }
 
-    private val audioKeys: Set<String> =
-        optionList.map { it.key }.filter { it.contains("audio") }.toSet()
-
     /** Keys driven by dedicated app-level controls (renderer and upscale). */
     private val managedKeys = setOf(
         "ppsspp_backend",
@@ -1300,14 +1297,14 @@ object PpssppCoreOptions {
      */
     fun graphicsOptions(renderer: Int = RendererDefaults.VULKAN): List<Option> =
         forCategory("video").filterNot {
-            it.key in audioKeys || isManagedKey(it.key) ||
+            isManagedKey(it.key) ||
                 (it.key in vulkanOnlyKeys && renderer != RendererDefaults.VULKAN)
         }
 
     /** System & performance tab: system and emulation hacks. */
     fun emulationOptions(): List<Option> =
         (forCategory("system") + forCategory("hacks"))
-            .filterNot { it.key in audioKeys || isManagedKey(it.key) }
+            .filterNot { isManagedKey(it.key) }
 
     /** Full system + hacks set, so every emulation option is tunable in-game. */
     fun gameMenuEmulationOptions(): List<Option> = emulationOptions()
@@ -1319,10 +1316,6 @@ object PpssppCoreOptions {
     /** Controls tab: input options. */
     fun controlsOptions(): List<Option> =
         forCategory("input").filterNot { isManagedKey(it.key) }
-
-    /** Audio tab: every option that targets audio output. */
-    fun audioOptions(): List<Option> =
-        optionList.filter { it.key in audioKeys }.filterNot { isManagedKey(it.key) }
 
     /** Graphics section of the in-game menu. */
     fun gameMenuGraphicsOptions(renderer: Int = RendererDefaults.VULKAN): List<Option> = listOfNotNull(

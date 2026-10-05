@@ -87,9 +87,6 @@ data class SettingsSnapshot(
     val audioOutputLatencyMs: Int = AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT,
     val audioMinimalOutputLatency: Boolean = AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT,
     val autoProgressiveScan: Boolean = false,
-    val padVibration: Boolean = true,
-    val padVibrationStrength: Int = AppPreferences.DEFAULT_PAD_VIBRATION_STRENGTH,
-    val padVibrationFallback: Boolean = true,
     val showFps: Boolean = false,
     val fpsOverlayMode: Int = AppPreferences.FPS_OVERLAY_MODE_DETAILED,
     val fpsOverlayCorner: Int = AppPreferences.FPS_OVERLAY_CORNER_TOP_RIGHT,
@@ -323,7 +320,7 @@ class AppPreferences(private val context: Context) {
             "displayCropRight", "displayCropBottom", "audioVolume", "audioFastForwardVolume",
             "audioMuted", "audioInterpolation", "audioSyncMode", "audioLightweightSpu2",
             "audioBackend", "audioBufferMs", "audioOutputLatencyMs", "audioMinimalOutputLatency",
-            "autoProgressiveScan", "padVibration", "padVibrationStrength", "padVibrationFallback",
+            "autoProgressiveScan",
             "showFps", "fpsOverlayMode", "fpsOverlayCorner", "fpsOverlayScale",
             "fpsOverlayMetrics", "confirmSaveLoadActions", "backButtonExitsGame",
             "compactControls", "keepScreenOn", "overlayScale", "overlayOpacity", "overlayShow",
@@ -427,7 +424,6 @@ class AppPreferences(private val context: Context) {
             else -> ORIENTATION_LOCK_AUTO
         }
         const val DEFAULT_PRESSURE_MODIFIER_AMOUNT = 50
-        const val DEFAULT_PAD_VIBRATION_STRENGTH = 100
         const val DEFAULT_TOUCH_HAPTICS_STRENGTH = 60
         const val STICK_TOGGLE_LEFT = 0
         const val STICK_TOGGLE_RIGHT = 1
@@ -569,9 +565,6 @@ class AppPreferences(private val context: Context) {
         private val AUDIO_OUTPUT_LATENCY_MS = intPreferencesKey("audio_output_latency_ms")
         private val AUDIO_MINIMAL_OUTPUT_LATENCY = booleanPreferencesKey("audio_minimal_output_latency")
         private val AUTO_PROGRESSIVE_SCAN = booleanPreferencesKey("auto_progressive_scan")
-        private val PAD_VIBRATION = booleanPreferencesKey("pad_vibration")
-        private val PAD_VIBRATION_STRENGTH = intPreferencesKey("pad_vibration_strength")
-        private val PAD_VIBRATION_FALLBACK = booleanPreferencesKey("pad_vibration_fallback")
         private val SHOW_FPS = booleanPreferencesKey("show_fps")
         private val FPS_OVERLAY_MODE = intPreferencesKey("fps_overlay_mode")
         private val FPS_OVERLAY_CORNER = intPreferencesKey("fps_overlay_corner")
@@ -1718,11 +1711,8 @@ class AppPreferences(private val context: Context) {
                 ),
                 audioMinimalOutputLatency = prefs[AUDIO_MINIMAL_OUTPUT_LATENCY]
                     ?: AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT,
-                autoProgressiveScan = prefs[AUTO_PROGRESSIVE_SCAN] ?: false,
-                padVibration = prefs[PAD_VIBRATION] ?: true,
-                padVibrationStrength = (prefs[PAD_VIBRATION_STRENGTH] ?: DEFAULT_PAD_VIBRATION_STRENGTH).coerceIn(0, 150),
-                padVibrationFallback = prefs[PAD_VIBRATION_FALLBACK] ?: true,
-                showFps = prefs[SHOW_FPS] ?: false,
+            autoProgressiveScan = prefs[AUTO_PROGRESSIVE_SCAN] ?: false,
+            showFps = prefs[SHOW_FPS] ?: false,
                 fpsOverlayMode = prefs[FPS_OVERLAY_MODE] ?: FPS_OVERLAY_MODE_DETAILED,
                 fpsOverlayCorner = when (prefs[FPS_OVERLAY_CORNER]) {
                     FPS_OVERLAY_CORNER_TOP_LEFT,
@@ -2031,30 +2021,6 @@ class AppPreferences(private val context: Context) {
             0, 1, 2, 3, 4 -> value
             else -> 1
         }
-    }
-
-    val padVibration: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[PAD_VIBRATION] ?: true
-    }
-
-    suspend fun setPadVibration(enabled: Boolean) {
-        context.dataStore.edit { it[PAD_VIBRATION] = enabled }
-    }
-
-    val padVibrationStrength: Flow<Int> = context.dataStore.data.map { prefs ->
-        (prefs[PAD_VIBRATION_STRENGTH] ?: DEFAULT_PAD_VIBRATION_STRENGTH).coerceIn(0, 150)
-    }
-
-    suspend fun setPadVibrationStrength(value: Int) {
-        context.dataStore.edit { it[PAD_VIBRATION_STRENGTH] = value.coerceIn(0, 150) }
-    }
-
-    val padVibrationFallback: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[PAD_VIBRATION_FALLBACK] ?: true
-    }
-
-    suspend fun setPadVibrationFallback(enabled: Boolean) {
-        context.dataStore.edit { it[PAD_VIBRATION_FALLBACK] = enabled }
     }
 
     val touchHaptics: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -4083,9 +4049,6 @@ class AppPreferences(private val context: Context) {
             put("audioOutputLatencyMs", AudioDefaults.coerceOutputLatencyMs(prefs[AUDIO_OUTPUT_LATENCY_MS] ?: AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT))
             put("audioMinimalOutputLatency", prefs[AUDIO_MINIMAL_OUTPUT_LATENCY] ?: AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT)
             put("autoProgressiveScan", prefs[AUTO_PROGRESSIVE_SCAN] ?: false)
-            put("padVibration", prefs[PAD_VIBRATION] ?: true)
-            put("padVibrationStrength", (prefs[PAD_VIBRATION_STRENGTH] ?: DEFAULT_PAD_VIBRATION_STRENGTH).coerceIn(0, 150))
-            put("padVibrationFallback", prefs[PAD_VIBRATION_FALLBACK] ?: true)
             put("showFps", prefs[SHOW_FPS] ?: false)
             put("fpsOverlayMode", prefs[FPS_OVERLAY_MODE] ?: FPS_OVERLAY_MODE_DETAILED)
             put("fpsOverlayCorner", prefs[FPS_OVERLAY_CORNER] ?: FPS_OVERLAY_CORNER_TOP_RIGHT)
@@ -4490,9 +4453,6 @@ class AppPreferences(private val context: Context) {
                 AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT
             )
             prefs[AUTO_PROGRESSIVE_SCAN] = json.optBoolean("autoProgressiveScan", false)
-            prefs[PAD_VIBRATION] = json.optBoolean("padVibration", true)
-            prefs[PAD_VIBRATION_STRENGTH] = json.optInt("padVibrationStrength", DEFAULT_PAD_VIBRATION_STRENGTH).coerceIn(0, 150)
-            prefs[PAD_VIBRATION_FALLBACK] = json.optBoolean("padVibrationFallback", true)
             prefs[SHOW_FPS] = json.optBoolean("showFps", false)
             prefs[FPS_OVERLAY_MODE] = json.optInt("fpsOverlayMode", FPS_OVERLAY_MODE_DETAILED)
             prefs[FPS_OVERLAY_CORNER] = json.optInt("fpsOverlayCorner", FPS_OVERLAY_CORNER_TOP_RIGHT).coerceIn(

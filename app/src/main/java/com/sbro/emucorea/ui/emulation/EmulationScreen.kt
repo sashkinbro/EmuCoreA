@@ -866,29 +866,6 @@ fun EmulationScreen(
         GamepadManager.setEmulationInputEnabled(!gamepadUiActive)
     }
 
-    // The core latches DualShock rumble every frame; forward it to the
-    // connected gamepad or the device vibrator while emulation runs. Polling
-    // happens off the main thread because the frame loop holds the runtime
-    // session lock for the duration of each frame.
-    LaunchedEffect(uiState.isRunning, uiState.isPaused) {
-        if (!uiState.isRunning || uiState.isPaused) return@LaunchedEffect
-        try {
-            withContext(Dispatchers.Default) {
-                while (isActive) {
-                    for (port in 0..1) {
-                        EmulatorBridge.getPadRumble(port)?.let { rumble ->
-                            NativeApp.onPadVibration(port, rumble[0], rumble[1])
-                        }
-                    }
-                    delay(50L)
-                }
-            }
-        } finally {
-            NativeApp.onPadVibration(0, 0f, 0f)
-            NativeApp.onPadVibration(1, 0f, 0f)
-        }
-    }
-
     DisposableEffect(touchPadIndex, shouldShowOverlay, uiState.showMenu, showControlsEditor) {
         val activeTouchPadIndex = touchPadIndex?.takeIf {
             shouldShowOverlay && !uiState.showMenu && !showControlsEditor
@@ -1603,9 +1580,6 @@ fun EmulationScreen(
                     onToggleFps = { viewModel.toggleFpsVisibility() },
                     onSetFrameLimit = { viewModel.toggleFrameLimit() },
                     onSetTargetFps = { viewModel.setTargetFps(it) },
-                    onSetFrameSkip = { viewModel.setFrameSkip(it) },
-                    onSetNtscFramerate = { viewModel.setNtscFramerate(it) },
-                    onSetPalFramerate = { viewModel.setPalFramerate(it) },
                     onSetFpsOverlayMode = { viewModel.setFpsOverlayMode(it) },
                     onSetFpsOverlayCorner = { viewModel.setFpsOverlayCorner(it) },
                     onSetFpsOverlayScale = { viewModel.setFpsOverlayScale(it) },
@@ -1624,49 +1598,18 @@ fun EmulationScreen(
                     onSetGamepadStickDeadzone = { viewModel.setGamepadStickDeadzone(it) },
                     onSetGamepadLeftStickSensitivity = { viewModel.setGamepadLeftStickSensitivity(it) },
                     onSetGamepadRightStickSensitivity = { viewModel.setGamepadRightStickSensitivity(it) },
-                    onSetGamepadRightStickUpToR2 = { viewModel.setGamepadRightStickUpToR2(it) },
-                    onSetGamepadRightStickDownToL2 = { viewModel.setGamepadRightStickDownToL2(it) },
                     onToggleControls = toggleControlsClick,
                     onOpenControlsEditor = { showControlsEditor = true },
                     onOpenGamepadMapping = { showGamepadMappingDialog = true },
                     onSetRenderer = { viewModel.setRenderer(it) },
                     onSetUpscale = { viewModel.setUpscale(it) },
                     onSetAspectRatio = { viewModel.setAspectRatio(it) },
-                    onSetDisplayCrop = { viewModel.setDisplayCrop(it) },
-                    onSetLocalMultiplayerMode = viewModel::setLocalMultiplayerMode,
-                    onSetMtvu = { viewModel.setMtvu(it) },
-                    onSetThreadPinning = { viewModel.setThreadPinning(it) },
-                    onSetFastCdvd = { viewModel.setFastCdvd(it) },
                     onSetEnableCheats = { viewModel.setEnableCheats(it) },
-                    onSetWidescreenPatches = { viewModel.setEnableWidescreenPatches(it) },
-                    onSetNoInterlacingPatches = { viewModel.setEnableNoInterlacingPatches(it) },
                     onToggleCheat = { id, enabled -> viewModel.setCheatEnabled(id, enabled) },
                     onSetCheatGroupEnabled = { ids, enabled -> viewModel.setCheatGroupEnabled(ids, enabled) },
                     onRefreshCheats = { viewModel.refreshAvailableCheats() },
-                    onSetEeCycleRate = { viewModel.setEeCycleRate(it) },
-                    onSetEeCycleSkip = { viewModel.setEeCycleSkip(it) },
-                    onSetEnableDisableStalls = { viewModel.setEnableDisableStalls(it) },
-                    onSetEnablePreciseExceptions = { viewModel.setEnablePreciseExceptions(it) },
-                    onSetEnableTurboCd = { viewModel.setEnableTurboCd(it) },
-                    onSetEnableXaDecoding = { viewModel.setEnableXaDecoding(it) },
-                    onSetEnableSpuReverb = { viewModel.setEnableSpuReverb(it) },
-                    onSetEnableSpuThread = { viewModel.setEnableSpuThread(it) },
                     onSetAudioVolume = { viewModel.setAudioVolume(it) },
                     onSetAudioMuted = { viewModel.setAudioMuted(it) },
-                    onSetNeonEnhancement = { viewModel.setNeonEnhancement(it) },
-                    onSetNeonEnhancementSpeedHack = { viewModel.setNeonEnhancementSpeedHack(it) },
-                    onSetNeonEnhancementTexAdj = { viewModel.setNeonEnhancementTexAdj(it) },
-                    onSetNeonInterlace = { viewModel.setNeonInterlace(it) },
-                    onSetGpuThreadRendering = { viewModel.setGpuThreadRendering(it) },
-                    onSetShowOverscan = { viewModel.setShowOverscan(it) },
-                    onSetScreenCentering = { viewModel.setScreenCentering(it) },
-                    onSetScreenCenteringX = { viewModel.setScreenCenteringX(it) },
-                    onSetScreenCenteringY = { viewModel.setScreenCenteringY(it) },
-                    onSetScreenCenteringHAdj = { viewModel.setScreenCenteringHAdj(it) },
-                    onSetEnableFractionalFramerate = { viewModel.setEnableFractionalFramerate(it) },
-                    onSetAltFlipMode = { viewModel.setAltFlipMode(it) },
-                    onSetEnableRgb32Output = { viewModel.setEnableRgb32Output(it) },
-                    onSetEnableScaleHires = { viewModel.setEnableScaleHires(it) },
                     onExit = requestExitClick,
                     modifier = Modifier
                         .fillMaxHeight()
@@ -2881,9 +2824,6 @@ private fun EmulationSidebarMenu(
     onToggleFps: () -> Unit,
     onSetFrameLimit: () -> Unit,
     onSetTargetFps: (Int) -> Unit,
-    onSetFrameSkip: (Int) -> Unit,
-    onSetNtscFramerate: (Float) -> Unit,
-    onSetPalFramerate: (Float) -> Unit,
     onSetFpsOverlayMode: (Int) -> Unit,
     onSetFpsOverlayCorner: (Int) -> Unit,
     onSetFpsOverlayScale: (Int) -> Unit,
@@ -2902,49 +2842,18 @@ private fun EmulationSidebarMenu(
     onSetGamepadStickDeadzone: (Int) -> Unit,
     onSetGamepadLeftStickSensitivity: (Int) -> Unit,
     onSetGamepadRightStickSensitivity: (Int) -> Unit,
-    onSetGamepadRightStickUpToR2: (Boolean) -> Unit,
-    onSetGamepadRightStickDownToL2: (Boolean) -> Unit,
     onToggleControls: () -> Unit,
     onOpenControlsEditor: () -> Unit,
     onOpenGamepadMapping: () -> Unit,
     onSetRenderer: (Int) -> Unit,
     onSetUpscale: (Float) -> Unit,
     onSetAspectRatio: (Int) -> Unit,
-    onSetDisplayCrop: (DisplayCrop) -> Unit,
-    onSetLocalMultiplayerMode: (Int) -> Unit,
-    onSetMtvu: (Boolean) -> Unit,
-    onSetThreadPinning: (Boolean) -> Unit,
-    onSetFastCdvd: (Boolean) -> Unit,
     onSetEnableCheats: (Boolean) -> Unit,
-    onSetWidescreenPatches: (Boolean) -> Unit,
-    onSetNoInterlacingPatches: (Boolean) -> Unit,
     onToggleCheat: (String, Boolean) -> Unit,
     onSetCheatGroupEnabled: (List<String>, Boolean) -> Unit,
     onRefreshCheats: () -> Unit,
-    onSetEeCycleRate: (Int) -> Unit,
-    onSetEeCycleSkip: (Int) -> Unit,
-    onSetEnableDisableStalls: (Boolean) -> Unit,
-    onSetEnablePreciseExceptions: (Boolean) -> Unit,
-    onSetEnableTurboCd: (Boolean) -> Unit,
-    onSetEnableXaDecoding: (Boolean) -> Unit,
-    onSetEnableSpuReverb: (Boolean) -> Unit,
-    onSetEnableSpuThread: (Boolean) -> Unit,
     onSetAudioVolume: (Int) -> Unit,
     onSetAudioMuted: (Boolean) -> Unit,
-    onSetNeonEnhancement: (Boolean) -> Unit,
-    onSetNeonEnhancementSpeedHack: (Boolean) -> Unit,
-    onSetNeonEnhancementTexAdj: (Boolean) -> Unit,
-    onSetNeonInterlace: (Int) -> Unit,
-    onSetGpuThreadRendering: (Int) -> Unit,
-    onSetShowOverscan: (Boolean) -> Unit,
-    onSetScreenCentering: (Int) -> Unit,
-    onSetScreenCenteringX: (Int) -> Unit,
-    onSetScreenCenteringY: (Int) -> Unit,
-    onSetScreenCenteringHAdj: (Int) -> Unit,
-    onSetEnableFractionalFramerate: (Boolean) -> Unit,
-    onSetAltFlipMode: (Int) -> Unit,
-    onSetEnableRgb32Output: (Boolean) -> Unit,
-    onSetEnableScaleHires: (Boolean) -> Unit,
     onExit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
