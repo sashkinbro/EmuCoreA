@@ -32,6 +32,7 @@
 #include "Common/File/VFS/VFS.h"
 #include "Common/File/VFS/ZipFileReader.h"
 #include "Common/GPU/thin3d.h"
+#include "Common/GPU/Vulkan/VulkanContext.h"
 #include "Common/GPU/Vulkan/VulkanGraphicsContext.h"
 #include "Common/Log.h"
 #include "Common/Serialize/Serializer.h"
@@ -59,6 +60,8 @@
 
 #include "android/jni/AndroidAudio.h"
 #include "fd_file_loader.h"
+#include "native_vulkan_presentation.h"
+#include "shader_chain.h"
 
 #define LOG_TAG "EmuCoreA-Native"
 #define NLOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -415,6 +418,26 @@ bool AttachSurface(ANativeWindow *window, int width, int height) {
     // presets and the backbuffer event. Calling any of those again starts the
     // render threads twice, which terminates the process.
     if (g_graphicsContext->GetDrawContext() == nullptr) return false;
+
+#if defined(EMUCOREA_HAVE_LIBRASHADER)
+    // Install the shader-chain presentation before the first frame. It forwards
+    // AcquireNextImage/QueuePresent to the real swapchain and only adds the
+    // librashader pass when a preset is enabled, so it is also a safe
+    // pass-through while shader chains are off. The selection itself is stored
+    // in shader_chain and re-read every present, so enabling a preset later
+    // needs no reinstall.
+    auto *vulkan = static_cast<VulkanContext *>(g_graphicsContext->GetAPIContext());
+    if (vulkan != nullptr && vulkan->GetPresentation() == nullptr) {
+        auto presentation = std::make_unique<NativeVulkanPresentation>(vulkan);
+        if (presentation->Create(vulkan)) {
+            vulkan->SetPresentation(std::move(presentation));
+            NLOGI("Shader chain presentation installed");
+        } else {
+            NLOGW("Shader chain presentation unavailable; using the direct swapchain path");
+        }
+    }
+#endif
+
     g_renderReady = true;
     NLOGI("Surface attached %dx%d", width, height);
     return true;
@@ -805,13 +828,22 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCheats(JNIEnv *env, jclass, js
 JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeSetShaderEffect(JNIEnv *, jclass, jint effect) {
     g_shaderEffect = effect;
-    NLOGI("Shader effect stored: %d", g_shaderEffect);
+    // The actual chain is driven by the preset; the effect id only classifies
+    // the selected pack for logging and the built-in fallback.
+    emucorer::shader_chain::SetPreset(g_shaderPreset, !g_shaderPreset.empty());
+    NLOGI("Shader effect stored: %d (chain %s)", g_shaderEffect,
+          emucorer::shader_chain::IsEnabled() ? "enabled" : "disabled");
 }
 
 JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeSetShaderPreset(JNIEnv *env, jclass, jstring preset) {
     g_shaderPreset = ToString(env, preset);
-    NLOGI("Shader preset stored: %s", g_shaderPreset.c_str());
+    // Publishing a new generation makes the presentation rebuild its
+    // librashader chain on the render thread; an empty path disables it and
+    // turns the next present into a plain pass-through.
+    emucorer::shader_chain::SetPreset(g_shaderPreset, !g_shaderPreset.empty());
+    NLOGI("Shader preset stored: %s (chain %s)", g_shaderPreset.c_str(),
+          emucorer::shader_chain::IsEnabled() ? "enabled" : "disabled");
 }
 
 JNIEXPORT void JNICALL

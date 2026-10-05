@@ -1168,9 +1168,15 @@ if(ANDROID AND EMUCOREA_NATIVE)
 	# The achievements bridge is linked into the same library so it can read
 	# guest RAM straight from the core and reuse PPSSPP's ISO/PBP readers for
 	# RetroAchievements hashing.
+	#
+	# librashader (RetroArch .slangp chains) is optional: without cargo the
+	# presentation below falls back to a plain pass-through vkQueuePresentKHR.
+	add_subdirectory(${EMUCOREA_NATIVE_DIR}/third_party/librashader librashader)
 	add_library(emucorea_core SHARED
 		${EMUCOREA_NATIVE_DIR}/native_core.cpp
 		${EMUCOREA_NATIVE_DIR}/achievements_bridge.cpp
+		${EMUCOREA_NATIVE_DIR}/shader_chain.cpp
+		${EMUCOREA_NATIVE_DIR}/native_vulkan_presentation.cpp
 		android/jni/AndroidAudio.cpp
 		android/jni/OpenSLContext.cpp
 	)
@@ -1179,6 +1185,13 @@ if(ANDROID AND EMUCOREA_NATIVE)
 		${EMUCOREA_NATIVE_DIR}
 		${CMAKE_SOURCE_DIR}/ext/rcheevos/include
 	)
+	if(EMUCOREA_HAVE_LIBRASHADER)
+		target_link_libraries(emucorea_core librashader)
+		target_compile_definitions(emucorea_core PRIVATE EMUCOREA_HAVE_LIBRASHADER=1)
+		message(STATUS "EmuCoreA: librashader shader chains ENABLED")
+	else()
+		message(STATUS "EmuCoreA: librashader shader chains DISABLED (cargo missing)")
+	endif()
 	if(ARM64)
 		target_link_options(emucorea_core PRIVATE "-Wl,-z,max-page-size=16384")
 	endif()
