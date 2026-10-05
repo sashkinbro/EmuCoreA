@@ -86,6 +86,9 @@ bool g_renderReady = false;
 std::string g_pendingCheatFile;
 // Rewind history must be dropped on the frame thread (ring buffer + compressor).
 bool g_clearRewindRequested = false;
+// Frontend shader selection, stored for a future presentation hook.
+int g_shaderEffect = 0;
+std::string g_shaderPreset;
 std::string g_bootError;
 int g_displayWidth = 1080;
 int g_displayHeight = 1920;
@@ -738,6 +741,18 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCheats(JNIEnv *env, jclass, js
     }
     g_pendingCheatFile = cheatPath;
     ApplyPendingCheatsLocked();
+}
+
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetShaderEffect(JNIEnv *, jclass, jint effect) {
+    g_shaderEffect = effect;
+    NLOGI("Shader effect stored: %d", g_shaderEffect);
+}
+
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetShaderPreset(JNIEnv *env, jclass, jstring preset) {
+    g_shaderPreset = ToString(env, preset);
+    NLOGI("Shader preset stored: %s", g_shaderPreset.c_str());
 }
 
 JNIEXPORT void JNICALL

@@ -60,6 +60,10 @@ object NativePpsspp {
 
     external fun nativeRewindStep(): Boolean
 
+    external fun nativeSetShaderEffect(effect: Int)
+
+    external fun nativeSetShaderPreset(preset: String)
+
     external fun nativeSaveState(path: String): Boolean
 
     external fun nativeLoadState(path: String): Boolean

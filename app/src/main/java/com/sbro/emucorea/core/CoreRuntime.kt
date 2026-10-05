@@ -21,6 +21,7 @@ import kotlin.concurrent.thread
 import kotlin.concurrent.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import com.sbro.emucorea.data.RetroArchShaderEffects
 
 /**
  * Process-wide owner of the native PPSSPP session.
@@ -325,6 +326,8 @@ internal object CoreRuntime {
             forwardCoreOption("ppsspp_cpu_core", if (jit) "JIT" else "IR JIT")
         }
         forwardCoreOption("ppsspp_texture_filtering", pspTextureFilterName())
+        pushShaderEffect()
+        pushShaderPreset()
         settings["EmuCoreA/GS:RewindEnabled"]?.toBooleanStrictOrNull()?.let {
             NativePpsspp.nativeSetRewindEnabled(it)
         }
@@ -345,6 +348,28 @@ internal object CoreRuntime {
     private fun pushInternalResolution(preference: Float) {
         val scale = Math.round(preference).coerceIn(1, 10)
         NativePpsspp.nativeSetConfig("internal_resolution", scale.toString())
+    }
+
+    private fun currentShaderEffect(): Int {
+        val enabled = settings["EmuCoreA/GS:ShaderChainEnabled"]?.toBooleanStrictOrNull() == true
+        if (!enabled) return RetroArchShaderEffects.NONE
+        return RetroArchShaderEffects.classify(settings["EmuCoreA/GS:ShaderChainPreset"])
+    }
+
+    /**
+     * Stores the frontend's shader selection in the native core. The values are
+     * not rendered yet; a future presentation hook consumes them.
+     */
+    private fun pushShaderEffect() {
+        runCatching { NativePpsspp.nativeSetShaderEffect(currentShaderEffect()) }
+            .onFailure { Log.w(TAG, "Unable to apply shader effect", it) }
+    }
+
+    private fun pushShaderPreset() {
+        val enabled = settings["EmuCoreA/GS:ShaderChainEnabled"]?.toBooleanStrictOrNull() == true
+        val preset = settings["EmuCoreA/GS:ShaderChainPreset"].orEmpty()
+        runCatching { NativePpsspp.nativeSetShaderPreset(if (enabled) preset else "") }
+            .onFailure { Log.w(TAG, "Unable to apply shader preset", it) }
     }
 
     private fun pspTextureFilterName(): String {
@@ -764,6 +789,12 @@ internal object CoreRuntime {
      * understand are simply ignored.
      */
     private fun forwardCoreSetting(section: String, key: String, value: String) {
+        if (section == "EmuCoreA/GS" &&
+            (key == "ShaderChainEnabled" || key == "ShaderChainPreset")
+        ) {
+            pushShaderEffect()
+            pushShaderPreset()
+        }
         val bool = value.toBooleanStrictOrNull()
         val target: Pair<String, String>? = when ("$section:$key") {
             "EmuCoreA/GS:filter" -> "ppsspp_texture_filtering" to pspTextureFilterName()
