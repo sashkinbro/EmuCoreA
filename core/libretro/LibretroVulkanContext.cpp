@@ -193,8 +193,9 @@ void LibretroVulkanContext::CreateDrawContext() {
 
    bool useMultiThreading = g_Config.bRenderMultiThreading;
 #if defined(__ANDROID__)
-   // The frontend consumes this frame immediately in SwapBuffers(). Submitting
-   // on this thread avoids waking a worker only to wait for it again.
+   // The frontend consumes this frame immediately in SwapBuffers(), so a
+   // separate render thread only adds a handoff + condvar wait per frame.
+   // Measured on the RG556: single-threaded was equal or faster.
    useMultiThreading = false;
 #endif
    if (g_Config.iInflightFrames == 1) {

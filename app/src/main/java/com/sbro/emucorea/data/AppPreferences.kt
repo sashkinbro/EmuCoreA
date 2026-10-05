@@ -396,7 +396,7 @@ class AppPreferences(private val context: Context) {
         private const val PREVIOUS_DEFAULT_CENTER_OFFSET_Y = 10f
         const val DEFAULT_CENTER_OFFSET_X = 0f
         const val DEFAULT_CENTER_OFFSET_Y = 10f
-        const val DEFAULT_STICK_SENSITIVITY = 100
+        const val DEFAULT_STICK_SENSITIVITY = 110
         const val OVERLAY_CONTROL_SCALE_MIN = 50
         const val OVERLAY_CONTROL_SCALE_MAX = 500
         const val OVERLAY_CONTROL_SCALE_DEFAULT = 100
@@ -411,7 +411,7 @@ class AppPreferences(private val context: Context) {
         const val TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX = 200
         const val DEFAULT_TOUCHSCREEN_RIGHT_STICK_SENSITIVITY = 100
         const val DEFAULT_GAMEPAD_STICK_DEADZONE = 15
-        const val DEFAULT_GAMEPAD_STICK_SENSITIVITY = 100
+        const val DEFAULT_GAMEPAD_STICK_SENSITIVITY = 110
         const val DEFAULT_FLOATING_QUICK_SAVE_POSITION_X = 0.88f
         const val DEFAULT_FLOATING_QUICK_SAVE_POSITION_Y = 0.42f
         const val DEFAULT_FLOATING_QUICK_LOAD_POSITION_X = 0.88f

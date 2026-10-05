@@ -1860,7 +1860,9 @@ Java_com_sbro_emucorea_core_NativeCoreBridge_startAudioOutput(JNIEnv*, jobject, 
         const int32_t actual = AAudioStream_getBufferSizeInFrames(output->stream);
         if (actual > 0) output->device_buffer_frames = actual;
         UpdatePacingTarget(output);
-        if (set_result != AAUDIO_OK) {
+        // On success AAudio returns the actual buffer size, not AAUDIO_OK (0);
+        // only a negative value is an error.
+        if (set_result < 0) {
             LOGW("AAudio setBufferSizeInFrames(%d) failed: %d", desired, static_cast<int>(set_result));
         }
     }

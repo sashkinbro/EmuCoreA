@@ -280,16 +280,6 @@ object PpssppCoreOptions {
             defaultValue = "disabled",
         ),
         Option(
-            key = "ppsspp_frameskiptype",
-            label = "Frameskip Type",
-            category = "video",
-            choices = listOf(
-                Choice("Number of frames", "Number of frames"),
-                Choice("Percent of FPS", "Percent of FPS"),
-            ),
-            defaultValue = "Number of frames",
-        ),
-        Option(
             key = "ppsspp_auto_frameskip",
             label = "Auto Frameskip",
             category = "video",
@@ -450,16 +440,6 @@ object PpssppCoreOptions {
             defaultValue = "disabled",
         ),
         Option(
-            key = "ppsspp_lazy_texture_caching",
-            label = "Lazy Texture Caching (Speedup)",
-            category = "hacks",
-            choices = listOf(
-                Choice("disabled", "disabled"),
-                Choice("enabled", "enabled"),
-            ),
-            defaultValue = "disabled",
-        ),
-        Option(
             key = "ppsspp_spline_quality",
             label = "Spline/Bezier Curves Quality",
             category = "hacks",
@@ -492,26 +472,6 @@ object PpssppCoreOptions {
                 Choice("enabled", "enabled"),
             ),
             defaultValue = "enabled",
-        ),
-        Option(
-            key = "ppsspp_software_skinning",
-            label = "Software Skinning",
-            category = "video",
-            choices = listOf(
-                Choice("disabled", "disabled"),
-                Choice("enabled", "enabled"),
-            ),
-            defaultValue = "enabled",
-        ),
-        Option(
-            key = "ppsspp_hardware_tesselation",
-            label = "Hardware Tesselation",
-            category = "video",
-            choices = listOf(
-                Choice("disabled", "disabled"),
-                Choice("enabled", "enabled"),
-            ),
-            defaultValue = "disabled",
         ),
         Option(
             key = "ppsspp_texture_scaling_type",
@@ -1364,7 +1324,6 @@ object PpssppCoreOptions {
     /** Graphics section of the in-game menu. */
     fun gameMenuGraphicsOptions(): List<Option> = listOfNotNull(
         option("ppsspp_frameskip"),
-        option("ppsspp_frameskiptype"),
         option("ppsspp_auto_frameskip"),
         option("ppsspp_texture_scaling_type"),
         option("ppsspp_texture_scaling_level"),
@@ -1374,11 +1333,8 @@ object PpssppCoreOptions {
         option("ppsspp_smart_2d_texture_filtering"),
         option("ppsspp_texture_replacement"),
         option("ppsspp_gpu_hardware_transform"),
-        option("ppsspp_software_skinning"),
-        option("ppsspp_hardware_tesselation"),
         option("ppsspp_skip_buffer_effects"),
         option("ppsspp_skip_gpu_readbacks"),
-        option("ppsspp_lazy_texture_caching"),
         option("ppsspp_spline_quality"),
         option("ppsspp_lower_resolution_for_effects"),
         option("ppsspp_frame_duplication"),

@@ -883,6 +883,13 @@ internal object CoreRuntime {
         var contentFrameRate = VBLANK_RATE_HZ
         var lastEmulatedUs = 0L
         var metricsEmulatedUs = 0L
+        // Debug-only diagnostics that do not depend on the performance overlay:
+        // fps/speed plus the audio queue and per-interval underrun padding.
+        var diagStartNanos = System.nanoTime()
+        var diagFrames = 0
+        var diagEmulatedUs = 0L
+        var diagMaxCoreNanos = 0L
+        var diagPrevSilence = 0L
         try {
             while (running) {
                 // Owns the thread-affine EGL context, so any queued save/load
@@ -1025,6 +1032,26 @@ internal object CoreRuntime {
                 metricsEmulatedUs += emulatedStepUs
                 val now = frameStartNanos
                 if (!performanceMetricsEnabled) {
+                    diagFrames++
+                    diagEmulatedUs += emulatedStepUs
+                    diagMaxCoreNanos = maxOf(diagMaxCoreNanos, coreNanos)
+                    if (com.sbro.emucorea.BuildConfig.DEBUG && now - diagStartNanos >= 2_000_000_000L) {
+                        val elapsed = now - diagStartNanos
+                        val stats = output.stats()
+                        val silenceTotal = stats?.getOrNull(7) ?: 0L
+                        Log.d(TAG, "diag fps=%.1f speed=%.1f%% queue=%d silence=%d maxCore=%.1fms".format(
+                            Locale.US,
+                            diagFrames * 1_000_000_000.0 / elapsed,
+                            diagEmulatedUs * 100_000.0 / elapsed,
+                            output.bufferedFrames(),
+                            silenceTotal - diagPrevSilence,
+                            diagMaxCoreNanos / 1_000_000.0))
+                        diagPrevSilence = silenceTotal
+                        diagStartNanos = now
+                        diagFrames = 0
+                        diagEmulatedUs = 0L
+                        diagMaxCoreNanos = 0L
+                    }
                     metricsStartNanos = now
                     metricsFrames = 0
                     metricsFrameTotalNanos = 0L

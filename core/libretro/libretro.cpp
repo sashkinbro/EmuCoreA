@@ -1975,14 +1975,19 @@ static int ReadGameAsset(FileLoader *source, int asset, uint8_t *out, size_t cap
     IdentifiedFileType type;
     std::unique_ptr<FileLoader> loader(ResolveFileLoaderTarget(source, &type, &error));
     if (!loader || !loader->Exists()) return 0;
-    PBPReader pbp(loader.get());
-    if (pbp.IsValid()) {
-        const auto part = asset == 0 ? PBP_PARAM_SFO : PBP_ICON0_PNG;
-        if (pbp.GetSubFileSize(part) > capacity) return 0;
-        std::vector<u8> bytes;
-        if (!pbp.GetSubFile(part, &bytes) || bytes.empty() || bytes.size() > capacity) return 0;
-        memcpy(out, bytes.data(), bytes.size());
-        return (int)bytes.size();
+    // Only PBP/ELF containers can carry PARAM.SFO/ICON0. Building a PBPReader
+    // for an ISO logs a scary (but harmless) magic-number error every query.
+    if (type == IdentifiedFileType::PSP_PBP || type == IdentifiedFileType::PSP_PS1_PBP ||
+        type == IdentifiedFileType::PSP_ELF) {
+        PBPReader pbp(loader.get());
+        if (pbp.IsValid()) {
+            const auto part = asset == 0 ? PBP_PARAM_SFO : PBP_ICON0_PNG;
+            if (pbp.GetSubFileSize(part) > capacity) return 0;
+            std::vector<u8> bytes;
+            if (!pbp.GetSubFile(part, &bytes) || bytes.empty() || bytes.size() > capacity) return 0;
+            memcpy(out, bytes.data(), bytes.size());
+            return (int)bytes.size();
+        }
     }
     if (type != IdentifiedFileType::PSP_ISO && type != IdentifiedFileType::PSP_ISO_NP) return 0;
     std::shared_ptr<BlockDevice> blocks(ConstructBlockDevice(loader.get(), &error));
