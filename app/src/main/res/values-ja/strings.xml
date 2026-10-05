@@ -181,7 +181,7 @@
     <string name="settings_updates_parallel_download">ダウンロード</string>
     <string name="settings_updates_parallel_unavailable">このリリースには別のAPKは用意されていません。</string>
     <string name="common_close">閉じる</string>
-    <string name="settings_upscale">画質</string>
+    <string name="settings_upscale">レンダリング解像度</string>
     <string name="settings_upscale_native">ネイティブ</string>
     <string name="settings_aspect_ratio">アスペクト比</string>
     <string name="settings_aspect_ratio_auto">自動</string>
@@ -2001,7 +2001,8 @@
     <string name="settings_rewind">巻き戻し</string>
     <string name="settings_rewind_desc">巻き戻しボタンを長押しすると前に戻ります。数秒ごとに完全なステートを保存するため、CPUを余分に使用します。</string>
     <string name="settings_target_fps">目標フレームレート</string>
-    <string name="settings_target_fps_desc">自動ではPPSSPPが報告するフレームレートを使用します。手動の値はエミュレーション速度を設定しますが、ゲームの描画枚数は少ない場合があります。</string>
+    <string name="settings_fps_value">%1$d fps</string>
+    <string name="settings_target_fps_desc">Auto はゲーム本来のフレームレートを維持します。値を下げるとエミュレーション速度が制限され、スローモーションになります。フルスピードのまま描画フレームを減らすにはフレームスキップを使用してください。</string>
     <string name="settings_vertical_refresh_ntsc">NTSC リフレッシュレート</string>
     <string name="settings_vertical_refresh_pal">PAL リフレッシュレート</string>
     <string name="settings_help_vertical_refresh">この地域のエミュレートされた垂直リフレッシュレートを上書きします。NTSC の音声が割れる、または PAL の映像が途切れる場合に少し調整してください。既定値はコンソール標準に従います。</string>

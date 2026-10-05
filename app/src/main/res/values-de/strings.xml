@@ -123,7 +123,7 @@
     <string name="settings_renderer_vulkan">Vulkan</string>
     <string name="settings_renderer_opengl">OpenGL</string>
     <string name="settings_renderer_software">Software</string>
-    <string name="settings_upscale">Bildqualität</string>
+    <string name="settings_upscale">Renderauflösung</string>
     <string name="settings_upscale_native">Nativ</string>
     <string name="settings_aspect_ratio">Seitenverhältnis</string>
     <string name="settings_aspect_ratio_auto">Auto</string>
@@ -2004,7 +2004,8 @@
     <string name="settings_rewind">Zurückspulen</string>
     <string name="settings_rewind_desc">Zum Zurückspulen die Taste gedrückt halten. Alle paar Sekunden wird ein kompletter Zustand gespeichert, was zusätzliche CPU kostet.</string>
     <string name="settings_target_fps">Ziel-Bildrate</string>
-    <string name="settings_target_fps_desc">Automatisch verwendet die von PPSSPP gemeldete Bildrate. Ein manueller Wert bestimmt das Emulationstempo; ein Spiel kann weniger Bilder darstellen.</string>
+    <string name="settings_fps_value">%1$d fps</string>
+    <string name="settings_target_fps_desc">Auto behält die Bildrate des Spiels bei. Ein niedrigerer Wert begrenzt die Emulationsgeschwindigkeit (Zeitlupe). Für volle Geschwindigkeit mit weniger gezeichneten Bildern Frameskip verwenden.</string>
     <string name="settings_vertical_refresh_ntsc">NTSC-Bildwiederholrate</string>
     <string name="settings_vertical_refresh_pal">PAL-Bildwiederholrate</string>
     <string name="settings_help_vertical_refresh">Überschreibt die emulierte vertikale Bildwiederholrate für diese Region. Passe sie leicht an, wenn NTSC-Audio knackt oder PAL-Video ruckelt; der Standardwert entspricht der Konsolennorm.</string>

@@ -123,7 +123,7 @@
     <string name="settings_renderer_vulkan">Vulkan</string>
     <string name="settings_renderer_opengl">OpenGL</string>
     <string name="settings_renderer_software">Software</string>
-    <string name="settings_upscale">Качество изображения</string>
+    <string name="settings_upscale">Разрешение рендеринга</string>
     <string name="settings_upscale_native">Родное</string>
     <string name="settings_aspect_ratio">Соотношение сторон</string>
     <string name="settings_aspect_ratio_auto">Авто</string>
@@ -2006,7 +2006,8 @@
     <string name="settings_rewind">Перемотка назад</string>
     <string name="settings_rewind_desc">Удерживайте кнопку перемотки, чтобы вернуться назад. Каждые несколько секунд сохраняется полный снимок состояния, что нагружает CPU.</string>
     <string name="settings_target_fps">Целевая частота кадров</string>
-    <string name="settings_target_fps_desc">«Авто» использует частоту кадров, сообщаемую PPSSPP. Ручное значение задаёт темп эмуляции; игра может выводить меньше кадров.</string>
+    <string name="settings_fps_value">%1$d кадр/с</string>
+    <string name="settings_target_fps_desc">Auto сохраняет собственную частоту игры. Меньшее значение ограничивает скорость эмуляции — игра замедляется. Для полной скорости с меньшим числом отрисованных кадров включите пропуск кадров.</string>
     <string name="settings_vertical_refresh_ntsc">Частота обновления NTSC</string>
     <string name="settings_vertical_refresh_pal">Частота обновления PAL</string>
     <string name="settings_help_vertical_refresh">Переопределяет эмулируемую вертикальную частоту обновления для этого региона. Слегка скорректируйте, если звук в NTSC-играх трещит или видео PAL дёргается; значение по умолчанию соответствует стандарту консоли.</string>

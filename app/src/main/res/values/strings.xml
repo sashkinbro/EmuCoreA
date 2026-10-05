@@ -284,7 +284,7 @@
     <string name="settings_updates_parallel_download">Download</string>
     <string name="settings_updates_parallel_unavailable">Separate APK is not available for this release.</string>
     <string name="common_close">Close</string>
-    <string name="settings_upscale">Image Quality</string>
+    <string name="settings_upscale">Rendering resolution</string>
     <string name="settings_upscale_native">Native</string>
     <string name="settings_aspect_ratio">Aspect Ratio</string>
     <string name="settings_aspect_ratio_auto">Auto</string>
@@ -2031,7 +2031,8 @@
     <string name="settings_rewind">Rewind (hold)</string>
     <string name="settings_rewind_desc">Hold the rewind control to step back. Saves a full state snapshot every few seconds, which costs extra CPU.</string>
     <string name="settings_target_fps">Target frame rate</string>
-    <string name="settings_target_fps_desc">Auto uses the frame rate reported by PPSSPP. Manual values set the emulation rate; a game may render fewer frames.</string>
+    <string name="settings_fps_value">%1$d fps</string>
+    <string name="settings_target_fps_desc">Auto keeps the game\'s own frame rate. A lower value limits the emulation rate, so the game runs slower; for full speed with fewer drawn frames use Frameskip.</string>
     <string name="settings_vertical_refresh_ntsc">NTSC refresh rate</string>
     <string name="settings_vertical_refresh_pal">PAL refresh rate</string>
     <string name="settings_help_vertical_refresh">Overrides the emulated vertical refresh rate for this region. Adjust it slightly if NTSC audio crackles or PAL video stutters; the default follows the console standard.</string>

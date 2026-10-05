@@ -1521,6 +1521,34 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         }
         return;
     }
+    if (key == "aspect_ratio") {
+        // Values come from the app's aspect selector. PPSSPP stores the ratio
+        // relative to the PSP's native 480:272 pixel ratio, so 16:9 is 1.0.
+        constexpr float kNativeAspect = 480.0f / 272.0f;
+        float ratio = 1.0f;
+        bool stretch = false;
+        if (EqualsIgnoreCase(value, "Stretch")) {
+            stretch = true;
+        } else if (EqualsIgnoreCase(value, "4:3")) {
+            ratio = (4.0f / 3.0f) / kNativeAspect;
+        } else if (EqualsIgnoreCase(value, "10:7")) {
+            ratio = (10.0f / 7.0f) / kNativeAspect;
+        }
+        auto applyLayout = [&](DisplayLayoutConfig &layout) {
+            layout.bDisplayStretch = stretch;
+            layout.fDisplayAspectRatio = ratio;
+        };
+        applyLayout(g_Config.displayLayoutLandscape);
+        applyLayout(g_Config.displayLayoutPortrait);
+        if (PSP_IsInited() && gpu != nullptr) {
+            gpu->NotifyDisplayResized();
+            const DisplayLayoutConfig &layout =
+                g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation());
+            gpu->NotifyRenderResized(layout);
+        }
+        NLOGI("Aspect ratio: %s (%.3f, stretch=%d)", value.c_str(), ratio, stretch ? 1 : 0);
+        return;
+    }
     if (key == "audio_buffer_ms") {
         if (ParseIntInRange(value, 10, 500, &number)) {
             // OpenSL runs one callback per buffer; cap it so latency stays sane
@@ -1568,8 +1596,20 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         return;
     }
     if (key == "ppsspp_locked_cpu_speed") {
-        if (EqualsIgnoreCase(value, "disabled")) g_Config.iLockedCPUSpeed = 0;
-        else if (ParseIntInRange(value, 1, 1000, &number)) g_Config.iLockedCPUSpeed = number;
+        if (EqualsIgnoreCase(value, "disabled")) {
+            g_Config.iLockedCPUSpeed = 0;
+        } else {
+            // Choices are "222MHz" ... "999MHz"; strip the unit before parsing.
+            std::string numeric = value;
+            if (numeric.size() > 3 &&
+                EqualsIgnoreCase(numeric.substr(numeric.size() - 3), "mhz")) {
+                numeric.resize(numeric.size() - 3);
+            }
+            if (ParseIntInRange(numeric, 1, 1000, &number)) {
+                g_Config.iLockedCPUSpeed = number;
+                NLOGI("Locked CPU speed: %d MHz", number);
+            }
+        }
         return;
     }
     if (key == "ppsspp_memstick_inserted") {

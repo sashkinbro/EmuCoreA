@@ -275,7 +275,7 @@
     <string name="settings_updates_parallel_download">دانلود</string>
     <string name="settings_updates_parallel_unavailable">APK مجزا برای این نسخه در دسترس نیست.</string>
     <string name="common_close">بستن</string>
-    <string name="settings_upscale">کیفیت تصویر</string>
+    <string name="settings_upscale">دقت رندر</string>
     <string name="settings_upscale_native">بومی (Native)</string>
     <string name="settings_aspect_ratio">نسبت تصویر</string>
     <string name="settings_aspect_ratio_auto">خودکار</string>
@@ -2017,7 +2017,8 @@
     <string name="settings_rewind">عقب‌گرد</string>
     <string name="settings_rewind_desc">برای بازگشت، دکمه عقب‌گرد را نگه دارید. هر چند ثانیه یک تصویر کامل از وضعیت ذخیره می‌شود که پردازنده بیشتری مصرف می‌کند.</string>
     <string name="settings_target_fps">نرخ فریم هدف</string>
-    <string name="settings_target_fps_desc">حالت خودکار از نرخ فریم گزارش‌شده توسط PPSSPP استفاده می‌کند. مقدار دستی سرعت شبیه‌سازی را تعیین می‌کند؛ بازی ممکن است فریم‌های کمتری نمایش دهد.</string>
+    <string name="settings_fps_value">%1$d فریم/ث</string>
+    <string name="settings_target_fps_desc">حالت خودکار نرخ فریم خود بازی را حفظ می‌کند. مقدار کمتر سرعت شبیه‌سازی را محدود می‌کند (اسلوموشن). برای سرعت کامل با رسم فریم‌های کمتر از پرش فریم استفاده کنید.</string>
     <string name="settings_vertical_refresh_ntsc">نرخ تازه‌سازی NTSC</string>
     <string name="settings_vertical_refresh_pal">نرخ تازه‌سازی PAL</string>
     <string name="settings_help_vertical_refresh">نرخ تازه‌سازی عمودی شبیه‌سازی‌شده را برای این منطقه بازنویسی می‌کند. اگر صدای NTSC خش می‌اندازد یا تصویر PAL تکه‌تکه می‌شود، آن را کمی تنظیم کنید؛ مقدار پیش‌فرض از استاندارد کنسول پیروی می‌کند.</string>

@@ -181,7 +181,7 @@
     <string name="settings_updates_parallel_download">다운로드</string>
     <string name="settings_updates_parallel_unavailable">이 릴리스에는 별도의 APK가 제공되지 않습니다.</string>
     <string name="common_close">닫기</string>
-    <string name="settings_upscale">이미지 품질</string>
+    <string name="settings_upscale">렌더링 해상도</string>
     <string name="settings_upscale_native">네이티브 (Native)</string>
     <string name="settings_aspect_ratio">화면 비율</string>
     <string name="settings_aspect_ratio_auto">자동</string>
@@ -2001,7 +2001,8 @@
     <string name="settings_rewind">되감기</string>
     <string name="settings_rewind_desc">되감기 버튼을 길게 누르면 뒤로 이동합니다. 몇 초마다 전체 상태 스냅샷을 저장하므로 CPU를 추가로 사용합니다.</string>
     <string name="settings_target_fps">목표 프레임 속도</string>
-    <string name="settings_target_fps_desc">자동은 PPSSPP가 보고한 프레임 속도를 사용합니다. 수동 값은 에뮬레이션 속도를 정하며, 게임은 더 적은 프레임을 표시할 수 있습니다.</string>
+    <string name="settings_fps_value">%1$d fps</string>
+    <string name="settings_target_fps_desc">Auto는 게임 고유의 프레임 레이트를 유지합니다. 값을 낮추면 에뮬레이션 속도가 제한되어 느려집니다. 최대 속도로 그리는 프레임 수를 줄이려면 프레임 스킵을 사용하세요.</string>
     <string name="settings_vertical_refresh_ntsc">NTSC 주사율</string>
     <string name="settings_vertical_refresh_pal">PAL 주사율</string>
     <string name="settings_help_vertical_refresh">이 지역의 에뮬레이션된 수직 주사율을 재정의합니다. NTSC 오디오가 지직거리거나 PAL 영상이 끊기면 조금 조정하세요. 기본값은 콘솔 표준을 따릅니다.</string>

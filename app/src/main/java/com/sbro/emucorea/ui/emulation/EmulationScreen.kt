@@ -210,6 +210,7 @@ import com.sbro.emucorea.ui.settings.ControlsEditorScreen
 import com.sbro.emucorea.ui.settings.toControlsEditorState
 import com.sbro.emucorea.core.PpssppCoreOptions
 import com.sbro.emucorea.core.RendererDefaults
+import com.sbro.emucorea.core.TARGET_FPS_CHOICES
 import com.sbro.emucorea.core.ppssppCoreOptionHelpRes
 import com.sbro.emucorea.core.PpssppCoreOptionLocalization
 import com.sbro.emucorea.data.AchievementItem
@@ -3099,15 +3100,6 @@ private fun EmulationSidebarMenu(
                             }
                         }
 
-                        MenuButton(
-                            icon = Icons.Rounded.Album,
-                            text = stringResource(R.string.emulation_swap_disc),
-                            onClick = onSwapDisc,
-                            enabled = !uiState.isActionInProgress,
-                            showProgress = uiState.actionLabel == "swapping_disc",
-                            containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.34f)
-                        )
-
                         val visibleSessionSections = gameMenuSectionsForTab(
                             GameMenuTabId.SESSION,
                             uiState.gameMenuSectionOrder
@@ -3677,13 +3669,20 @@ private fun EmulationSidebarMenu(
 
                         LiveSelectionRow(
                             title = stringResource(R.string.settings_target_fps),
-                            options = listOf(
-                                LiveSelectionOption(0, stringResource(R.string.settings_aspect_ratio_auto)),
-                                LiveSelectionOption(50, "50 Hz"),
-                                LiveSelectionOption(60, "60 Hz")
-                            ),
+                            options = TARGET_FPS_CHOICES.map { fps ->
+                                LiveSelectionOption(
+                                    fps,
+                                    if (fps == 0) {
+                                        stringResource(R.string.settings_aspect_ratio_auto)
+                                    } else {
+                                        stringResource(R.string.settings_fps_value, fps)
+                                    }
+                                )
+                            },
                             currentValue = uiState.targetFps,
                             onValueChange = onSetTargetFps,
+                            allowWrap = false,
+                            horizontalScrolling = true,
                             helpText = stringResource(R.string.settings_target_fps_desc),
                             onResetToDefault = { onSetTargetFps(globalDefaults.targetFps) }
                         )
@@ -3887,19 +3886,6 @@ private fun EmulationSidebarMenu(
                             allowWrap = false,
                             helpText = stringResource(R.string.settings_help_aspect_ratio),
                             onResetToDefault = { onSetAspectRatio(globalDefaults.aspectRatio) }
-                        )
-
-                        LiveSelectionRow(
-                            title = stringResource(R.string.settings_display_crop),
-                            options = DisplayCrop.PRESET_PIXELS.map {
-                                LiveSelectionOption(it, stringResource(R.string.settings_display_crop_pixels, it))
-                            },
-                            currentValue = uiState.displayCrop.presetPixels,
-                            onValueChange = { onSetDisplayCrop(DisplayCrop.uniform(it)) },
-                            allowWrap = false,
-                            horizontalScrolling = true,
-                            helpText = stringResource(R.string.settings_display_crop_desc),
-                            onResetToDefault = { onSetDisplayCrop(globalDefaults.displayCrop) }
                         )
 
                         CoreOptionRows(

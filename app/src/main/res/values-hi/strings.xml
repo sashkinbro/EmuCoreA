@@ -150,7 +150,7 @@
     <string name="settings_renderer_vulkan">Vulkan</string>
     <string name="settings_renderer_opengl">OpenGL</string>
     <string name="settings_renderer_software">सॉफ़्टवेयर</string>
-    <string name="settings_upscale">छवि गुणवत्ता (Image Quality)</string>
+    <string name="settings_upscale">रेंडरिंग रिज़ॉल्यूशन</string>
     <string name="settings_upscale_native">मूल (Native)</string>
     <string name="settings_aspect_ratio">आस्पेक्ट रेश्यो</string>
     <string name="settings_aspect_ratio_auto">स्वतः (Auto)</string>
@@ -2002,7 +2002,8 @@
     <string name="settings_rewind">रीवाइंड</string>
     <string name="settings_rewind_desc">पीछे जाने के लिए रीवाइंड नियंत्रण दबाए रखें। हर कुछ सेकंड में पूरा स्टेट स्नैपशॉट सहेजा जाता है, जिससे अतिरिक्त CPU लगता है।</string>
     <string name="settings_target_fps">लक्ष्य फ़्रेम दर</string>
-    <string name="settings_target_fps_desc">ऑटो PPSSPP द्वारा बताई गई फ़्रेम दर का उपयोग करता है। मैन्युअल मान एमुलेशन की गति तय करता है; गेम कम फ़्रेम दिखा सकता है।</string>
+    <string name="settings_fps_value">%1$d fps</string>
+    <string name="settings_target_fps_desc">Auto गेम की अपनी फ़्रेम दर रखता है। कम मान एमुलेशन गति को सीमित करता है (धीमी गति)। पूरी गति के साथ कम फ़्रेम बनाने के लिए फ़्रेम स्किप इस्तेमाल करें।</string>
     <string name="settings_vertical_refresh_ntsc">NTSC रिफ्रेश दर</string>
     <string name="settings_vertical_refresh_pal">PAL रिफ्रेश दर</string>
     <string name="settings_help_vertical_refresh">इस क्षेत्र के लिए एम्युलेटेड वर्टिकल रिफ्रेश दर को बदलता है। अगर NTSC ऑडियो में चटकनी आती है या PAL वीडियो अटकता है तो इसे हल्का समायोजित करें; डिफ़ॉल्ट मान कंसोल मानक के अनुसार है।</string>

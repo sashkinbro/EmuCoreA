@@ -123,7 +123,7 @@
     <string name="settings_renderer_vulkan">Vulkan</string>
     <string name="settings_renderer_opengl">OpenGL</string>
     <string name="settings_renderer_software">軟體</string>
-    <string name="settings_upscale">影像品質</string>
+    <string name="settings_upscale">渲染分辨率</string>
     <string name="settings_upscale_native">原生</string>
     <string name="settings_aspect_ratio">螢幕比例</string>
     <string name="settings_aspect_ratio_auto">自動</string>
@@ -2003,7 +2003,8 @@
     <string name="settings_rewind">倒帶</string>
     <string name="settings_rewind_desc">長按倒帶控制即可回退。每隔幾秒儲存一次完整狀態快照，會額外耗用 CPU。</string>
     <string name="settings_target_fps">目標幀率</string>
-    <string name="settings_target_fps_desc">自動使用 PPSSPP 回報的影格率。手動數值設定模擬速度；遊戲實際顯示的影格可能較少。</string>
+    <string name="settings_fps_value">%1$d fps</string>
+    <string name="settings_target_fps_desc">Auto 保持游戏自身的帧率。较低的值会限制模拟速度（慢动作）。要在全速下减少绘制帧数，请使用跳帧。</string>
     <string name="settings_vertical_refresh_ntsc">NTSC 刷新率</string>
     <string name="settings_vertical_refresh_pal">PAL 刷新率</string>
     <string name="settings_help_vertical_refresh">覆盖该地区的模拟垂直刷新率。如果 NTSC 音频出现爆音或 PAL 视频卡顿，可稍作调整；默认值遵循主机标准。</string>

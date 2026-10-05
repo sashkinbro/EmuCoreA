@@ -279,7 +279,7 @@
     <string name="settings_updates_parallel_download">Pobierz</string>
     <string name="settings_updates_parallel_unavailable">Oddzielne APK nie jest dostępne dla tego wydania.</string>
     <string name="common_close">Zamknij</string>
-    <string name="settings_upscale">Jakość obrazu</string>
+    <string name="settings_upscale">Rozdzielczość renderowania</string>
     <string name="settings_upscale_native">Natywna</string>
     <string name="settings_aspect_ratio">Proporcje obrazu</string>
     <string name="settings_aspect_ratio_auto">Auto</string>
@@ -2023,7 +2023,8 @@
     <string name="settings_rewind">Przewijanie</string>
     <string name="settings_rewind_desc">Przytrzymaj przewijanie, aby cofnąć. Co kilka sekund zapisywany jest pełny stan, co zużywa dodatkowy CPU.</string>
     <string name="settings_target_fps">Docelowa liczba klatek</string>
-    <string name="settings_target_fps_desc">Auto używa liczby klatek zgłaszanej przez PPSSPP. Wartość ręczna ustala tempo emulacji; gra może wyświetlać mniej klatek.</string>
+    <string name="settings_fps_value">%1$d kl./s</string>
+    <string name="settings_target_fps_desc">Auto zachowuje własne tempo gry. Niższa wartość ogranicza szybkość emulacji (zwolnione tempo). Aby uzyskać pełną szybkość z mniejszą liczbą rysowanych klatek, użyj pomijania klatek.</string>
     <string name="settings_vertical_refresh_ntsc">Częstotliwość odświeżania NTSC</string>
     <string name="settings_vertical_refresh_pal">Częstotliwość odświeżania PAL</string>
     <string name="settings_help_vertical_refresh">Zastępuje emulowaną pionową częstotliwość odświeżania dla tego regionu. Dostosuj nieznacznie, jeśli dźwięk NTSC trzeszczy lub obraz PAL przycina; domyślna wartość odpowiada standardowi konsoli.</string>

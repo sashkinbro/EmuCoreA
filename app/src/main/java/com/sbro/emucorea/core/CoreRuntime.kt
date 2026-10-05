@@ -412,6 +412,13 @@ internal object CoreRuntime {
         // Internal resolution is owned by the app's per-game upscale setting, so
         // re-assert it after the persisted store so a stale entry cannot shadow it.
         upscale?.let(::pushInternalResolution)
+        // Aspect ratio is also owned by the app (the core has no option for it).
+        settings["EmuCoreA/GS:AspectRatio"]?.let {
+            NativePpsspp.nativeSetConfig("aspect_ratio", it)
+        }
+        settings["EmuCoreA/Display:AspectRatio"]?.toIntOrNull()?.let {
+            NativePpsspp.nativeSetConfig("aspect_ratio", aspectRatioValue(it))
+        }
     }
 
     private fun pushInternalResolution(preference: Float) {
@@ -539,8 +546,26 @@ internal object CoreRuntime {
         }
     }
 
+    @Volatile private var audioOutputLatencyMs = AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT
+    @Volatile private var audioLowLatency = false
+
     /** OpenSL buffer size target in milliseconds. */
     fun setAudioBufferMs(milliseconds: Int) {
+        audioOutputLatencyMs = AudioDefaults.coerceOutputLatencyMs(milliseconds)
+        pushAudioBuffer()
+    }
+
+    /**
+     * "Minimal output latency" trades buffer size for responsiveness: when on,
+     * the OpenSL callback uses a small buffer so input lag is lower.
+     */
+    fun setAudioLowLatency(enabled: Boolean) {
+        audioLowLatency = enabled
+        pushAudioBuffer()
+    }
+
+    private fun pushAudioBuffer() {
+        val milliseconds = if (audioLowLatency) 20 else audioOutputLatencyMs
         NativePpsspp.nativeSetConfig("audio_buffer_ms", milliseconds.toString())
     }
 
@@ -556,10 +581,20 @@ internal object CoreRuntime {
         forwardCoreOption(key, value)
     }
 
-    /** Persists the app's aspect-ratio selection (0..4). */
+    /** Persists the app's aspect-ratio selection (0..4) and applies it. */
     fun setDisplayAspectRatio(type: Int) {
         val normalized = if (type in ASPECT_RATIO_STRETCH..ASPECT_RATIO_CUSTOM) type else ASPECT_RATIO_AUTO
         settings["EmuCoreA/Display:AspectRatio"] = normalized.toString()
+        runCatching { NativePpsspp.nativeSetConfig("aspect_ratio", aspectRatioValue(normalized)) }
+            .onFailure { Log.w(TAG, "Unable to apply the aspect ratio", it) }
+    }
+
+    private fun aspectRatioValue(type: Int): String = when (type) {
+        ASPECT_RATIO_STRETCH -> "Stretch"
+        2 -> "4:3"
+        3 -> "16:9"
+        ASPECT_RATIO_CUSTOM -> "10:7"
+        else -> "Auto 4:3/3:2"
     }
 
     fun pause() = lifecycleLock.withLock {
@@ -964,6 +999,14 @@ internal object CoreRuntime {
         if (section == "EmuCoreA/GS" && (key == "FrameLimitEnable" || key == "TargetFps")) {
             settings["$section:$key"] = value
             pushFpsLimit()
+            return true
+        }
+        if ((section == "EmuCoreA" || section == "EmuCoreA/GS" || section == "EmuCoreA/Display") &&
+            key == "AspectRatio"
+        ) {
+            settings["$section:$key"] = value
+            val nativeValue = value.toIntOrNull()?.let(::aspectRatioValue) ?: value
+            NativePpsspp.nativeSetConfig("aspect_ratio", nativeValue)
             return true
         }
         settings["$section:$key"] = value

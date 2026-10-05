@@ -181,7 +181,7 @@
     <string name="settings_updates_parallel_download">İndir</string>
     <string name="settings_updates_parallel_unavailable">Ayrı APK bu sürüm için mevcut değil.</string>
     <string name="common_close">Kapat</string>
-    <string name="settings_upscale">Görüntü Kalitesi</string>
+    <string name="settings_upscale">Render çözünürlüğü</string>
     <string name="settings_upscale_native">Yerel (Native)</string>
     <string name="settings_aspect_ratio">En Boy Oranı</string>
     <string name="settings_aspect_ratio_auto">Oto</string>
@@ -2002,7 +2002,8 @@
     <string name="settings_rewind">Geri sarma</string>
     <string name="settings_rewind_desc">Geri gitmek için geri sarma düğmesini basılı tutun. Birkaç saniyede bir tam durum anlık görüntüsü kaydedilir; bu ek CPU kullanır.</string>
     <string name="settings_target_fps">Hedef kare hızı</string>
-    <string name="settings_target_fps_desc">Otomatik, PPSSPP tarafından bildirilen kare hızını kullanır. Elle seçilen değer emülasyon hızını belirler; oyun daha az kare gösterebilir.</string>
+    <string name="settings_fps_value">%1$d fps</string>
+    <string name="settings_target_fps_desc">Auto oyunun kendi kare hızını korur. Daha düşük bir değer emülasyon hızını sınırlar (ağır çekim). Tam hızda daha az kare çizmek için Kare Atlama kullanın.</string>
     <string name="settings_vertical_refresh_ntsc">NTSC yenileme hızı</string>
     <string name="settings_vertical_refresh_pal">PAL yenileme hızı</string>
     <string name="settings_help_vertical_refresh">Bu bölge için emüle edilen dikey yenileme hızını geçersiz kılar. NTSC sesi çıtırdıyorsa veya PAL görüntüsü takılıyorsa hafifçe ayarlayın; varsayılan değer konsol standardını izler.</string>

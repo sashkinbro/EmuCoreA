@@ -275,7 +275,7 @@
     <string name="settings_updates_parallel_download">Unduh</string>
     <string name="settings_updates_parallel_unavailable">APK terpisah tidak tersedia untuk rilis ini.</string>
     <string name="common_close">Tutup</string>
-    <string name="settings_upscale">Kualitas Gambar</string>
+    <string name="settings_upscale">Resolusi rendering</string>
     <string name="settings_upscale_native">Native</string>
     <string name="settings_aspect_ratio">Rasio Aspek</string>
     <string name="settings_aspect_ratio_auto">Otomatis</string>
@@ -2016,7 +2016,8 @@
     <string name="settings_rewind">Mundur</string>
     <string name="settings_rewind_desc">Tahan kontrol mundur untuk kembali. Snapshot status penuh disimpan tiap beberapa detik, yang memakai CPU ekstra.</string>
     <string name="settings_target_fps">Laju bingkai target</string>
-    <string name="settings_target_fps_desc">Otomatis memakai laju bingkai yang dilaporkan PPSSPP. Nilai manual mengatur kecepatan emulasi; game dapat menampilkan lebih sedikit bingkai.</string>
+    <string name="settings_fps_value">%1$d fps</string>
+    <string name="settings_target_fps_desc">Auto mempertahankan laju bingkai asli game. Nilai lebih rendah membatasi kecepatan emulasi (gerak lambat). Untuk kecepatan penuh dengan lebih sedikit bingkai yang digambar, gunakan Lewati Bingkai.</string>
     <string name="settings_vertical_refresh_ntsc">Laju penyegaran NTSC</string>
     <string name="settings_vertical_refresh_pal">Laju penyegaran PAL</string>
     <string name="settings_help_vertical_refresh">Mengganti laju penyegaran vertikal yang diemulasi untuk wilayah ini. Sesuaikan sedikit jika audio NTSC berderak atau video PAL tersendat; nilai bawaan mengikuti standar konsol.</string>

@@ -123,7 +123,7 @@
     <string name="settings_renderer_vulkan">Vulkan</string>
     <string name="settings_renderer_opengl">OpenGL</string>
     <string name="settings_renderer_software">Logiciel</string>
-    <string name="settings_upscale">Qualité de l\'image</string>
+    <string name="settings_upscale">Résolution de rendu</string>
     <string name="settings_upscale_native">Native</string>
     <string name="settings_aspect_ratio">Format d\'image</string>
     <string name="settings_aspect_ratio_auto">Auto</string>
@@ -2004,7 +2004,8 @@
     <string name="settings_rewind">Retour arrière</string>
     <string name="settings_rewind_desc">Maintenez la commande de retour arrière pour revenir en arrière. Un instantané complet est enregistré toutes les quelques secondes, ce qui consomme du CPU.</string>
     <string name="settings_target_fps">Fréquence d\'images cible</string>
-    <string name="settings_target_fps_desc">Auto utilise la fréquence d’images indiquée par PPSSPP. Une valeur manuelle règle le rythme de l’émulation ; le jeu peut afficher moins d’images.</string>
+    <string name="settings_fps_value">%1$d ips</string>
+    <string name="settings_target_fps_desc">Auto conserve la cadence propre du jeu. Une valeur plus basse limite la vitesse d\'émulation (ralenti). Pour la vitesse complète avec moins d\'images affichées, utilisez le saut d\'images.</string>
     <string name="settings_vertical_refresh_ntsc">Fréquence de rafraîchissement NTSC</string>
     <string name="settings_vertical_refresh_pal">Fréquence de rafraîchissement PAL</string>
     <string name="settings_help_vertical_refresh">Remplace la fréquence de rafraîchissement verticale émulée pour cette région. Ajustez-la légèrement si l\'audio NTSC craque ou si la vidéo PAL saccade ; la valeur par défaut suit la norme de la console.</string>

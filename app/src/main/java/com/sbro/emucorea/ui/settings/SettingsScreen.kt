@@ -196,6 +196,7 @@ import com.sbro.emucorea.core.ppssppCoreOptionHelpRes
 import com.sbro.emucorea.core.PpssppCoreOptionLocalization
 import com.sbro.emucorea.core.LocalTvUiEnvironment
 import com.sbro.emucorea.core.PerformanceProfiles
+import com.sbro.emucorea.core.TARGET_FPS_CHOICES
 import com.sbro.emucorea.core.ProPurchaseTier
 import com.sbro.emucorea.core.availableProSupportOffers
 import com.sbro.emucorea.core.RendererDefaults
@@ -1764,19 +1765,6 @@ private fun SettingsContent(
                     }
 
                     SettingsSection(title = stringResource(R.string.settings_core_input)) {
-                        ChoiceSection(
-                            title = stringResource(R.string.settings_multitap_mode),
-                            options = listOf(
-                                0 to stringResource(R.string.settings_multitap_off),
-                                1 to stringResource(R.string.settings_multitap_port1),
-                                2 to stringResource(R.string.settings_multitap_port2),
-                                3 to stringResource(R.string.settings_multitap_both)
-                            ),
-                            selectedValue = uiState.multitapMode,
-                            onSelect = viewModel::setMultitapMode,
-                            helpText = stringResource(R.string.settings_help_multitap_mode),
-                            onResetToDefault = { viewModel.setMultitapMode(defaults.multitapMode) }
-                        )
                         var coreControlsVersion by remember { mutableIntStateOf(0) }
                         CoreOptionSettingsRows(
                             options = remember { PpssppCoreOptions.controlsOptions() },
@@ -1935,14 +1923,6 @@ private fun SettingsContent(
                                 viewModel.setUpscaleMultiplier(defaults.upscaleMultiplier)
                             }
                         )
-                        ChoiceSection(
-                            title = stringResource(R.string.settings_display_crop),
-                            options = DisplayCrop.PRESET_PIXELS.map { it to stringResource(R.string.settings_display_crop_pixels, it) },
-                            selectedValue = uiState.displayCrop.presetPixels,
-                            onSelect = { viewModel.setDisplayCrop(DisplayCrop.uniform(it)) },
-                            helpText = stringResource(R.string.settings_display_crop_desc),
-                            onResetToDefault = { viewModel.setDisplayCrop(defaults.displayCrop) }
-                        )
                         var coreGraphicsVersion by remember { mutableIntStateOf(0) }
                         ToggleItem(
                             icon = Icons.Rounded.AutoFixHigh,
@@ -2033,11 +2013,13 @@ private fun SettingsContent(
                         )
                         ChoiceSection(
                             title = stringResource(R.string.settings_target_fps),
-                            options = listOf(
-                                0 to stringResource(R.string.settings_aspect_ratio_auto),
-                                50 to "50 Hz",
-                                60 to "60 Hz"
-                            ),
+                            options = TARGET_FPS_CHOICES.map { fps ->
+                                fps to if (fps == 0) {
+                                    stringResource(R.string.settings_aspect_ratio_auto)
+                                } else {
+                                    stringResource(R.string.settings_fps_value, fps)
+                                }
+                            },
                             selectedValue = uiState.targetFps,
                             onSelect = viewModel::setTargetFps,
                             helpText = stringResource(R.string.settings_target_fps_desc),

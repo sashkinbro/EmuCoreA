@@ -181,7 +181,7 @@
     <string name="settings_updates_parallel_download">تنزيل</string>
     <string name="settings_updates_parallel_unavailable">ملف APK المنفصل غير متوفر لهذا الإصدار.</string>
     <string name="common_close">إغلاق</string>
-    <string name="settings_upscale">جودة الصورة</string>
+    <string name="settings_upscale">دقة الرسم</string>
     <string name="settings_upscale_native">أصلي (Native)</string>
     <string name="settings_aspect_ratio">نسبة العرض إلى الارتفاع</string>
     <string name="settings_aspect_ratio_auto">تلقائي</string>
@@ -2010,7 +2010,8 @@
     <string name="settings_rewind">إرجاع</string>
     <string name="settings_rewind_desc">استمر في الضغط على زر الإرجاع للرجوع للخلف. تُحفظ لقطة كاملة للحالة كل بضع ثوانٍ، ما يستهلك معالجًا إضافيًا.</string>
     <string name="settings_target_fps">معدل الإطارات المستهدف</string>
-    <string name="settings_target_fps_desc">يستخدم الوضع التلقائي معدل الإطارات الذي يبلّغ عنه PPSSPP. تحدد القيمة اليدوية سرعة المحاكاة؛ وقد تعرض اللعبة إطارات أقل.</string>
+    <string name="settings_fps_value">%1$d إطار/ث</string>
+    <string name="settings_target_fps_desc">يحافظ Auto على معدل إطارات اللعبة. القيمة الأقل تحد من سرعة المحاكاة (حركة بطيئة). للسرعة الكاملة مع رسم إطارات أقل استخدم تخطي الإطارات.</string>
     <string name="settings_vertical_refresh_ntsc">معدل تحديث NTSC</string>
     <string name="settings_vertical_refresh_pal">معدل تحديث PAL</string>
     <string name="settings_help_vertical_refresh">يتجاوز معدل التحديث الرأسي المحاكى لهذه المنطقة. اضبطه قليلاً إذا كان صوت NTSC يطقطق أو فيديو PAL يتقطع؛ القيمة الافتراضية تتبع معيار الجهاز.</string>

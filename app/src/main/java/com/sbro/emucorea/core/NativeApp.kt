@@ -114,8 +114,8 @@ object NativeApp {
     // Audio buffering belongs to the native core (PPSSPP StereoResampler +
     // OpenSL), so the AAudio tuning surface is retained as a no-op.
     @JvmStatic fun setAudioBufferMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
-    @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = Unit
-    @JvmStatic fun setAudioLowLatency(enabled: Boolean) = Unit
+    @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
+    @JvmStatic fun setAudioLowLatency(enabled: Boolean) = CoreRuntime.setAudioLowLatency(enabled)
     @JvmStatic fun setRewindEnabled(enabled: Boolean) =
         CoreRuntime.updateSetting("EmuCoreA/GS", "RewindEnabled", enabled.toString())
     @JvmStatic fun queueGsDump(frames: Int) = Unit

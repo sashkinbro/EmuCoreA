@@ -281,7 +281,7 @@
     <string name="settings_updates_parallel_download">Stáhnout</string>
     <string name="settings_updates_parallel_unavailable">Oddělený APK není pro toto vydání k dispozici.</string>
     <string name="common_close">Zavřít</string>
-    <string name="settings_upscale">Kvalita obrazu</string>
+    <string name="settings_upscale">Rozlišení vykreslování</string>
     <string name="settings_upscale_native">Nativní</string>
     <string name="settings_aspect_ratio">Poměr stran</string>
     <string name="settings_aspect_ratio_auto">Auto</string>
@@ -2023,7 +2023,8 @@
     <string name="settings_rewind">Převíjení</string>
     <string name="settings_rewind_desc">Podržením převíjení se vrátíte zpět. Každých pár sekund se ukládá úplný snímek stavu, což spotřebovává CPU navíc.</string>
     <string name="settings_target_fps">Cílová frekvence snímků</string>
-    <string name="settings_target_fps_desc">Automaticky se použije snímková frekvence hlášená PPSSPP. Ruční hodnota určuje rychlost emulace; hra může vykreslovat méně snímků.</string>
+    <string name="settings_fps_value">%1$d kl./s</string>
+    <string name="settings_target_fps_desc">Auto zachová vlastní snímkovou frekvenci hry. Nižší hodnota omezí rychlost emulace (zpomalení). Pro plnou rychlost s méně vykreslenými snímky použijte přeskakování snímků.</string>
     <string name="settings_vertical_refresh_ntsc">Obnovovací frekvence NTSC</string>
     <string name="settings_vertical_refresh_pal">Obnovovací frekvence PAL</string>
     <string name="settings_help_vertical_refresh">Přepisuje emulovanou vertikální obnovovací frekvenci pro tento region. Mírně ji upravte, pokud zvuk NTSC praská nebo se obraz PAL trhá; výchozí hodnota odpovídá standardu konzole.</string>

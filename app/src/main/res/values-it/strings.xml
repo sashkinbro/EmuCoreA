@@ -150,7 +150,7 @@
     <string name="settings_renderer_vulkan">Vulkan</string>
     <string name="settings_renderer_opengl">OpenGL</string>
     <string name="settings_renderer_software">Software</string>
-    <string name="settings_upscale">Qualità immagine</string>
+    <string name="settings_upscale">Risoluzione di rendering</string>
     <string name="settings_upscale_native">Nativa</string>
     <string name="settings_aspect_ratio">Proporzioni</string>
     <string name="settings_aspect_ratio_auto">Auto</string>
@@ -2002,7 +2002,8 @@
     <string name="settings_rewind">Riavvolgimento</string>
     <string name="settings_rewind_desc">Tieni premuto il comando di riavvolgimento per tornare indietro. Ogni pochi secondi viene salvata un\'istantanea completa, con un costo CPU extra.</string>
     <string name="settings_target_fps">Frequenza fotogrammi target</string>
-    <string name="settings_target_fps_desc">Auto usa la frequenza dei fotogrammi indicata da PPSSPP. Un valore manuale imposta la velocità di emulazione; il gioco può mostrare meno fotogrammi.</string>
+    <string name="settings_fps_value">%1$d fps</string>
+    <string name="settings_target_fps_desc">Auto mantiene la frequenza del gioco. Un valore più basso limita la velocità di emulazione (rallentatore). Per la velocità piena con meno fotogrammi disegnati usa Salto fotogrammi.</string>
     <string name="settings_vertical_refresh_ntsc">Frequenza di aggiornamento NTSC</string>
     <string name="settings_vertical_refresh_pal">Frequenza di aggiornamento PAL</string>
     <string name="settings_help_vertical_refresh">Sostituisce la frequenza di aggiornamento verticale emulata per questa regione. Regolala leggermente se l\'audio NTSC gracchia o il video PAL scatta; il valore predefinito segue lo standard della console.</string>

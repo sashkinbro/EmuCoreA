@@ -48,6 +48,7 @@ import com.sbro.emucorea.core.AudioDefaults
 import com.sbro.emucorea.core.EmulatorBridge
 import com.sbro.emucorea.core.GpuHardwareProfiles
 import com.sbro.emucorea.core.RendererDefaults
+import com.sbro.emucorea.core.TARGET_FPS_CHOICES
 import com.sbro.emucorea.core.buildUpscaleOptions
 import com.sbro.emucorea.core.upscaleKeyToMultiplier
 import com.sbro.emucorea.core.upscaleMultiplierKey
@@ -909,14 +910,6 @@ private fun GameSettingsTabContent(
                             onDraftChange(draft.copy(aspectRatio = defaultProfile.aspectRatio))
                         }
                     )
-                    SelectionRow(
-                        title = stringResource(R.string.settings_display_crop),
-                        options = DisplayCrop.PRESET_PIXELS.map { it to stringResource(R.string.settings_display_crop_pixels, it) },
-                        selectedValue = draft.displayCrop.presetPixels,
-                        onSelected = { onDraftChange(draft.copy(displayCrop = DisplayCrop.uniform(it))) },
-                        helpText = stringResource(R.string.settings_display_crop_desc),
-                        onResetToDefault = { onDraftChange(draft.copy(displayCrop = defaultProfile.displayCrop)) }
-                    )
                     CoreOptionManagerRows(
                         options = PpssppCoreOptions.graphicsOptions(
                             RendererDefaults.normalizeAndroidRenderer(draft.renderer)
@@ -971,11 +964,13 @@ private fun GameSettingsTabContent(
                     )
                     SelectionRow(
                         title = stringResource(R.string.settings_target_fps),
-                        options = listOf(
-                            0 to stringResource(R.string.settings_aspect_ratio_auto),
-                            50 to "50 Hz",
-                            60 to "60 Hz"
-                        ),
+                        options = TARGET_FPS_CHOICES.map { fps ->
+                            fps to if (fps == 0) {
+                                stringResource(R.string.settings_aspect_ratio_auto)
+                            } else {
+                                stringResource(R.string.settings_fps_value, fps)
+                            }
+                        },
                         selectedValue = draft.targetFps,
                         onSelected = { onDraftChange(draft.copy(targetFps = it)) },
                         helpText = stringResource(R.string.settings_target_fps_desc),
@@ -1244,19 +1239,6 @@ private fun GameSettingsTabContent(
                 }
 
                 EditorSection(title = stringResource(R.string.settings_core_input)) {
-                    SelectionRow(
-                        title = stringResource(R.string.settings_multitap_mode),
-                        options = listOf(
-                            0 to stringResource(R.string.settings_multitap_off),
-                            1 to stringResource(R.string.settings_multitap_port1),
-                            2 to stringResource(R.string.settings_multitap_port2),
-                            3 to stringResource(R.string.settings_multitap_both)
-                        ),
-                        selectedValue = draft.multitapMode,
-                        onSelected = { onDraftChange(draft.copy(multitapMode = it)) },
-                        helpText = stringResource(R.string.settings_help_multitap_mode),
-                        onResetToDefault = { onDraftChange(draft.copy(multitapMode = defaultProfile.multitapMode)) }
-                    )
                     CoreOptionManagerRows(
                         options = PpssppCoreOptions.controlsOptions(),
                         draft = draft,
