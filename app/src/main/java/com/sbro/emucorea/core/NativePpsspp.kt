@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-EmuCoreA-Proprietary
 package com.sbro.emucorea.core
 
+import android.content.Context
 import android.util.Log
 import android.view.Surface
 
@@ -31,6 +32,13 @@ object NativePpsspp {
             false
         }
     }
+
+    /**
+     * Hands the application context to the core. PPGe dialogs (savedata,
+     * memory stick, OSK) draw their text through the Java TextRenderer, which
+     * loads the fonts from the APK assets and needs a Context.
+     */
+    external fun nativeSetAppContext(context: Context)
 
     external fun nativeInit(
         apkPath: String,
@@ -85,6 +93,15 @@ object NativePpsspp {
     external fun nativeSetRewindEnabled(enabled: Boolean)
 
     external fun nativeRewindStep(): Boolean
+
+    /** Resumes the core after the rewind control is released. */
+    external fun nativeRewindRelease()
+
+    /**
+     * PPSSPP frame statistics: [0] = emulated vblanks/s (speed source),
+     * [1] = displayed flips/s, [2] = actual displayed fps.
+     */
+    external fun nativeGetDisplayStats(): FloatArray?
 
     external fun nativeSetShaderEffect(effect: Int)
 

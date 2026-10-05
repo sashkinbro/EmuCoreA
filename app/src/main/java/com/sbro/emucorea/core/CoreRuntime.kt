@@ -201,6 +201,11 @@ internal object CoreRuntime {
             Log.e(TAG, "libemucorea_core is unavailable")
             return false
         }
+        // PPSSPP's PPGe text renderer needs the application context before the
+        // first PPGe draw (savedata dialogs would otherwise crash under
+        // CheckJNI with an invalid class reference).
+        runCatching { NativePpsspp.nativeSetAppContext(appContext) }
+            .onFailure { Log.w(TAG, "Unable to set the native app context", it) }
         // The context is created inside nativeInit, so the renderer must be
         // pushed first. This is a no-op for the Vulkan default.
         runCatching {
@@ -458,7 +463,7 @@ internal object CoreRuntime {
         NativePpsspp.nativeSetConfig(config.first, config.second)
     }
 
-    private fun translateCoreOption(key: String, value: String): Pair<String, String>? {
+    internal fun translateCoreOption(key: String, value: String): Pair<String, String>? {
         // The native core understands the full libretro option catalogue and
         // parses the same value strings the UI uses, so every ppsspp_* key is
         // forwarded verbatim. The two exceptions are owned by the app's own
@@ -500,7 +505,13 @@ internal object CoreRuntime {
     }
 
     fun setTimeControl(mode: Int) {
-        timeControlMode = mode.coerceIn(0, 2)
+        val normalized = mode.coerceIn(0, 2)
+        val wasRewinding = timeControlMode == 2
+        timeControlMode = normalized
+        if (wasRewinding && normalized != 2) {
+            // Rewinding pauses the core in stepping mode; release resumes it.
+            runCatching { NativePpsspp.nativeRewindRelease() }
+        }
     }
 
     /** Effective value of a core option (user override or core default). */
@@ -1076,21 +1087,26 @@ internal object CoreRuntime {
                     metricsStartEmuUs = lastEmuUs
                 } else if (now - metricsStartNanos >= 1_000_000_000L && metricsFrames >= 2) {
                     val elapsed = now - metricsStartNanos
-                    val fps = (metricsFrames * 1_000_000_000.0 / elapsed).coerceIn(0.0, 999.9)
-                    // Speed is emulated time over wall time. Host FPS alone is
-                    // misleading: 30 fps games run at full speed ("100%") while
-                    // the frontend presents 30 frames per second. A fresh
-                    // session resets the core clock, so implausible deltas
-                    // (boot transitions, state loads) fall back to the previous
-                    // authoritative speed instead of publishing garbage.
+                    val hostFps = (metricsFrames * 1_000_000_000.0 / elapsed).coerceIn(0.0, 999.9)
+                    // PPSSPP's own frame statistics. Speed is emulated vblanks
+                    // per second (so a genuine slowdown drops below 100%, while
+                    // a native 30 fps game keeps 100%); FPS is the frames
+                    // actually displayed. If the core has not produced stats
+                    // yet, fall back to the host numbers.
+                    val displayStats = runCatching { NativePpsspp.nativeGetDisplayStats() }.getOrNull()
+                    val vps = displayStats?.getOrNull(0)?.toDouble() ?: 0.0
+                    val actualFps = displayStats?.getOrNull(2)?.toDouble() ?: 0.0
                     val targetFps = VBLANK_RATE_HZ
-                    val emuDeltaUs = lastEmuUs - metricsStartEmuUs
-                    val plausibleEmuDelta = metricsStartEmuUs > 0L && lastEmuUs > metricsStartEmuUs &&
-                        emuDeltaUs * 1_000L <= elapsed * 3L
-                    val speed = if (plausibleEmuDelta) {
-                        (emuDeltaUs * 100_000.0 / elapsed).coerceIn(0.0, 999.9)
-                    } else {
-                        lastPublishedSpeed
+                    val fps = if (actualFps > 0.0) actualFps.coerceIn(0.0, 999.9) else hostFps
+                    val speed = emulationSpeedPercent(vps) ?: run {
+                        val emuDeltaUs = lastEmuUs - metricsStartEmuUs
+                        val plausibleEmuDelta = metricsStartEmuUs > 0L && lastEmuUs > metricsStartEmuUs &&
+                            emuDeltaUs * 1_000L <= elapsed * 3L
+                        if (plausibleEmuDelta) {
+                            (emuDeltaUs * 100_000.0 / elapsed).coerceIn(0.0, 999.9)
+                        } else {
+                            lastPublishedSpeed
+                        }
                     }
                     lastPublishedSpeed = speed
                     val cpuNowMs = Process.getElapsedCpuTime()

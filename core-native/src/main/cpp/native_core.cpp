@@ -42,6 +42,7 @@
 #include "Common/GPU/OpenGL/OpenGLGraphicsContext.h"
 #include "Common/GPU/Vulkan/VulkanContext.h"
 #include "Common/GPU/Vulkan/VulkanGraphicsContext.h"
+#include "Common/Render/Text/draw_text_android.h"
 #include "Common/Log.h"
 #include "Common/Log/LogManager.h"
 #include "Common/Serialize/Serializer.h"
@@ -69,6 +70,7 @@
 #include "GPU/GPUCommon.h"
 
 #include "Core/FrameTiming.h"
+#include "Core/HW/Display.h"
 #include "Core/HLE/sceUtility.h"
 
 #include "android/jni/AndroidAudio.h"
@@ -448,9 +450,93 @@ JNIEnv *getEnv() {
     return env;
 }
 
+// The app's class loader, cached from the JVM's main thread in JNI_OnLoad.
+// FindClass() cannot see application classes from arbitrary native threads, so
+// the class loader has to be used explicitly (PPSSPP's own Android frontend
+// does the same).
+jobject g_classLoader = nullptr;
+jmethodID g_loadClassMethod = nullptr;
+// Application context handed to PPSSPP's TextRenderer / TextDrawerAndroid.
+jobject g_appContext = nullptr;
+
+void CacheClassLoader(JNIEnv *env) {
+    if (env == nullptr || g_classLoader != nullptr) return;
+    jclass classClass = env->FindClass("java/lang/ClassLoader");
+    if (classClass == nullptr) {
+        env->ExceptionClear();
+        return;
+    }
+    jmethodID getSystemClassLoader =
+        env->GetStaticMethodID(classClass, "getSystemClassLoader", "()Ljava/lang/ClassLoader;");
+    if (getSystemClassLoader != nullptr) {
+        jobject loader = env->CallStaticObjectMethod(classClass, getSystemClassLoader);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        } else if (loader != nullptr) {
+            g_classLoader = env->NewGlobalRef(loader);
+            env->DeleteLocalRef(loader);
+        }
+    }
+    g_loadClassMethod = env->GetMethodID(classClass, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    if (g_loadClassMethod == nullptr) env->ExceptionClear();
+    env->DeleteLocalRef(classClass);
+}
+
+// The loader from an application object is guaranteed to see every app class;
+// the system loader captured in JNI_OnLoad is not always the same instance.
+void CacheClassLoaderFromContext(JNIEnv *env, jobject context) {
+    if (env == nullptr || context == nullptr) return;
+    jclass contextClass = env->GetObjectClass(context);
+    if (contextClass == nullptr) {
+        env->ExceptionClear();
+        return;
+    }
+    jmethodID getClassLoader = env->GetMethodID(contextClass, "getClassLoader", "()Ljava/lang/ClassLoader;");
+    if (getClassLoader != nullptr) {
+        jobject loader = env->CallObjectMethod(context, getClassLoader);
+        if (env->ExceptionCheck()) {
+            env->ExceptionClear();
+        } else if (loader != nullptr) {
+            if (g_classLoader != nullptr) env->DeleteGlobalRef(g_classLoader);
+            g_classLoader = env->NewGlobalRef(loader);
+            env->DeleteLocalRef(loader);
+            NLOGI("Cached the application class loader");
+        }
+    } else {
+        env->ExceptionClear();
+    }
+    if (g_loadClassMethod == nullptr) {
+        jclass classClass = env->FindClass("java/lang/ClassLoader");
+        if (classClass != nullptr) {
+            g_loadClassMethod =
+                env->GetMethodID(classClass, "loadClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+            env->DeleteLocalRef(classClass);
+        }
+        if (env->ExceptionCheck()) env->ExceptionClear();
+    }
+    env->DeleteLocalRef(contextClass);
+}
+
 jclass findClass(const char *name) {
     JNIEnv *env = getEnv();
-    return env != nullptr ? env->FindClass(name) : nullptr;
+    if (env == nullptr) return nullptr;
+    if (g_classLoader != nullptr && g_loadClassMethod != nullptr) {
+        std::string dotted(name);
+        std::replace(dotted.begin(), dotted.end(), '/', '.');
+        jstring className = env->NewStringUTF(dotted.c_str());
+        jobject cls = env->CallObjectMethod(g_classLoader, g_loadClassMethod, className);
+        env->DeleteLocalRef(className);
+        if (env->ExceptionCheck()) {
+            if (env->ExceptionOccurred()) {
+                NLOGW("loadClass(%s) failed", name);
+            }
+            env->ExceptionClear();
+            return nullptr;
+        }
+        return static_cast<jclass>(cls);
+    }
+    NLOGW("No application class loader cached; falling back to FindClass(%s)", name);
+    return env->FindClass(name);
 }
 
 void EmuCoreA_AttachThreadToJNI() {
@@ -1686,10 +1772,41 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
     EmuCoreAAchievementsSetJavaVm(vm);
     JNIEnv *env = nullptr;
     if (vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) == JNI_OK) {
+        // Must happen here: this is the JVM's main thread, where FindClass sees
+        // the application's classes.
+        CacheClassLoader(env);
         EmuCoreAAchievementsInitializeJava(env);
     }
     NLOGI("emucorea native core loaded");
     return JNI_VERSION_1_6;
+}
+
+// Hands the Android application context to the core so PPGe/PSPSaveDialog text
+// can be rendered through the Java TextRenderer (fonts load from the APK's
+// assets). Must be called before the first boot.
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetAppContext(JNIEnv *env, jclass, jobject context) {
+    if (g_appContext != nullptr) {
+        env->DeleteGlobalRef(g_appContext);
+        g_appContext = nullptr;
+    }
+    if (context == nullptr) return;
+    g_appContext = env->NewGlobalRef(context);
+    CacheClassLoaderFromContext(env, g_appContext);
+    TextDrawerAndroid::SetActivity(g_appContext);
+
+    jclass textRendererClass = findClass("org/ppsspp/ppsspp/TextRenderer");
+    if (textRendererClass != nullptr) {
+        jmethodID init = env->GetStaticMethodID(textRendererClass, "init", "(Landroid/content/Context;)V");
+        if (init != nullptr) {
+            env->CallStaticVoidMethod(textRendererClass, init, g_appContext);
+        }
+        if (env->ExceptionCheck()) env->ExceptionClear();
+        env->DeleteLocalRef(textRendererClass);
+        NLOGI("TextRenderer initialized");
+    } else {
+        NLOGW("org.ppsspp.ppsspp.TextRenderer is missing; PSP dialogs will not draw text");
+    }
 }
 
 JNIEXPORT void JNICALL
@@ -2000,8 +2117,38 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindStep(JNIEnv *, jclass) {
     if (!PSP_IsInited() || g_Config.iRewindSnapshotInterval <= 0 || !SaveState::CanRewind()) {
         return JNI_FALSE;
     }
+    // Rewind() breaks the CPU into stepping mode so the operation can run on
+    // the frame thread; each queued step is executed by SaveState::Process()
+    // while the core stays stepped.
     SaveState::Rewind();
     return JNI_TRUE;
+}
+
+// Called when the rewind control is released. Rewinding leaves the CPU in
+// CORE_STEPPING_CPU (that is how PPSSPP pauses for the operation), so the core
+// must be explicitly resumed or the game stays frozen forever.
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindRelease(JNIEnv *, jclass) {
+    if (PSP_IsInited() && coreState == CORE_STEPPING_CPU) {
+        Core_Resume();
+        NLOGI("Rewind released; core resumed");
+    }
+}
+
+// PPSSPP's own frame statistics: vps = emulated vblanks per wall second,
+// actual_fps = frames actually displayed. The UI's Speed comes from vps, so a
+// slow host correctly reports less than 100% while a 30 fps game still does
+// not (its emulated clock keeps up).
+JNIEXPORT jfloatArray JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeGetDisplayStats(JNIEnv *env, jclass) {
+    float vps = 0.0f;
+    float flips = 0.0f;
+    float actualFps = 0.0f;
+    __DisplayGetFPS(&vps, &flips, &actualFps);
+    const jfloat values[3] = { vps, flips, actualFps };
+    jfloatArray result = env->NewFloatArray(3);
+    if (result != nullptr) env->SetFloatArrayRegion(result, 0, 3, values);
+    return result;
 }
 
 JNIEXPORT jboolean JNICALL

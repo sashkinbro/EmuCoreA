@@ -41,6 +41,13 @@ class NativeCoreProbeActivity : Activity(), SurfaceHolder.Callback {
         // attached so the shader-chain presentation is installed with it.
         intent.getStringExtra("shaderPreset")?.let(NativePpsspp::nativeSetShaderPreset)
 
+        // Optional rewind self-test: accumulates snapshots, rewinds three
+        // times, releases, and logs the emulated clock around every step.
+        val rewindTest = intent.getBooleanExtra("rewind", false)
+        if (rewindTest) {
+            NativePpsspp.nativeSetRewindEnabled(true)
+        }
+
         val metrics = resources.displayMetrics
         val refresh = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             display?.refreshRate ?: 60.0f
@@ -75,8 +82,31 @@ class NativeCoreProbeActivity : Activity(), SurfaceHolder.Callback {
                 return@Thread
             }
             Log.i(TAG, "native boot started, entering frame loop")
+            var rewindPhasesLeft = if (rewindTest) 3 else 0
+            var rewindInitiated = false
+            var emuUs = 0L
+            var emuAtRewindStart = 0L
             while (running) {
-                NativePpsspp.nativeRunFrame()
+                emuUs = NativePpsspp.nativeRunFrame()
+                if (rewindTest && !rewindInitiated && emuUs >= 6_000_000L) {
+                    rewindInitiated = true
+                    emuAtRewindStart = emuUs
+                    Log.i(TAG, "REWIND test start at emu=${emuUs / 1000}ms")
+                }
+                if (rewindInitiated && rewindPhasesLeft > 0 && emuUs > 0L) {
+                    rewindPhasesLeft--
+                    val before = emuUs
+                    val stepped = NativePpsspp.nativeRewindStep()
+                    Thread.sleep(700)
+                    Log.i(TAG, "REWIND step result=$stepped before=${before / 1000}ms")
+                    if (rewindPhasesLeft == 0) {
+                        NativePpsspp.nativeRewindRelease()
+                        Thread.sleep(1500)
+                        val after = NativePpsspp.nativeRunFrame()
+                        Log.i(TAG, "REWIND released: emuAtRewindStart=${emuAtRewindStart / 1000}ms " +
+                            "resumedAt=${after / 1000}ms continued=${after > 0}")
+                    }
+                }
             }
         }.also { it.name = "EmuCoreA-NativeFrame"; it.start() }
     }
