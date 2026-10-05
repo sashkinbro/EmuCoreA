@@ -199,6 +199,11 @@ internal object CoreRuntime {
             Log.e(TAG, "libemucorea_core is unavailable")
             return false
         }
+        // The context is created inside nativeInit, so the renderer must be
+        // pushed first. This is a no-op for the Vulkan default.
+        runCatching {
+            NativePpsspp.nativeSetRenderer(RendererDefaults.toCoreRenderer(requestedRenderer))
+        }.onFailure { Log.w(TAG, "Unable to select the renderer", it) }
         val metrics = appContext.resources.displayMetrics
         NativePpsspp.nativeInit(
             appContext.packageCodePath,
@@ -244,12 +249,15 @@ internal object CoreRuntime {
     }
 
     /**
-     * The native frontend always boots Vulkan; the in-game renderer selector is
-     * accepted but has no effect on the retired multi-renderer frontend.
+     * Stores the renderer for the next session. The native context can only be
+     * rebuilt while idle, so a live session keeps its renderer until then.
      */
     fun restartWithRenderer(renderer: Int): Boolean = lifecycleLock.withLock {
         requestedRenderer = RendererDefaults.normalizeAndroidRenderer(renderer)
-        Log.i(TAG, "Renderer preference stored; the native core boots Vulkan for the next session")
+        val coreRenderer = RendererDefaults.toCoreRenderer(requestedRenderer)
+        runCatching { NativePpsspp.nativeSetRenderer(coreRenderer) }
+            .onFailure { Log.w(TAG, "Unable to store the renderer", it) }
+        Log.i(TAG, "Renderer preference stored: ${RendererDefaults.coreRendererName(coreRenderer)}")
         true
     }
 
@@ -320,6 +328,11 @@ internal object CoreRuntime {
 
     /** Publishes the frontend filters and core options the app owns before boot. */
     private fun applyStartOptions() {
+        // The renderer must be known before the core creates its graphics
+        // context; nativeSetRenderer rebuilds an idle context if needed.
+        runCatching {
+            NativePpsspp.nativeSetRenderer(RendererDefaults.toCoreRenderer(requestedRenderer))
+        }.onFailure { Log.w(TAG, "Unable to apply the renderer", it) }
         val upscale = settings["EmuCoreA/Display:Upscale"]?.toFloatOrNull()
             ?: settings["EmuCoreA:UpscaleMultiplier"]?.toFloatOrNull()
         upscale?.let(::pushInternalResolution)

@@ -31,6 +31,12 @@ class NativeCoreProbeActivity : Activity(), SurfaceHolder.Callback {
             return
         }
 
+        // Optional renderer override for debugging: 0 = software, 1 = Vulkan,
+        // 2 = OpenGL ES. Must be set before nativeInit creates the context.
+        if (intent.hasExtra("renderer")) {
+            NativePpsspp.nativeSetRenderer(intent.getIntExtra("renderer", 1))
+        }
+
         val metrics = resources.displayMetrics
         val refresh = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             display?.refreshRate ?: 60.0f

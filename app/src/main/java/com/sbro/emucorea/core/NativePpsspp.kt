@@ -65,6 +65,14 @@ object NativePpsspp {
 
     external fun nativeSetConfig(key: String, value: String)
 
+    /**
+     * Selects the renderer used when the graphics context is created, using
+     * [RendererDefaults]' core values (0 = software, 1 = Vulkan, 2 = OpenGL ES).
+     * Call before [nativeInit] or before a session starts; during a session the
+     * choice is applied to the next one.
+     */
+    external fun nativeSetRenderer(renderer: Int)
+
     external fun nativeSetCheats(path: String)
 
     external fun nativeSetRewindEnabled(enabled: Boolean)

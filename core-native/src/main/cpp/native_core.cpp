@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 #include <memory>
@@ -32,6 +33,7 @@
 #include "Common/File/VFS/VFS.h"
 #include "Common/File/VFS/ZipFileReader.h"
 #include "Common/GPU/thin3d.h"
+#include "Common/GPU/OpenGL/OpenGLGraphicsContext.h"
 #include "Common/GPU/Vulkan/VulkanContext.h"
 #include "Common/GPU/Vulkan/VulkanGraphicsContext.h"
 #include "Common/Log.h"
@@ -95,6 +97,14 @@ bool g_clearRewindRequested = false;
 // Frontend shader selection, stored for a future presentation hook.
 int g_shaderEffect = 0;
 std::string g_shaderPreset;
+// Renderer requested by the frontend. 0 = software (unsupported), 1 = Vulkan,
+// 2 = OpenGL ES. Stored before nativeInit so the graphics context is created
+// for the right API; g_activeRenderer records what was actually created.
+constexpr int kRendererSoftware = 0;
+constexpr int kRendererVulkan = 1;
+constexpr int kRendererOpenGL = 2;
+std::atomic<int> g_requestedRenderer{kRendererVulkan};
+int g_activeRenderer = kRendererVulkan;
 std::string g_bootError;
 int g_displayWidth = 1080;
 int g_displayHeight = 1920;
@@ -352,8 +362,32 @@ std::string NativeLoadSecret(std::string_view nameOfSecret) { return ""; }
 // ---------------------------------------------------------------------------
 namespace {
 
+const char *RendererName(int renderer) {
+    switch (renderer) {
+    case kRendererSoftware: return "Software";
+    case kRendererOpenGL: return "OpenGL";
+    case kRendererVulkan: return "Vulkan";
+    default: return "Unknown";
+    }
+}
+
+// Creates the graphics context for the renderer stored by nativeSetRenderer.
+// Must run before PSP_Init, because BootGame picks the GPU core from it.
 bool CreateGraphicsContext() {
     if (g_graphicsContext != nullptr) return true;
+
+    const int requested = g_requestedRenderer.load();
+    if (requested == kRendererOpenGL) {
+        // PPSSPP's OpenGL backend expects an EGL context that is current on the
+        // render thread (its own Android app creates it from Java). This
+        // frontend has no EGL render-thread integration, so GLES cannot be
+        // brought up safely here; keep the app working on Vulkan.
+        NLOGE("OpenGL ES is not supported by the native frontend; using Vulkan instead");
+    } else if (requested == kRendererSoftware) {
+        NLOGW("Software rendering is not supported by the native frontend; using Vulkan instead");
+    }
+    g_activeRenderer = kRendererVulkan;
+
     g_graphicsContext = new VulkanGraphicsContext();
     std::string deviceName;
     std::string error;
@@ -365,7 +399,8 @@ bool CreateGraphicsContext() {
     }
     Core_SetGraphicsContext(g_graphicsContext);
     SetGPUBackend(GPUBackend::VULKAN);
-    NLOGI("Vulkan API initialized (%s)", deviceName.c_str());
+    NLOGI("%s renderer initialized (Vulkan API: %s)", RendererName(g_activeRenderer),
+          deviceName.c_str());
     return true;
 }
 
@@ -388,7 +423,7 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
     coreParam.startBreak = false;
     coreParam.headLess = false;
     coreParam.graphicsContext = g_graphicsContext;
-    coreParam.gpuCore = GPUCORE_VULKAN;
+    coreParam.gpuCore = g_activeRenderer == kRendererOpenGL ? GPUCORE_GLES : GPUCORE_VULKAN;
     coreParam.cpuCore = CPUCore::JIT;
     coreParam.bUseVertexDecoderJit = true;
 
@@ -841,6 +876,34 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetConfig(JNIEnv *env, jclass, js
     } else {
         NLOGW("Unknown config key: %s", k.c_str());
     }
+}
+
+// Selects the renderer for the next graphics context. Values follow
+// RendererDefaults' core contract: 0 = software, 1 = Vulkan, 2 = OpenGL ES.
+// The core is only recreated while idle; during a session the choice is stored
+// and applied when the next session creates its context.
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetRenderer(JNIEnv *, jclass, jint renderer) {
+    const int normalized = renderer == kRendererOpenGL || renderer == kRendererSoftware
+                               ? renderer
+                               : kRendererVulkan;
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    g_requestedRenderer.store(normalized);
+    NLOGI("Renderer requested: %s (%d)", RendererName(normalized), normalized);
+
+    if (g_graphicsContext == nullptr) {
+        return;
+    }
+    if (g_booted || g_pendingBoot || g_renderReady) {
+        NLOGI("Renderer change stored; it applies when the next session starts");
+        return;
+    }
+    // Idle: rebuild the context now so the choice is honored before PSP_Init.
+    g_graphicsContext->ShutdownAPI();
+    delete g_graphicsContext;
+    g_graphicsContext = nullptr;
+    Core_SetGraphicsContext(nullptr);
+    CreateGraphicsContext();
 }
 
 JNIEXPORT void JNICALL
