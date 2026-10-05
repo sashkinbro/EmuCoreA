@@ -53,6 +53,11 @@ bool NativeVulkanPresentation::Create(VulkanContext *vulkan) {
         return false;
     }
     RefreshImages();
+    const VkExtent2D extent = QueryExtent();
+    const VkSurfaceCapabilitiesKHR &caps = vulkan->GetSurfaceCapabilities();
+    NVK_LOGI("Presentation created: extent %ux%u format %d currentExtent %ux%u transform 0x%x",
+             extent.width, extent.height, (int)QueryFormat(), caps.currentExtent.width,
+             caps.currentExtent.height, (unsigned)caps.currentTransform);
     return true;
 }
 

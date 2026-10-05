@@ -35,6 +35,7 @@
 #include "Common/GPU/Vulkan/VulkanContext.h"
 #include "Common/GPU/Vulkan/VulkanGraphicsContext.h"
 #include "Common/Log.h"
+#include "Common/Log/LogManager.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/System/Display.h"
 #include "Common/System/System.h"
@@ -391,6 +392,23 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
     coreParam.cpuCore = CPUCore::JIT;
     coreParam.bUseVertexDecoderJit = true;
 
+    // Output/display size drives the presentation viewport. Without it
+    // (zero-initialized CoreParameter) every frame is drawn into a 0x0
+    // viewport, which presents as a black screen. Mirrors EmuScreen::bootGame.
+    const int displayWidth = g_display.pixel_xres > 0 ? g_display.pixel_xres : g_displayWidth;
+    const int displayHeight = g_display.pixel_yres > 0 ? g_display.pixel_yres : g_displayHeight;
+    coreParam.pixelWidth = displayWidth;
+    coreParam.pixelHeight = displayHeight;
+    if (g_Config.iInternalResolution == 0) {
+        coreParam.renderWidth = displayWidth;
+        coreParam.renderHeight = displayHeight;
+    } else {
+        coreParam.renderWidth = 480 * g_Config.iInternalResolution;
+        coreParam.renderHeight = 272 * g_Config.iInternalResolution;
+    }
+    NLOGI("Display %dx%d render %dx%d", coreParam.pixelWidth, coreParam.pixelHeight,
+          coreParam.renderWidth, coreParam.renderHeight);
+
     // Asynchronous boot, exactly like the libretro wrapper: the loader thread
     // runs in the background and PSP_InitUpdate is polled from the frame loop
     // once the surface (and with it the draw context) is ready.
@@ -419,15 +437,23 @@ bool AttachSurface(ANativeWindow *window, int width, int height) {
     // render threads twice, which terminates the process.
     if (g_graphicsContext->GetDrawContext() == nullptr) return false;
 
+    // Publish the window size so display-dependent code (presentation viewport,
+    // DPI heuristics) has real dimensions. PPSSPP's own Android frontend does
+    // this from SizeManager; without it the presentation draws into a 0x0
+    // viewport and presents black frames.
+    if (width > 0 && height > 0) {
+        g_display.Recalculate(width, height, 1.0f, 1.0f, 1.0f);
+        g_display.display_hz = g_displayRefreshRate;
+        PSP_CoreParameter().pixelWidth = width;
+        PSP_CoreParameter().pixelHeight = height;
+    }
+
 #if defined(EMUCOREA_HAVE_LIBRASHADER)
-    // Install the shader-chain presentation before the first frame. It forwards
-    // AcquireNextImage/QueuePresent to the real swapchain and only adds the
-    // librashader pass when a preset is enabled, so it is also a safe
-    // pass-through while shader chains are off. The selection itself is stored
-    // in shader_chain and re-read every present, so enabling a preset later
-    // needs no reinstall.
+    // The shader-chain presentation is strictly opt-in: with no preset enabled
+    // the core must use PPSSPP's untouched real-swapchain path. Installing it
+    // unconditionally changed behavior even in pass-through mode.
     auto *vulkan = static_cast<VulkanContext *>(g_graphicsContext->GetAPIContext());
-    if (vulkan != nullptr && vulkan->GetPresentation() == nullptr) {
+    if (vulkan != nullptr && vulkan->GetPresentation() == nullptr && emucorer::shader_chain::IsEnabled()) {
         auto presentation = std::make_unique<NativeVulkanPresentation>(vulkan);
         if (presentation->Create(vulkan)) {
             vulkan->SetPresentation(std::move(presentation));
@@ -657,6 +683,13 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeInit(JNIEnv *env, jclass, jstring
     g_displayWidth = displayWidth > 0 ? displayWidth : 1080;
     g_displayHeight = displayHeight > 0 ? displayHeight : 1920;
     g_displayRefreshRate = refreshRate > 0.0f ? refreshRate : 60.0f;
+
+#ifndef NDEBUG
+    // PPSSPP's own log manager is muted until a frontend enables an output.
+    g_Config.bEnableLogging = true;
+    g_logManager.Init(&g_Config.bEnableLogging, false);
+    g_logManager.SetOutputsEnabled(LogOutput::Stdio);
+#endif
 
     const std::string apk = ToString(env, apkPath);
     const std::string data = ToString(env, dataDir);
