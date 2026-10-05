@@ -84,6 +84,8 @@ bool g_pendingBoot = false;
 bool g_renderReady = false;
 // Cheat .ini requested by the frontend, applied once the disc ID is known.
 std::string g_pendingCheatFile;
+// Rewind history must be dropped on the frame thread (ring buffer + compressor).
+bool g_clearRewindRequested = false;
 std::string g_bootError;
 int g_displayWidth = 1080;
 int g_displayHeight = 1920;
@@ -507,6 +509,10 @@ void RunFrame() {
         draw->Present(Draw::PresentMode::FIFO);
     }
     g_graphicsContext->Poll();
+    if (g_clearRewindRequested) {
+        g_clearRewindRequested = false;
+        SaveState::ClearRewind();
+    }
     SaveState::Process();
     EmuCoreAAchievementsOnFrame();
 }
@@ -726,6 +732,23 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCheats(JNIEnv *env, jclass, js
     }
     g_pendingCheatFile = cheatPath;
     ApplyPendingCheatsLocked();
+}
+
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetRewindEnabled(JNIEnv *, jclass, jboolean enabled) {
+    const bool on = enabled == JNI_TRUE;
+    g_Config.iRewindSnapshotInterval = on ? 2 : 0;
+    if (!on) g_clearRewindRequested = true;
+    NLOGI("Rewind %s", on ? "enabled" : "disabled");
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindStep(JNIEnv *, jclass) {
+    if (!PSP_IsInited() || g_Config.iRewindSnapshotInterval <= 0 || !SaveState::CanRewind()) {
+        return JNI_FALSE;
+    }
+    SaveState::Rewind();
+    return JNI_TRUE;
 }
 
 JNIEXPORT jboolean JNICALL

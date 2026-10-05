@@ -56,6 +56,10 @@ object NativePpsspp {
 
     external fun nativeSetCheats(path: String)
 
+    external fun nativeSetRewindEnabled(enabled: Boolean)
+
+    external fun nativeRewindStep(): Boolean
+
     external fun nativeSaveState(path: String): Boolean
 
     external fun nativeLoadState(path: String): Boolean

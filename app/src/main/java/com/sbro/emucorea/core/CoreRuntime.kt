@@ -37,6 +37,8 @@ internal object CoreRuntime {
     private const val SAVE_STATE_MAGIC = 0x54534345
     private const val SAVE_STATE_VERSION = 1
     private const val SAVE_STATE_HEADER_BYTES = 8
+    // Holding rewind steps back through history at a steady pace.
+    private const val REWIND_STEP_INTERVAL_NANOS = 500_000_000L
 
     val settings = ConcurrentHashMap<String, String>()
     private val _failure = MutableStateFlow<RuntimeFailure?>(null)
@@ -321,6 +323,9 @@ internal object CoreRuntime {
             forwardCoreOption("ppsspp_cpu_core", if (jit) "JIT" else "IR JIT")
         }
         forwardCoreOption("ppsspp_texture_filtering", pspTextureFilterName())
+        settings["EmuCoreA/GS:RewindEnabled"]?.toBooleanStrictOrNull()?.let {
+            NativePpsspp.nativeSetRewindEnabled(it)
+        }
         // Explicit user choices from the settings / game manager / in-game menu
         // win over every derived default.
         PpssppCoreOptions.all().forEach { option ->
@@ -735,8 +740,9 @@ internal object CoreRuntime {
             return true
         }
         if ((section == "EmuCoreA" || section == "EmuCoreA/GS") && key == "RewindEnabled") {
-            if (value.toBooleanStrictOrNull() == null) return false
+            val enabled = value.toBooleanStrictOrNull() ?: return false
             settings["$section:$key"] = value
+            NativePpsspp.nativeSetRewindEnabled(enabled)
             return true
         }
         if ((section == "EmuCoreA" || section == "EmuCoreA/GS") && key == "VsyncEnable") {
@@ -804,6 +810,7 @@ internal object CoreRuntime {
         var metricsMaxCoreNanos = 0L
         var metricsStartCpuMs = Process.getElapsedCpuTime()
         var resetMetrics = true
+        var lastRewindNanos = 0L
         // Debug-only diagnostics that do not depend on the performance overlay.
         var diagStartNanos = System.nanoTime()
         var diagFrames = 0
@@ -843,6 +850,15 @@ internal object CoreRuntime {
                                 (analog ushr 16) and 0xFF,
                                 (analog ushr 24) and 0xFF
                             )
+                        }
+                        if (timeControlMode == 2) {
+                            val nowNanos = System.nanoTime()
+                            if (nowNanos - lastRewindNanos >= REWIND_STEP_INTERVAL_NANOS) {
+                                lastRewindNanos = nowNanos
+                                NativePpsspp.nativeRewindStep()
+                            }
+                        } else {
+                            lastRewindNanos = 0L
                         }
                         NativePpsspp.nativeRunFrame()
                         NativePpsspp.nativeGetFrameSize()
