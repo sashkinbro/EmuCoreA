@@ -21,8 +21,14 @@ import java.util.concurrent.atomic.AtomicIntegerArray
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.thread
 import kotlin.concurrent.withLock
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import com.sbro.emucorea.data.RetroArchShaderEffects
 
 /**
@@ -548,11 +554,19 @@ internal object CoreRuntime {
 
     @Volatile private var audioOutputLatencyMs = AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT
     @Volatile private var audioLowLatency = false
+    // Rebuilding the OpenSL player is expensive, so dragging the latency slider
+    // coalesces into a single apply shortly after the user stops.
+    private val audioBufferScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private var audioBufferApplyJob: Job? = null
 
     /** OpenSL buffer size target in milliseconds. */
     fun setAudioBufferMs(milliseconds: Int) {
         audioOutputLatencyMs = AudioDefaults.coerceOutputLatencyMs(milliseconds)
-        pushAudioBuffer()
+        audioBufferApplyJob?.cancel()
+        audioBufferApplyJob = audioBufferScope.launch {
+            delay(400)
+            pushAudioBuffer()
+        }
     }
 
     /**
@@ -561,6 +575,7 @@ internal object CoreRuntime {
      */
     fun setAudioLowLatency(enabled: Boolean) {
         audioLowLatency = enabled
+        audioBufferApplyJob?.cancel()
         pushAudioBuffer()
     }
 
