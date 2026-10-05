@@ -3884,6 +3884,7 @@ private fun EmulationSidebarMenu(
                             currentValue = uiState.aspectRatio,
                             onValueChange = onSetAspectRatio,
                             allowWrap = false,
+                            horizontalScrolling = true,
                             helpText = stringResource(R.string.settings_help_aspect_ratio),
                             onResetToDefault = { onSetAspectRatio(globalDefaults.aspectRatio) }
                         )
