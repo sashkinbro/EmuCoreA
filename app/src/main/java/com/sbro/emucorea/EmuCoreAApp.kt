@@ -7,6 +7,7 @@ import com.sbro.emucorea.core.AppAnalytics
 import com.sbro.emucorea.core.AppIconManager
 import com.sbro.emucorea.core.BackupSessionGate
 import com.sbro.emucorea.core.CrashLogger
+import com.sbro.emucorea.core.DeviceGpuInfoProvider
 import com.sbro.emucorea.core.EmulatorBridge
 import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.drive.DriveBackupArchive
@@ -43,6 +44,10 @@ class EmuCoreAApp : Application() {
         AppIconManager.applyProIcon(this, AppPreferences(this).getProUnlockedSync())
         DriveBackupWork.resumePending(this)
         EmulatorBridge.initializeOnce(this)
+        // Resolve the GPU model off the main thread (the GL renderer query opens
+        // an EGL context). The overlay falls back to the SoC catalog until this
+        // finishes, so a cold start never blocks on it.
+        applicationScope.launch { DeviceGpuInfoProvider.preload(this@EmuCoreAApp) }
         DiscordIntegration.initialize(this)
     }
 }

@@ -18,6 +18,7 @@ import com.sbro.emucorea.core.EmulatorBridge
 import com.sbro.emucorea.core.RendererDefaults
 import com.sbro.emucorea.core.SetupValidator
 import com.sbro.emucorea.core.EmulatorStorage
+import com.sbro.emucorea.core.DeviceGpuInfoProvider
 import com.sbro.emucorea.core.GamepadManager
 import com.sbro.emucorea.core.GpuHardwareProfiles
 import com.sbro.emucorea.core.GsHackDefaults
@@ -610,7 +611,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     private val playerProfileRepository = PlayerProfileRepository(application)
     private val playTimeSyncCacheRepository = PlayTimeSyncCacheRepository(application)
     private val performanceCpuName = MobileSocNameMapper.currentDeviceName()
-    private val performanceGpuName = GpuHardwareProfiles.gpuDisplayName()
+    private val performanceGpuName = DeviceGpuInfoProvider.get(application).model?.displayName
+        ?: GpuHardwareProfiles.gpuDisplayName()
     private val androidGamePerformance = AndroidGamePerformance(application)
     private val _uiState = MutableStateFlow(
         EmulationUiState(performanceOverlayHeader = buildPerformanceOverlayHeader(application))
