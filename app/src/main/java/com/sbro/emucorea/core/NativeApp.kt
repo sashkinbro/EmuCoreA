@@ -395,7 +395,30 @@ object NativeApp {
         val dataRoot = resolveDataRoot(context.applicationContext)
         dataRootOverride = dataRoot
         prepareNativeDataRoot(File(dataRoot))
+        publishAudioDeviceInfo(context.applicationContext)
         CoreRuntime.initialize(context.applicationContext, dataRoot)
+    }
+
+    /**
+     * Hands the Android output properties to the core so the OpenSL track runs
+     * at the device's native rate and the resampler sizes its ring for the
+     * actual OpenSL buffer. Without this the core forces 44.1 kHz and keeps a
+     * 1680-sample ring even when the buffer is larger, which underruns on every
+     * callback and is heard as a light crackle.
+     */
+    private fun publishAudioDeviceInfo(context: Context) {
+        if (!hasNativeCore) return
+        val audioManager = runCatching {
+            context.getSystemService(Context.AUDIO_SERVICE) as? android.media.AudioManager
+        }.getOrNull()
+        val sampleRate = audioManager
+            ?.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+            ?.toIntOrNull() ?: 0
+        val framesPerBuffer = audioManager
+            ?.getProperty(android.media.AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)
+            ?.toIntOrNull() ?: 0
+        runCatching { NativePpsspp.nativeSetAudioDeviceInfo(sampleRate, framesPerBuffer) }
+            .onFailure { Log.w(TAG, "Unable to publish the audio device info", it) }
     }
 
     @JvmStatic

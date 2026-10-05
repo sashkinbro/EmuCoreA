@@ -74,6 +74,14 @@ object NativePpsspp {
     external fun nativeSetConfig(key: String, value: String)
 
     /**
+     * Android audio device properties from [android.media.AudioManager]
+     * (PROPERTY_OUTPUT_SAMPLE_RATE / PROPERTY_OUTPUT_FRAMES_PER_BUFFER).
+     * The core sizes the OpenSL track and its resampler ring from these,
+     * exactly like PPSSPP's own Android audio init. Zero means "unknown".
+     */
+    external fun nativeSetAudioDeviceInfo(sampleRate: Int, framesPerBuffer: Int)
+
+    /**
      * Selects the renderer used when the graphics context is created, using
      * [RendererDefaults]' core values (0 = software, 1 = Vulkan, 2 = OpenGL ES).
      * Call before [nativeInit] or before a session starts; during a session the

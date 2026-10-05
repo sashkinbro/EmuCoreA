@@ -603,7 +603,16 @@ internal object CoreRuntime {
 
     private fun pushAudioBuffer() {
         val milliseconds = if (audioLowLatency) 20 else audioOutputLatencyMs
-        NativePpsspp.nativeSetConfig("audio_buffer_ms", milliseconds.toString())
+        // The default mirrors PPSSPP's Android audio exactly: the device's
+        // optimal buffer (typically ~144 frames) and the resampler's 1680-frame
+        // ring, which absorbs frame-time jitter. A custom value becomes an
+        // explicit OpenSL buffer override.
+        val value = if (!audioLowLatency && milliseconds == AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT) {
+            0
+        } else {
+            milliseconds
+        }
+        NativePpsspp.nativeSetConfig("audio_buffer_ms", value.toString())
     }
 
     /** Effective value of a core option (user override or core default). */

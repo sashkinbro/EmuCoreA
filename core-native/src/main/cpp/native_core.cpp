@@ -99,10 +99,27 @@ GraphicsContext *g_graphicsContext = nullptr;
 StereoResampler g_resampler;
 AndroidAudioState *g_audioState = nullptr;
 bool g_audioStarted = false;
-// OpenSL frames per callback. 256 is PPSSPP's fallback, but the GL render
-// thread can delay audio pushes under load; a slightly larger buffer removes
-// the resulting crackle at the cost of ~10 ms of latency.
-int g_audioFramesPerBuffer = 512;
+// Android output properties (AudioManager's optimal sample rate and frames
+// per buffer), published by the frontend before the core initializes.
+// Zero means "unknown".
+int g_audioDeviceSampleRate = 0;
+int g_audioDeviceFramesPerBuffer = 0;
+// Explicit OpenSL frames-per-callback override (0 = automatic). Set from the
+// frontend's output-latency setting; automatic mode mirrors PPSSPP's Android
+// audio init (device optimal rate with a small fallback buffer).
+int g_audioFramesPerBuffer = 0;
+#ifndef NDEBUG
+int64_t g_audioDiagLastWallUs = 0;
+// Debug-only capture of the exact PCM handed to OpenSL, written to
+// <cache>/audio-capture.wav when the session's capture is finished. It lets us
+// tell an in-pipeline artifact (clicks in the file) from a device-side one
+// (clean file, crackle still audible).
+std::vector<short> g_audioDumpSamples;
+std::string g_audioDumpPath;
+int g_audioDumpSampleRate = 48000;
+bool g_audioDumpActive = false;
+constexpr int kAudioDumpSeconds = 90;
+#endif
 bool g_booted = false;
 bool g_pendingBoot = false;
 bool g_renderReady = false;
@@ -281,13 +298,94 @@ void RebuildAdhocIp() {
 // Audio. Mirrors PPSSPP's UI/AudioCommon.cpp path: the emulator pushes mixed
 // samples into StereoResampler, the OpenSL callback pulls device-rate frames.
 // ---------------------------------------------------------------------------
+#ifndef NDEBUG
+void AudioDumpFinish() {
+    if (!g_audioDumpActive || g_audioDumpSamples.empty() || g_audioDumpPath.empty()) {
+        g_audioDumpActive = false;
+        g_audioDumpSamples.clear();
+        return;
+    }
+    FILE *file = File::OpenCFile(Path(g_audioDumpPath), "wb");
+    if (file != nullptr) {
+        const uint32_t dataBytes = static_cast<uint32_t>(g_audioDumpSamples.size() * sizeof(short));
+        const uint32_t riffSize = 36 + dataBytes;
+        const uint16_t channels = 2;
+        const uint16_t bitsPerSample = 16;
+        const uint32_t byteRate = static_cast<uint32_t>(g_audioDumpSampleRate) * channels * bitsPerSample / 8;
+        const uint16_t blockAlign = channels * bitsPerSample / 8;
+        auto writeU16 = [file](uint16_t v) { fputc(v & 0xFF, file); fputc((v >> 8) & 0xFF, file); };
+        auto writeU32 = [file](uint32_t v) {
+            fputc(v & 0xFF, file); fputc((v >> 8) & 0xFF, file);
+            fputc((v >> 16) & 0xFF, file); fputc((v >> 24) & 0xFF, file);
+        };
+        fwrite("RIFF", 1, 4, file);
+        writeU32(riffSize);
+        fwrite("WAVEfmt ", 1, 8, file);
+        writeU32(16);
+        writeU16(1);
+        writeU16(channels);
+        writeU32(static_cast<uint32_t>(g_audioDumpSampleRate));
+        writeU32(byteRate);
+        writeU16(blockAlign);
+        writeU16(bitsPerSample);
+        fwrite("data", 1, 4, file);
+        writeU32(dataBytes);
+        fwrite(g_audioDumpSamples.data(), sizeof(short), g_audioDumpSamples.size(), file);
+        fclose(file);
+        NLOGI("Audio capture written: %s (%zu samples @ %d Hz)", g_audioDumpPath.c_str(),
+              g_audioDumpSamples.size(), g_audioDumpSampleRate);
+    }
+    g_audioDumpActive = false;
+    g_audioDumpSamples.clear();
+}
+
+void AudioDumpAppend(const short *samples, int numFrames, int sampleRate) {
+    if (g_audioDumpPath.empty() || samples == nullptr || numFrames <= 0) return;
+    if (!g_audioDumpActive) {
+        g_audioDumpActive = true;
+        g_audioDumpSampleRate = sampleRate > 0 ? sampleRate : 48000;
+        g_audioDumpSamples.reserve(
+            static_cast<size_t>(g_audioDumpSampleRate) * 2 * kAudioDumpSeconds);
+    }
+    const size_t maxSamples = static_cast<size_t>(g_audioDumpSampleRate) * 2 * kAudioDumpSeconds;
+    if (g_audioDumpSamples.size() >= maxSamples) {
+        AudioDumpFinish();
+        return;
+    }
+    const size_t count = std::min(
+        static_cast<size_t>(numFrames) * 2, maxSamples - g_audioDumpSamples.size());
+    g_audioDumpSamples.insert(g_audioDumpSamples.end(), samples, samples + count);
+    if (g_audioDumpSamples.size() >= maxSamples) AudioDumpFinish();
+}
+#endif
+
 void AudioRenderCallback(short *buffer, int numSamples, int sampleRateHz, void *userdata) {
     g_resampler.Mix(buffer, numSamples, false, sampleRateHz);
+#ifndef NDEBUG
+    AudioDumpAppend(buffer, numSamples, sampleRateHz);
+#endif
+}
+
+// Mirrors Java_org_ppsspp_ppsspp_NativeApp_audioInit: prefer the device's
+// optimal output rate. Devices that report huge frames-per-buffer values lose
+// the OpenSL fast path, so PPSSPP falls back to 44.1 kHz / 512 frames there.
+int AudioOutputSampleRate() {
+    if (g_audioFramesPerBuffer <= 0 && g_audioDeviceFramesPerBuffer > 512) return 44100;
+    return g_audioDeviceSampleRate > 0 ? g_audioDeviceSampleRate : 44100;
+}
+
+int AudioOutputFramesPerBuffer() {
+    if (g_audioFramesPerBuffer > 0) return g_audioFramesPerBuffer;
+    const int frames = g_audioDeviceFramesPerBuffer > 0 ? g_audioDeviceFramesPerBuffer : 512;
+    return frames > 512 ? 512 : frames;
 }
 
 void StartAudio() {
     if (g_audioState == nullptr) {
-        g_audioState = AndroidAudio_Init(AudioRenderCallback, g_audioFramesPerBuffer, 44100);
+        const int sampleRate = AudioOutputSampleRate();
+        const int frames = AudioOutputFramesPerBuffer();
+        g_audioState = AndroidAudio_Init(AudioRenderCallback, frames, sampleRate);
+        NLOGI("Audio output: %d Hz, %d frames/buffer", sampleRate, frames);
     }
     if (!g_audioStarted && g_audioState != nullptr) {
         g_audioStarted = AndroidAudio_Resume(g_audioState);
@@ -590,7 +688,12 @@ bool System_AudioRecordingState() { return false; }
 int64_t System_GetPropertyInt(SystemProperty prop) {
     switch (prop) {
     case SYSPROP_AUDIO_SAMPLE_RATE:
-        return 44100;
+        return AudioOutputSampleRate();
+    case SYSPROP_AUDIO_FRAMES_PER_BUFFER:
+        // StereoResampler sizes its ring so one OpenSL callback never
+        // underruns; without this it stays at 1680 samples, pads silence on
+        // every larger callback and the padding is audible as crackle.
+        return AudioOutputFramesPerBuffer();
     case SYSPROP_DEVICE_TYPE:
         return DEVICE_TYPE_MOBILE;
     case SYSPROP_DISPLAY_XRES:
@@ -1270,6 +1373,16 @@ void RunFrame() {
             g_diagLastEmuUs = CoreTiming::GetGlobalTimeUs();
             g_diagFrames = 0;
         }
+        // Audio health: underruns/overruns produce clicks even when the frame
+        // loop reports full speed. The stats reset on every call.
+        if (g_audioDiagLastWallUs == 0) {
+            g_audioDiagLastWallUs = nowWallUs;
+        } else if (nowWallUs - g_audioDiagLastWallUs >= 2'000'000) {
+            char audioStats[512];
+            System_AudioGetDebugStats(audioStats, sizeof(audioStats));
+            NLOGI("audio diag\n%s", audioStats);
+            g_audioDiagLastWallUs = nowWallUs;
+        }
     }
 #endif
 }
@@ -1333,6 +1446,9 @@ void ShutdownCore() {
         AndroidAudio_Shutdown(g_audioState);
         g_audioState = nullptr;
     }
+#ifndef NDEBUG
+    AudioDumpFinish();
+#endif
     if (g_bootRequestLoader != nullptr) {
         // A boot request that never reached the frame thread: the loader is
         // still owned here.
@@ -1550,12 +1666,19 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         return;
     }
     if (key == "audio_buffer_ms") {
-        if (ParseIntInRange(value, 10, 500, &number)) {
-            // OpenSL runs one callback per buffer; cap it so latency stays sane
-            // even with the app's large request (150 ms by default).
-            const int frames = std::clamp(44100 * number / 1000, 64, 2048);
+        // 0 selects automatic sizing (the device's optimal rate and buffer,
+        // PPSSPP's Android behavior). A positive value is the frontend's
+        // output-latency target in milliseconds.
+        if (ParseIntInRange(value, 0, 500, &number)) {
+            const int frames = number <= 0
+                ? 0
+                : std::clamp(AudioOutputSampleRate() * number / 1000, 64, 4096);
             if (frames != g_audioFramesPerBuffer) {
-                NLOGI("Audio buffer: %d ms (%d frames)", number, frames);
+                if (frames > 0) {
+                    NLOGI("Audio buffer: %d ms (%d frames)", number, frames);
+                } else {
+                    NLOGI("Audio buffer: automatic (%d frames)", AudioOutputFramesPerBuffer());
+                }
                 g_audioFramesPerBuffer = frames;
                 if (g_audioState != nullptr) {
                     // Rebuild the OpenSL player so the new buffer takes effect.
@@ -1966,6 +2089,9 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeInit(JNIEnv *env, jclass, jstring
     const std::string data = ToString(env, dataDir);
     const std::string external = ToString(env, externalDir);
     const std::string cache = ToString(env, cacheDir);
+#ifndef NDEBUG
+    g_audioDumpPath = cache.empty() ? std::string() : cache + "/audio-capture.wav";
+#endif
 
     if (!apk.empty()) {
         g_VFS.Register("", ZipFileReader::Create(Path(apk), "assets/"));
@@ -2144,6 +2270,19 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetConfig(JNIEnv *env, jclass, js
     if (k.empty()) return;
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     ApplyNativeConfig(k, v);
+}
+
+// Android output properties from AudioManager (optimal sample rate and frames
+// per buffer). The core uses them for the OpenSL track and lets
+// StereoResampler size its ring to the real callback size, like PPSSPP.
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetAudioDeviceInfo(JNIEnv *, jclass, jint sampleRate,
+                                                                  jint framesPerBuffer) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    g_audioDeviceSampleRate = sampleRate > 0 ? sampleRate : 0;
+    g_audioDeviceFramesPerBuffer = framesPerBuffer > 0 ? framesPerBuffer : 0;
+    NLOGI("Audio device info: %d Hz, %d frames/buffer", g_audioDeviceSampleRate,
+          g_audioDeviceFramesPerBuffer);
 }
 
 // Selects the renderer for the next graphics context. Values follow
