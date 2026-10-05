@@ -244,6 +244,7 @@ internal object CoreRuntime {
      */
     fun restartWithRenderer(renderer: Int): Boolean = lifecycleLock.withLock {
         requestedRenderer = RendererDefaults.normalizeAndroidRenderer(renderer)
+        Log.i(TAG, "Renderer preference stored; the native core boots Vulkan for the next session")
         true
     }
 
@@ -536,7 +537,10 @@ internal object CoreRuntime {
     }
 
     fun changeDisc(path: String): Boolean {
-        if (!isSupportedDiscPath(path)) return false
+        if (!isSupportedDiscPath(path)) {
+            Log.w(TAG, "Disc swap rejected: unsupported PSP image")
+            return false
+        }
         Log.w(TAG, "Disc swapping is not supported by the native core")
         return false
     }
