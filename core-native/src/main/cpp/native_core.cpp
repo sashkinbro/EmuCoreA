@@ -982,8 +982,10 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeLoadState(JNIEnv *env, jclass, js
 
 JNIEXPORT jintArray JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeGetFrameSize(JNIEnv *env, jclass) {
-    jint values[2] = {static_cast<jint>(PSP_CoreParameter().pixelWidth),
-                      static_cast<jint>(PSP_CoreParameter().pixelHeight)};
+    // The overlay shows the game's internal rendering resolution, not the
+    // window/backbuffer size.
+    jint values[2] = {static_cast<jint>(PSP_CoreParameter().renderWidth),
+                      static_cast<jint>(PSP_CoreParameter().renderHeight)};
     jintArray result = env->NewIntArray(2);
     if (result != nullptr) env->SetIntArrayRegion(result, 0, 2, values);
     return result;
