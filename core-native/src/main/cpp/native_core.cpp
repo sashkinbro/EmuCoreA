@@ -16,6 +16,8 @@
 #include <android/native_window_jni.h>
 #include <sys/system_properties.h>
 
+#include <algorithm>
+#include <array>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -29,6 +31,7 @@
 #include "Common/GPU/thin3d.h"
 #include "Common/GPU/Vulkan/VulkanGraphicsContext.h"
 #include "Common/Log.h"
+#include "Common/Serialize/Serializer.h"
 #include "Common/System/Display.h"
 #include "Common/System/System.h"
 #include "Common/Thread/ThreadManager.h"
@@ -343,6 +346,37 @@ void RunFrame() {
         draw->Present(Draw::PresentMode::FIFO);
     }
     g_graphicsContext->Poll();
+    SaveState::Process();
+}
+
+bool SaveStateToFile(const std::string &path) {
+    std::vector<u8> data;
+    if (SaveState::SaveToRam(data) != CChunkFileReader::ERROR_NONE) {
+        NLOGE("SaveToRam failed");
+        return false;
+    }
+    FILE *file = File::OpenCFile(Path(path), "wb");
+    if (file == nullptr) return false;
+    const size_t written = fwrite(data.data(), 1, data.size(), file);
+    fclose(file);
+    return written == data.size();
+}
+
+bool LoadStateFromFile(const std::string &path) {
+    FILE *file = File::OpenCFile(Path(path), "rb");
+    if (file == nullptr) return false;
+    std::vector<u8> data;
+    std::array<u8, 65536> buffer;
+    for (;;) {
+        const size_t n = fread(buffer.data(), 1, buffer.size(), file);
+        data.insert(data.end(), buffer.begin(), buffer.begin() + n);
+        if (n < buffer.size()) break;
+    }
+    fclose(file);
+    std::string error;
+    const bool ok = SaveState::LoadFromRam(data, &error) == CChunkFileReader::ERROR_NONE;
+    if (!ok) NLOGE("LoadFromRam failed: %s", error.c_str());
+    return ok;
 }
 
 void ShutdownCore() {
@@ -473,6 +507,66 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetPadAnalog(JNIEnv *, jclass, ji
 JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeShutdown(JNIEnv *, jclass) {
     ShutdownCore();
+}
+
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetConfig(JNIEnv *env, jclass, jstring key,
+                                                         jstring value) {
+    const std::string k = ToString(env, key);
+    const std::string v = ToString(env, value);
+    const bool on = v == "1" || v == "true";
+    if (k == "internal_resolution") {
+        g_Config.iInternalResolution = std::clamp(atoi(v.c_str()), 1, 10);
+    } else if (k == "frameskip") {
+        g_Config.iFrameSkip = atoi(v.c_str());
+    } else if (k == "auto_frameskip") {
+        g_Config.bAutoFrameSkip = on;
+    } else if (k == "frame_duplication") {
+        g_Config.bRenderDuplicateFrames = on;
+    } else if (k == "texture_filtering") {
+        g_Config.iTexFiltering = atoi(v.c_str());
+    } else if (k == "texture_scaling_level") {
+        g_Config.iTexScalingLevel = atoi(v.c_str());
+    } else if (k == "volume") {
+        g_Config.iGameVolume = std::clamp(atoi(v.c_str()), 0, 100);
+    } else if (k == "skip_buffer_effects") {
+        g_Config.bSkipBufferEffects = on;
+    } else if (k == "fast_memory") {
+        g_Config.bFastMemory = on;
+    } else if (k == "cpu_core") {
+        g_Config.iCpuCore = v == "jit" ? (int)CPUCore::JIT : (int)CPUCore::IR_INTERPRETER;
+    } else if (k == "crop16x9") {
+        g_Config.bDisplayCropTo16x9 = on;
+    } else if (k == "vsync") {
+        g_Config.bVSync = on;
+    } else if (k == "multi_threading") {
+        g_Config.bRenderMultiThreading = on;
+    } else {
+        NLOGW("Unknown config key: %s", k.c_str());
+    }
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSaveState(JNIEnv *env, jclass, jstring path) {
+    if (!g_booted) return JNI_FALSE;
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    return SaveStateToFile(ToString(env, path)) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeLoadState(JNIEnv *env, jclass, jstring path) {
+    if (!g_booted) return JNI_FALSE;
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    return LoadStateFromFile(ToString(env, path)) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jintArray JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeGetFrameSize(JNIEnv *env, jclass) {
+    jint values[2] = {static_cast<jint>(PSP_CoreParameter().pixelWidth),
+                      static_cast<jint>(PSP_CoreParameter().pixelHeight)};
+    jintArray result = env->NewIntArray(2);
+    if (result != nullptr) env->SetIntArrayRegion(result, 0, 2, values);
+    return result;
 }
 
 }  // extern "C"

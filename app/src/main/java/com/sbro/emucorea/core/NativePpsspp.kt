@@ -52,5 +52,13 @@ object NativePpsspp {
 
     external fun nativeSetPadAnalog(port: Int, lx: Int, ly: Int, rx: Int, ry: Int)
 
+    external fun nativeSetConfig(key: String, value: String)
+
+    external fun nativeSaveState(path: String): Boolean
+
+    external fun nativeLoadState(path: String): Boolean
+
+    external fun nativeGetFrameSize(): IntArray?
+
     external fun nativeShutdown()
 }
