@@ -626,7 +626,13 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeInit(JNIEnv *env, jclass, jstring
 JNIEXPORT jboolean JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeBoot(JNIEnv *env, jclass, jstring gamePath) {
     const std::string game = ToString(env, gamePath);
-    if (game.empty()) return JNI_FALSE;
+    if (game.empty()) {
+        // PPSSPP's loader requires content to identify (an empty path fails
+        // Identify_File before the kernel starts), so a disc-less boot cannot
+        // succeed. Fail cleanly instead of starting a loader that dies.
+        NLOGW("BIOS-only boot requested, but the core requires a game image");
+        return JNI_FALSE;
+    }
     // The non-libretro loader thread initializes the GPU immediately, so the
     // draw context (created with the surface) must already exist.
     if (!g_renderReady) {

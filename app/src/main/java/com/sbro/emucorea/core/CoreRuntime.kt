@@ -249,7 +249,9 @@ internal object CoreRuntime {
     private fun startSession(gamePath: String, biosOnly: Boolean): Boolean {
         val startupStartedAtNanos = System.nanoTime()
         if (biosOnly || gamePath.isBlank()) {
-            Log.w(TAG, "BIOS-only boot is not supported by the native core")
+            // PPSSPP cannot identify content from an empty path, so a BIOS-only
+            // session is not bootable. Report it instead of crashing.
+            Log.w(TAG, "BIOS-only boot is not supported: nativeBoot requires a game image")
             return false
         }
         if (!isSupportedDiscPath(gamePath)) {
