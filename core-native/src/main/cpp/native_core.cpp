@@ -43,6 +43,7 @@
 #include "Core/Config.h"
 #include "Core/Core.h"
 #include "Core/CoreParameter.h"
+#include "Core/ELF/ParamSFO.h"
 #include "Core/FileSystems/BlockDevices.h"
 #include "Core/FileSystems/ISOFileSystem.h"
 #include "Core/HLE/sceCtrl.h"
@@ -81,6 +82,8 @@ bool g_audioStarted = false;
 bool g_booted = false;
 bool g_pendingBoot = false;
 bool g_renderReady = false;
+// Cheat .ini requested by the frontend, applied once the disc ID is known.
+std::string g_pendingCheatFile;
 std::string g_bootError;
 int g_displayWidth = 1080;
 int g_displayHeight = 1920;
@@ -397,6 +400,53 @@ bool AttachSurface(ANativeWindow *window, int width, int height) {
     return true;
 }
 
+// Copies the frontend's CWCheat file into the core's cheat directory under
+// the booted game's disc ID and asks the cheat engine to reload it. Called
+// with g_nativeFrameMutex held; retries every frame until the disc ID exists.
+void ApplyPendingCheatsLocked() {
+    if (g_pendingCheatFile.empty() || !g_booted) return;
+
+    const std::string discID = g_paramSFO.GetDiscID();
+    if (discID.empty()) return;
+
+    FILE *in = File::OpenCFile(Path(g_pendingCheatFile), "rb");
+    if (in == nullptr) {
+        NLOGW("Unable to open cheat file: %s", g_pendingCheatFile.c_str());
+        g_pendingCheatFile.clear();
+        return;
+    }
+    std::vector<u8> data;
+    std::array<u8, 16384> buffer;
+    for (;;) {
+        const size_t n = fread(buffer.data(), 1, buffer.size(), in);
+        data.insert(data.end(), buffer.begin(), buffer.begin() + n);
+        if (n < buffer.size()) break;
+    }
+    fclose(in);
+
+    const Path cheatDirectory = GetSysDirectory(DIRECTORY_CHEATS);
+    File::CreateFullPath(cheatDirectory);
+    const Path target = cheatDirectory / (discID + ".ini");
+    FILE *out = File::OpenCFile(target, "wb");
+    if (out == nullptr) {
+        NLOGE("Unable to write cheat file: %s", target.c_str());
+        g_pendingCheatFile.clear();
+        return;
+    }
+    const size_t written = fwrite(data.data(), 1, data.size(), out);
+    fclose(out);
+    if (written != data.size()) {
+        NLOGE("Short write on cheat file: %s", target.c_str());
+        g_pendingCheatFile.clear();
+        return;
+    }
+
+    g_Config.bEnableCheats = true;
+    g_Config.bReloadCheats = true;
+    NLOGI("Cheats applied for %s (%zu bytes)", discID.c_str(), data.size());
+    g_pendingCheatFile.clear();
+}
+
 void RunFrame() {
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     if (g_graphicsContext == nullptr || !g_renderReady) return;
@@ -422,6 +472,8 @@ void RunFrame() {
     }
 
     if (!g_booted || gpu == nullptr) return;
+
+    ApplyPendingCheatsLocked();
 
     Draw::DrawContext *draw = g_graphicsContext->GetDrawContext();
     if (draw != nullptr) {
@@ -659,6 +711,21 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetConfig(JNIEnv *env, jclass, js
     } else {
         NLOGW("Unknown config key: %s", k.c_str());
     }
+}
+
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCheats(JNIEnv *env, jclass, jstring path) {
+    const std::string cheatPath = ToString(env, path);
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    if (cheatPath.empty()) {
+        g_pendingCheatFile.clear();
+        g_Config.bEnableCheats = false;
+        g_Config.bReloadCheats = false;
+        NLOGI("Cheats disabled");
+        return;
+    }
+    g_pendingCheatFile = cheatPath;
+    ApplyPendingCheatsLocked();
 }
 
 JNIEXPORT jboolean JNICALL

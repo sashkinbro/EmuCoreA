@@ -54,6 +54,8 @@ object NativePpsspp {
 
     external fun nativeSetConfig(key: String, value: String)
 
+    external fun nativeSetCheats(path: String)
+
     external fun nativeSaveState(path: String): Boolean
 
     external fun nativeLoadState(path: String): Boolean

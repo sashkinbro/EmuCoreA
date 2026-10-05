@@ -593,18 +593,29 @@ internal object CoreRuntime {
 
     @Volatile private var lastCheatFilePath: String? = null
 
-    // Cheats are applied by the retired libretro bridge; the native core has no
-    // cheat interface yet, so this surface stays a safe no-op.
+    /** Hands the selected CWCheat file to the core, which reloads its engine. */
     fun loadCheats(path: String) {
         lastCheatFilePath = path
+        applyCheats(path)
     }
 
     fun clearCheats() {
         lastCheatFilePath = null
+        applyCheats("")
     }
 
     fun reloadCheats() {
-        // No-op: cheats are not exposed by the native core.
+        val path = lastCheatFilePath
+        if (path != null) applyCheats(path) else applyCheats("")
+    }
+
+    private fun applyCheats(path: String) {
+        runOnFrameThread {
+            sessionLock.withLock {
+                if (nativeInitialized) NativePpsspp.nativeSetCheats(path)
+            }
+            true
+        }
     }
 
     fun setMemoryCardPath(slot: Int, path: String?) {
