@@ -19,8 +19,8 @@ object AudioDefaults {
     const val LIGHTWEIGHT_SPU2_DEFAULT = false
 
     // Audio backend selection (Android-specific)
-    // BACKEND_AAUDIO  → maps to AudioBackend::SDL in core (android_aaudio_stream.cpp)
-    // BACKEND_OPENSLES → maps to AudioBackend::OpenSLES (android_opensles_stream.cpp)
+    // BACKEND_AAUDIO   → the native frontend's own AAudio output
+    // BACKEND_OPENSLES → PPSSPP's OpenSL ES backend (android/jni/OpenSLContext.cpp)
     const val BACKEND_AAUDIO = 0
     const val BACKEND_OPENSLES = 1
     const val BACKEND_DEFAULT = BACKEND_AAUDIO

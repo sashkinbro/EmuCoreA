@@ -80,7 +80,12 @@
 #include "shader_chain.h"
 
 #define LOG_TAG "EmuCoreA-Native"
+#ifdef NDEBUG
+// Release builds keep warnings and errors only: no info-level output at all.
+#define NLOGI(...) ((void)0)
+#else
 #define NLOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#endif
 #define NLOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define NLOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
@@ -109,22 +114,33 @@ int g_audioDeviceFramesPerBuffer = 0;
 // frontend's output-latency setting; automatic mode mirrors PPSSPP's Android
 // audio init (device optimal rate with a small fallback buffer).
 int g_audioFramesPerBuffer = 0;
-// Output backend. AAudio is PPSSPP's modern Android default; OpenSL ES stays
-// as the fallback and as an explicit frontend choice.
+// Output backend. AAudio is the frontend's default; OpenSL ES stays as the
+// fallback and as an explicit frontend choice.
 bool g_useAaudioBackend = true;
 AAudioStream *g_aaudioStream = nullptr;
 int g_aaudioSampleRate = 0;
 int g_aaudioFramesPerBuffer = 0;
+// "Minimal output latency": when off (the default) the AAudio stream is opened
+// in the normal performance mode with AAudio's own (larger) buffer. Requesting
+// the low-latency path unconditionally produced a tiny MMAP buffer that leaves
+// no room for frame-time spikes on many devices, which is heard as crackle.
+bool g_audioLowLatency = false;
+// Set by the AAudio error callback when the stream is disconnected (device
+// change, audio server restart). The frame thread rebuilds the output; AAudio
+// streams cannot be reused after a disconnect.
+std::atomic<bool> g_audioRebuildRequested{false};
 #ifndef NDEBUG
 int64_t g_audioDiagLastWallUs = 0;
-// Debug-only capture of the exact PCM handed to OpenSL, written to
-// <cache>/audio-capture.wav when the session's capture is finished. It lets us
-// tell an in-pipeline artifact (clicks in the file) from a device-side one
-// (clean file, crackle still audible).
+// Debug-only capture of the exact PCM handed to the output, enabled with the
+// "audio_capture" config key or debug.emucorea.audio_capture, written to
+// <cache>/audio-capture.wav at shutdown. It lets us tell an in-pipeline
+// artifact (clicks in the file) from a device-side one (clean file, crackle
+// still audible). Never written from the audio callback thread.
 std::vector<short> g_audioDumpSamples;
 std::string g_audioDumpPath;
 int g_audioDumpSampleRate = 48000;
 bool g_audioDumpActive = false;
+bool g_audioCaptureEnabled = false;
 constexpr int kAudioDumpSeconds = 90;
 #endif
 bool g_booted = false;
@@ -239,6 +255,19 @@ bool ParseBool(const std::string &value, bool *out) {
     return false;
 }
 
+#ifndef NDEBUG
+// Debug builds start at LNOTICE so per-framebuffer INFO logs cannot flood
+// logcat and spike frame times. The frontend's "log_level" config key and the
+// debug.emucorea.log_level system property raise or disable it explicitly.
+void ApplyDebugLogLevel(const std::string &value) {
+    if (EqualsIgnoreCase(value, "verbose")) g_logManager.SetAllLogLevels(LogLevel::LVERBOSE);
+    else if (EqualsIgnoreCase(value, "debug")) g_logManager.SetAllLogLevels(LogLevel::LDEBUG);
+    else if (EqualsIgnoreCase(value, "info")) g_logManager.SetAllLogLevels(LogLevel::LINFO);
+    else if (EqualsIgnoreCase(value, "notice")) g_logManager.SetAllLogLevels(LogLevel::LNOTICE);
+    else if (EqualsIgnoreCase(value, "off")) g_logManager.SetOutputsEnabled((LogOutput)0);
+}
+#endif
+
 // Mirrors Config::PostLoadCleanup() (private) for the fields this frontend
 // depends on, then restores the shipped defaults. The frontend forwards every
 // option afterwards, so the on-disk ppsspp.ini is deliberately never loaded:
@@ -303,11 +332,11 @@ void RebuildAdhocIp() {
 
 // ---------------------------------------------------------------------------
 // Audio. Mirrors PPSSPP's UI/AudioCommon.cpp path: the emulator pushes mixed
-// samples into StereoResampler, the OpenSL callback pulls device-rate frames.
+// samples into StereoResampler, the output callback pulls device-rate frames.
 // ---------------------------------------------------------------------------
 #ifndef NDEBUG
 void AudioDumpFinish() {
-    if (!g_audioDumpActive || g_audioDumpSamples.empty() || g_audioDumpPath.empty()) {
+    if (g_audioDumpSamples.empty() || g_audioDumpPath.empty()) {
         g_audioDumpActive = false;
         g_audioDumpSamples.clear();
         return;
@@ -347,8 +376,9 @@ void AudioDumpFinish() {
 }
 
 void AudioDumpAppend(const short *samples, int numFrames, int sampleRate) {
-    if (g_audioDumpPath.empty() || samples == nullptr || numFrames <= 0) return;
+    if (!g_audioCaptureEnabled || g_audioDumpPath.empty() || samples == nullptr || numFrames <= 0) return;
     if (!g_audioDumpActive) {
+        if (!g_audioDumpSamples.empty()) return;  // capture already complete
         g_audioDumpActive = true;
         g_audioDumpSampleRate = sampleRate > 0 ? sampleRate : 48000;
         g_audioDumpSamples.reserve(
@@ -356,13 +386,16 @@ void AudioDumpAppend(const short *samples, int numFrames, int sampleRate) {
     }
     const size_t maxSamples = static_cast<size_t>(g_audioDumpSampleRate) * 2 * kAudioDumpSeconds;
     if (g_audioDumpSamples.size() >= maxSamples) {
-        AudioDumpFinish();
+        // Capture complete. Do not write the file here: this runs on the audio
+        // callback thread and a synchronous multi-megabyte write would stall
+        // the output. ShutdownCore() writes it on the frame thread.
+        g_audioDumpActive = false;
         return;
     }
     const size_t count = std::min(
         static_cast<size_t>(numFrames) * 2, maxSamples - g_audioDumpSamples.size());
     g_audioDumpSamples.insert(g_audioDumpSamples.end(), samples, samples + count);
-    if (g_audioDumpSamples.size() >= maxSamples) AudioDumpFinish();
+    if (g_audioDumpSamples.size() >= maxSamples) g_audioDumpActive = false;
 }
 #endif
 
@@ -375,8 +408,7 @@ void AudioRenderCallback(short *buffer, int numSamples, int sampleRateHz, void *
 
 // ---------------------------------------------------------------------------
 // AAudio output. The stream pulls straight from StereoResampler on the audio
-// callback thread, so no OpenSL buffer queue sits in between. This mirrors
-// PPSSPP's modern Android default backend.
+// callback thread, so no OpenSL buffer queue sits in between.
 // ---------------------------------------------------------------------------
 aaudio_data_callback_result_t AAudioDataCallback(AAudioStream *stream, void * /*userData*/,
                                                  void *audioData, int32_t numFrames) {
@@ -394,6 +426,11 @@ aaudio_data_callback_result_t AAudioDataCallback(AAudioStream *stream, void * /*
 
 void AAudioErrorCallback(AAudioStream * /*stream*/, void * /*userData*/, aaudio_result_t error) {
     NLOGE("AAudio stream error: %s", AAudio_convertResultToText(error));
+    if (error == AAUDIO_ERROR_DISCONNECTED) {
+        // The stream cannot be reused after a disconnect; the frame thread
+        // rebuilds the output (headset change, audio server restart, ...).
+        g_audioRebuildRequested.store(true);
+    }
 }
 
 bool StartAAudio() {
@@ -408,8 +445,17 @@ bool StartAAudio() {
     AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
     AAudioStreamBuilder_setChannelCount(builder, 2);
     AAudioStreamBuilder_setSampleRate(builder, sampleRate);
-    AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+    // Only opt into the low-latency MMAP path when the user asked for it. Its
+    // tiny device buffer has no room for frame-time spikes, which many devices
+    // turn into audible crackle. The default (performance mode NONE) uses
+    // AAudio's regular buffer instead.
+    AAudioStreamBuilder_setPerformanceMode(
+        builder, g_audioLowLatency ? AAUDIO_PERFORMANCE_MODE_LOW_LATENCY : AAUDIO_PERFORMANCE_MODE_NONE);
     AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_SHARED);
+    // An explicit buffer size only sticks if the capacity can hold it.
+    if (g_audioFramesPerBuffer > 0) {
+        AAudioStreamBuilder_setBufferCapacityInFrames(builder, g_audioFramesPerBuffer);
+    }
     AAudioStreamBuilder_setDataCallback(builder, AAudioDataCallback, nullptr);
     AAudioStreamBuilder_setErrorCallback(builder, AAudioErrorCallback, nullptr);
 
@@ -423,7 +469,7 @@ bool StartAAudio() {
     g_aaudioSampleRate = AAudioStream_getSampleRate(g_aaudioStream);
     g_aaudioFramesPerBuffer = AAudioStream_getFramesPerBurst(g_aaudioStream);
     // The frontend's output-latency setting maps to the stream buffer size;
-    // automatic mode keeps AAudio's own sizing.
+    // automatic mode keeps AAudio's own (safer) sizing.
     if (g_audioFramesPerBuffer > 0) {
         const int32_t applied =
             AAudioStream_setBufferSizeInFrames(g_aaudioStream, g_audioFramesPerBuffer);
@@ -438,9 +484,10 @@ bool StartAAudio() {
         g_aaudioFramesPerBuffer = 0;
         return false;
     }
-    NLOGI("AAudio started: %d Hz, burst %d, buffer %d frames", g_aaudioSampleRate,
+    NLOGI("AAudio started: %d Hz, burst %d, buffer %d frames (%s latency mode)", g_aaudioSampleRate,
           AAudioStream_getFramesPerBurst(g_aaudioStream),
-          AAudioStream_getBufferSizeInFrames(g_aaudioStream));
+          AAudioStream_getBufferSizeInFrames(g_aaudioStream),
+          g_audioLowLatency ? "low" : "normal");
     return true;
 }
 
@@ -466,6 +513,12 @@ int AudioOutputSampleRate() {
 int AudioOutputFramesPerBuffer() {
     if (g_audioFramesPerBuffer > 0) return g_audioFramesPerBuffer;
     if (g_useAaudioBackend) {
+        // The resampler ring must cover one whole callback; AAudio's callback
+        // can ask for the entire stream buffer, not just one burst.
+        if (g_aaudioStream != nullptr) {
+            const int32_t bufferFrames = AAudioStream_getBufferSizeInFrames(g_aaudioStream);
+            if (bufferFrames > 0) return bufferFrames;
+        }
         return g_aaudioFramesPerBuffer > 0
             ? g_aaudioFramesPerBuffer
             : (g_audioDeviceFramesPerBuffer > 0 ? g_audioDeviceFramesPerBuffer : 512);
@@ -1350,6 +1403,13 @@ void RunFrame() {
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     if (g_graphicsContext == nullptr || !g_renderReady) return;
 
+    // An AAudio stream that was disconnected (device change, audio server
+    // restart) cannot be reused; rebuild the output on this thread.
+    if (g_audioRebuildRequested.exchange(false) && g_audioStarted) {
+        NLOGW("Rebuilding the audio output after a stream disconnect");
+        RebuildAudio();
+    }
+
     // The OpenGL context lives on this thread, so it is created on the first
     // frame after the surface arrives.
     if (g_activeRenderer == kRendererOpenGL && !g_glInitialized) {
@@ -1498,6 +1558,12 @@ void RunFrame() {
             char audioStats[512];
             System_AudioGetDebugStats(audioStats, sizeof(audioStats));
             NLOGI("audio diag\n%s", audioStats);
+            if (g_aaudioStream != nullptr) {
+                const int32_t xruns = AAudioStream_getXRunCount(g_aaudioStream);
+                if (xruns > 0) {
+                    NLOGW("AAudio xruns (underruns) since start: %d", xruns);
+                }
+            }
             g_audioDiagLastWallUs = nowWallUs;
         }
     }
@@ -1564,6 +1630,8 @@ void ShutdownCore() {
         g_audioState = nullptr;
     }
 #ifndef NDEBUG
+    // Writes the diagnostic capture here, on the frame thread, never from the
+    // audio callback.
     AudioDumpFinish();
 #endif
     if (g_bootRequestLoader != nullptr) {
@@ -1806,8 +1874,8 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         return;
     }
     if (key == "audio_backend") {
-        // "aaudio" (default, like PPSSPP) or "opensl". Switching rebuilds a
-        // live output so the change is audible immediately.
+        // "aaudio" (default) or "opensl". Switching rebuilds a live output so
+        // the change is audible immediately.
         const bool useAaudio = !EqualsIgnoreCase(value, "opensl") &&
             !EqualsIgnoreCase(value, "opensl es") && !EqualsIgnoreCase(value, "opensl_es");
         if (useAaudio != g_useAaudioBackend) {
@@ -1817,6 +1885,40 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
                 RebuildAudio();
             }
         }
+        return;
+    }
+    if (key == "audio_low_latency") {
+        // Off by default: the low-latency path uses a tiny device buffer that
+        // leaves no room for frame-time spikes. Only enable it on request.
+        if (hasBool && on != g_audioLowLatency) {
+            g_audioLowLatency = on;
+            NLOGI("Audio low-latency mode: %s", on ? "on" : "off");
+            if (g_audioStarted || g_audioState != nullptr || g_aaudioStream != nullptr) {
+                RebuildAudio();
+            }
+        }
+        return;
+    }
+    if (key == "audio_capture") {
+#ifndef NDEBUG
+        // Debug-only diagnostic PCM capture, written to <cache>/audio-capture.wav
+        // at shutdown. The capture memcpy runs on the audio callback thread.
+        if (hasBool) {
+            g_audioCaptureEnabled = on;
+            NLOGI("Audio capture: %s", on ? "enabled" : "disabled");
+            if (!on && g_audioDumpActive) {
+                g_audioDumpActive = false;
+                g_audioDumpSamples.clear();
+            }
+        }
+#endif
+        return;
+    }
+    if (key == "log_level") {
+#ifndef NDEBUG
+        ApplyDebugLogLevel(value);
+        NLOGI("Log level set to: %s", value.c_str());
+#endif
         return;
     }
 
@@ -2210,11 +2312,22 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeInit(JNIEnv *env, jclass, jstring
     g_displayHeight = displayHeight > 0 ? displayHeight : 1920;
     g_displayRefreshRate = refreshRate > 0.0f ? refreshRate : 60.0f;
 
-#ifndef NDEBUG
-    // PPSSPP's own log manager is muted until a frontend enables an output.
-    g_Config.bEnableLogging = true;
+    // PPSSPP's own frontend always initializes the log manager. Without it the
+    // channels keep their LDEBUG defaults and every DEBUG_LOG in a hot path
+    // still pays a GenericLog/LogLine call in release before the (disabled)
+    // output check. Init() lowers them to LINFO and lets the macros filter
+    // DEBUG_LOG out entirely.
     g_logManager.Init(&g_Config.bEnableLogging, false);
+#ifndef NDEBUG
+    // Debug builds write to logcat, but only important messages by default:
+    // per-framebuffer INFO logs can flood logcat and spike frame times.
+    // "log_level" raises or disables it explicitly when diagnosing.
     g_logManager.SetOutputsEnabled(LogOutput::Stdio);
+    g_logManager.SetAllLogLevels(LogLevel::LNOTICE);
+    char logLevelProp[PROP_VALUE_MAX] = {0};
+    if (__system_property_get("debug.emucorea.log_level", logLevelProp) > 0) {
+        ApplyDebugLogLevel(logLevelProp);
+    }
 #endif
 
     // Must happen before anything reads g_Config (including CreateGraphicsContext
@@ -2228,6 +2341,11 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeInit(JNIEnv *env, jclass, jstring
     const std::string cache = ToString(env, cacheDir);
 #ifndef NDEBUG
     g_audioDumpPath = cache.empty() ? std::string() : cache + "/audio-capture.wav";
+    char captureProp[PROP_VALUE_MAX] = {0};
+    if (__system_property_get("debug.emucorea.audio_capture", captureProp) > 0 && captureProp[0] == '1') {
+        g_audioCaptureEnabled = true;
+        NLOGI("Audio capture enabled by debug.emucorea.audio_capture");
+    }
 #endif
 
     if (!apk.empty()) {

@@ -49,6 +49,9 @@ internal object CoreRuntime {
     private const val DEFAULT_SAVE_STATE_BUFFER_BYTES = 256 * 1024
     // Holding rewind steps back through history at a steady pace.
     private const val REWIND_STEP_INTERVAL_NANOS = 500_000_000L
+    // The internal render size changes only on boot or an explicit resolution
+    // change, so it does not need a per-frame JNI round trip.
+    private const val FRAME_SIZE_POLL_INTERVAL_NANOS = 500_000_000L
 
     val settings = ConcurrentHashMap<String, String>()
     private val _failure = MutableStateFlow<RuntimeFailure?>(null)
@@ -91,6 +94,7 @@ internal object CoreRuntime {
     @Volatile private var currentBiosOnly = false
     @Volatile private var performanceMetricsEnabled = false
     @Volatile private var detailedPerformanceMetrics = false
+    @Volatile private var metricsResetRequested = false
     @Volatile private var performanceMetricsSnapshot: String? = null
 
     private val desiredPadButtons = AtomicIntegerArray(IntArray(2) { 0xFFFF })
@@ -271,6 +275,7 @@ internal object CoreRuntime {
     fun setPerformanceMetricsEnabled(visible: Boolean, detailed: Boolean) {
         performanceMetricsEnabled = visible
         detailedPerformanceMetrics = visible && detailed
+        metricsResetRequested = true
         if (!visible) performanceMetricsSnapshot = null
     }
 
@@ -602,10 +607,12 @@ internal object CoreRuntime {
 
     /**
      * "Minimal output latency" trades buffer size for responsiveness: when on,
-     * the OpenSL callback uses a small buffer so input lag is lower.
+     * the output uses a small buffer (and AAudio's low-latency performance
+     * mode) so input lag is lower.
      */
     fun setAudioLowLatency(enabled: Boolean) {
         audioLowLatency = enabled
+        NativePpsspp.nativeSetConfig("audio_low_latency", if (enabled) "1" else "0")
         audioBufferApplyJob?.cancel()
         pushAudioBuffer()
     }
@@ -615,7 +622,7 @@ internal object CoreRuntime {
         // The default mirrors PPSSPP's Android audio exactly: the device's
         // optimal buffer (typically ~144 frames) and the resampler's 1680-frame
         // ring, which absorbs frame-time jitter. A custom value becomes an
-        // explicit OpenSL buffer override.
+        // explicit output buffer override.
         val value = if (!audioLowLatency && milliseconds == AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT) {
             0
         } else {
@@ -1155,6 +1162,7 @@ internal object CoreRuntime {
         var lastPublishedSpeed = 100.0
         var resetMetrics = true
         var lastRewindNanos = 0L
+        var lastFrameSizePollNanos = 0L
         var coreExited = false
         // Debug-only diagnostics that do not depend on the performance overlay.
         var diagStartNanos = System.nanoTime()
@@ -1163,15 +1171,25 @@ internal object CoreRuntime {
         try {
             while (running) {
                 drainFrameTasks()
+                if (metricsResetRequested) {
+                    // The overlay was toggled: start a clean measurement window
+                    // without doing the reset work on every frame.
+                    metricsResetRequested = false
+                    resetMetrics = true
+                }
                 if (paused) {
                     resetMetrics = true
                     Thread.sleep(8)
                     continue
                 }
                 val t0 = System.nanoTime()
-                val coreNanos = sessionLock.withLock {
+                // A primitive holder instead of a nullable Long: this runs once
+                // per frame and must not allocate.
+                var coreNanos = 0L
+                var frameAborted = false
+                sessionLock.withLock {
                     if (!running) {
-                        null
+                        frameAborted = true
                     } else {
                         for (port in 0..1) {
                             // Preserve a tap that began and ended between two
@@ -1238,12 +1256,18 @@ internal object CoreRuntime {
                                 Log.e(TAG, "Renderer-switch snapshot restore gave up")
                             }
                         }
-                        NativePpsspp.nativeGetFrameSize()
-                            ?.takeIf { it.size >= 2 && it[0] > 0 && it[1] > 0 }
-                            ?.let {
-                                frameWidth = it[0]
-                                frameHeight = it[1]
-                            }
+                        // The render size only changes on boot or an explicit
+                        // resolution change, so poll it at 2 Hz instead of
+                        // allocating a Java array every frame.
+                        if (t0 - lastFrameSizePollNanos >= FRAME_SIZE_POLL_INTERVAL_NANOS) {
+                            lastFrameSizePollNanos = t0
+                            NativePpsspp.nativeGetFrameSize()
+                                ?.takeIf { it.size >= 2 && it[0] > 0 && it[1] > 0 }
+                                ?.let {
+                                    frameWidth = it[0]
+                                    frameHeight = it[1]
+                                }
+                        }
                         if (!renderedFirstFrame && booted) {
                             renderedFirstFrame = true
                             val startedAt = sessionStartedAtNanos
@@ -1253,10 +1277,10 @@ internal object CoreRuntime {
                                     (System.nanoTime() - startedAt) / 1_000_000.0))
                             }
                         }
-                        System.nanoTime() - t0
+                        coreNanos = System.nanoTime() - t0
                     }
                 }
-                if (coreNanos == null) break
+                if (frameAborted) break
                 if (coreExited) {
                     reportFailure("The game exited to the system menu")
                     break
@@ -1274,29 +1298,30 @@ internal object CoreRuntime {
                     resetMetrics = false
                     continue
                 }
+                val now = frameStartNanos
+                if (!performanceMetricsEnabled) {
+                    // Diagnostics only. The overlay is off, so there is no
+                    // reason to sample the process CPU clock every frame.
+                    if (com.sbro.emucorea.BuildConfig.DEBUG) {
+                        diagFrames++
+                        diagMaxCoreNanos = maxOf(diagMaxCoreNanos, coreNanos)
+                        if (now - diagStartNanos >= 2_000_000_000L) {
+                            val elapsed = now - diagStartNanos
+                            Log.d(TAG, "diag fps=%.1f maxCore=%.1fms".format(
+                                Locale.US,
+                                diagFrames * 1_000_000_000.0 / elapsed,
+                                diagMaxCoreNanos / 1_000_000.0))
+                            diagStartNanos = now
+                            diagFrames = 0
+                            diagMaxCoreNanos = 0L
+                        }
+                    }
+                    continue
+                }
                 metricsMaxCoreNanos = maxOf(metricsMaxCoreNanos, coreNanos)
                 metricsFrames++
                 metricsFrameTotalNanos += frameNanos
-                val now = frameStartNanos
-                if (!performanceMetricsEnabled) {
-                    diagFrames++
-                    diagMaxCoreNanos = maxOf(diagMaxCoreNanos, coreNanos)
-                    if (com.sbro.emucorea.BuildConfig.DEBUG && now - diagStartNanos >= 2_000_000_000L) {
-                        val elapsed = now - diagStartNanos
-                        Log.d(TAG, "diag fps=%.1f maxCore=%.1fms".format(
-                            Locale.US,
-                            diagFrames * 1_000_000_000.0 / elapsed,
-                            diagMaxCoreNanos / 1_000_000.0))
-                        diagStartNanos = now
-                        diagFrames = 0
-                        diagMaxCoreNanos = 0L
-                    }
-                    metricsStartNanos = now
-                    metricsFrames = 0
-                    metricsFrameTotalNanos = 0L
-                    metricsStartCpuMs = Process.getElapsedCpuTime()
-                    metricsStartEmuUs = lastEmuUs
-                } else if (now - metricsStartNanos >= 1_000_000_000L && metricsFrames >= 2) {
+                if (now - metricsStartNanos >= 1_000_000_000L && metricsFrames >= 2) {
                     val elapsed = now - metricsStartNanos
                     val hostFps = (metricsFrames * 1_000_000_000.0 / elapsed).coerceIn(0.0, 999.9)
                     // PPSSPP's own frame statistics. Speed is emulated vblanks

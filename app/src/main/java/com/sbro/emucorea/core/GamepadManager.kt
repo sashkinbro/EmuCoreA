@@ -1038,6 +1038,11 @@ object GamepadManager {
     }
 
     private fun resolvePadIndexForDevice(deviceId: Int): Int? {
+        // Hot path: axis events arrive at the controller's report rate. The
+        // assignment map is kept fresh by the periodic refresh, so a lookup
+        // must not rebuild the whole device list per event.
+        synchronized(connectionLock) { deviceToPadIndex[deviceId] }?.let { return it }
+        // A device that connected between two refreshes still resolves.
         refreshConnectedGamepads()
         return synchronized(connectionLock) { deviceToPadIndex[deviceId] }
     }
