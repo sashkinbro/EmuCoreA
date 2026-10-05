@@ -190,6 +190,10 @@ option(MOBILE_DEVICE "Set to ON when targeting a mobile device" ${MOBILE_DEVICE}
 option(HEADLESS "Set to OFF to not generate the PPSSPPHeadless target" ${HEADLESS})
 # Set by b.sh for the loongarch64/riscv64 cross builds, whose sysroots have no SDL3.
 option(HEADLESS_CROSS "Set to ON for a headless-only cross build (no SDL frontend)" ${HEADLESS_CROSS})
+# EmuCoreA drives the core from its own native frontend: no libretro wrapper,
+# no PPSSPP ImGui UI, no PPSSPP Java app. Builds only the core libraries plus
+# the emucorea_core JNI target below.
+option(EMUCOREA_NATIVE "Build the EmuCoreA native frontend instead of the PPSSPP app/UI" OFF)
 option(ATLAS_TOOL "Set to OFF to not generate the ATLAS_TOOL target" ${ATLAS_TOOL})
 option(UNITTEST "Set to ON to generate the unittest target" ${UNITTEST})
 option(SIMULATOR "Set to ON when targeting an x86 simulator of an ARM platform" ${SIMULATOR})
@@ -1079,7 +1083,9 @@ if(NOT LIBRETRO)
 	if(USE_DISCORD AND NOT IOS)
 		add_compile_definitions(USE_DISCORD=1)
 	endif()
+	if(NOT EMUCOREA_NATIVE)
 	add_subdirectory(UI)
+endif()
 endif()
 
 if(ANDROID)
@@ -1138,7 +1144,7 @@ endif()
 add_subdirectory(GPU)
 add_subdirectory(Core)
 
-if(ANDROID AND NOT LIBRETRO)
+if(ANDROID AND NOT LIBRETRO AND NOT EMUCOREA_NATIVE)
 	add_library(ppsspp_jni SHARED ${AndroidJniSource})
 	target_link_libraries(ppsspp_jni Core log EGL OpenSLES)
 	if(TARGET ppsspp_ui)
@@ -1153,6 +1159,21 @@ if(ANDROID AND NOT LIBRETRO)
 	if(ARM64)
 		# Support 16kb page size on Android
 		target_link_options(ppsspp_jni PRIVATE "-Wl,-z,max-page-size=16384")
+	endif()
+endif()
+
+if(ANDROID AND EMUCOREA_NATIVE)
+	# EmuCoreA's own native frontend: drives Core directly, with the same
+	# graphics/audio backends PPSSPP uses, but without ppsspp_ui or libretro.
+	add_library(emucorea_core SHARED
+		${EMUCOREA_NATIVE_DIR}/native_core.cpp
+		android/jni/AndroidAudio.cpp
+		android/jni/OpenSLContext.cpp
+	)
+	target_link_libraries(emucorea_core Core log EGL OpenSLES android)
+	target_include_directories(emucorea_core PRIVATE ${EMUCOREA_NATIVE_DIR})
+	if(ARM64)
+		target_link_options(emucorea_core PRIVATE "-Wl,-z,max-page-size=16384")
 	endif()
 endif()
 

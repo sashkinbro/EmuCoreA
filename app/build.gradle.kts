@@ -60,7 +60,7 @@ android {
         applicationId = "com.sbro.emucorea"
         minSdk = 26
         targetSdk = 37
-        versionCode = 11
+        versionCode = 12
         versionName = "0.0.4"
 
         buildConfigField("String", "FEEDBACK_ENDPOINT", buildConfigString(feedbackEndpoint))
@@ -174,6 +174,7 @@ android {
 
 dependencies {
     implementation(project(":core-android"))
+    implementation(project(":core-native"))
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.google.identity)
