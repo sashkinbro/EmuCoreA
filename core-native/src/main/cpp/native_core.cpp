@@ -1893,7 +1893,12 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         return;
     }
     if (key == "ppsspp_texture_replacement") {
-        if (hasBool) g_Config.bReplaceTextures = on;
+        if (hasBool) {
+            g_Config.bReplaceTextures = on;
+            // Make the toggle effective mid-session; without this the texture
+            // replacer keeps its boot-time state until the next launch.
+            NotifyGpuConfigChanged();
+        }
         return;
     }
 
@@ -2376,6 +2381,17 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCheats(JNIEnv *env, jclass, js
         g_pendingCheatFile.clear();
         g_Config.bEnableCheats = false;
         g_Config.bReloadCheats = false;
+        // Remove the copy the core previously wrote for this game: the user
+        // just deleted/disabled the cheats and the "Internal Cheats Support"
+        // option must not resurrect them.
+        const std::string discID = g_booted ? g_paramSFO.GetDiscID() : std::string();
+        if (!discID.empty()) {
+            const Path coreCheatFile = GetSysDirectory(DIRECTORY_CHEATS) / (discID + ".ini");
+            if (File::Exists(coreCheatFile)) {
+                File::Delete(coreCheatFile);
+                NLOGI("Removed core cheat file: %s", coreCheatFile.ToVisualString().c_str());
+            }
+        }
         NLOGI("Cheats disabled");
         return;
     }
