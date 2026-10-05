@@ -1,7 +1,6 @@
 package com.sbro.emucorea.ui.gamedb
 
 import android.content.Context
-import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.CoverArtRepository
 import java.util.Locale
 
@@ -51,7 +50,6 @@ data class GameDbCatalogEntry(
 
 class GameDbCatalogRepository(context: Context) {
     private val appContext = context.applicationContext
-    private val preferences = AppPreferences(appContext)
     private val covers = CoverArtRepository(appContext)
 
     fun loadEntries(): List<GameDbCatalogEntry> {

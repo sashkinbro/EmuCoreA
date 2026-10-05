@@ -537,21 +537,6 @@ internal object CoreRuntime {
         }
     }
 
-    private fun nativeBoolValue(value: String): String? = when (value.trim().lowercase(Locale.US)) {
-        "enabled", "true", "1", "on", "yes" -> "1"
-        "disabled", "false", "0", "off", "no" -> "0"
-        else -> null
-    }
-
-    private fun parseInternalResolution(value: String): String? {
-        val trimmed = value.trim().lowercase(Locale.US)
-        if (trimmed.endsWith("x")) {
-            return trimmed.removeSuffix("x").toIntOrNull()?.coerceIn(1, 10)?.toString()
-        }
-        val width = trimmed.substringBefore('x').toIntOrNull() ?: return null
-        return ((width + 240) / 480).coerceIn(1, 10).toString()
-    }
-
     /** Persists and forwards a PPSSPP core option. */
     fun setCoreOption(key: String, value: String) {
         CoreOptionStore.set(key, value)

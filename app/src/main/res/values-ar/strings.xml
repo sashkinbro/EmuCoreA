@@ -662,7 +662,6 @@
     <string name="emulation_auto_load_on_start_desc">قم بتحميل أحدث حفظ تلقائي لهذه اللعبة تلقائيًا عند بدئها.</string>
     <string name="settings_mediatek_notice_title">توافق MediaTek</string>
     <string name="settings_mediatek_notice_message">لا يزال دعم MediaTek تجريبيًا. قد تحدث أعطال ومشكلات رسومية وسلوك غير مستقر بينما نواصل تحسين التوافق والأداء.\n\nإذا واجهت مشكلات رسومية، فجرّب OpenGL مع تفعيل ANGLE. وإذا استمرت المشكلات، فاستخدم العارض البرمجي.</string>
-    <string name="error_storage_permission_not_persisted">لم يمنح أندرويد وصولاً دائماً إلى هذا الموقع. يرجى اختياره مرة أخرى من نافذة اختيار الملفات في النظام.</string>
     <string name="settings_touch_haptics">استجابة اللمس لعناصر التحكم</string>
     <string name="settings_touch_haptics_desc">تشغيل نبضة اهتزاز قصيرة عند الضغط على عناصر التحكم على الشاشة.</string>
     <string name="settings_gamepad_button_haptics">استجابة اللمس لأزرار لوحة الألعاب</string>

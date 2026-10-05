@@ -662,7 +662,6 @@
     <string name="emulation_auto_load_on_start_desc">जब यह शुरू होता है तो स्वचालित रूप से इस गेम का नवीनतम ऑटो-सेव लोड करें।</string>
     <string name="settings_mediatek_notice_title">MediaTek संगतता</string>
     <string name="settings_mediatek_notice_message">MediaTek समर्थन अभी प्रयोगात्मक है। संगतता और प्रदर्शन में सुधार के दौरान क्रैश, ग्राफ़िक्स आर्टिफ़ैक्ट और अस्थिर व्यवहार हो सकते हैं।\n\nग्राफ़िक्स समस्या होने पर ANGLE चालू करके OpenGL आज़माएँ। समस्या बनी रहे तो सॉफ़्टवेयर रेंडरर का उपयोग करें।</string>
-    <string name="error_storage_permission_not_persisted">Android ने इस स्थान के लिए स्थायी पहुँच नहीं दी। कृपया सिस्टम चयनकर्ता में इसे फिर से चुनें।</string>
     <string name="settings_touch_haptics">टच कंट्रोल हैप्टिक्स</string>
     <string name="settings_touch_haptics_desc">ऑन-स्क्रीन नियंत्रण दबाते समय एक छोटी हैप्टिक टिक प्ले करें।</string>
     <string name="settings_gamepad_button_haptics">गेमपैड बटन हैप्टिक्स</string>

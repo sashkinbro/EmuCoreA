@@ -11,13 +11,11 @@ import com.sbro.emucorea.core.AudioDefaults
 import com.sbro.emucorea.core.AppUpdateRelease
 import com.sbro.emucorea.core.AppUpdateRepository
 import com.sbro.emucorea.core.BiosValidator
-import com.sbro.emucorea.core.DocumentPathResolver
 import com.sbro.emucorea.core.EmulatorBridge
 import com.sbro.emucorea.core.EmulatorDataLocation
 import com.sbro.emucorea.core.EmulatorStorage
 import com.sbro.emucorea.core.GpuHardwareProfiles
 import com.sbro.emucorea.core.RendererDefaults
-import com.sbro.emucorea.core.GamepadManager
 import com.sbro.emucorea.core.PerformanceProfiles
 import com.sbro.emucorea.core.PerformancePresets
 import com.sbro.emucorea.core.ProProductOffer
@@ -25,7 +23,6 @@ import com.sbro.emucorea.core.ProPurchaseManager
 import com.sbro.emucorea.core.ProPurchaseState
 import com.sbro.emucorea.core.ProPurchaseTier
 import com.sbro.emucorea.core.NativeApp
-import com.sbro.emucorea.core.SetupValidator
 import com.sbro.emucorea.core.StorageAccess
 import com.sbro.emucorea.core.TvInterfaceMode
 import com.sbro.emucorea.core.UPSCALE_DEFAULT
@@ -430,10 +427,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun clearProPurchaseMessage() { proPurchaseManager.clearMessage() }
 
-    fun saveCustomTheme(config: CustomThemeConfig, activate: Boolean) = viewModelScope.launch {
-        if (!_uiState.value.isProUnlocked) return@launch
-        if (activate) preferences.applyCustomTheme(config) else preferences.setCustomTheme(config)
-    }
     fun saveCustomThemeLibrary(library: CustomThemeLibrary, activate: Boolean) {
         val current = _uiState.value
         if (!current.isProUnlocked) return

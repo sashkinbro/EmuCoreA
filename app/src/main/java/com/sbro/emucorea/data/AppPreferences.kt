@@ -667,11 +667,6 @@ class AppPreferences(private val context: Context) {
         }
     }
 
-    suspend fun applyCustomTheme(config: CustomThemeConfig) {
-        setCustomTheme(config)
-        setThemeMode(ThemeMode.CUSTOM)
-    }
-
     suspend fun setCustomThemeLibrary(library: CustomThemeLibrary, activate: Boolean) {
         context.dataStore.edit { prefs ->
             if (prefs[PRO_UNLOCKED] != true) return@edit

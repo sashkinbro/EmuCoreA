@@ -664,7 +664,6 @@
     <string name="emulation_auto_load_on_start_desc">Автоматически загружать последнее автосохранение этой игры при ее запуске.</string>
     <string name="settings_mediatek_notice_title">Совместимость с MediaTek</string>
     <string name="settings_mediatek_notice_message">Поддержка MediaTek пока экспериментальная. Возможны вылеты, графические артефакты и нестабильная работа, пока мы продолжаем улучшать совместимость и производительность.\n\nПри проблемах с графикой попробуйте OpenGL с включённым ANGLE. Если проблемы сохраняются, используйте программный рендерер Software.</string>
-    <string name="error_storage_permission_not_persisted">Android не предоставил постоянный доступ к этому расположению. Выберите его ещё раз в системном окне.</string>
     <string name="settings_touch_haptics">Тактильная отдача сенсорного управления</string>
     <string name="settings_touch_haptics_desc">Кратковременная тактильная отдача при нажатии на экранные элементы управления.</string>
     <string name="settings_gamepad_button_haptics">Тактильная отдача кнопок геймпада</string>

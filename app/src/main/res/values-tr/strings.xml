@@ -662,7 +662,6 @@
     <string name="emulation_auto_load_on_start_desc">Başladığında bu oyunun en son otomatik kaydını otomatik olarak yükleyin.</string>
     <string name="settings_mediatek_notice_title">MediaTek uyumluluğu</string>
     <string name="settings_mediatek_notice_message">MediaTek desteği hâlâ deneyseldir. Uyumluluğu ve performansı geliştirmeye devam ederken çökmeler, grafik bozulmaları ve kararsız çalışma görülebilir.\n\nGrafik sorunları yaşarsanız ANGLE etkinleştirilmiş OpenGL’yi deneyin. Sorunlar devam ederse Yazılım işleyicisini kullanın.</string>
-    <string name="error_storage_permission_not_persisted">Android bu konuma kalıcı erişim izni vermedi. Lütfen sistem seçicisinden konumu yeniden seçin.</string>
     <string name="settings_touch_haptics">Dokunmatik kontrol titreşimi</string>
     <string name="settings_touch_haptics_desc">Ekrandaki kontrollere basıldığında kısa bir titreşim oynatır.</string>
     <string name="settings_gamepad_button_haptics">Gamepad düğmesi titreşimi</string>

@@ -803,7 +803,6 @@
     <string name="home_game_menu_custom_cover_failed">Aplikace vlastního obalu se nezdařila.</string>
     <string name="save">Uložit</string>
     <string name="delete">Smazat</string>
-    <string name="error_storage_permission_not_persisted">Systém Android neudělil do tohoto umístění trvalý přístup. Vyberte jej prosím znovu v systémovém výběru.</string>
     <string name="settings_touch_haptics_strength">Síla haptické odezvy dotyku</string>
     <string name="settings_touch_haptics_test">Otestovat haptickou odezvu dotyku</string>
     <string name="settings_touch_haptics_test_desc">Zobrazí náhled zvoleného pocitu při stisknutí a uvolnění při aktuální síle.</string>

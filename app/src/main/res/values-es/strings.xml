@@ -664,7 +664,6 @@
     <string name="emulation_auto_load_on_start_desc">Carga automáticamente el último guardado automático de este juego cuando se inicie.</string>
     <string name="settings_mediatek_notice_title">Compatibilidad con MediaTek</string>
     <string name="settings_mediatek_notice_message">La compatibilidad con MediaTek aún es experimental. Pueden producirse cierres, artefactos gráficos y un funcionamiento inestable mientras seguimos mejorando la compatibilidad y el rendimiento.\n\nSi tienes problemas gráficos, prueba OpenGL con ANGLE activado. Si continúan, usa el renderizador Software.</string>
-    <string name="error_storage_permission_not_persisted">Android no concedió acceso permanente a esta ubicación. Vuelva a seleccionarla en el selector del sistema.</string>
     <string name="settings_touch_haptics">Respuesta háptica táctil</string>
     <string name="settings_touch_haptics_desc">Reproducir una breve vibración al presionar los controles en pantalla.</string>
     <string name="settings_gamepad_button_haptics">Respuesta háptica de botones del mando</string>

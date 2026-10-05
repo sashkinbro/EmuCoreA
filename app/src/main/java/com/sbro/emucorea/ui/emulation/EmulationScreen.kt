@@ -67,11 +67,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
-import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Gamepad
-import androidx.compose.material.icons.rounded.LockOpen
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -190,7 +188,6 @@ import com.sbro.emucorea.data.gameMenuSectionsForTab
 import com.sbro.emucorea.ui.common.CustomControlVisual
 import com.sbro.emucorea.ui.common.actionDrawableRes
 import com.sbro.emucorea.ui.common.composeShape
-import com.sbro.emucorea.ui.common.BitmapPathImage
 import com.sbro.emucorea.ui.common.EmulationSideArtworkOverlay
 import com.sbro.emucorea.ui.common.GameCoverArt
 import com.sbro.emucorea.ui.common.ProvideGamepadMenuAction
@@ -215,18 +212,15 @@ import com.sbro.emucorea.core.PpssppCoreOptionLocalization
 import com.sbro.emucorea.data.AchievementItem
 import com.sbro.emucorea.data.RetroAchievementsEvent
 import com.sbro.emucorea.data.RetroAchievementsRepository
-import com.sbro.emucorea.data.RetroAchievementsState
 import coil3.compose.AsyncImage
 import com.sbro.emucorea.ui.theme.GradientEnd
 import com.sbro.emucorea.ui.theme.GradientStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
 import java.util.Date
-import java.util.Locale
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.milliseconds
 import com.sbro.emucorea.ui.theme.neon.LocalNeonTheme
@@ -5321,65 +5315,6 @@ private fun AnnotatedString.Builder.addLineValueStyle(
         ?: lineEnd
     if (valueStart < valueEnd)
         addStyle(SpanStyle(color = color), valueStart, valueEnd)
-}
-
-@Composable
-private fun LiveChipsSelectionRow(
-    title: String,
-    options: List<Pair<Int, String>>,
-    currentValue: Int,
-    onValueChange: (Int) -> Unit,
-    helpText: String? = null,
-    onResetToDefault: (() -> Unit)? = null
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val context = LocalContext.current
-    val resetToast = stringResource(R.string.settings_reset_to_default_toast)
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 4.dp)
-                .combinedClickable(
-                    interactionSource = interactionSource,
-                    indication = null,
-                    onClick = {},
-                    onLongClick = onResetToDefault?.let {
-                        {
-                            it()
-                            Toast.makeText(context, resetToast, Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            helpText?.let {
-                SettingHelpButton(title = title, description = it)
-            }
-        }
-        LazyRow(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalViewportBleed(18.dp),
-            contentPadding = PaddingValues(horizontal = 18.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(options) { (value, label) ->
-                FilterChip(
-                    shape = neonChipShape(),
-                    selected = currentValue == value,
-                    onClick = { onValueChange(value) },
-                    label = { Text(text = label) }
-                )
-            }
-        }
-    }
 }
 
 @Composable

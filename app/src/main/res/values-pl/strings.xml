@@ -800,7 +800,6 @@
     <string name="home_game_menu_custom_cover_failed">Nie udało się zastosować niestandardowej okładki.</string>
     <string name="save">Zapisz</string>
     <string name="delete">Usuń</string>
-    <string name="error_storage_permission_not_persisted">System Android nie przyznał trwałego dostępu do tej lokalizacji. Wybierz ją ponownie w oknie systemowym.</string>
     <string name="settings_touch_haptics_strength">Siła haptyki dotykowej</string>
     <string name="settings_touch_haptics_test">Testuj haptykę dotykową</string>
     <string name="settings_touch_haptics_test_desc">Podgląd wybranego odczucia wciśnięcia i zwolnienia przy aktualnej sile wibracji.</string>

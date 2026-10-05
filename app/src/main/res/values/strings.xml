@@ -826,7 +826,6 @@
     <string name="home_game_menu_custom_cover_failed">Failed to apply custom cover.</string>
     <string name="save">Save</string>
     <string name="delete">Delete</string>
-    <string name="error_storage_permission_not_persisted">Android did not grant permanent access to this location. Please choose it again in the system picker.</string>
     <string name="settings_touch_haptics_strength">Touch haptic strength</string>
     <string name="settings_touch_haptics_test">Test touch haptics</string>
     <string name="settings_touch_haptics_test_desc">Previews the selected press-and-release feel at the current strength.</string>

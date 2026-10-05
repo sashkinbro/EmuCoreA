@@ -662,7 +662,6 @@
     <string name="emulation_auto_load_on_start_desc">起動時に、このゲームの最新のオートセーブを自動的にロードします。</string>
     <string name="settings_mediatek_notice_title">MediaTekの互換性</string>
     <string name="settings_mediatek_notice_message">MediaTekのサポートはまだ試験段階です。互換性とパフォーマンスの改善中は、クラッシュ、表示の乱れ、不安定な動作が発生する場合があります。\n\nグラフィックに問題がある場合は、ANGLEを有効にしたOpenGLをお試しください。問題が続く場合は、ソフトウェアレンダラーを使用してください。</string>
-    <string name="error_storage_permission_not_persisted">Androidからこの場所への永続的なアクセスが許可されませんでした。システムの選択画面でもう一度選択してください。</string>
     <string name="settings_touch_haptics">タッチ操作のハプティクス</string>
     <string name="settings_touch_haptics_desc">画面上のコントロールを押したときに短いハプティクス振動を再生します。</string>
     <string name="settings_gamepad_button_haptics">ゲームパッドボタンのハプティクス</string>

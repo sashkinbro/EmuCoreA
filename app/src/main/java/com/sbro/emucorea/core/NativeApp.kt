@@ -53,8 +53,6 @@ object NativeApp {
     private val timeControlTapPulse = Array(2) { BooleanArray(2) }
     private val _timeControlMode = MutableStateFlow(0)
     val timeControlMode: StateFlow<Int> = _timeControlMode.asStateFlow()
-    private var profilerActive = false
-    private var hangTraceActive = false
 
     @JvmStatic fun reloadDataRoot(path: String) {
         dataRootOverride = path.takeIf(String::isNotBlank)
@@ -290,12 +288,6 @@ object NativeApp {
     }
     @JvmStatic fun getCurrentSaveStatePath(slot: Int): String? =
         getSaveStatePathForFile(saveStatePathSource(), slot)
-    @JvmStatic fun startJitProfiler() { profilerActive = true }
-    @JvmStatic fun stopJitProfiler() { profilerActive = false }
-    @JvmStatic fun isJitProfilerActive(): Boolean = profilerActive
-    @JvmStatic fun startHangTrace() { hangTraceActive = true }
-    @JvmStatic fun stopHangTrace() { hangTraceActive = false }
-    @JvmStatic fun isHangTraceActive(): Boolean = hangTraceActive
 
     @JvmStatic
     fun initializeOnce(context: Context) {

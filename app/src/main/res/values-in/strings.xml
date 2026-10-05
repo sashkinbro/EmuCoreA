@@ -771,7 +771,6 @@
     <string name="home_game_menu_custom_cover_failed">Gagal menerapkan sampul kustom.</string>
     <string name="save">Simpan</string>
     <string name="delete">Hapus</string>
-    <string name="error_storage_permission_not_persisted">Android tidak memberikan akses permanen ke lokasi ini. Silakan pilih lagi melalui pemilih sistem.</string>
     <string name="settings_touch_haptics_strength">Kekuatan haptik sentuh</string>
     <string name="settings_touch_haptics_test">Uji haptik sentuh</string>
     <string name="settings_touch_haptics_test_desc">Menjalankan kedipan (tick) pendek menggunakan kekuatan haptik sentuh saat ini.</string>

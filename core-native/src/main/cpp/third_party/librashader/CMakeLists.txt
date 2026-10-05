@@ -92,9 +92,14 @@ string(REPLACE "-" "_" _lrs_target_upper "${_lrs_target_upper}")
 string(REPLACE "-" "_" _lrs_target_under "${_lrs_rust_target}")
 
 include(FetchContent)
+# No submodules: the only one is test/shaders_slang, and its Mega Bezel paths
+# exceed the Windows 260-char limit, which breaks configure on fresh checkouts.
+# Tests are not built here, so the shader corpus is not needed.
 FetchContent_Declare(librashader_src
     GIT_REPOSITORY https://github.com/SnowflakePowered/librashader.git
     GIT_TAG        ${LIBRASHADER_PIN}
+    GIT_SUBMODULES ""
+    GIT_SUBMODULES_RECURSE FALSE
     SOURCE_SUBDIR  cmake-does-not-exist
 )
 FetchContent_MakeAvailable(librashader_src)

@@ -75,7 +75,6 @@ object GamepadManager {
         val releaseR2PadKey: Int?
     )
 
-    private const val TAG = "GamepadManager"
     private const val MAX_PAD_SLOTS = 2
     const val ACTION_QUICK_SAVE = "quick_save"
     const val ACTION_QUICK_LOAD = "quick_load"

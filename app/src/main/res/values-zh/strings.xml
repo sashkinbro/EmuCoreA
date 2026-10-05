@@ -664,7 +664,6 @@
     <string name="emulation_auto_load_on_start_desc">在游戏启动时自动加载其最新的自动保存。</string>
     <string name="settings_mediatek_notice_title">MediaTek 兼容性</string>
     <string name="settings_mediatek_notice_message">MediaTek 支持目前仍处于实验阶段。在我们继续改进兼容性和性能期间，可能会出现崩溃、图形异常和运行不稳定。\n\n如果遇到图形问题，请尝试启用 ANGLE 的 OpenGL。若问题仍然存在，请使用软件渲染器。</string>
-    <string name="error_storage_permission_not_persisted">Android 未授予对此位置的永久访问权限。请在系统选择器中重新选择。</string>
     <string name="settings_touch_haptics">触摸控制震动反馈</string>
     <string name="settings_touch_haptics_desc">按下屏幕控件时播放短促的触觉反馈。</string>
     <string name="settings_gamepad_button_haptics">游戏手柄按钮震动反馈</string>

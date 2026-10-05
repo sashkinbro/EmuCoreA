@@ -9,7 +9,6 @@ import java.io.File
 
 object SetupValidator {
     private val supportedDiscExtensions = PspGameFormats.extensions
-    private val supportedGameExtensions = supportedDiscExtensions
     private const val MAX_GAME_READ_PROBE_FILES = 24
     private const val MAX_GAME_READ_PROBE_DIRECTORIES = 96
 
