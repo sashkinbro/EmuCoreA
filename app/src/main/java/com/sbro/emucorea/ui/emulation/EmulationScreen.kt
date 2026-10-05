@@ -935,6 +935,41 @@ fun EmulationScreen(
         }
     }
 
+    val surfaceViewHolder = remember { arrayOfNulls<SurfaceView>(1) }
+
+    // The SurfaceView surface can be torn down by an activity transition or a
+    // fast orientation change and never come back, which leaves a running game
+    // on a black screen. Rebind the last known Surface when possible; otherwise
+    // reset the view so the platform creates a fresh Surface, and recreate the
+    // host view as a last resort.
+    LaunchedEffect(uiState.isRunning, presentationSurfaceGeneration) {
+        if (!uiState.isRunning) return@LaunchedEffect
+        var missingSinceNanos = 0L
+        while (true) {
+            delay(1000)
+            val resumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+            if (!resumed || EmulatorBridge.isPresentationSurfaceAttached()) {
+                missingSinceNanos = 0L
+                continue
+            }
+            val now = System.nanoTime()
+            if (missingSinceNanos == 0L) missingSinceNanos = now
+            if (now - missingSinceNanos < 2_000_000_000L) continue
+            missingSinceNanos = 0L
+            if (EmulatorBridge.rebindPresentationSurface()) continue
+            val surfaceView = surfaceViewHolder[0]
+            if (surfaceView != null && surfaceView.isAttachedToWindow &&
+                surfaceView.width > 0 && surfaceView.height > 0
+            ) {
+                android.util.Log.i("EmulationScreen", "Presentation surface missing; resetting SurfaceView")
+                surfaceView.visibility = android.view.View.INVISIBLE
+                surfaceView.post { surfaceView.visibility = android.view.View.VISIBLE }
+            } else {
+                EmulatorBridge.requestPresentationSurfaceRebuild()
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         // Game surface
         val surfaceGeneration = presentationSurfaceGeneration
@@ -942,6 +977,7 @@ fun EmulationScreen(
             AndroidView(
                 factory = { ctx ->
                     SurfaceView(ctx).apply {
+                        surfaceViewHolder[0] = this
                         isClickable = false
                         isFocusable = false
                         isFocusableInTouchMode = false

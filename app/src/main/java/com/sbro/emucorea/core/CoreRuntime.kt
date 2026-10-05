@@ -907,12 +907,20 @@ internal object CoreRuntime {
     fun getPadRumble(port: Int): FloatArray? = null
 
     fun attachSurface(value: Surface, width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
         val previous = surface
+        // The Surface object can survive an orientation change while its buffer
+        // size does not: the first launch after onboarding attaches the still
+        // portrait window, and the landscape callback used to be dropped
+        // because the Surface object was identical. The core then booted with a
+        // portrait display (black presentation). Forward every size change so
+        // the swapchain and the display layout follow the real window.
+        val sizeChanged = surfaceWidth != width || surfaceHeight != height
         surface = value
         surfaceWidth = width
         surfaceHeight = height
         sessionLock.withLock {
-            if (!(nativeSurfaceReady && previous === value)) {
+            if (!(nativeSurfaceReady && previous === value && !sizeChanged)) {
                 if (nativeSurfaceReady) {
                     NativePpsspp.nativeSetSurface(null, 0, 0)
                     nativeSurfaceReady = false
@@ -986,6 +994,9 @@ internal object CoreRuntime {
         sessionLock.withLock {
             nativeSurfaceReady && surface === value && surfaceWidth == width && surfaceHeight == height
         }
+
+    /** True while the native core owns a presentation surface. */
+    fun isSurfaceAttached(): Boolean = nativeSurfaceReady
 
     fun detachSurface() {
         sessionLock.withLock {

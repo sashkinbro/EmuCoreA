@@ -81,6 +81,11 @@ object EmulatorBridge {
     private val _presentationSurfaceGeneration = MutableStateFlow(0L)
     val presentationSurfaceGeneration: StateFlow<Long> =
         _presentationSurfaceGeneration.asStateFlow()
+
+    // Set when the UI asked for a fresh SurfaceView and cleared by the next
+    // surface callback, so the watchdog cannot recreate the view in a loop.
+    @Volatile
+    private var presentationSurfaceRebuildPending = false
     val runtimeFailure: StateFlow<RuntimeFailure?> get() = NativeApp.runtimeFailure
 
     @Volatile
@@ -1477,9 +1482,40 @@ object EmulatorBridge {
         setSetting("InputSources", "PadVibration", "bool", enabled.toString())
     }
 
+    /** True while the native core has a live presentation surface. */
+    fun isPresentationSurfaceAttached(): Boolean =
+        isNativeLoaded && CoreRuntime.isSurfaceAttached()
+
+    /**
+     * Re-attaches the last known Surface when the native core lost it but the
+     * platform Surface is still valid. Returns false when there is nothing to
+     * rebind, so the caller can fall back to recreating the host view.
+     */
+    fun rebindPresentationSurface(): Boolean {
+        val surface = lastSurface ?: return false
+        if (!surface.isValid) return false
+        rebindSurface()
+        return true
+    }
+
+    /**
+     * The SurfaceView's surface died and never came back (seen on rotation and
+     * activity transitions). Recreating the host view is the only reliable way
+     * to get a fresh Surface; the generation bump makes the stale callbacks
+     * harmless.
+     */
+    fun requestPresentationSurfaceRebuild() {
+        if (!isNativeLoaded) return
+        if (presentationSurfaceRebuildPending) return
+        presentationSurfaceRebuildPending = true
+        _presentationSurfaceGeneration.value += 1
+        Log.i(TAG, "Requested a fresh presentation SurfaceView (generation=${_presentationSurfaceGeneration.value})")
+    }
+
     fun onSurfaceCreated(generation: Long) {
         if (!isNativeLoaded) return
         if (generation != _presentationSurfaceGeneration.value) return
+        presentationSurfaceRebuildPending = false
         Log.i(TAG, "onSurfaceCreated: generation=$generation")
         NativeApp.setCrashContextString("emu_surface_state", "created")
         NativeApp.logCrashBreadcrumb("surfaceCreated")
@@ -1499,6 +1535,7 @@ object EmulatorBridge {
             Log.i(TAG, "Ignoring stale surfaceChanged generation=$generation")
             return
         }
+        presentationSurfaceRebuildPending = false
         val eventVersion = ++surfaceEventVersion
         Log.i(TAG, "onSurfaceChanged: width=$width height=$height valid=${surface.isValid} generation=$generation eventVersion=$eventVersion")
         lastSurface = surface
