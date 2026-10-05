@@ -56,6 +56,8 @@ internal object CoreRuntime {
     @Volatile private var sessionActive = false
     @Volatile private var booted = false
     @Volatile private var pendingGamePath: String? = null
+    // Snapshot restored once the re-booted core reports ready (renderer switch).
+    @Volatile private var pendingStateRestorePath: String? = null
     // SAF descriptor for a content:// game. Kept open for the whole session;
     // the native core duplicates the fd and owns only its own duplicate.
     private var pendingGameDescriptor: ParcelFileDescriptor? = null
@@ -249,15 +251,47 @@ internal object CoreRuntime {
     }
 
     /**
-     * Stores the renderer for the next session. The native context can only be
-     * rebuilt while idle, so a live session keeps its renderer until then.
+     * Switches the renderer. The native graphics context is re-negotiated on
+     * boot, so a live session is restarted in place: the running game is
+     * snapshotted, the session torn down, the new renderer applied, the game
+     * re-booted and the snapshot restored as soon as the core finishes booting.
      */
     fun restartWithRenderer(renderer: Int): Boolean = lifecycleLock.withLock {
         requestedRenderer = RendererDefaults.normalizeAndroidRenderer(renderer)
         val coreRenderer = RendererDefaults.toCoreRenderer(requestedRenderer)
         runCatching { NativePpsspp.nativeSetRenderer(coreRenderer) }
             .onFailure { Log.w(TAG, "Unable to store the renderer", it) }
-        Log.i(TAG, "Renderer preference stored: ${RendererDefaults.coreRendererName(coreRenderer)}")
+        Log.i(TAG, "Renderer preference set: ${RendererDefaults.coreRendererName(coreRenderer)}")
+
+        val gamePath = currentGamePath
+        val hasLiveSession = (sessionActive || running) && !gamePath.isNullOrBlank()
+        if (!hasLiveSession) {
+            // Idle: the native side rebuilds its context immediately.
+            return@withLock true
+        }
+
+        val appContext = context
+        val snapshot: File? = if (appContext != null) {
+            File(appContext.cacheDir, ".renderer-switch.sav").also { it.delete() }
+        } else {
+            null
+        }
+        val savedState = snapshot != null && saveState(snapshot.absolutePath)
+        shutdownSession()
+        if (!startSession(gamePath, false)) {
+            Log.e(TAG, "Renderer restart failed; the game could not be re-booted")
+            if (snapshot != null) snapshot.delete()
+            reportFailure("The renderer restart failed")
+            return@withLock false
+        }
+        if (savedState && snapshot != null) {
+            // The core needs its first frame before a state can be loaded, so
+            // the frame loop picks this up and retries until it takes.
+            pendingStateRestorePath = snapshot.absolutePath
+        } else if (snapshot != null) {
+            snapshot.delete()
+        }
+        Log.i(TAG, "Renderer restarted with ${RendererDefaults.coreRendererName(coreRenderer)}")
         true
     }
 
@@ -350,10 +384,18 @@ internal object CoreRuntime {
         settings["EmuCoreA/GS:RewindEnabled"]?.toBooleanStrictOrNull()?.let {
             NativePpsspp.nativeSetRewindEnabled(it)
         }
-        // Explicit user choices from the settings / game manager / in-game menu
-        // win over every derived default.
+        // Every core option is pushed with its effective value (user override
+        // or catalogue default) so the native defaults can never drift from
+        // what the UI shows. Options the app manages itself (backend/software
+        // rendering/internal resolution) are filtered by translateCoreOption.
         PpssppCoreOptions.all().forEach { option ->
-            SwanStationOptions.value(option.key)?.let { forwardCoreOption(option.key, it) }
+            val stored = SwanStationOptions.value(option.key)
+            val value = stored ?: when (option.key) {
+                // The legacy app-level GS filter still derives the default.
+                "ppsspp_texture_filtering" -> pspTextureFilterName()
+                else -> option.defaultValue
+            }
+            forwardCoreOption(option.key, value)
         }
         // Full catalogue overrides win over the derived defaults as well.
         SwanStationOptions.persistedEntries().forEach { (key, value) ->
@@ -417,34 +459,18 @@ internal object CoreRuntime {
     }
 
     private fun translateCoreOption(key: String, value: String): Pair<String, String>? {
+        // The native core understands the full libretro option catalogue and
+        // parses the same value strings the UI uses, so every ppsspp_* key is
+        // forwarded verbatim. The two exceptions are owned by the app's own
+        // renderer controls and would otherwise fight nativeSetRenderer.
+        if (key.startsWith("ppsspp_")) {
+            return when (key) {
+                "ppsspp_backend", "ppsspp_software_rendering" -> null
+                else -> key to value
+            }
+        }
+        // Native short keys may also be pushed directly.
         return when (key) {
-            "ppsspp_internal_resolution" -> parseInternalResolution(value)?.let {
-                "internal_resolution" to it
-            }
-            "ppsspp_frameskip" -> {
-                val frames = if (value.equals("disabled", true)) 0 else value.trim().toIntOrNull()
-                frames?.let { "frameskip" to it.toString() }
-            }
-            "ppsspp_auto_frameskip" -> nativeBoolValue(value)?.let { "auto_frameskip" to it }
-            "ppsspp_frame_duplication" -> nativeBoolValue(value)?.let { "frame_duplication" to it }
-            "ppsspp_texture_filtering" -> when (value.trim().lowercase(Locale.US)) {
-                "auto" -> "texture_filtering" to "1"
-                "nearest" -> "texture_filtering" to "0"
-                "linear" -> "texture_filtering" to "2"
-                "auto max quality" -> "texture_filtering" to "3"
-                else -> null
-            }
-            "ppsspp_texture_scaling_level" -> {
-                val level = value.trim().lowercase(Locale.US).removeSuffix("x").toIntOrNull()
-                    ?: if (value.equals("disabled", true)) 0 else null
-                level?.let { "texture_scaling_level" to it.toString() }
-            }
-            "ppsspp_cpu_core" ->
-                "cpu_core" to if (value.trim().equals("JIT", true)) "jit" else "interpreter"
-            "ppsspp_fast_memory" -> nativeBoolValue(value)?.let { "fast_memory" to it }
-            "ppsspp_skip_buffer_effects" -> nativeBoolValue(value)?.let { "skip_buffer_effects" to it }
-            "ppsspp_cropto16x9" -> nativeBoolValue(value)?.let { "crop16x9" to it }
-            // Native keys may also be pushed directly.
             "internal_resolution", "frameskip", "auto_frameskip", "frame_duplication",
             "texture_filtering", "texture_scaling_level", "volume", "skip_buffer_effects",
             "fast_memory", "cpu_core", "crop16x9", "vsync", "multi_threading" -> key to value
@@ -551,6 +577,8 @@ internal object CoreRuntime {
             renderedFirstFrame = false
             sessionStartedAtNanos = 0L
             performanceMetricsSnapshot = null
+            pendingStateRestorePath?.let { File(it).delete() }
+            pendingStateRestorePath = null
             _failure.value = null
         } finally {
             if (callerInterrupted) Thread.currentThread().interrupt()
@@ -822,7 +850,8 @@ internal object CoreRuntime {
     }
 
     fun diagnostics(): String =
-        "native core: loaded=${if (nativeInitialized) 1 else 0} booted=${if (booted) 1 else 0}"
+        "native core: loaded=${if (nativeInitialized) 1 else 0} booted=${if (booted) 1 else 0} " +
+            "renderer=${RendererDefaults.coreRendererName(activeCoreRenderer())}"
 
     fun gpuBackendSubmissions(): Long = 0L
 
@@ -880,10 +909,14 @@ internal object CoreRuntime {
         target?.let { (coreKey, coreValue) -> forwardCoreOption(coreKey, coreValue) }
     }
 
+    private fun activeCoreRenderer(): Int =
+        runCatching { NativePpsspp.nativeGetActiveRenderer() }
+            .getOrDefault(RendererDefaults.toCoreRenderer(requestedRenderer))
+
     private fun publishPerformanceMetrics(fps: Double, frames: Int, frameNanos: Long,
                                           cpuLoadPercent: Double, speed: Double, targetFps: Double) {
         if (frames <= 0 || !performanceMetricsEnabled) return
-        val renderer = RendererDefaults.coreRendererName(RendererDefaults.CORE_VULKAN)
+        val renderer = RendererDefaults.coreRendererName(activeCoreRenderer())
         val frameMs = frameNanos / frames / 1_000_000.0
         val gpuLoad = if (detailedPerformanceMetrics) GpuLoadReader.loadPercent() else null
         val overlay = buildString {
@@ -909,8 +942,15 @@ internal object CoreRuntime {
         var metricsFrameTotalNanos = 0L
         var metricsMaxCoreNanos = 0L
         var metricsStartCpuMs = Process.getElapsedCpuTime()
+        // Emulated time reported by the core, used for the real speed metric.
+        var metricsStartEmuUs = 0L
+        var lastEmuUs = 0L
+        // Last authoritative emulation speed; reused when a window is not
+        // measurable (boot transition, state load, first frames).
+        var lastPublishedSpeed = 100.0
         var resetMetrics = true
         var lastRewindNanos = 0L
+        var coreExited = false
         // Debug-only diagnostics that do not depend on the performance overlay.
         var diagStartNanos = System.nanoTime()
         var diagFrames = 0
@@ -960,7 +1000,22 @@ internal object CoreRuntime {
                         } else {
                             lastRewindNanos = 0L
                         }
-                        NativePpsspp.nativeRunFrame()
+                        lastEmuUs = NativePpsspp.nativeRunFrame()
+                        if (lastEmuUs < 0L) {
+                            // The game exited itself; stop after this frame.
+                            coreExited = true
+                            running = false
+                        }
+                        pendingStateRestorePath?.let { restorePath ->
+                            // nativeLoadState fails until the core has finished
+                            // booting; keep the snapshot queued until it takes.
+                            if (NativePpsspp.nativeLoadState(restorePath)) {
+                                pendingStateRestorePath = null
+                                File(restorePath).delete()
+                                renderedFirstFrame = false
+                                Log.i(TAG, "Renderer-switch snapshot restored")
+                            }
+                        }
                         NativePpsspp.nativeGetFrameSize()
                             ?.takeIf { it.size >= 2 && it[0] > 0 && it[1] > 0 }
                             ?.let {
@@ -980,6 +1035,10 @@ internal object CoreRuntime {
                     }
                 }
                 if (coreNanos == null) break
+                if (coreExited) {
+                    reportFailure("The game exited to the system menu")
+                    break
+                }
                 val frameStartNanos = t0
                 val frameNanos = System.nanoTime() - t0
 
@@ -989,6 +1048,7 @@ internal object CoreRuntime {
                     metricsFrameTotalNanos = 0L
                     metricsMaxCoreNanos = 0L
                     metricsStartCpuMs = Process.getElapsedCpuTime()
+                    metricsStartEmuUs = lastEmuUs
                     resetMetrics = false
                     continue
                 }
@@ -1013,13 +1073,26 @@ internal object CoreRuntime {
                     metricsFrames = 0
                     metricsFrameTotalNanos = 0L
                     metricsStartCpuMs = Process.getElapsedCpuTime()
-                } else if (now - metricsStartNanos >= 1_000_000_000L) {
+                    metricsStartEmuUs = lastEmuUs
+                } else if (now - metricsStartNanos >= 1_000_000_000L && metricsFrames >= 2) {
                     val elapsed = now - metricsStartNanos
-                    val fps = metricsFrames * 1_000_000_000.0 / elapsed
-                    // The native frame runs one emulated vblank per call, so the
-                    // presented rate tracks the content rate directly.
+                    val fps = (metricsFrames * 1_000_000_000.0 / elapsed).coerceIn(0.0, 999.9)
+                    // Speed is emulated time over wall time. Host FPS alone is
+                    // misleading: 30 fps games run at full speed ("100%") while
+                    // the frontend presents 30 frames per second. A fresh
+                    // session resets the core clock, so implausible deltas
+                    // (boot transitions, state loads) fall back to the previous
+                    // authoritative speed instead of publishing garbage.
                     val targetFps = VBLANK_RATE_HZ
-                    val speed = if (targetFps > 0.0) fps / targetFps * 100.0 else 0.0
+                    val emuDeltaUs = lastEmuUs - metricsStartEmuUs
+                    val plausibleEmuDelta = metricsStartEmuUs > 0L && lastEmuUs > metricsStartEmuUs &&
+                        emuDeltaUs * 1_000L <= elapsed * 3L
+                    val speed = if (plausibleEmuDelta) {
+                        (emuDeltaUs * 100_000.0 / elapsed).coerceIn(0.0, 999.9)
+                    } else {
+                        lastPublishedSpeed
+                    }
+                    lastPublishedSpeed = speed
                     val cpuNowMs = Process.getElapsedCpuTime()
                     val cpuDeltaMs = (cpuNowMs - metricsStartCpuMs).coerceAtLeast(0L)
                     val cores = Runtime.getRuntime().availableProcessors().coerceAtLeast(1)
@@ -1038,6 +1111,7 @@ internal object CoreRuntime {
                     metricsMaxCoreNanos = 0L
                     metricsStartNanos = now
                     metricsStartCpuMs = cpuNowMs
+                    metricsStartEmuUs = lastEmuUs
                     metricsFrames = 0
                     metricsFrameTotalNanos = 0L
                 }

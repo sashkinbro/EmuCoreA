@@ -209,6 +209,7 @@ import com.sbro.emucorea.ui.common.tvFocusGroup
 import com.sbro.emucorea.ui.settings.ControlsEditorScreen
 import com.sbro.emucorea.ui.settings.toControlsEditorState
 import com.sbro.emucorea.core.PpssppCoreOptions
+import com.sbro.emucorea.core.RendererDefaults
 import com.sbro.emucorea.core.ppssppCoreOptionHelpRes
 import com.sbro.emucorea.core.PpssppCoreOptionLocalization
 import com.sbro.emucorea.data.AchievementItem
@@ -3902,7 +3903,9 @@ private fun EmulationSidebarMenu(
                         )
 
                         CoreOptionRows(
-                            options = PpssppCoreOptions.gameMenuGraphicsOptions(),
+                            options = PpssppCoreOptions.gameMenuGraphicsOptions(
+                                RendererDefaults.normalizeAndroidRenderer(uiState.renderer)
+                            ),
                             version = coreOptionsVersion,
                             perGameOverrides = uiState.perGameCoreOptions,
                             onValueChange = onCoreOptionChange

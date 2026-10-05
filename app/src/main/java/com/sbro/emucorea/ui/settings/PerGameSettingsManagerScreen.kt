@@ -918,7 +918,9 @@ private fun GameSettingsTabContent(
                         onResetToDefault = { onDraftChange(draft.copy(displayCrop = defaultProfile.displayCrop)) }
                     )
                     CoreOptionManagerRows(
-                        options = PpssppCoreOptions.graphicsOptions(),
+                        options = PpssppCoreOptions.graphicsOptions(
+                            RendererDefaults.normalizeAndroidRenderer(draft.renderer)
+                        ),
                         draft = draft,
                         onDraftChange = onDraftChange
                     )

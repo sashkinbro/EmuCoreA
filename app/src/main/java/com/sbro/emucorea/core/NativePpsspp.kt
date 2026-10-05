@@ -73,6 +73,13 @@ object NativePpsspp {
      */
     external fun nativeSetRenderer(renderer: Int)
 
+    /**
+     * Renderer the core actually initialized: 0 = software, 1 = Vulkan,
+     * 2 = OpenGL ES. The overlay and diagnostics must report this instead of
+     * the stored preference.
+     */
+    external fun nativeGetActiveRenderer(): Int
+
     external fun nativeSetCheats(path: String)
 
     external fun nativeSetRewindEnabled(enabled: Boolean)

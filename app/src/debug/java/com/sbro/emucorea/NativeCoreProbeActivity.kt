@@ -37,6 +37,10 @@ class NativeCoreProbeActivity : Activity(), SurfaceHolder.Callback {
             NativePpsspp.nativeSetRenderer(intent.getIntExtra("renderer", 1))
         }
 
+        // Optional shader preset override. Must be set before the surface is
+        // attached so the shader-chain presentation is installed with it.
+        intent.getStringExtra("shaderPreset")?.let(NativePpsspp::nativeSetShaderPreset)
+
         val metrics = resources.displayMetrics
         val refresh = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             display?.refreshRate ?: 60.0f

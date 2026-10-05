@@ -1987,7 +1987,11 @@ private fun SettingsContent(
                             onClick = launchShaderPackPicker
                         )
                         CoreOptionSettingsRows(
-                            options = remember { PpssppCoreOptions.graphicsOptions() },
+                            options = remember(uiState.renderer) {
+                                PpssppCoreOptions.graphicsOptions(
+                                    RendererDefaults.normalizeAndroidRenderer(uiState.renderer)
+                                )
+                            },
                             version = coreGraphicsVersion,
                             onValueChange = { key, value ->
                                 NativeApp.setCoreOption(key, value)

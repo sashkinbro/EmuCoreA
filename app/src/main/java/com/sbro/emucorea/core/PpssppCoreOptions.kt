@@ -1271,7 +1271,8 @@ object PpssppCoreOptions {
         "ppsspp_software_rendering",
         "ppsspp_internal_resolution",
     )
-    private val unavailableRendererKeys = setOf(
+    /** GPU features that only exist on the Vulkan backend (PPSSPP hides them elsewhere). */
+    private val vulkanOnlyKeys = setOf(
         "ppsspp_mulitsample_level",
         "ppsspp_texture_shader",
     )
@@ -1292,10 +1293,15 @@ object PpssppCoreOptions {
     fun categoryDescription(categoryKey: String): String =
         categoryList.firstOrNull { it.key == categoryKey }?.description.orEmpty()
 
-    /** Video tab: rendering and display options. */
-    fun graphicsOptions(): List<Option> =
+    /**
+     * Video tab: rendering and display options. Vulkan-only features (MSAA and
+     * the GPU texture upscaler) are only listed when Vulkan is the active
+     * renderer, exactly like the standalone app.
+     */
+    fun graphicsOptions(renderer: Int = RendererDefaults.VULKAN): List<Option> =
         forCategory("video").filterNot {
-            it.key in audioKeys || isManagedKey(it.key) || it.key in unavailableRendererKeys
+            it.key in audioKeys || isManagedKey(it.key) ||
+                (it.key in vulkanOnlyKeys && renderer != RendererDefaults.VULKAN)
         }
 
     /** System & performance tab: system and emulation hacks. */
@@ -1303,11 +1309,8 @@ object PpssppCoreOptions {
         (forCategory("system") + forCategory("hacks"))
             .filterNot { it.key in audioKeys || isManagedKey(it.key) }
 
-    /** Small set of system switches useful during play; detailed tuning stays in settings. */
-    fun gameMenuEmulationOptions(): List<Option> = listOfNotNull(
-        option("ppsspp_memstick_inserted"),
-        option("ppsspp_language"),
-    )
+    /** Full system + hacks set, so every emulation option is tunable in-game. */
+    fun gameMenuEmulationOptions(): List<Option> = emulationOptions()
 
     /** PSP ad hoc, WLAN, and port configuration. */
     fun networkOptions(): List<Option> =
@@ -1322,11 +1325,13 @@ object PpssppCoreOptions {
         optionList.filter { it.key in audioKeys }.filterNot { isManagedKey(it.key) }
 
     /** Graphics section of the in-game menu. */
-    fun gameMenuGraphicsOptions(): List<Option> = listOfNotNull(
+    fun gameMenuGraphicsOptions(renderer: Int = RendererDefaults.VULKAN): List<Option> = listOfNotNull(
         option("ppsspp_frameskip"),
         option("ppsspp_auto_frameskip"),
+        if (renderer == RendererDefaults.VULKAN) option("ppsspp_mulitsample_level") else null,
         option("ppsspp_texture_scaling_type"),
         option("ppsspp_texture_scaling_level"),
+        if (renderer == RendererDefaults.VULKAN) option("ppsspp_texture_shader") else null,
         option("ppsspp_texture_deposterize"),
         option("ppsspp_texture_anisotropic_filtering"),
         option("ppsspp_texture_filtering"),
