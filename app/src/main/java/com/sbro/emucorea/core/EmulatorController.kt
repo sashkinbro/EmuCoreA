@@ -13,7 +13,7 @@ import kotlinx.coroutines.withContext
  * Handles: surface lifecycle, audio lifecycle, pause/resume, background/foreground,
  * SAF file access, diagnostics, save-state versioning, shutdown/restart
  */
-class EmulatorController(private val bridge: NativeCoreBridge) : DefaultLifecycleObserver {
+class EmulatorController : DefaultLifecycleObserver {
 
     private var sessionAlive = false
     private var surfaceAlive = false
@@ -44,9 +44,9 @@ class EmulatorController(private val bridge: NativeCoreBridge) : DefaultLifecycl
 
     suspend fun createSession(config: String = "default"): Boolean = withContext(Dispatchers.IO) {
         try {
-            val diag = bridge.getDiagnostics()
+            val diag = CoreRuntime.diagnostics()
             Log.i(TAG, "createSession diag $diag")
-            sessionAlive = diag.contains("api_version")
+            sessionAlive = diag.contains("loaded=1")
             sessionAlive
         } catch (e: Throwable) {
             Log.e(TAG, "createSession failed", e)
@@ -83,7 +83,7 @@ class EmulatorController(private val bridge: NativeCoreBridge) : DefaultLifecycl
 
     fun diagnostics(): String {
         return try {
-            bridge.getDiagnostics()
+            CoreRuntime.diagnostics()
         } catch (e: Throwable) { "diag error ${e.message}" }
     }
 

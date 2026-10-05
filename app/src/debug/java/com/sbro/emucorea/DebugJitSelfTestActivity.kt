@@ -5,17 +5,14 @@ package com.sbro.emucorea
 import android.app.Activity
 import android.os.Bundle
 import android.util.Log
-import com.sbro.emucorea.core.NativeCoreBridge
 import kotlin.concurrent.thread
 
-/** A debug-build-only entry point for running the native ARM64 JIT oracle on a device. */
+/** Debug-build-only entry point retained after the libretro core was removed. */
 class DebugJitSelfTestActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         thread(name = "EmuCoreA-JitSelfTest") {
-            val report = runCatching { NativeCoreBridge().runJitTests() }
-                .getOrElse { error -> "JIT SELF TEST CRASHED\n${error.stackTraceToString()}" }
-            Log.i(TAG, report)
+            Log.i(TAG, "PPSSPP native core: JIT self-test is not available")
             runOnUiThread { finish() }
         }
     }

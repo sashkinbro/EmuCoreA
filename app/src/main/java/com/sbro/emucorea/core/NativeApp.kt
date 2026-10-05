@@ -35,10 +35,11 @@ object NativeApp {
 
 
     init {
-        loadedCoreLibraryName = "emucorea_jni"
-        hasNativeCore = runCatching { CoreRuntime.bridge.apiVersion() }
-            .onFailure { Log.e(TAG, "Unable to load $loadedCoreLibraryName", it) }
-            .isSuccess
+        loadedCoreLibraryName = "emucorea_core"
+        hasNativeCore = NativePpsspp.ensureLoaded()
+            .also { loaded ->
+                if (!loaded) Log.e(TAG, "Unable to load $loadedCoreLibraryName")
+            }
         hasNativeTools = false
     }
 
@@ -82,37 +83,7 @@ object NativeApp {
                 if (!title.isNullOrBlank()) return title
             }
         }
-        val rawMetadata = runCatching {
-            if (path.startsWith("content://")) {
-                val appContext = contextRef?.get() ?: return@runCatching null
-                // For a prepared CUE launch the BIN descriptor is already open;
-                // metadata must be read from the BIN, not the tiny CUE text.
-                val preparedCue = DocumentPathResolver.getPreparedCueLaunch(path)
-                if (preparedCue != null && preparedCue.descriptors.isNotEmpty()) {
-                    CoreRuntime.bridge.getDiscMetadataFd(
-                        preparedCue.descriptors[0],
-                        0L,
-                        preparedCue.sizes.getOrElse(0) { 0L }
-                    )
-                } else {
-                    appContext.contentResolver.openFileDescriptor(path.toUri(), "r")?.use { descriptor ->
-                        CoreRuntime.bridge.getDiscMetadataFd(
-                            descriptor.fd,
-                            0L,
-                            descriptor.statSize.coerceAtLeast(0L)
-                        )
-                    }
-                }
-            } else {
-                CoreRuntime.bridge.getDiscMetadata(path)
-            }
-        }.onFailure { error ->
-            Log.w(TAG, "Unable to read PSP game metadata: $path", error)
-        }.getOrNull()
-        val fields = rawMetadata?.split('\n', limit = 3).orEmpty()
-        val serial = fields.getOrNull(1).orEmpty().trim()
-        if (serial.isBlank()) return fallback
-        return "${fallback.orEmpty()}|$serial|$serial"
+        return fallback
     }
     @JvmStatic fun isBiosPath(path: String): Boolean = File(path).let { it.isFile && it.length() == BIOS_SIZE_BYTES }
     /** Takes ownership of [fd] and always closes it before returning. */
@@ -136,23 +107,15 @@ object NativeApp {
     }
     @JvmStatic fun getPerformanceMetricsSnapshot(): String? = CoreRuntime.performanceMetricsSnapshot()
     @JvmStatic fun getDisplayDrawRect(): FloatArray? = CoreRuntime.displayRect()
-    @JvmStatic fun getCoreName(): String? = runCatching {
-        CoreRuntime.bridge.coreName()?.takeIf { it.isNotBlank() }
-    }.getOrNull()
-    @JvmStatic fun getCoreVersion(): String? = runCatching {
-        CoreRuntime.bridge.coreVersion()
-    }.getOrNull()
+    @JvmStatic fun getCoreName(): String? = "PPSSPP"
+    @JvmStatic fun getCoreVersion(): String? = null
     @JvmStatic fun setAudioOutputGain(volume: Int, muted: Boolean) =
         CoreRuntime.setAudioGain(volume, muted)
-    @JvmStatic fun setAudioBufferMs(milliseconds: Int) = runCatching {
-        CoreRuntime.bridge.setAudioBufferMs(milliseconds)
-    }
-    @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = runCatching {
-        CoreRuntime.bridge.setAudioOutputLatencyMs(milliseconds)
-    }
-    @JvmStatic fun setAudioLowLatency(enabled: Boolean) = runCatching {
-        CoreRuntime.bridge.setAudioLowLatency(enabled)
-    }
+    // Audio buffering belongs to the native core (PPSSPP StereoResampler +
+    // OpenSL), so the AAudio tuning surface is retained as a no-op.
+    @JvmStatic fun setAudioBufferMs(milliseconds: Int) = Unit
+    @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = Unit
+    @JvmStatic fun setAudioLowLatency(enabled: Boolean) = Unit
     @JvmStatic fun setRewindEnabled(enabled: Boolean) =
         CoreRuntime.updateSetting("EmuCoreA/GS", "RewindEnabled", enabled.toString())
     @JvmStatic fun queueGsDump(frames: Int) = Unit
@@ -251,21 +214,17 @@ object NativeApp {
         val clamped = frames.coerceIn(0, 4)
         CoreRuntime.updateSetting("EmuCoreA/GS", "FrameSkip", clamped.toString())
         // PPSSPP's frameskip skips GPU draw work, which is what actually saves
-        // frame time. The frontend present-drop counter stays at zero so the two
-        // mechanisms cannot stack.
-        runCatching { CoreRuntime.bridge.setFrameSkip(0) }
+        // frame time. The native core owns the skip counter.
         runCatching {
-            CoreRuntime.bridge.nativeSetOption(
+            CoreRuntime.applyCoreOption(
                 "ppsspp_frameskip",
                 if (clamped == 0) "disabled" else clamped.toString()
             )
         }
     }
     @JvmStatic fun setDisplayCrop(crop: com.sbro.emucorea.data.DisplayCrop) {
-        val value = crop.sanitized()
-        runCatching {
-            CoreRuntime.bridge.setDisplayCrop(value.left, value.top, value.right, value.bottom)
-        }
+        // Crop/overscan is not exposed by the native core config surface.
+        crop.sanitized()
     }
     @JvmStatic fun setFrameLimitEnabled(enabled: Boolean) =
         CoreRuntime.updateSetting("EmuCoreA/GS", "FrameLimitEnable", enabled.toString())
@@ -277,34 +236,22 @@ object NativeApp {
         CoreRuntime.setTextureReplacementsPathOverride(path)
     @JvmStatic fun hasDiscMedia(): Boolean = CoreRuntime.hasDiscMedia()
 
-    // RetroAchievements: every call degrades to a no-op when the bundled core
-    // does not expose the rcheevos JNI surface.
-    @JvmStatic fun achievementsSetEnabled(enabled: Boolean) =
-        runCatching { CoreRuntime.bridge.achievementsSetEnabled(enabled) }
-    @JvmStatic fun achievementsSetHardcore(enabled: Boolean) =
-        runCatching { CoreRuntime.bridge.achievementsSetHardcore(enabled) }
-    @JvmStatic fun achievementsSetUnofficial(enabled: Boolean) =
-        runCatching { CoreRuntime.bridge.achievementsSetUnofficial(enabled) }
-    @JvmStatic fun achievementsSetEncore(enabled: Boolean) =
-        runCatching { CoreRuntime.bridge.achievementsSetEncore(enabled) }
-    @JvmStatic fun achievementsLoginWithPassword(user: String, password: String): String? =
-        runCatching { CoreRuntime.bridge.achievementsLoginWithPassword(user, password) }.getOrNull()
-    @JvmStatic fun achievementsLoginWithToken(user: String, token: String): String? =
-        runCatching { CoreRuntime.bridge.achievementsLoginWithToken(user, token) }.getOrNull()
-    @JvmStatic fun achievementsLogout() =
-        runCatching { CoreRuntime.bridge.achievementsLogout() }
-    @JvmStatic fun achievementsLoadGame(path: String) =
-        runCatching { CoreRuntime.bridge.achievementsLoadGame(path) }
-    @JvmStatic fun achievementsUnloadGame() =
-        runCatching { CoreRuntime.bridge.achievementsUnloadGame() }
-    @JvmStatic fun achievementsPump() =
-        runCatching { CoreRuntime.bridge.achievementsPump() }
-    @JvmStatic fun achievementsStateJson(): String =
-        runCatching { CoreRuntime.bridge.achievementsStateJson() }.getOrNull().orEmpty()
-    @JvmStatic fun achievementsAchievementsJson(): String =
-        runCatching { CoreRuntime.bridge.achievementsAchievementsJson() }.getOrNull().orEmpty()
-    @JvmStatic fun achievementsPollEventsJson(): String =
-        runCatching { CoreRuntime.bridge.achievementsPollEventsJson() }.getOrNull().orEmpty()
+    // RetroAchievements were backed by the retired libretro memory bridge. The
+    // native core does not expose rcheevos memory access yet, so the whole
+    // surface stays safe and empty instead of touching the core.
+    @JvmStatic fun achievementsSetEnabled(enabled: Boolean) = Unit
+    @JvmStatic fun achievementsSetHardcore(enabled: Boolean) = Unit
+    @JvmStatic fun achievementsSetUnofficial(enabled: Boolean) = Unit
+    @JvmStatic fun achievementsSetEncore(enabled: Boolean) = Unit
+    @JvmStatic fun achievementsLoginWithPassword(user: String, password: String): String? = null
+    @JvmStatic fun achievementsLoginWithToken(user: String, token: String): String? = null
+    @JvmStatic fun achievementsLogout() = Unit
+    @JvmStatic fun achievementsLoadGame(path: String) = Unit
+    @JvmStatic fun achievementsUnloadGame() = Unit
+    @JvmStatic fun achievementsPump() = Unit
+    @JvmStatic fun achievementsStateJson(): String = "{}"
+    @JvmStatic fun achievementsAchievementsJson(): String = "[]"
+    @JvmStatic fun achievementsPollEventsJson(): String = "[]"
     @JvmStatic fun onNativeSurfaceCreated() = Unit
     @JvmStatic fun onNativeSurfaceChanged(surface: Surface, width: Int, height: Int) = CoreRuntime.attachSurface(surface, width, height)
     @JvmStatic fun hasAttachedSurface(surface: Surface, width: Int, height: Int): Boolean =
@@ -317,9 +264,7 @@ object NativeApp {
     @JvmStatic fun restartRenderer(renderer: Int): Boolean = CoreRuntime.restartWithRenderer(renderer)
     @JvmStatic fun changeDisc(path: String): Boolean = CoreRuntime.changeDisc(path)
     @JvmStatic fun runBootSmokeProbe(path: String, steps: Int): Int = 0
-    @JvmStatic fun runJitExecutableMemorySmokeTest(): Boolean = runCatching {
-        CoreRuntime.bridge.getDiagnostics().contains("\"jit_w_x_ok\": 1")
-    }.getOrDefault(false)
+    @JvmStatic fun runJitExecutableMemorySmokeTest(): Boolean = false
     @JvmStatic fun runEeFpuDivRoundingSelfTest(): String = "not applicable to R3000A"
     @JvmStatic fun bootElf(path: String): Boolean = false
     @JvmStatic fun bootIrx(path: String): Boolean = false
@@ -381,14 +326,8 @@ object NativeApp {
         }.toString()
     }
     @JvmStatic fun createMemoryCard(name: String, type: Int, fileType: Int): Boolean {
-        if (type != 1) return false
-        val context = getContext() ?: return false
-        val file = File(EmulatorStorage.memoryCardsDir(context, dataRootOverride), name)
-        if (file.exists()) return false
-        return runCatching {
-            file.parentFile?.mkdirs()
-            CoreRuntime.bridge.createMemoryCard(file.absolutePath) == 0
-        }.getOrDefault(false)
+        // Memory card images are owned by the native PPSSPP core.
+        return false
     }
     @JvmStatic fun convertIsoToChd(inputIsoPath: String): Int = -1
     @JvmStatic fun startJitProfiler() { profilerActive = true }
@@ -441,10 +380,7 @@ object NativeApp {
     }
 
     @JvmStatic
-    fun getPadRumble(index: Int): FloatArray? {
-        if (!hasNativeCore) return null
-        return runCatching { CoreRuntime.getPadRumble(index) }.getOrNull()
-    }
+    fun getPadRumble(index: Int): FloatArray? = null
 
     @JvmStatic
     fun setCrashContextString(key: String, value: String?) {

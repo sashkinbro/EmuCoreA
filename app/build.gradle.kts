@@ -76,13 +76,6 @@ android {
             //noinspection ChromeOsAbiSupport
             abiFilters += "arm64-v8a"
         }
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++23"
-                arguments += "-DANDROID_STL=c++_shared"
-                discordSdkDirectory?.let { arguments += "-DDISCORD_SDK_DIR=${it.absolutePath}" }
-            }
-        }
     }
 
     signingConfigs {
@@ -98,16 +91,6 @@ android {
 
     buildTypes {
         debug {
-            // The emulator core is performance-sensitive even when the
-            // Android frontend is debuggable. Keep symbols and assertions,
-            // but do not run the complete native machine at Clang's implicit
-            // -O0 when launching it from Android Studio.
-            externalNativeBuild {
-                cmake {
-                    cFlags += "-O3"
-                    cppFlags += "-O3"
-                }
-            }
         }
         release {
             if (releaseSigningConfigured) {
@@ -115,23 +98,6 @@ android {
             }
             isDebuggable = false
             isJniDebuggable = false
-            // AGP configures CMake with CMAKE_BUILD_TYPE=RelWithDebInfo, whose
-            // default flags are "-O2 -g -DNDEBUG" and are appended after any -O3
-            // given through cFlags/cppFlags, so that -O2 would win. Replace the
-            // RelWithDebInfo flags outright to keep symbols but compile the
-            // emulator core at the same -O3 as the debug build.
-            //
-            // Overriding -DCMAKE_BUILD_TYPE=Release would also enable the
-            // core's LTO block, but full LTO across the whole vendored machine
-            // is a large build-time cost and stays a separate step.
-            externalNativeBuild {
-                cmake {
-                    arguments += listOf(
-                        "-DCMAKE_C_FLAGS_RELWITHDEBINFO=-O3 -g -DNDEBUG",
-                        "-DCMAKE_CXX_FLAGS_RELWITHDEBINFO=-O3 -g -DNDEBUG"
-                    )
-                }
-            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -147,12 +113,6 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
-    }
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.30.5"
-        }
     }
     packaging {
         jniLibs {
@@ -173,7 +133,6 @@ android {
 }
 
 dependencies {
-    implementation(project(":core-android"))
     implementation(project(":core-native"))
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)

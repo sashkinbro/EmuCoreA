@@ -5,17 +5,14 @@ package com.sbro.emucorea
 import android.app.Activity
 import android.os.Bundle
 import android.util.Log
-import com.sbro.emucorea.core.NativeCoreBridge
 
 class DebugGamesBootActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Thread(null, Runnable {
-            Log.i("GamesBoot", "START GamesBoot")
-            val r = try { NativeCoreBridge().runGamesBootTests() } catch(e: Throwable) { "CRASH ${e.stackTraceToString()}" }
-            Log.i("GamesBoot", "RESULT len=${r.length} ${r.take(500)}")
-            Log.i("GamesBoot", if(r.contains("PASSED")) "PASSED" else "FAILED")
+            Log.i("GamesBoot", "PPSSPP native core: games-boot self-test is not available")
+            Log.i("GamesBoot", "FAILED")
             runOnUiThread { finish() }
-        }, "GamesBoot", 8*1024*1024L).start()
+        }, "GamesBoot", 8 * 1024 * 1024L).start()
     }
 }

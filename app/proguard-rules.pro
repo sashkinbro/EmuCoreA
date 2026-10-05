@@ -1,7 +1,7 @@
 # EmuCoreA R8 rules.
 #
-# This app is a Compose/Kotlin frontend around the bundled PPSSPP libretro
-# core and its JNI bridge (libemucorea_jni.so). Runtime name lookups need explicit keeps:
+# This app is a Compose/Kotlin frontend around the bundled native PPSSPP core
+# (libemucorea_core.so). Runtime name lookups need explicit keeps:
 # JNI entry points, classes resolved by the Discord partner SDK,
 # and kotlinx.serialization serializers used for persisted JSON and
 # typed Navigation Compose routes. Everything else is shrunk normally.
@@ -15,10 +15,10 @@
 
 # --- JNI --------------------------------------------------------------------
 # Native entry points are resolved by their mangled names
-# (Java_com_sbro_emucorea_core_NativeCoreBridge_*,
+# (Java_com_sbro_emucorea_core_NativePpsspp_*,
 #  Java_com_sbro_emucorea_discord_DiscordNative_*), so class and method names
 # must stay stable in release builds.
--keepclasseswithmembers,includedescriptorclasses class com.sbro.emucorea.core.NativeCoreBridge {
+-keepclasseswithmembers,includedescriptorclasses class com.sbro.emucorea.core.NativePpsspp {
     native <methods>;
 }
 -keepclasseswithmembers,includedescriptorclasses class com.sbro.emucorea.discord.DiscordNative {
