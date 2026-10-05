@@ -51,7 +51,8 @@ data class RemoteCheatPack(
     val sourceUrl: String,
     val sourceName: String,
     val license: String,
-    val blockCount: Int
+    val blockCount: Int,
+    val sha256: String = ""
 )
 
 data class RemoteCatalogResult<T>(
@@ -124,6 +125,11 @@ class RemoteContentCatalogRepository(context: Context) {
     fun downloadCheatText(pack: RemoteCheatPack): String {
         require(pack.downloadUrl.isHttpsUrl()) { "Cheat download must use HTTPS" }
         val bytes = fetchBytes(pack.downloadUrl, MAX_CHEAT_BYTES)
+        if (pack.sha256.isNotEmpty()) {
+            val actual = MessageDigest.getInstance("SHA-256").digest(bytes)
+                .joinToString("") { byte -> "%02x".format(byte) }
+            require(actual == pack.sha256) { "Cheat pack failed its integrity check" }
+        }
         val text = bytes.toString(Charsets.UTF_8).removePrefix("\uFEFF")
         require(
             text.lineSequence().any { line ->
@@ -252,11 +258,13 @@ class RemoteContentCatalogRepository(context: Context) {
                     sourceUrl = item.requiredString("sourceUrl").requireHttps(),
                     sourceName = item.requiredString("sourceName"),
                     license = item.string("license"),
-                    blockCount = item.int("blockCount")
+                    blockCount = item.int("blockCount"),
+                    sha256 = item.string("sha256").trim().lowercase(Locale.US)
                 ).also { pack ->
                     require(pack.crc.isEmpty() || pack.crc.matches(Regex("[0-9A-F]{8}")))
                     require(pack.authors.isNotEmpty())
                     require(pack.blockCount > 0)
+                    require(pack.sha256.isEmpty() || pack.sha256.matches(Regex("[0-9a-f]{64}")))
                 }
             }.getOrNull()
         }.distinctBy(RemoteCheatPack::id)
@@ -414,7 +422,9 @@ class RemoteContentCatalogRepository(context: Context) {
     private companion object {
         const val MAX_CATALOG_BYTES = 8L * 1024L * 1024L
         const val MAX_CHEAT_BYTES = 2L * 1024L * 1024L
-        const val MAX_TEXTURE_ARCHIVE_BYTES = 16L * 1024L * 1024L * 1024L
+        // Matches TexturePackRepository.MAX_ARCHIVE_BYTES so a catalog pack that
+    // downloads successfully can always be installed.
+    const val MAX_TEXTURE_ARCHIVE_BYTES = 12L * 1024L * 1024L * 1024L
         const val MAX_TEXTURE_PART_BYTES = 2L * 1024L * 1024L * 1024L
         const val CATALOG_CACHE_TTL_MS = 6L * 60L * 60L * 1000L
 

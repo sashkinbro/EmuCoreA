@@ -128,15 +128,18 @@ internal fun CheatOnlineCatalogSection(
     identity: SelectedGameIdentity?,
     resolvingIdentity: Boolean,
     gamesLoading: Boolean,
-    onInstalled: () -> Unit
+    onInstalled: () -> Unit,
+    refreshKey: Int = 0
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
     val scope = rememberCoroutineScope()
     val catalogRepository = remember(context) { RemoteContentCatalogRepository(context) }
     val cheatRepository = remember(context) { CheatRepository(context) }
-    val installState = remember(context) { RemoteContentInstallState(context) }
     val preferences = remember(context) { AppPreferences(context) }
+    val installState = remember(context) {
+        RemoteContentInstallState(context, preferences.getEmulatorDataPathSync())
+    }
 
     // Retained so scrolling the card out of view and back does not reset the
     // loaded catalog, re-run the loaders or replay the entrance animation.
@@ -153,7 +156,7 @@ internal fun CheatOnlineCatalogSection(
     val installSuccessMessage = stringResource(R.string.cheat_catalog_install_success)
     val installFailureMessage = stringResource(R.string.cheat_catalog_install_failed)
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshKey) {
         val loaded = withContext(Dispatchers.IO) {
             val catalog = catalogRepository.loadCheatCatalog()
             catalog to installState.installedCheats()

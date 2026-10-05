@@ -62,6 +62,7 @@ import com.sbro.emucorea.data.CheatGameConfig
 import com.sbro.emucorea.data.CheatRepository
 import com.sbro.emucorea.data.ContentLibraryRepository
 import com.sbro.emucorea.data.GameItem
+import com.sbro.emucorea.data.RemoteContentInstallState
 import com.sbro.emucorea.core.NativeApp
 import com.sbro.emucorea.data.SelectedGameIdentity
 import com.sbro.emucorea.ui.common.AppAlertDialog
@@ -100,6 +101,7 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
     var config by remember { mutableStateOf<CheatGameConfig?>(null) }
     var resolvingIdentity by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<CheatGameConfig?>(null) }
+    var catalogRefreshKey by remember { mutableStateOf(0) }
     var selectedCheatCategory by remember { mutableStateOf<CheatCategory?>(null) }
     var cheatSearchVisible by remember { mutableStateOf(false) }
     var cheatSearchQuery by remember { mutableStateOf("") }
@@ -381,7 +383,8 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
                     identity = identity,
                     resolvingIdentity = resolvingIdentity,
                     gamesLoading = gamesLoading,
-                    onInstalled = { syncSelectedGame() }
+                    onInstalled = { syncSelectedGame() },
+                    refreshKey = catalogRefreshKey
                 )
             }
             config?.let { current ->
@@ -584,11 +587,31 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
             text = { Text(stringResource(R.string.cheat_manager_delete_confirm)) },
             confirmButton = {
                 TextButton(onClick = {
-                    cheatRepository.deleteImportedCheats(current.gameKey, current.serial, current.crc)
-                    NativeApp.clearCheats()
-                    config = null
                     pendingDelete = null
-                    Toast.makeText(context, deleteSuccess, Toast.LENGTH_SHORT).show()
+                    scope.launch {
+                        withContext(Dispatchers.IO) {
+                            cheatRepository.deleteImportedCheats(current.gameKey, current.serial, current.crc)
+                            // The online catalog tracks installs by pack id; without this the
+                            // card keeps showing "Installed" after the files are gone.
+                            runCatching {
+                                val installState = RemoteContentInstallState(
+                                    context,
+                                    preferences.getEmulatorDataPathSync()
+                                )
+                                val serial = current.serial
+                                if (!serial.isNullOrBlank()) {
+                                    val packIds = installState.installedCheats().values
+                                        .filter { it.serial.equals(serial, ignoreCase = true) }
+                                        .map { it.packId }
+                                    if (packIds.isNotEmpty()) installState.removeCheatsForGame(packIds)
+                                }
+                            }
+                            NativeApp.clearCheats()
+                        }
+                        config = null
+                        catalogRefreshKey++
+                        Toast.makeText(context, deleteSuccess, Toast.LENGTH_SHORT).show()
+                    }
                 }) { Text(stringResource(R.string.delete)) }
             },
             dismissButton = {

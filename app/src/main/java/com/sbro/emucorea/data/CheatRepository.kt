@@ -124,8 +124,11 @@ class CheatRepository(private val context: Context) {
         val enabledIds = if (enableAllByDefault) {
             blocks.map { it.id }
         } else {
+            // Parsed files mark every `_C1` block as enabled, which is just the
+            // cheat type, not a user choice: only blocks enabled before the
+            // import keep their state.
             blocks.filter {
-                it.enabled || old.contains(it.id) || cheatBlockSignature(it) in oldEnabledSignatures
+                old.contains(it.id) || cheatBlockSignature(it) in oldEnabledSignatures
             }.map { it.id }
         }
         state.put(normalizedGameKey, JSONArray(enabledIds))
