@@ -2208,6 +2208,27 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeIsBooted(JNIEnv *, jclass) {
     return g_booted ? JNI_TRUE : JNI_FALSE;
 }
 
+// Repoints the core at a different data root (the app's "Emulator data
+// location"). All PSP directories (SAVEDATA, TEXTURES, CHEATS, NAND, ...) are
+// derived from memStickDirectory, so only that has to move. Ignored while a
+// session is live; the next nativeInit then uses the new path.
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeUpdateDataDirectories(JNIEnv *env, jclass, jstring dataDir,
+                                                                     jstring externalDir) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    if (g_booted || g_pendingBoot || g_bootRequested) {
+        NLOGI("Data directory change deferred until the next session");
+        return;
+    }
+    const std::string data = ToString(env, dataDir);
+    const std::string external = ToString(env, externalDir);
+    if (!data.empty()) g_Config.internalDataDirectory = Path(data);
+    if (!external.empty()) g_Config.memStickDirectory = Path(external);
+    g_Config.nandRootDirectory = GetSysDirectory(DIRECTORY_NAND);
+    CreateSysDirectories();
+    NLOGI("Data directories updated: memstick=%s", g_Config.memStickDirectory.ToVisualString().c_str());
+}
+
 JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCheats(JNIEnv *env, jclass, jstring path) {
     const std::string cheatPath = ToString(env, path);

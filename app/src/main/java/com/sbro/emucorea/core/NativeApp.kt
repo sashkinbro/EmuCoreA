@@ -63,7 +63,13 @@ object NativeApp {
 
     @JvmStatic fun initialize(path: String, apiVer: Int) = Unit
 
-    @JvmStatic fun reloadDataRoot(path: String) { dataRootOverride = path.takeIf(String::isNotBlank) }
+    @JvmStatic fun reloadDataRoot(path: String) {
+        dataRootOverride = path.takeIf(String::isNotBlank)
+        val appContext = contextRef?.get() ?: return
+        val root = resolveDataRoot(appContext)
+        prepareNativeDataRoot(File(root))
+        CoreRuntime.setExternalDataDirectory(root)
+    }
     @JvmStatic fun setSaveStateIdentityPath(path: String?) {
         saveStateIdentityPath = path?.takeIf(String::isNotBlank)
     }
@@ -389,7 +395,7 @@ object NativeApp {
         val dataRoot = resolveDataRoot(context.applicationContext)
         dataRootOverride = dataRoot
         prepareNativeDataRoot(File(dataRoot))
-        CoreRuntime.initialize(context.applicationContext)
+        CoreRuntime.initialize(context.applicationContext, dataRoot)
     }
 
     @JvmStatic

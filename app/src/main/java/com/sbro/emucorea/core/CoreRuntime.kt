@@ -58,6 +58,7 @@ internal object CoreRuntime {
     private val sessionLock = ReentrantLock()
     private var context: Context? = null
     private var nativeDataDirectory = ""
+    private var externalDataDirectory = ""
     @Volatile private var nativeInitialized = false
     @Volatile private var nativeSurfaceReady = false
     @Volatile private var sessionActive = false
@@ -148,13 +149,18 @@ internal object CoreRuntime {
         }
     }
 
-    fun initialize(context: Context) {
+    fun initialize(context: Context, externalDataRoot: String? = null) {
         this.context = context.applicationContext
         val root = File(context.filesDir, "ppsspp")
         systemDirectory = File(root, "system").apply { mkdirs() }.absolutePath
         saveDirectory = File(root, "save").apply { mkdirs() }.absolutePath
         coreAssetsDirectory = File(root, "assets").apply { mkdirs() }.absolutePath
         nativeDataDirectory = File(root, "native").apply { mkdirs() }.absolutePath
+        // The core's memStickDirectory must match the app's emulator data root,
+        // otherwise core-owned data (SAVEDATA, TEXTURES, CHEATS, NAND) splits
+        // off into Android/data while the app reads the chosen folder.
+        externalDataDirectory = externalDataRoot?.takeIf { it.isNotBlank() }
+            ?: (context.getExternalFilesDir(null) ?: context.filesDir).absolutePath
         SwanStationOptions.initialize(context.applicationContext)
         runCatching {
             extractCoreAssets(context.applicationContext)
@@ -220,10 +226,12 @@ internal object CoreRuntime {
             NativePpsspp.nativeSetRenderer(RendererDefaults.toCoreRenderer(requestedRenderer))
         }.onFailure { Log.w(TAG, "Unable to select the renderer", it) }
         val metrics = appContext.resources.displayMetrics
+        val externalDir = externalDataDirectory.takeIf { it.isNotBlank() }
+            ?: (appContext.getExternalFilesDir(null) ?: appContext.filesDir).absolutePath
         NativePpsspp.nativeInit(
             appContext.packageCodePath,
             nativeDataDirectory,
-            appContext.getExternalFilesDir(null)?.absolutePath ?: appContext.filesDir.absolutePath,
+            externalDir,
             appContext.cacheDir.absolutePath,
             metrics.widthPixels,
             metrics.heightPixels,
@@ -231,6 +239,20 @@ internal object CoreRuntime {
         )
         nativeInitialized = true
         return true
+    }
+
+    /**
+     * The app's emulator data root changed. The core derives SAVEDATA,
+     * TEXTURES, CHEATS and NAND from it, so repoint the live core (when idle)
+     * and remember it for the next nativeInit.
+     */
+    fun setExternalDataDirectory(path: String) {
+        if (path.isBlank()) return
+        externalDataDirectory = path
+        if (!nativeInitialized) return
+        runCatching {
+            NativePpsspp.nativeUpdateDataDirectories(nativeDataDirectory, externalDataDirectory)
+        }.onFailure { Log.w(TAG, "Unable to update the native data directories", it) }
     }
 
     private fun displayRefreshRate(context: Context): Float = runCatching {

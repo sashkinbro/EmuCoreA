@@ -91,6 +91,9 @@ object NativePpsspp {
     /** True once the asynchronous core boot (PSP_InitUpdate) has completed. */
     external fun nativeIsBooted(): Boolean
 
+    /** Repoints the core at a new data root while idle. */
+    external fun nativeUpdateDataDirectories(dataDir: String, externalDir: String)
+
     external fun nativeSetCheats(path: String)
 
     external fun nativeSetRewindEnabled(enabled: Boolean)

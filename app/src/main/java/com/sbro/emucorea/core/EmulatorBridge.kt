@@ -341,16 +341,18 @@ object EmulatorBridge {
 
         try {
             NativeApp.setNativeLibraryDir(context.applicationInfo.nativeLibraryDir ?: "")
-            NativeApp.initializeOnce(context.applicationContext)
-            NativeApp.setSetting("EmuCoreA", "AppVersion", "string", appVersionName(context.applicationContext))
-            val jitSmokeOk = runCatching { NativeApp.runJitExecutableMemorySmokeTest() }.getOrDefault(false)
-            Log.i(TAG, "JIT executable-memory smoke result=$jitSmokeOk")
+            // The persisted emulator data root has to be known before the native
+            // core is initialized: its memStickDirectory is set from it.
             val (preferEnglishTitles, emulatorDataPath) = runBlocking {
                 val preferences = AppPreferences(context.applicationContext)
                 preferences.preferEnglishGameTitles.first() to preferences.getEmulatorDataPathSync()
             }
-            NativeApp.setSetting("UI", "PreferEnglishGameTitles", "bool", preferEnglishTitles.toString())
             NativeApp.reloadDataRoot(emulatorDataPath ?: "")
+            NativeApp.initializeOnce(context.applicationContext)
+            NativeApp.setSetting("EmuCoreA", "AppVersion", "string", appVersionName(context.applicationContext))
+            NativeApp.setSetting("UI", "PreferEnglishGameTitles", "bool", preferEnglishTitles.toString())
+            val jitSmokeOk = runCatching { NativeApp.runJitExecutableMemorySmokeTest() }.getOrDefault(false)
+            Log.i(TAG, "JIT executable-memory smoke result=$jitSmokeOk")
             Log.i(TAG, "initializeOnce completed")
         } catch (error: Exception) {
             Log.e(TAG, "initializeOnce failed", error)
