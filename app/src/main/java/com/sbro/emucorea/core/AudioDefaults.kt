@@ -77,10 +77,10 @@ object AudioDefaults {
         else -> BACKEND_DEFAULT
     }
 
-    /** Returns the core AudioBackend enum string name for the given frontend backend index. */
+    /** Native audio backend name for the given frontend backend index. */
     fun backendCoreName(value: Int): String = when (coerceBackend(value)) {
-        BACKEND_OPENSLES -> "OpenSLES"
-        else -> "SDL" // SDL on Android = AAudio via android_aaudio_stream.cpp
+        BACKEND_OPENSLES -> "OpenSL ES"
+        else -> "AAudio"
     }
 
     fun coerceBufferMs(value: Int): Int = value.coerceIn(BUFFER_MS_MIN, BUFFER_MS_MAX)

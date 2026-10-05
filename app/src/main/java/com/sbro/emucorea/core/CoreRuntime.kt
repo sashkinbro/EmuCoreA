@@ -591,6 +591,15 @@ internal object CoreRuntime {
         }
     }
 
+    /** Selects the native output backend (AAudio by default, OpenSL ES on request). */
+    fun setAudioBackend(backend: Int) {
+        val name = when (AudioDefaults.coerceBackend(backend)) {
+            AudioDefaults.BACKEND_OPENSLES -> "opensl"
+            else -> "aaudio"
+        }
+        NativePpsspp.nativeSetConfig("audio_backend", name)
+    }
+
     /**
      * "Minimal output latency" trades buffer size for responsiveness: when on,
      * the OpenSL callback uses a small buffer so input lag is lower.

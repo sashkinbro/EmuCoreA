@@ -301,6 +301,15 @@ object EmulatorBridge {
                 NativeApp.setAudioLowLatency(enabled)
                 return true
             }
+            "Backend", "AudioBackend" -> {
+                val backend = if (value.contains("OpenSL", ignoreCase = true)) {
+                    AudioDefaults.BACKEND_OPENSLES
+                } else {
+                    AudioDefaults.BACKEND_AAUDIO
+                }
+                NativeApp.setAudioBackend(backend)
+                return true
+            }
             else -> return false
         }
         NativeApp.setAudioOutputGain(audioVolumeSetting, audioMutedSetting)

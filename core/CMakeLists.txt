@@ -1180,7 +1180,7 @@ if(ANDROID AND EMUCOREA_NATIVE)
 		android/jni/AndroidAudio.cpp
 		android/jni/OpenSLContext.cpp
 	)
-	target_link_libraries(emucorea_core Core log EGL OpenSLES android)
+	target_link_libraries(emucorea_core Core log EGL OpenSLES aaudio android)
 	target_include_directories(emucorea_core PRIVATE
 		${EMUCOREA_NATIVE_DIR}
 		${CMAKE_SOURCE_DIR}/ext/rcheevos/include

@@ -122,6 +122,7 @@ object NativeApp {
     @JvmStatic fun setAudioBufferMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
     @JvmStatic fun setAudioOutputLatencyMs(milliseconds: Int) = CoreRuntime.setAudioBufferMs(milliseconds)
     @JvmStatic fun setAudioLowLatency(enabled: Boolean) = CoreRuntime.setAudioLowLatency(enabled)
+    @JvmStatic fun setAudioBackend(backend: Int) = CoreRuntime.setAudioBackend(backend)
     @JvmStatic fun setRewindEnabled(enabled: Boolean) =
         CoreRuntime.updateSetting("EmuCoreA/GS", "RewindEnabled", enabled.toString())
     @JvmStatic fun queueGsDump(frames: Int) = Unit

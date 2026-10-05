@@ -1288,7 +1288,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             val normalized = AudioDefaults.coerceBackend(value)
             preferences.setAudioBackend(normalized)
             _uiState.value = _uiState.value.copy(audioBackend = normalized)
-            // A backend change is applied the next time the game starts.
+            // Rebuilds a running output immediately; idle cores store the choice.
+            EmulatorBridge.setSetting(
+                "SPU2/Output",
+                "Backend",
+                "string",
+                AudioDefaults.backendCoreName(normalized)
+            )
         }
     }
 

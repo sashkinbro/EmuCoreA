@@ -15,6 +15,7 @@
 #include <android/log.h>
 #include <android/native_window_jni.h>
 #include <sys/system_properties.h>
+#include <aaudio/AAudio.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
@@ -104,10 +105,16 @@ bool g_audioStarted = false;
 // Zero means "unknown".
 int g_audioDeviceSampleRate = 0;
 int g_audioDeviceFramesPerBuffer = 0;
-// Explicit OpenSL frames-per-callback override (0 = automatic). Set from the
+// Explicit output buffer override in frames (0 = automatic). Set from the
 // frontend's output-latency setting; automatic mode mirrors PPSSPP's Android
 // audio init (device optimal rate with a small fallback buffer).
 int g_audioFramesPerBuffer = 0;
+// Output backend. AAudio is PPSSPP's modern Android default; OpenSL ES stays
+// as the fallback and as an explicit frontend choice.
+bool g_useAaudioBackend = true;
+AAudioStream *g_aaudioStream = nullptr;
+int g_aaudioSampleRate = 0;
+int g_aaudioFramesPerBuffer = 0;
 #ifndef NDEBUG
 int64_t g_audioDiagLastWallUs = 0;
 // Debug-only capture of the exact PCM handed to OpenSL, written to
@@ -366,21 +373,118 @@ void AudioRenderCallback(short *buffer, int numSamples, int sampleRateHz, void *
 #endif
 }
 
+// ---------------------------------------------------------------------------
+// AAudio output. The stream pulls straight from StereoResampler on the audio
+// callback thread, so no OpenSL buffer queue sits in between. This mirrors
+// PPSSPP's modern Android default backend.
+// ---------------------------------------------------------------------------
+aaudio_data_callback_result_t AAudioDataCallback(AAudioStream *stream, void * /*userData*/,
+                                                 void *audioData, int32_t numFrames) {
+    if (audioData == nullptr || numFrames <= 0) return AAUDIO_CALLBACK_RESULT_CONTINUE;
+    const int sampleRate = g_aaudioSampleRate > 0
+        ? g_aaudioSampleRate
+        : AAudioStream_getSampleRate(stream);
+    auto *samples = static_cast<short *>(audioData);
+    g_resampler.Mix(samples, static_cast<unsigned int>(numFrames), false, sampleRate);
+#ifndef NDEBUG
+    AudioDumpAppend(samples, numFrames, sampleRate);
+#endif
+    return AAUDIO_CALLBACK_RESULT_CONTINUE;
+}
+
+void AAudioErrorCallback(AAudioStream * /*stream*/, void * /*userData*/, aaudio_result_t error) {
+    NLOGE("AAudio stream error: %s", AAudio_convertResultToText(error));
+}
+
+bool StartAAudio() {
+    if (g_aaudioStream != nullptr) return true;
+    AAudioStreamBuilder *builder = nullptr;
+    if (AAudio_createStreamBuilder(&builder) != AAUDIO_OK || builder == nullptr) {
+        NLOGE("AAudio: unable to create a stream builder");
+        return false;
+    }
+    const int sampleRate = g_audioDeviceSampleRate > 0 ? g_audioDeviceSampleRate : 48000;
+    AAudioStreamBuilder_setDirection(builder, AAUDIO_DIRECTION_OUTPUT);
+    AAudioStreamBuilder_setFormat(builder, AAUDIO_FORMAT_PCM_I16);
+    AAudioStreamBuilder_setChannelCount(builder, 2);
+    AAudioStreamBuilder_setSampleRate(builder, sampleRate);
+    AAudioStreamBuilder_setPerformanceMode(builder, AAUDIO_PERFORMANCE_MODE_LOW_LATENCY);
+    AAudioStreamBuilder_setSharingMode(builder, AAUDIO_SHARING_MODE_SHARED);
+    AAudioStreamBuilder_setDataCallback(builder, AAudioDataCallback, nullptr);
+    AAudioStreamBuilder_setErrorCallback(builder, AAudioErrorCallback, nullptr);
+
+    aaudio_result_t result = AAudioStreamBuilder_openStream(builder, &g_aaudioStream);
+    AAudioStreamBuilder_delete(builder);
+    if (result != AAUDIO_OK || g_aaudioStream == nullptr) {
+        NLOGE("AAudio openStream failed: %s", AAudio_convertResultToText(result));
+        g_aaudioStream = nullptr;
+        return false;
+    }
+    g_aaudioSampleRate = AAudioStream_getSampleRate(g_aaudioStream);
+    g_aaudioFramesPerBuffer = AAudioStream_getFramesPerBurst(g_aaudioStream);
+    // The frontend's output-latency setting maps to the stream buffer size;
+    // automatic mode keeps AAudio's own sizing.
+    if (g_audioFramesPerBuffer > 0) {
+        const int32_t applied =
+            AAudioStream_setBufferSizeInFrames(g_aaudioStream, g_audioFramesPerBuffer);
+        if (applied > 0) g_aaudioFramesPerBuffer = applied;
+    }
+    result = AAudioStream_requestStart(g_aaudioStream);
+    if (result != AAUDIO_OK) {
+        NLOGE("AAudio requestStart failed: %s", AAudio_convertResultToText(result));
+        AAudioStream_close(g_aaudioStream);
+        g_aaudioStream = nullptr;
+        g_aaudioSampleRate = 0;
+        g_aaudioFramesPerBuffer = 0;
+        return false;
+    }
+    NLOGI("AAudio started: %d Hz, burst %d, buffer %d frames", g_aaudioSampleRate,
+          AAudioStream_getFramesPerBurst(g_aaudioStream),
+          AAudioStream_getBufferSizeInFrames(g_aaudioStream));
+    return true;
+}
+
+void StopAAudio() {
+    if (g_aaudioStream == nullptr) return;
+    AAudioStream_requestStop(g_aaudioStream);
+    AAudioStream_close(g_aaudioStream);
+    g_aaudioStream = nullptr;
+    g_aaudioSampleRate = 0;
+    g_aaudioFramesPerBuffer = 0;
+    NLOGI("AAudio stopped");
+}
+
 // Mirrors Java_org_ppsspp_ppsspp_NativeApp_audioInit: prefer the device's
-// optimal output rate. Devices that report huge frames-per-buffer values lose
-// the OpenSL fast path, so PPSSPP falls back to 44.1 kHz / 512 frames there.
+// optimal output rate. The AAudio stream reports the rate it actually opened.
 int AudioOutputSampleRate() {
+    if (g_aaudioStream != nullptr && g_aaudioSampleRate > 0) return g_aaudioSampleRate;
+    if (g_useAaudioBackend) return g_audioDeviceSampleRate > 0 ? g_audioDeviceSampleRate : 48000;
     if (g_audioFramesPerBuffer <= 0 && g_audioDeviceFramesPerBuffer > 512) return 44100;
     return g_audioDeviceSampleRate > 0 ? g_audioDeviceSampleRate : 44100;
 }
 
 int AudioOutputFramesPerBuffer() {
     if (g_audioFramesPerBuffer > 0) return g_audioFramesPerBuffer;
+    if (g_useAaudioBackend) {
+        return g_aaudioFramesPerBuffer > 0
+            ? g_aaudioFramesPerBuffer
+            : (g_audioDeviceFramesPerBuffer > 0 ? g_audioDeviceFramesPerBuffer : 512);
+    }
     const int frames = g_audioDeviceFramesPerBuffer > 0 ? g_audioDeviceFramesPerBuffer : 512;
     return frames > 512 ? 512 : frames;
 }
 
 void StartAudio() {
+    if (g_audioStarted) return;
+    if (g_useAaudioBackend) {
+        if (StartAAudio()) {
+            g_audioStarted = true;
+            return;
+        }
+        // Keep the requested backend for the next rebuild, but fall back to
+        // OpenSL for this session so the game still has sound.
+        NLOGW("AAudio unavailable; falling back to OpenSL ES");
+    }
     if (g_audioState == nullptr) {
         const int sampleRate = AudioOutputSampleRate();
         const int frames = AudioOutputFramesPerBuffer();
@@ -394,10 +498,23 @@ void StartAudio() {
 }
 
 void StopAudio() {
+    if (g_aaudioStream != nullptr) {
+        StopAAudio();
+        g_audioStarted = false;
+    }
     if (g_audioState != nullptr && g_audioStarted) {
         AndroidAudio_Pause(g_audioState);
         g_audioStarted = false;
     }
+}
+
+void RebuildAudio() {
+    StopAudio();
+    if (g_audioState != nullptr) {
+        AndroidAudio_Shutdown(g_audioState);
+        g_audioState = nullptr;
+    }
+    StartAudio();
 }
 
 }  // namespace
@@ -1680,13 +1797,24 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
                     NLOGI("Audio buffer: automatic (%d frames)", AudioOutputFramesPerBuffer());
                 }
                 g_audioFramesPerBuffer = frames;
-                if (g_audioState != nullptr) {
-                    // Rebuild the OpenSL player so the new buffer takes effect.
-                    StopAudio();
-                    AndroidAudio_Shutdown(g_audioState);
-                    g_audioState = nullptr;
-                    StartAudio();
+                if (g_audioStarted || g_audioState != nullptr || g_aaudioStream != nullptr) {
+                    // Rebuild the output so the new buffer takes effect.
+                    RebuildAudio();
                 }
+            }
+        }
+        return;
+    }
+    if (key == "audio_backend") {
+        // "aaudio" (default, like PPSSPP) or "opensl". Switching rebuilds a
+        // live output so the change is audible immediately.
+        const bool useAaudio = !EqualsIgnoreCase(value, "opensl") &&
+            !EqualsIgnoreCase(value, "opensl es") && !EqualsIgnoreCase(value, "opensl_es");
+        if (useAaudio != g_useAaudioBackend) {
+            g_useAaudioBackend = useAaudio;
+            NLOGI("Audio backend: %s", useAaudio ? "AAudio" : "OpenSL ES");
+            if (g_audioStarted || g_audioState != nullptr || g_aaudioStream != nullptr) {
+                RebuildAudio();
             }
         }
         return;
