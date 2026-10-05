@@ -9,20 +9,24 @@ class TexturePackLayoutTest {
             "pack-main/PSP/TEXTURES/ULES00151/textures/ui/icon.png",
             "pack-main/PSP/TEXTURES/ULES00151/regions/eu.ini", "outside.png")
         assertEquals(listOf("textures.ini", "textures/ui/icon.png", "regions/eu.ini"),
-            resolveTexturePackLayout(paths).values.toList())
+            resolveTexturePackSections(paths).single().files.values.toList())
     }
     @Test fun flatPackKeepsRelativePaths() {
         assertEquals(mapOf("textures.ini" to "textures.ini", "replacements/a.png" to "replacements/a.png"),
-            resolveTexturePackLayout(setOf("textures.ini", "replacements/a.png")))
+            resolveTexturePackSections(setOf("textures.ini", "replacements/a.png")).single().files)
     }
     @Test fun mainIniIsCanonicalized() {
         assertEquals(mapOf("Pack/Textures.INI" to "textures.ini", "Pack/A.png" to "A.png"),
-            resolveTexturePackLayout(setOf("Pack/Textures.INI", "Pack/A.png")))
+            resolveTexturePackSections(setOf("Pack/Textures.INI", "Pack/A.png")).single().files)
     }
-    @Test(expected = IllegalStateException::class) fun ambiguousPacksAreRejected() {
-        resolveTexturePackLayout(setOf("A/textures.ini", "B/textures.ini"))
+    @Test fun multiRootPacksKeepOneSectionPerIni() {
+        val sections = resolveTexturePackSections(
+            setOf("A/textures.ini", "A/a.png", "B/textures.ini", "B/b.png"))
+        assertEquals(listOf("A/textures.ini", "B/textures.ini"), sections.map { it.iniPath })
+        assertEquals(mapOf("A/textures.ini" to "textures.ini", "A/a.png" to "a.png"), sections[0].files)
+        assertEquals(mapOf("B/textures.ini" to "textures.ini", "B/b.png" to "b.png"), sections[1].files)
     }
     @Test(expected = IllegalStateException::class) fun missingIniIsRejected() {
-        resolveTexturePackLayout(setOf("A.png"))
+        resolveTexturePackSections(setOf("A.png"))
     }
 }

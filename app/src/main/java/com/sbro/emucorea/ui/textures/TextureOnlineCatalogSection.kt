@@ -58,6 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.sbro.emucorea.R
+import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.ContentLibraryRepository
 import com.sbro.emucorea.data.GameItem
 import com.sbro.emucorea.data.InstalledRemoteTexture
@@ -89,7 +90,10 @@ internal fun TextureOnlineCatalogSection(
     val uriHandler = LocalUriHandler.current
     val catalogRepository = remember(context) { RemoteContentCatalogRepository(context) }
     val libraryRepository = remember(context) { ContentLibraryRepository(context) }
-    val installState = remember(context) { RemoteContentInstallState(context) }
+    val preferences = remember(context) { AppPreferences(context) }
+    val installState = remember(context) {
+        RemoteContentInstallState(context, preferences.getEmulatorDataPathSync())
+    }
     val downloadManager = remember(context) { TextureDownloadManager(context) }
     // Retained so scrolling the card out of view and back does not reset the
     // loaded catalog, lose the selected game, re-run the loaders or replay the

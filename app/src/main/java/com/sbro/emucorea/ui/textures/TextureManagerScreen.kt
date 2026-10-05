@@ -83,7 +83,9 @@ fun TextureManagerScreen(
     val context = LocalContext.current
     val preferences = remember(context) { AppPreferences(context) }
     val repository = remember(context) { TexturePackRepository(context, preferences) }
-    val remoteInstallState = remember(context) { RemoteContentInstallState(context) }
+    val remoteInstallState = remember(context) {
+        RemoteContentInstallState(context, preferences.getEmulatorDataPathSync())
+    }
     val scope = rememberCoroutineScope()
     val topInset = appScreenTopPadding()
     val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()

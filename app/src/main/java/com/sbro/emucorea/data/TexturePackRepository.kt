@@ -157,25 +157,47 @@ class TexturePackRepository(
                 }
             }
 
-            val layout = resolveTexturePackLayout(sourceFiles)
-            val textureIniPath = layout.entries.single { it.value == "textures.ini" }.key
-            val textureIni = File(sourceRoot, textureIniPath)
-            require(layout.values.any { isTextureFile(it.substringAfterLast('/')) }) {
-                "PPSSPP texture pack contains no texture assets"
+            val sections = resolveTexturePackSections(sourceFiles)
+            // serial -> staged files (source file + relative destination)
+            val stagedBySerial = linkedMapOf<String, MutableList<Pair<File, String>>>()
+            var importedFiles = 0
+            sections.forEach section@{ section ->
+                require(section.files.values.any { isTextureFile(it.substringAfterLast('/')) }) {
+                    "PPSSPP texture pack contains no texture assets"
+                }
+                val textureIni = File(sourceRoot, section.iniPath)
+                val declared = linkedSetOf<String>().apply {
+                    addAll(readSerialsFromTexturesIni(textureIni))
+                    serialFromParts(section.iniPath.split('/').dropLast(1))?.let(::add)
+                }
+                // A chosen target serial always wins for a single-root pack.
+                // Multi-root packs only import the roots that belong to it.
+                val serials = when {
+                    normalizedTargetSerial != null &&
+                        (sections.size == 1 || declared.isEmpty() || normalizedTargetSerial in declared) ->
+                        linkedSetOf(normalizedTargetSerial)
+                    normalizedTargetSerial != null -> emptySet()
+                    declared.isNotEmpty() -> declared
+                    fallbackSerial != null -> linkedSetOf(fallbackSerial)
+                    else -> emptySet()
+                }
+                if (serials.isEmpty()) return@section
+                serials.forEach { serial ->
+                    val bucket = stagedBySerial.getOrPut(serial) { mutableListOf() }
+                    section.files.forEach { (sourceRelative, relative) ->
+                        val source = safeChild(sourceRoot, sourceRelative.split('/'))
+                            ?: error("Invalid staged texture path")
+                        bucket += source to relative
+                    }
+                }
+                importedFiles += section.files.size * serials.size
             }
-            val serials = linkedSetOf<String>().apply {
-                normalizedTargetSerial?.let(::add)
-                if (isEmpty()) addAll(readSerialsFromTexturesIni(textureIni))
-                if (isEmpty()) serialFromParts(textureIniPath.split('/').dropLast(1))?.let(::add)
-                if (isEmpty()) fallbackSerial?.let(::add)
-            }
-            require(serials.isNotEmpty()) { "Could not determine a PSP disc ID" }
+            require(stagedBySerial.isNotEmpty()) { "Could not determine a PSP disc ID" }
 
-            serials.forEach { serial ->
+            val stagedSerials = stagedBySerial.keys.toList()
+            stagedBySerial.forEach { (serial, files) ->
                 val stagedSerialRoot = File(canonicalStagingRoot, gameDirectoryName(serial))
-                layout.forEach { (sourceRelative, relative) ->
-                    val source = safeChild(sourceRoot, sourceRelative.split('/'))
-                        ?: error("Invalid staged texture path")
+                files.forEach { (source, relative) ->
                     val target = safeChild(stagedSerialRoot, relative.split('/'))
                         ?: error("Invalid staged texture path")
                     target.parentFile?.mkdirs()
@@ -184,21 +206,16 @@ class TexturePackRepository(
             }
 
             if (replaceExisting) {
-                serials.forEach { serial ->
+                stagedSerials.forEach { serial ->
                     replacePackAtomically(
                         stagedSerialRoot = File(canonicalStagingRoot, gameDirectoryName(serial)),
                         serial = serial
                     )
                 }
-                TextureImportResult(
-                    success = true,
-                    importedFiles = layout.size * serials.size,
-                    importedSerials = serials
-                )
             } else {
-                serials.forEach { serial ->
+                stagedSerials.forEach { serial ->
                     val stagedSerialRoot = File(canonicalStagingRoot, gameDirectoryName(serial))
-                    layout.values.forEach { relative ->
+                    stagedBySerial.getValue(serial).forEach { (_, relative) ->
                         val staged = safeChild(stagedSerialRoot, relative.split('/'))
                             ?: error("Invalid staged texture path")
                         val target = safeChild(gameDir(serial), relative.split('/'))
@@ -207,12 +224,12 @@ class TexturePackRepository(
                         staged.copyTo(target, overwrite = true)
                     }
                 }
-                TextureImportResult(
-                    success = true,
-                    importedFiles = layout.size * serials.size,
-                    importedSerials = serials
-                )
             }
+            TextureImportResult(
+                success = true,
+                importedFiles = importedFiles,
+                importedSerials = stagedBySerial.keys
+            )
         } catch (_: Exception) {
             TextureImportResult(success = false)
         } finally {
@@ -229,9 +246,10 @@ class TexturePackRepository(
         val target = File(root, gameDirectoryName(serial)).canonicalFile
         require(target.parentFile == root) { "Invalid texture target" }
         val backup = File(root, ".texture-backup-${UUID.randomUUID()}")
+        val targetExisted = target.exists()
         var oldMoved = false
         try {
-            if (target.exists()) {
+            if (targetExisted) {
                 require(target.renameTo(backup)) { "Could not prepare texture update" }
                 oldMoved = true
             }
@@ -249,7 +267,13 @@ class TexturePackRepository(
             }
             if (backup.exists()) backup.deleteRecursively()
         } catch (error: Throwable) {
-            if (target.exists()) target.deleteRecursively()
+            // Only remove the target when it cannot be the intact old pack:
+            // either the old pack was moved aside or there was none to begin
+            // with. If the backup rename itself failed, the target is still
+            // the good pack and must stay.
+            if (oldMoved || !targetExisted) {
+                if (target.exists()) target.deleteRecursively()
+            }
             if (oldMoved && backup.exists()) backup.renameTo(target)
             throw error
         }

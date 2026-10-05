@@ -136,7 +136,8 @@ object EmulatorStorage {
         )
     }
 
-    fun appStateDir(context: Context): File = File(root(context), "app-state").apply { mkdirs() }
+    fun appStateDir(context: Context, customRootPath: String? = null): File =
+        File(root(context, customRootPath), "app-state").apply { mkdirs() }
 
     fun importedCheatsDir(context: Context): File = File(appStateDir(context), "imported-cheats").apply { mkdirs() }
 

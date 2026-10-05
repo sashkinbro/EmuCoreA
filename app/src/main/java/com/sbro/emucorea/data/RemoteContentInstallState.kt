@@ -19,28 +19,45 @@ data class InstalledRemoteCheat(
     val installedAt: Long
 )
 
-class RemoteContentInstallState(context: Context) {
-    private val stateFile = File(EmulatorStorage.appStateDir(context.applicationContext), "remote-content.json")
+class RemoteContentInstallState(
+    context: Context,
+    private val emulatorDataPath: String? = null
+) {
+    private val appContext = context.applicationContext
+    private val stateFile = File(
+        EmulatorStorage.appStateDir(appContext, emulatorDataPath),
+        "remote-content.json"
+    )
     private val lock = Any()
 
     fun installedTextures(): Map<String, InstalledRemoteTexture> = synchronized(lock) {
         val textures = readState().optJSONObject("textures") ?: return@synchronized emptyMap()
+        // The pack directory lives under the configured emulator data root, so
+        // an entry whose folder is gone (data root switched or pack deleted by
+        // hand) must not keep showing as installed.
+        val texturesRoot = runCatching {
+            EmulatorStorage.texturesDir(appContext, emulatorDataPath).canonicalFile
+        }.getOrNull()
         buildMap {
             textures.keys().forEach { id ->
                 val value = textures.optJSONObject(id) ?: return@forEach
                 val serial = value.optString("serial").trim()
                 val version = value.optString("version").trim()
-                if (serial.isNotEmpty() && version.isNotEmpty()) {
-                    put(
-                        id,
-                        InstalledRemoteTexture(
-                            packId = id,
-                            serial = serial,
-                            version = version,
-                            installedAt = value.optLong("installedAt", 0L)
-                        )
-                    )
+                if (serial.isEmpty() || version.isEmpty()) return@forEach
+                if (texturesRoot != null &&
+                    !File(texturesRoot, serial.replace("-", "")).isDirectory
+                ) {
+                    return@forEach
                 }
+                put(
+                    id,
+                    InstalledRemoteTexture(
+                        packId = id,
+                        serial = serial,
+                        version = version,
+                        installedAt = value.optLong("installedAt", 0L)
+                    )
+                )
             }
         }
     }

@@ -2029,6 +2029,10 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         }
         return;
     }
+    if (key == "ppsspp_texture_dumping") {
+        if (hasBool) g_Config.bSaveNewTextures = on;
+        return;
+    }
 
     // ----- Input -----
     if (key == "ppsspp_button_preference") {

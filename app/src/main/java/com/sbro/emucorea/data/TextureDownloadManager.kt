@@ -185,7 +185,10 @@ class TextureDownloadWorker(
                 .installRemotePack(archive, task.serial)
             if (!installed.success) throw PermanentDownloadException("Texture archive could not be installed")
 
-            val installState = RemoteContentInstallState(applicationContext)
+            val installState = RemoteContentInstallState(
+                applicationContext,
+                preferences.getEmulatorDataPathSync()
+            )
             installState.removeTexturesForSerial(task.serial)
             installState.recordTexture(task.packId, task.version, task.serial)
             preferences.setTextureReplacementsEnabled(true)

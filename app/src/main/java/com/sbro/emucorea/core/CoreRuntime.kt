@@ -1107,6 +1107,8 @@ internal object CoreRuntime {
                 bool?.let { "ppsspp_vsync" to if (it) "enabled" else "disabled" }
             "EmuCoreA/GS:LoadTextureReplacements" ->
                 bool?.let { "ppsspp_texture_replacement" to if (it) "enabled" else "disabled" }
+            "EmuCoreA/GS:DumpReplaceableTextures" ->
+                bool?.let { "ppsspp_texture_dumping" to if (it) "enabled" else "disabled" }
             else -> null
         }
         target?.let { (coreKey, coreValue) -> forwardCoreOption(coreKey, coreValue) }
