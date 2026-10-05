@@ -17,6 +17,7 @@
 #include <sys/system_properties.h>
 
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,10 @@
 namespace {
 
 JavaVM *g_vm = nullptr;
+// Serializes RunFrame against surface attach/detach and shutdown, so closing
+// the activity or turning the screen off cannot tear the swapchain down while
+// a frame is being recorded or presented.
+std::mutex g_nativeFrameMutex;
 GraphicsContext *g_graphicsContext = nullptr;
 StereoResampler g_resampler;
 AndroidAudioState *g_audioState = nullptr;
@@ -281,6 +286,7 @@ bool AttachSurface(ANativeWindow *window, int width, int height) {
 }
 
 void RunFrame() {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     if (g_graphicsContext == nullptr || !g_renderReady) return;
 
     if (g_pendingBoot) {
@@ -340,6 +346,7 @@ void RunFrame() {
 }
 
 void ShutdownCore() {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     StopAudio();
     if (g_audioState != nullptr) {
         AndroidAudio_Shutdown(g_audioState);
@@ -427,6 +434,7 @@ JNIEXPORT jboolean JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeSetSurface(JNIEnv *env, jclass, jobject surface,
                                                           jint width, jint height) {
     if (surface == nullptr) {
+        std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
         if (g_renderReady) {
             if (gpu != nullptr) gpu->DeviceLost();
             g_graphicsContext->ShutdownSurface();
@@ -436,6 +444,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetSurface(JNIEnv *env, jclass, j
     }
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
     if (window == nullptr) return JNI_FALSE;
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     const bool ok = AttachSurface(window, width, height);
     ANativeWindow_release(window);
     return ok ? JNI_TRUE : JNI_FALSE;
