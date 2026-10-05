@@ -5177,12 +5177,17 @@ private fun LiveSelectionChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val icon = option.icon
+    val label = option.label?.takeIf { it.isNotEmpty() }
     FilterChip(
         shape = neonChipShape(),
         modifier = modifier,
         selected = selected,
         onClick = onClick,
-        leadingIcon = option.icon?.let { icon ->
+        // Icon-only options (for example "Stretch to full screen") must not
+        // render an empty label slot: Material reserves its padding and the
+        // chip ends up as a big half-empty button.
+        leadingIcon = if (label != null && icon != null) {
             {
                 Icon(
                     imageVector = icon,
@@ -5190,15 +5195,33 @@ private fun LiveSelectionChip(
                     modifier = Modifier.size(18.dp)
                 )
             }
+        } else {
+            null
         },
-        label = {
-            Text(
-                text = option.label.orEmpty(),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip
-            )
+        label = when {
+            label != null -> {
+                {
+                    Text(
+                        text = label,
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip
+                    )
+                }
+            }
+            icon != null -> {
+                {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = option.contentDescription,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            else -> {
+                { Text(text = "", style = MaterialTheme.typography.labelSmall) }
+            }
         }
     )
 }
