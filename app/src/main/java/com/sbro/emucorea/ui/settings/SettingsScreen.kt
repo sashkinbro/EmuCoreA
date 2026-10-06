@@ -265,8 +265,6 @@ fun SettingsScreen(
     initialTab: String = "general",
     onBackClick: (() -> Unit)? = null,
     onOpenLanguageScreen: (() -> Unit)? = null,
-    onOpenMemoryCardManager: (() -> Unit)? = null,
-    onOpenGameDbBrowser: (() -> Unit)? = null,
     onOpenControlsLayoutEditor: (() -> Unit)? = null,
     onOpenThemeManager: (() -> Unit)? = null,
     onOpenTouchControlCreator: (() -> Unit)? = null,
@@ -374,7 +372,6 @@ fun SettingsScreen(
     TvStoragePickerHost(
         request = tvStorageRequest,
         onDismiss = { tvStorageRequest = null },
-        onBiosSelected = {},
         onGameFolderSelected = viewModel::setGamePath
     )
     val launchGamePicker = rememberDebouncedClick(
@@ -566,8 +563,6 @@ fun SettingsScreen(
                     searchEnabled = false
                     searchQuery = ""
                 },
-                onOpenMemoryCardManager = onOpenMemoryCardManager,
-                onOpenGameDbBrowser = onOpenGameDbBrowser,
                 onOpenControlsLayoutEditor = onOpenControlsLayoutEditor,
                 onOpenThemeManager = onOpenThemeManager,
                 onOpenTouchControlCreator = onOpenTouchControlCreator,
@@ -1025,8 +1020,6 @@ private fun SettingsContent(
     viewModel: SettingsViewModel,
     topInset: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
-    onOpenMemoryCardManager: (() -> Unit)? = null,
-    onOpenGameDbBrowser: (() -> Unit)? = null,
     onOpenControlsLayoutEditor: (() -> Unit)? = null,
     onOpenThemeManager: (() -> Unit)? = null,
     onOpenTouchControlCreator: (() -> Unit)? = null
@@ -3242,7 +3235,7 @@ private fun drawerItemIcon(item: DrawerItemId): ImageVector = when (item) {
     DrawerItemId.LIBRARY -> Icons.Rounded.Home
     DrawerItemId.CATALOG_SEARCH -> Icons.Rounded.Search
     DrawerItemId.HUB -> Icons.Rounded.Newspaper
-    DrawerItemId.LAUNCH_GAME, DrawerItemId.LAUNCH_BIOS -> Icons.Rounded.PlayArrow
+    DrawerItemId.LAUNCH_GAME -> Icons.Rounded.PlayArrow
     DrawerItemId.GAME_SETTINGS -> Icons.Rounded.Tune
     DrawerItemId.DATA_TRANSFER -> Icons.Rounded.SwapVert
     DrawerItemId.RESET_SETTINGS -> Icons.Rounded.Restore
@@ -3263,11 +3256,10 @@ private fun drawerItemLabel(item: DrawerItemId): String = when (item) {
     DrawerItemId.CATALOG_SEARCH -> stringResource(R.string.shell_catalog_search)
     DrawerItemId.HUB -> stringResource(R.string.hub_title)
     DrawerItemId.LAUNCH_GAME -> stringResource(R.string.shell_launch_game)
-    DrawerItemId.LAUNCH_BIOS -> stringResource(R.string.shell_launch_bios)
     DrawerItemId.GAME_SETTINGS -> stringResource(R.string.shell_game_settings_manager)
     DrawerItemId.DATA_TRANSFER -> stringResource(R.string.shell_data_transfer)
     DrawerItemId.RESET_SETTINGS -> stringResource(R.string.settings_reset_all_action)
-    DrawerItemId.MEMORY_CARDS -> stringResource(R.string.shell_memory_cards)
+    DrawerItemId.MEMORY_CARDS -> stringResource(R.string.psp_memstick_title)
     DrawerItemId.TEXTURE_MANAGER -> stringResource(R.string.shell_texture_manager)
     DrawerItemId.CHEAT_MANAGER -> stringResource(R.string.shell_cheat_manager)
     DrawerItemId.ACHIEVEMENTS -> stringResource(R.string.shell_achievements)

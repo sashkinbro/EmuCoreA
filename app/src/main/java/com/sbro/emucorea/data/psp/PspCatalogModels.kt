@@ -1,6 +1,6 @@
-package com.sbro.emucorea.data.ps1
+package com.sbro.emucorea.data.psp
 
-data class Ps1CatalogSummary(
+data class PspCatalogSummary(
     val igdbId: Long,
     val name: String,
     val normalizedName: String,
@@ -14,7 +14,7 @@ data class Ps1CatalogSummary(
     val primarySerial: String? = null
 )
 
-data class Ps1CatalogDetails(
+data class PspCatalogDetails(
     val igdbId: Long,
     val name: String,
     val normalizedName: String,

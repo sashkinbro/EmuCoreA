@@ -79,14 +79,12 @@
     <string name="emulation_save_failed">فشل في حفظ حالة اللعبة.</string>
     <string name="emulation_loaded">تم التحميل</string>
     <string name="emulation_load_failed">فشل في تحميل حالة الحفظ.</string>
-    <string name="emulation_bios_missing">أضف ملف BIOS أولاً.</string>
     <string name="emulation_launch_failed">تعذر فتح هذه اللعبة.</string>
     <string name="emulation_launch_path_error">تعذر فتح هذا الملف.</string>
     <string name="emulation_session_restored_unavailable">تم إغلاق جلسة المحاكاة السابقة في الخلفية. قم بتشغيل اللعبة مرة أخرى من مكتبتك.</string>
     <string name="emulation_show_controls">إظهار عناصر التحكم</string>
     <string name="emulation_hide_controls">إخفاء عناصر التحكم</string>
     <string name="emulation_status_preparing">جاري التجهيز…</string>
-    <string name="emulation_status_checking_bios">جاري التحقق من ملف BIOS…</string>
     <string name="emulation_status_loading_game">جاري تحميل اللعبة…</string>
     <string name="emulation_status_starting_core">جاري بدء نواة المحاكاة…</string>
     <string name="emulation_status_waiting_vm">في انتظار الجهاز الافتراضي…</string>
@@ -242,8 +240,8 @@
     <string name="settings_help_hide_dlc_in_library">تظهر حزم المحتوى القابل للتنزيل (DLC) في المكتبة بجانب الألعاب. عند التفعيل، يُخفى DLC من المكتبة والبحث. أوقفه لعرض جميع الإدخالات المكتشفة.</string>
     <string name="home_dlc_title">المحتوى القابل للتنزيل</string>
     <string name="settings_help_home_search">يعرض شريط البحث في المكتبة مباشرة على الشاشة الرئيسية. اتركه قيد التشغيل للمكتبات الكبيرة؛ أوقفه إذا كنت تفضل تخطيطًا أنظف ونادرًا ما تبحث بالاسم.</string>
-    <string name="settings_help_prefer_english_game_titles">يستخدم العناوين الإنجليزية من قاعدة بيانات GameIndex الخاصة بـ EmuCoreA للألعاب التي تُشحن بأسماء يابانية أو إقليمية أخرى. يساعد هذا بشكل أساسي الإصدارات المستوردة على القراءة بوضوح أكبر في المكتبة، بينما الألعاب التي ليس لها عنوان إنجليزي في قاعدة البيانات تحتفظ باسمها العادي.</string>
-    <string name="settings_help_game_path">يحدد مجلد المكتبة الذي يمسحه EmuCoreA بحثًا عن الألعاب. المسح متداخل، لذا فإن المجلدات الفرعية مقبولة. تشمل الصور المدعومة .iso و .bin و .img و .mdf و .gz و .cso و .zso و .chd و .elf. يُعد ISO الخط الأساسي الأكثر أمانًا، بينما يُعد CHD عادةً أفضل تنسيق طويل المدى لأنه يوفر المساحة دون التخلي عن الاستخدام العادي.</string>
+    <string name="settings_help_prefer_english_game_titles">يستخدم العناوين الإنجليزية من قاعدة بيانات عناوين PSP الخاصة بـ EmuCoreA للألعاب التي تُشحن بأسماء يابانية أو إقليمية أخرى. يساعد هذا بشكل أساسي الإصدارات المستوردة على القراءة بوضوح أكبر في المكتبة، بينما الألعاب التي ليس لها عنوان إنجليزي في قاعدة البيانات تحتفظ باسمها العادي.</string>
+    <string name="settings_help_game_path">يحدد مجلد المكتبة الذي يمسحه EmuCoreA بحثًا عن الألعاب. المسح متداخل، لذا فإن المجلدات الفرعية مقبولة. تشمل الصور المدعومة .iso و .cso و .chd و .pbp و .elf و .prx و .plf و .zip. يُعد ISO الخط الأساسي الأكثر أمانًا، بينما يُعد CHD عادةً أفضل تنسيق طويل المدى لأنه يوفر المساحة دون التخلي عن الاستخدام العادي.</string>
     <string name="settings_help_renderer">يحدد واجهة الرسومات الخلفية المستخدمة للعرض باستخدام الهاردوير. يُعد Vulkan عادةً الأسرع على الأجهزة الحديثة، بينما يمكن أن يكون OpenGL أكثر أمانًا للتوافق على بعض وحدات معالجة الرسومات، و Software هو في الأساس بديل للاختبار أو الألعاب التي تتعطل بشدة في وضع الهاردوير.</string>
     <string name="settings_help_aspect_ratio">يتحكم في كيفية تأطير الصورة النهائية على شاشتك. يتتبع Auto اللعبة، ويحتفظ 4:3 بالمظهر الأصلي لمعظم ألعاب PSP، ويناسب 16:9 الألعاب ذات تصحيح الشاشة العريضة، ويجب استخدام Stretch فقط إذا لم تكن تمانع في التشويه الهندسي.</string>
     <string name="settings_help_overlay_scale">يغير حجم الأزرار والعصي التي تظهر على الشاشة. قم بزيادته إذا كانت دقة اللمس أهم من مساحة الشاشة؛ قم بخفضه إذا كانت الطبقة تغطي الكثير من الصورة.</string>
@@ -275,8 +273,6 @@
     <string name="shell_data_transfer">نقل البيانات</string>
     <string name="shell_launch_game_unsupported">صيغة ملف صورة اللعبة غير مدعومة.</string>
     <string name="shell_save_states">مدير الحفظ</string>
-    <string name="shell_memory_cards">بطاقات الذاكرة</string>
-    <string name="shell_launch_bios">تشغيل BIOS</string>
 
     <string name="settings_controls_tab">التحكم</string>
     <string name="settings_overlay_scale">مقياس الطبقة</string>
@@ -306,11 +302,6 @@
     <string name="settings_gamepad_assignment_reset">إعادة الضبط إلى التلقائي</string>
     <string name="settings_gamepad_hide_overlay">إخفاء الطبقة عند استخدام وحدة تحكم</string>
 
-    <string name="settings_ee_cycle_rate">معدل دورة EE</string>
-    <string name="settings_mtvu">MTVU (وحدة VU1 متعددة الخيوط)</string>
-    <string name="settings_instant_vu1">VU1 الفوري</string>
-    <string name="settings_half_pixel_offset">إزاحة نصف بكسل</string>
-
     <string name="settings_touch_controls">عناصر التحكم باللمس</string>
     <string name="settings_gamepad_section">وحدة تحكم (Gamepad)</string>
     <string name="settings_speed_hacks">تعديلات السرعة (Speed Hacks)</string>
@@ -319,69 +310,9 @@
     <string name="settings_device_profile_family_exynos">Exynos</string>
     <string name="settings_device_profile_family_tensor">Tensor</string>
     <string name="settings_device_profile_family_generic">Android عام</string>
-    <string name="settings_ee_cycle_disabled">معطل</string>
-    <string name="settings_ee_cycle_mild">خفيف</string>
-    <string name="settings_ee_cycle_moderate">معتدل</string>
-    <string name="settings_ee_cycle_maximum">أقصى</string>
-    <string name="settings_texture_preloading">التحميل المسبق للأنسجة</string>
-    <string name="settings_hw_mipmapping">Mipmapping</string>
-    <string name="settings_cpu_sprite_render_size">حجم عرض CPU Sprite</string>
-    <string name="settings_cpu_sprite_render_level">مستوى عرض CPU Sprite</string>
-    <string name="settings_software_clut_render">عرض CLUT البرمجي</string>
-    <string name="settings_gpu_target_clut">GPU Target CLUT</string>
-    <string name="settings_auto_flush_hardware">المسح التلقائي (هاردوير)</string>
-    <string name="settings_cpu_framebuffer_conversion">تحويل المخزن المؤقت للإطار عبر CPU</string>
-    <string name="settings_preload_frame_data">التحميل المسبق لبيانات الإطار</string>
-    <string name="settings_disable_partial_invalidation">تعطيل الإبطال الجزئي</string>
-    <string name="settings_texture_inside_rt">نسيج داخل RT</string>
-    <string name="settings_read_targets_on_close">قراءة الأهداف عند الإغلاق</string>
-    <string name="settings_estimate_texture_region">تقدير منطقة النسيج</string>
-    <string name="settings_gpu_palette_conversion">تحويل لوحة ألوان GPU</string>
-    <string name="settings_half_pixel_off">إيقاف</string>
-    <string name="settings_half_pixel_normal">عادي</string>
-    <string name="settings_half_pixel_special">خاص</string>
-    <string name="settings_half_pixel_special_aggressive">خاص قوي</string>
-    <string name="settings_half_pixel_native">المحاذاة مع الأصلي</string>
-    <string name="settings_half_pixel_native_tex">الأصلي + إزاحة النسيج</string>
-    <string name="settings_native_scaling">القياس الأصلي (Native Scaling)</string>
-    <string name="settings_native_scaling_off">إيقاف</string>
-    <string name="settings_native_scaling_normal">عادي</string>
-    <string name="settings_native_scaling_aggressive">قوي</string>
-    <string name="settings_round_sprite">تدوير Sprite</string>
-    <string name="settings_round_sprite_half">نصف</string>
-    <string name="settings_round_sprite_full">كامل</string>
-    <string name="settings_bilinear_upscale">رفع الدقة الثنائي (Bilinear Upscale)</string>
-    <string name="settings_align_sprite">محاذاة Sprite</string>
-    <string name="settings_merge_sprite">دمج Sprite</string>
-    <string name="settings_force_even_sprite_position">فرض وضع Sprite الزوجي</string>
-    <string name="settings_native_palette_draw">رسومات نسيج اللوحة غير المقاسة</string>
     <string name="emulation_cheats_title">الشفرات</string>
     <string name="emulation_cheats_empty">لم يتم العثور على شفرات لهذه اللعبة.</string>
     <string name="emulation_cheats_group_enable">تفعيل الكل في المجموعة</string>
-    <string name="settings_trilinear_filtering_auto">تلقائي</string>
-    <string name="settings_blending_accuracy_minimum">الأدنى</string>
-    <string name="settings_blending_accuracy_basic">أساسي</string>
-    <string name="settings_blending_accuracy_medium">متوسط</string>
-    <string name="settings_blending_accuracy_high">عالي</string>
-    <string name="settings_blending_accuracy_full">كامل</string>
-    <string name="settings_blending_accuracy_maximum">الأقصى</string>
-    <string name="settings_texture_preloading_none">لا شيء</string>
-    <string name="settings_texture_preloading_partial">جزئي</string>
-    <string name="settings_texture_preloading_full">كامل</string>
-    <string name="settings_disabled_short">معطل</string>
-    <string name="settings_normal_short">عادي</string>
-    <string name="settings_aggressive_short">قوي</string>
-    <string name="settings_cpu_sprite_render_level_sprites">الرسومات المتحركة (Sprites)</string>
-    <string name="settings_cpu_sprite_render_level_triangles">Sprites + مثلثات</string>
-    <string name="settings_cpu_sprite_render_level_blended">مدمج</string>
-    <string name="settings_gpu_target_clut_exact">تطابق تام</string>
-    <string name="settings_gpu_target_clut_inside">داخل الهدف</string>
-    <string name="settings_auto_flush_sprites">الرسومات المتحركة فقط</string>
-    <string name="settings_auto_flush_all">كل الأشكال الأولية</string>
-    <string name="settings_texture_inside_rt_inside">داخل الهدف</string>
-    <string name="settings_texture_inside_rt_merge">دمج الأهداف</string>
-    <string name="settings_bilinear_upscale_force_bilinear">فرض الثنائي</string>
-    <string name="settings_bilinear_upscale_force_nearest">فرض الأقرب</string>
     <string name="settings_more_options">خيارات إضافية</string>
     <string name="settings_reset_all_title">إعادة تعيين جميع الإعدادات</string>
     <string name="settings_reset_all_action">إعادة تعيين جميع الإعدادات</string>
@@ -438,7 +369,6 @@
     <string name="onboarding_profile_fast_desc">للأجهزة الأضعف التي تحتاج إلى سرعة إضافية. قد تظهر بعض الألعاب المزيد من الأخطاء أو تصبح أقل استقرارًا.</string>
     <string name="onboarding_title">استعد للعب</string>
     <string name="onboarding_subtitle">اختر مجلدات ألعاب PSP وامنح إذن الوصول إلى الملفات.</string>
-    <string name="onboarding_bios_desc">اختر مجلدًا يحتوي على تفريغ BIOS نظيف لـ PSP بحجم 512 KiB بالضبط وبتنسيق .bin أو .rom.</string>
     <string name="onboarding_games_title">اختر مجلد الألعاب</string>
     <string name="onboarding_games_desc">حدد المجلد الذي يحتوي على ألعابك.</string>
     <string name="onboarding_status_required">مطلوب</string>
@@ -524,7 +454,6 @@
     <string name="save_manager_delete_confirm_body">سيتم حذف %1$s، الفتحة %2$d بشكل دائم.</string>
     <string name="save_manager_delete_confirm_body_named">سيتم حذف %1$s، %2$s بشكل دائم.</string>
     <string name="save_manager_load_unavailable">ملف اللعبة غير موجود في المكتبة</string>
-    <string name="memory_card_loading">جاري تحميل بطاقات الذاكرة…</string>
     <string name="settings_reset_to_default_toast">تمت استعادة القيمة الافتراضية.</string>
     <string name="shell_game_settings_manager">مدير اللعبة</string>
     <string name="game_settings_manager_title">مدير اللعبة</string>
@@ -645,21 +574,6 @@
     <string name="game_settings_manager_no_games">لم يتم العثور على ألعاب في مكتبتك الحالية.</string>
     <string name="game_settings_manager_profile_active_short">ملف التعريف</string>
     <string name="game_settings_manager_tab_system">النظام والأداء</string>
-    <string name="settings_ee_fpu_round_mode">وضع تقريب EE FPU</string>
-    <string name="settings_vu0_round_mode">وضع تقريب VU0</string>
-    <string name="settings_vu1_round_mode">وضع تقريب VU1</string>
-    <string name="settings_ee_fpu_clamping">تقييد EE/FPU</string>
-    <string name="settings_vu0_clamping">تقييد VU0</string>
-    <string name="settings_vu1_clamping">تقييد VU1</string>
-    <string name="settings_float_round_nearest">الأقرب (Nearest)</string>
-    <string name="settings_float_round_negative">سالب (Negative)</string>
-    <string name="settings_float_round_positive">موجب (Positive)</string>
-    <string name="settings_float_round_chop">اقتطاع (Chop)</string>
-    <string name="settings_clamping_none">بلا</string>
-    <string name="settings_clamping_normal">عادي</string>
-    <string name="settings_clamping_extra">إضافي</string>
-    <string name="settings_clamping_full">كامل</string>
-    <string name="settings_clamping_extra_sign">إضافي+إشارة (Extra+Sign)</string>
     <string name="emulation_auto_save_on_exit">حفظ تلقائي عند الخروج</string>
     <string name="emulation_auto_save_on_exit_desc">احفظ هذه اللعبة في فتحة الحفظ التلقائي قبل إغلاق المحاكي.</string>
     <string name="emulation_auto_load_on_start">تحميل تلقائي عند البدء</string>
@@ -702,8 +616,6 @@
     <string name="settings_touch_haptics_test_desc">يشغل نبضة قصيرة باستخدام قوة استجابة اللمس الحالية.</string>
     <string name="settings_help_touch_haptics_strength">يتحكم في قوة اهتزاز الجهاز المستخدمة لاستجابة اللمس لعناصر التحكم. قم بزيادتها إذا كانت النبضة خفيفة للغاية، أو قم بخفضها للعب محمول أكثر هدوءًا.</string>
     <string name="settings_help_touch_haptics_test">يشغل نفس نبضة اللمس للجهاز التي تستخدمها عناصر التحكم على الشاشة، حتى تتمكن من ضبط القوة قبل بدء اللعبة.</string>
-    <string name="settings_native_scaling_normal_maintain_upscale">عادي (الحفاظ على الترقية)</string>
-    <string name="settings_native_scaling_aggressive_maintain_upscale">صارم (الحفاظ على الترقية)</string>
     <string name="settings_audio_tab">الصوت</string>
     <string name="settings_audio_control">التحكم في الصوت</string>
     <string name="settings_audio_volume">مستوى الصوت</string>
@@ -721,68 +633,6 @@
 <!-- Core-specific emulation settings -->
     <string name="settings_core_cpu">المعالج / النظام</string>
     <string name="settings_core_input">الإدخال</string>
-
-    <string name="gamedb_browser_title">متصفح GameDB</string>
-    <string name="gamedb_browser_subtitle">%1$d لعبة بإعدادات تلقائية</string>
-    <string name="gamedb_browser_loading">جاري قراءة GameDB المدمج…</string>
-    <string name="gamedb_browser_search_hint">البحث عن الألعاب</string>
-    <string name="gamedb_browser_clear_search">مسح البحث</string>
-    <string name="gamedb_browser_filter_all">الكل</string>
-    <string name="gamedb_browser_filter_core">الأساسية</string>
-    <string name="gamedb_browser_filter_graphics">الرسومات</string>
-    <string name="gamedb_browser_load_failed">تعذر فتح GameDB</string>
-    <string name="gamedb_browser_load_failed_desc">ملف GameIndex المدمج مفقود أو لا يمكن قراءته.</string>
-    <string name="gamedb_browser_no_results">لا توجد ألعاب مطابقة</string>
-    <string name="gamedb_browser_no_results_desc">جرب عنوانًا أو رقمًا تسلسليًا للقرص أو منطقة أو اسم إعداد.</string>
-    <string name="gamedb_browser_core_count">%1$d أساسية</string>
-    <string name="gamedb_browser_graphics_count">%1$d رسومات</string>
-    <string name="gamedb_browser_show_details">إظهار كافة الإعدادات</string>
-    <string name="gamedb_browser_show_less">إظهار أقل</string>
-    <string name="gamedb_browser_category_core">إصلاحات اللعبة الأساسية</string>
-    <string name="gamedb_browser_category_round">تجاوزات وضع التقريب</string>
-    <string name="gamedb_browser_category_clamp">تجاوزات وضع التثبيت (Clamp)</string>
-    <string name="gamedb_browser_category_speedhack">تجاوزات اختراق السرعة (Speed hack)</string>
-    <string name="gamedb_browser_category_graphics">إصلاحات توافق الرسومات</string>
-    <string name="gamedb_browser_enabled">مفعل</string>
-    <string name="gamedb_browser_controlled_by_toggle">يتم التحكم فيه عن طريق مفتاح إصلاحات GameDB</string>
-    <string name="gamedb_browser_graphics_always_applied">قاعدة رسومية من GameDB. يتحكم مفتاح إصلاحات GameDB في إصلاحات النواة فقط.</string>
-    <string name="gamedb_setting_unknown">%1$s</string>
-    <string name="gamedb_setting_value_mode">الوضع %1$s</string>
-    <string name="gamedb_setting_value_rate">المعدل %1$s</string>
-    <string name="gamedb_setting_value_builtin_rule">قاعدة مدمجة خاصة باللعبة</string>
-    <string name="gamedb_setting_ee_div_round_mode">وضع تقريب قسمة EE</string>
-    <string name="gamedb_setting_vu_round_mode">وضع تقريب وحدات المتجهات (VU)</string>
-    <string name="gamedb_setting_vu_clamping">تثبيت (Clamping) وحدات المتجهات</string>
-    <string name="gamedb_setting_mvu_flag">تحسين علامة microVU</string>
-    <string name="gamedb_setting_accurate_alpha_test">اختبار ألفا دقيق</string>
-    <string name="gamedb_setting_before_draw">معالج ما قبل الرسم (Before-draw)</string>
-    <string name="gamedb_setting_deinterlace_mode">وضع إزالة التداخل (Deinterlace)</string>
-    <string name="gamedb_setting_skip_draw_handler">معالج تخطي الرسم (Skip-draw)</string>
-    <string name="gamedb_setting_limit_24_bit_depth">تقييد عمق الألوان إلى 24 بت</string>
-    <string name="gamedb_setting_minimum_blending">الحد الأدنى لمستوى المزج</string>
-    <string name="gamedb_setting_recommended_blending">مستوى المزج الموصى به</string>
-    <string name="gamedb_setting_maximum_blending">الحد الأقصى لمستوى المزج</string>
-    <string name="gamedb_setting_move_handler">معالج تحريك النسيج (Texture move)</string>
-    <string name="gamedb_setting_pcrtc_offsets">إزاحات PCRTC</string>
-    <string name="gamedb_setting_pcrtc_overscan">المسح الزائد (Overscan) لـ PCRTC</string>
-    <string name="gamedb_fix_blit_internal_fps">إصلاح blit لمعدل الإطارات الداخلي</string>
-    <string name="gamedb_fix_dma_busy">إصلاح توقيت انشغال DMA</string>
-    <string name="gamedb_fix_ee_timing">إصلاح توقيت EE</string>
-    <string name="gamedb_fix_fpu_multiply">إصلاح ضرب FPU</string>
-    <string name="gamedb_fix_full_vu0_sync">مزامنة VU0 كاملة</string>
-    <string name="gamedb_fix_gif_fifo">إصلاح GIF FIFO</string>
-    <string name="gamedb_fix_goemon_tlb">إصلاح Goemon TLB</string>
-    <string name="gamedb_fix_i_bit">إصلاح توقيت I-bit</string>
-    <string name="gamedb_fix_instant_dma">إصلاح DMA الفوري</string>
-    <string name="gamedb_fix_oph_flag">إصلاح علامة OPH</string>
-    <string name="gamedb_fix_skip_mpeg">إصلاح تخطي MPEG</string>
-    <string name="gamedb_fix_software_renderer_fmv">عارض برمجي لـ FMV</string>
-    <string name="gamedb_fix_vif1_stall">إصلاح توقف VIF1</string>
-    <string name="gamedb_fix_vif_fifo">إصلاح VIF FIFO</string>
-    <string name="gamedb_fix_vu_add_sub">إصلاح الجمع/الطرح في VU</string>
-    <string name="gamedb_fix_vu_overflow">إصلاح تجاوز سعة VU</string>
-    <string name="gamedb_fix_vu_sync">إصلاح مزامنة VU</string>
-    <string name="gamedb_fix_xgkick">إصلاح توقيت XGKICK</string>
     <string name="settings_language_indonesian">الإندونيسية</string>
     <string name="settings_language_native_indonesian">Bahasa Indonesia</string>
     <string name="settings_language_persian">الفارسية</string>
@@ -809,7 +659,6 @@
     <string name="settings_help_gyro_smoothing">يصفي ضوضاء المستشعر واهتزاز اليد. تتفاعل القيم الأقل بشكل أسرع؛ وتشعر القيم الأعلى بثبات أكبر ولكنها تضيف مقدارًا صغيرًا من التأخير.</string>
     <string name="settings_help_upscale">يعرض اللعبة بدقة داخلية أعلى ثم يوسّع الصورة لتناسب الشاشة. القيم العالية تجعل الألعاب ثلاثية الأبعاد أكثر وضوحًا بكثير، لكنها تُحمّل GPU بشدة، لذا قد تفقد الألعاب الثقيلة الإطارات أو تسخن. ارفع القيمة تدريجيًا مع مراقبة عدّاد FPS: الأصلية لأفضل أداء، و2x توازن جيد على معظم الهواتف، والقيم الأعلى فقط على الأجهزة القوية أو الألعاب البسيطة.</string>
     <string name="settings_help_core_frameskip">يتخطى عددًا من الإطارات المرسومة في الثانية حسب القيمة المختارة. قد يجعل اللعب المتعثر أكثر استجابة، لكن الحركة تصبح متقطعة وقد تتسارع الألعاب الحساسة للتوقيت أو تظهر بها أخطاء. اتركه معطّلًا ما لم تفشل الحلول الأخرى في رفع السرعة.</string>
-    <string name="settings_help_core_frameskiptype">يحدد كيفية قياس تخطي الإطارات. «عدد الإطارات» يتخطى عددًا ثابتًا، بينما «نسبة FPS» يتخطى نسبة من معدل الإطارات الحالي ويتكيف بشكل أفضل عند تغير السرعة. اختر «نسبة FPS» إذا بدا التخطي غير منتظم.</string>
     <string name="settings_help_core_auto_frameskip">يتيح للمحاكي تخطي الإطارات تلقائيًا للحفاظ على السرعة المستهدفة. يساعد الألعاب غير المستقرة على الأجهزة الأبطأ، لكن التخطي التلقائي قد يجعل الحركة غير منتظمة. فعّله فقط عندما يعجز اللعب عن بلوغ السرعة الكاملة؛ واتركه معطّلًا على الأجهزة القوية.</string>
     <string name="settings_help_core_gpu_hardware_transform">يحسب تحويلات الرؤوس على GPU بدلًا من المعالج. يحسّن الأداء عادة ويخفض حمل المعالج في الألعاب ثلاثية الأبعاد؛ أوقفه إذا ظهرت نماذج مكسورة أو ممتدة أو مفقودة. اتركه مفعّلًا افتراضيًا وأوقفه فقط للألعاب التي بها مشاكل.</string>
     <string name="settings_help_core_texture_scaling_type">يختار الخوارزمية المستخدمة عند تفعيل تكبير الخامات عبر المعالج. xBRZ يزيد حدة الرسومات ثنائية الأبعاد، وHybrid يوازن بين الحدة والنعومة، وخيارات Bicubic تستخدم تكبيرًا ناعمًا قياسيًا. الأنواع الأثقل تستهلك المعالج أكثر، لذا اختر الأسرع الذي يعطي نتيجة جيدة.</string>
@@ -1330,7 +1179,7 @@
     <string name="hub_filter_all_topics">كل الموضوعات</string>
     <string name="hub_filter_emucorea">EmuCoreA</string>
     <string name="hub_filter_emucorev">EmuCoreAV</string>
-    <string name="hub_filter_ps1">PSP</string>
+    <string name="hub_filter_psp">PSP</string>
     <string name="hub_filter_other_emulators">محاكيات أخرى</string>
     <string name="hub_clear_filters">مسح عوامل التصفية</string>
     <string name="hub_scroll_to_top">التمرير إلى الأعلى</string>
@@ -1402,7 +1251,7 @@
     <string name="discord_share_serial">إظهار الرقم التسلسلي للعبة</string>
     <string name="discord_preview_game_title">عنوان اللعبة</string>
     <string name="discord_preview_serial">الرقم التسلسلي</string>
-    <string name="discord_share_serial_desc">تضمين الرقم التسلسلي لقرص PSP، مثل SLUS-12345</string>
+    <string name="discord_share_serial_desc">تضمين الرقم التسلسلي لقرص PSP، مثل ULUS-12345</string>
     <string name="discord_preview_title">معاينة الحالة</string>
     <string name="discord_privacy_note">يستخدم تسجيل الدخول Discord OAuth مع PKCE. يتم تشفير رمز الوصول بواسطة Android Keystore ولا يُرسل مطلقًا إلى خوادم EmuCoreA.</string>
     <string name="discord_status_disabled">معطل</string>
@@ -1438,7 +1287,7 @@
     <string name="save_manager_import_partial">تم الاستيراد: %1$d. فشل: %2$d.</string>
     <string name="settings_theme_neon">نيون</string>
 
-    <!-- SwanStation core options -->
+    <!-- Core options -->
 
 
 
@@ -1531,11 +1380,8 @@
     <string name="settings_help_core_analog_sensitivity">عامل حساسية إضافي بعد إدخال الواجهة.</string>
     <string name="settings_help_core_skip_buffer_effects">أسرع، لكن قد لا تُرسم بعض العناصر في بعض الألعاب.</string>
     <string name="settings_help_core_skip_gpu_readbacks">تتطلب بعض الألعاب قراءة نتائج GPU؛ استخدمه بحذر.</string>
-    <string name="settings_help_core_lazy_texture_caching">أسرع، لكنه قد يسبب مشاكل في النص ببعض الألعاب.</string>
     <string name="settings_help_core_spline_quality">يستخدمه بعض الألعاب فقط للتحكم في نعومة المنحنيات.</string>
     <string name="settings_help_core_lower_resolution_for_effects">يقلل العيوب البصرية.</string>
-    <string name="settings_help_core_software_skinning">دمج رسم النماذج ذات الجلد على وحدة المعالجة؛ أسرع في معظم الألعاب.</string>
-    <string name="settings_help_core_hardware_tesselation">يستخدم العتاد لإنشاء المنحنيات.</string>
     <string name="settings_help_core_texture_scaling_level">يستهلك المعالج؛ قد يتأخر بعض التحجيم لتجنب التقطيع.</string>
     <string name="settings_help_core_texture_deposterize">إصلاح تدرج الألوان في الخامات المكبرة.</string>
     <string name="settings_help_core_texture_shader">يعمل مع Vulkan فقط ويتجاوز نوع تحجيم الخامات.</string>
@@ -1602,7 +1448,7 @@
     <string name="drive_core_warning">تستخدم هذه النسخة إصدارًا مختلفًا من النواة. قد لا تتوافق حالات الحفظ؛ بطاقات الذاكرة هي الخيار الأكثر أمانًا.</string>
     <string name="drive_delete">حذف</string>
     <string name="drive_delete_warning">نقل هذه النسخة إلى مهملات Google Drive؟ لن تتغير ملفات الحفظ المحلية.</string>
-    <string name="drive_description">انسخ الإعدادات وبطاقات الذاكرة وحالات الحفظ والغش والمظهر إلى Drive الخاص بك. تُستثنى الألعاب وBIOS وذاكرة التخزين المؤقت وبيانات تسجيل الدخول.</string>
+    <string name="drive_description">انسخ الإعدادات وبطاقات الذاكرة وحالات الحفظ والغش والمظهر إلى Drive الخاص بك. تُستثنى الألعاب وذاكرة التخزين المؤقت وبيانات تسجيل الدخول.</string>
     <string name="drive_disconnect">قطع الاتصال</string>
     <string name="drive_disconnect_warning">سيتوقف النسخ التلقائي. ستبقى النسخ الموجودة على Google Drive. لن يتم تسجيل خروجك من ملف EmuCoreA.</string>
     <string name="drive_downloading">جارٍ تنزيل النسخة…</string>
@@ -1627,7 +1473,7 @@
     <string name="drive_reconnect">إعادة ربط Google Drive</string>
     <string name="drive_refresh">تحديث</string>
     <string name="drive_restore">استعادة</string>
-    <string name="drive_restore_warning">ستحل البيانات المحددة محل الملفات المحلية المطابقة. تُنشأ نسخة للاسترجاع أولًا. أغلق اللعبة قبل الاستعادة. على جهاز آخر، اختر الألعاب وBIOS مجددًا.</string>
+    <string name="drive_restore_warning">ستحل البيانات المحددة محل الملفات المحلية المطابقة. تُنشأ نسخة للاسترجاع أولًا. أغلق اللعبة قبل الاستعادة. على جهاز آخر، اختر الألعاب مجددًا.</string>
     <string name="drive_restored">اكتملت الاستعادة. أعد فتح الشاشات لتحميل الإعدادات المستعادة.</string>
     <string name="drive_restoring">جارٍ استعادة البيانات…</string>
     <string name="drive_retention">الاحتفاظ بآخر %1$d نسخة لكل جهاز</string>
@@ -1675,10 +1521,10 @@
     <string name="profile_cloud_count">Cloud · %1$d</string>
     <string name="profile_cloud_delete">Delete cloud profile</string>
     <string name="profile_cloud_deleted">Cloud profile deleted.</string>
-    <string name="profile_cloud_description">احفظ حتى 5 ملفات شخصية مسماة. تتم مزامنة إعدادات المحاكي وإعدادات كل لعبة فقط. تبقى ألعابك وملفات BIOS وحالات الحفظ (الحفظ السريع) وملفات بطاقات الذاكرة وبرامج التشغيل على هذا الجهاز فقط.</string>
+    <string name="profile_cloud_description">احفظ حتى 5 ملفات شخصية مسماة. تتم مزامنة إعدادات المحاكي وإعدادات كل لعبة فقط. تبقى ألعابك وحالات الحفظ (الحفظ السريع) وملفات بطاقات الذاكرة وبرامج التشغيل على هذا الجهاز فقط.</string>
     <string name="profile_cloud_name">Profile name</string>
     <string name="profile_cloud_restore">Restore</string>
-    <string name="profile_cloud_restore_warning">سيؤدي هذا إلى استبدال إعدادات المحاكي وإعدادات كل لعبة على هذا الجهاز. لن تتغير ألعابك وملفات BIOS وحالات الحفظ وبطاقات الذاكرة.</string>
+    <string name="profile_cloud_restore_warning">سيؤدي هذا إلى استبدال إعدادات المحاكي وإعدادات كل لعبة على هذا الجهاز. لن تتغير ألعابك وحالات الحفظ وبطاقات الذاكرة.</string>
     <string name="profile_cloud_restored">Emulator settings restored. Restart a running game to apply them.</string>
     <string name="profile_cloud_save_current">Save current settings</string>
     <string name="profile_cloud_saved">Emulator settings saved to your profile.</string>
@@ -1851,15 +1697,15 @@
     <string name="welcome_title">مرحبًا بك في EmuCoreA</string>
 
 
-    <!-- EmuCoreA achievements: PS1 classics and PSP headline games -->
-    <string name="achievement_ps1_debut_title">PlayStation veteran</string>
-    <string name="achievement_ps1_debut_description">Launch a PlayStation 1 classic.</string>
-    <string name="achievement_ps1_library_title">PS1 collector — %1$d</string>
-    <string name="achievement_ps1_library_description">Play %1$d different PlayStation 1 games.</string>
-    <string name="achievement_ps1_time_title">PS1 resident — %1$d min</string>
-    <string name="achievement_ps1_time_description">Spend %1$d minutes in PlayStation 1 games.</string>
-    <string name="achievement_ps1_sessions_title">Retro session — %1$d</string>
-    <string name="achievement_ps1_sessions_description">Complete %1$d PlayStation 1 sessions.</string>
+    <!-- EmuCoreA achievements -->
+    <string name="achievement_psp_debut_title">PSP veteran</string>
+    <string name="achievement_psp_debut_description">Launch a PSP game.</string>
+    <string name="achievement_psp_library_title">PSP collector — %1$d</string>
+    <string name="achievement_psp_library_description">Play %1$d different PSP games.</string>
+    <string name="achievement_psp_time_title">PSP resident — %1$d min</string>
+    <string name="achievement_psp_time_description">Spend %1$d minutes in PSP games.</string>
+    <string name="achievement_psp_sessions_title">Portable session — %1$d</string>
+    <string name="achievement_psp_sessions_description">Complete %1$d PSP sessions.</string>
     <string name="achievement_gow_chains_title">Ghost of Sparta</string>
     <string name="achievement_gow_chains_description">Spend 2 hours in God of War: Chains of Olympus.</string>
     <string name="achievement_gta_lcs_title">Liberty City stories</string>
@@ -1876,7 +1722,7 @@
     <string name="touch_control_creator_unlock">فتح PRO</string>
     <string name="core_update_reset_title">تحديث النواة</string>
     <string name="core_update_reset_body">يتضمن هذا التحديث تغييرات في نواة المحاكي. أعد تعيين ذاكرة التخزين المؤقت والإعدادات لتجنب المشكلات.</string>
-    <string name="core_update_reset_kept">سيتم الاحتفاظ بـ BIOS ومجلدات الألعاب والتحكم والحفظ وبطاقات الذاكرة والأغلفة.</string>
+    <string name="core_update_reset_kept">سيتم الاحتفاظ بمجلدات الألعاب والتحكم والحفظ وبطاقات الذاكرة والأغلفة.</string>
     <string name="core_update_reset_action">إعادة تعيين الإعدادات</string>
     <string name="core_update_reset_keep">الاحتفاظ بالإعدادات</string>
     <string name="core_update_reset_done">تمت إعادة تعيين الإعدادات</string>

@@ -275,22 +275,6 @@ void StartHttpWorkerLocked()
   g_state.http_thread = std::thread(HttpWorkerMain);
 }
 
-void StopHttpWorkerLocked()
-{
-  if (!g_state.http_started)
-    return;
-
-  {
-    std::lock_guard<std::mutex> lock(g_state.http_mutex);
-    g_state.http_stopping = true;
-    g_state.http_queue.clear();
-  }
-  g_state.http_cv.notify_all();
-  if (g_state.http_thread.joinable())
-    g_state.http_thread.join();
-  g_state.http_started = false;
-}
-
 void PumpHttpResponsesLocked()
 {
   std::deque<CompletedHttpResponse> completed;
@@ -596,32 +580,6 @@ extern "C" void EmuCoreAAchievementsOnFrame()
     return;
 
   rc_client_do_frame(g_state.client);
-}
-
-extern "C" void EmuCoreAAchievementsOnSessionEnd()
-{
-  std::lock_guard<std::recursive_mutex> lock(g_state.mutex);
-  g_state.has_game.store(false, std::memory_order_relaxed);
-  g_state.unsupported_image = false;
-  g_state.image_read_error = false;
-  g_state.last_error.clear();
-  if (g_state.client != nullptr)
-    rc_client_unload_game(g_state.client);
-}
-
-extern "C" void EmuCoreAAchievementsShutdown()
-{
-  std::lock_guard<std::recursive_mutex> lock(g_state.mutex);
-  if (g_state.client != nullptr)
-  {
-    rc_client_destroy(g_state.client);
-    g_state.client = nullptr;
-  }
-  StopHttpWorkerLocked();
-  g_state.has_game.store(false, std::memory_order_relaxed);
-  g_state.unsupported_image = false;
-  g_state.image_read_error = false;
-  g_state.last_error.clear();
 }
 
 // ---------------------------------------------------------------------------

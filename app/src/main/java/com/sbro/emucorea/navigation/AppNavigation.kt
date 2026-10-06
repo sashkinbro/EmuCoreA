@@ -65,7 +65,6 @@ import com.sbro.emucorea.ui.discord.DiscordScreen
 import com.sbro.emucorea.ui.emulation.EmulationScreen
 import com.sbro.emucorea.ui.formats.SupportedFormatsScreen
 import com.sbro.emucorea.ui.feedback.FeedbackScreen
-import com.sbro.emucorea.ui.gamedb.GameDbBrowserScreen
 import com.sbro.emucorea.ui.home.HomeScreen
 import com.sbro.emucorea.ui.hub.HubScreen
 import com.sbro.emucorea.ui.hub.detail.HubDetailScreen
@@ -103,18 +102,14 @@ data class GameDetailRoute(val catalogGameId: Long)
 data class EmulationRoute(
     val gamePath: String? = null,
     val saveSlot: Int? = null,
-    val bootBios: Boolean = false,
     val bootSmokeProbe: Boolean = false,
     val autotestMode: Boolean = false,
     val renderer: Int? = null,
-    val gsDumpFrames: Int? = null,
-    val gsDumpDelayMs: Int? = null,
     val exitAppOnExit: Boolean = false
 )
 
 internal fun EmulationRoute.isMeaningfulReviewSession(): Boolean =
-    !bootBios &&
-        !bootSmokeProbe &&
+    !bootSmokeProbe &&
         !autotestMode &&
         !exitAppOnExit &&
         !gamePath.isNullOrBlank()
@@ -158,9 +153,6 @@ data class SaveManagerRoute(
 
 @Serializable
 object MemoryCardManagerRoute
-
-@Serializable
-data class GameDbBrowserRoute(val query: String? = null)
 
 @Serializable
 object AchievementsRoute
@@ -235,19 +227,17 @@ fun AppNavigation(
         }
         value = combine(
             preferences.onboardingCompleted,
-            preferences.biosPath,
             preferences.gamePaths
-        ) { onboardingCompleted, biosPath, gamePaths ->
+        ) { onboardingCompleted, gamePaths ->
             val hasGameFolder = withContext(Dispatchers.IO) {
                 SetupValidator.isAnyGameFolderPresentForStartup(context, gamePaths)
             }
             // PPSSPP boots without a firmware dump, so only a game folder is
             // required before the home screen opens.
-            val hasUsableBios = true
-            val shouldOpenHome = onboardingCompleted && hasUsableBios && hasGameFolder
+            val shouldOpenHome = onboardingCompleted && hasGameFolder
             Log.i(
                 TAG,
-                "Startup destination onboarding=$onboardingCompleted bios=$hasUsableBios gameFolder=$hasGameFolder launch=${launchRequest != null}"
+                "Startup destination onboarding=$onboardingCompleted gameFolder=$hasGameFolder launch=${launchRequest != null}"
             )
             if (shouldOpenHome) StartupDestination.HOME else StartupDestination.ONBOARDING
         }.first()
@@ -460,12 +450,7 @@ fun AppNavigation(
                     onNavigateCheatManager = navigateCheatManager,
                     onNavigateAchievements = navigateAchievements,
                     onNavigateProfile = navigateProfile,
-                    onLaunchGame = launchGamePickerAction,
-                    onLaunchBios = {
-                        navController.navigate(EmulationRoute(bootBios = true)) {
-                            launchSingleTop = true
-                        }
-                    }
+                    onLaunchGame = launchGamePickerAction
                 ) { openDrawer ->
                     HomeScreen(
                         onGameClick = { game ->
@@ -501,13 +486,6 @@ fun AppNavigation(
                         },
                         onCreateShortcutClick = { game ->
                             GameLaunchShortcut.requestPinnedShortcut(context, game)
-                        },
-                        onOpenGameDbClick = { game ->
-                            navController.navigate(
-                                GameDbBrowserRoute(query = game.serial?.takeIf { it.isNotBlank() } ?: game.title)
-                            ) {
-                                launchSingleTop = true
-                            }
                         },
                         onMenuClick = openDrawer,
                         onShelfModeChanged = { isShelfMode ->
@@ -634,14 +612,9 @@ fun AppNavigation(
                         onNavigateTextureManager = navigateTextureManager,
                         onNavigateCheatManager = navigateCheatManager,
                     onNavigateAchievements = navigateAchievements,
-                    onNavigateProfile = navigateProfile,
+                        onNavigateProfile = navigateProfile,
                         onBackClick = { navController.popBackStack() },
-                        onLaunchGame = launchGamePickerAction,
-                        onLaunchBios = {
-                            navController.navigate(EmulationRoute(bootBios = true)) {
-                                launchSingleTop = true
-                            }
-                        }
+                        onLaunchGame = launchGamePickerAction
                     ) {
                         HubScreen(
                             onBackClick = { navController.popBackStack() },
@@ -675,13 +648,10 @@ fun AppNavigation(
                 val route = backStackEntry.toRoute<EmulationRoute>()
                 EmulationScreen(
                     gamePath = route.gamePath,
-                    bootToBios = route.bootBios,
                     bootSmokeProbe = route.bootSmokeProbe,
                     saveSlot = route.saveSlot,
                     autotestMode = route.autotestMode,
                     rendererOverride = route.renderer,
-                    gsDumpFrames = route.gsDumpFrames,
-                    gsDumpDelayMs = route.gsDumpDelayMs,
                     restoredAfterProcessDeath = blockRestoredEmulationRoute,
                     onExit = { activePlayTimeMs ->
                         if (route.exitAppOnExit) {
@@ -828,14 +798,8 @@ fun AppNavigation(
                     SettingsScreen(
                         initialTab = route.tab,
                         onBackClick = { navController.popBackStack() },
-                        onOpenMemoryCardManager = navigateMemoryCardManager,
                         onOpenLanguageScreen = {
                             navController.navigate(LanguageSettingsRoute) {
-                                launchSingleTop = true
-                            }
-                        },
-                        onOpenGameDbBrowser = {
-                            navController.navigate(GameDbBrowserRoute()) {
                                 launchSingleTop = true
                             }
                         },
@@ -910,14 +874,6 @@ fun AppNavigation(
                         onBackClick = { navController.popBackStack() }
                     )
                 }
-            }
-
-            composable<GameDbBrowserRoute> { backStackEntry ->
-                val route = backStackEntry.toRoute<GameDbBrowserRoute>()
-                GameDbBrowserScreen(
-                    initialQuery = route.query,
-                    onBackClick = { navController.popBackStack() }
-                )
             }
 
             composable<GameSettingsManagerRoute> { backStackEntry ->
@@ -1100,7 +1056,7 @@ fun AppNavigation(
             val launchRequest = GameLaunchShortcut.parseLaunchRequest(activity?.intent) ?: return@LaunchedEffect
             Log.i(
                 TAG,
-                "Handling launch request destination=$startupDestination path=${launchRequest.gamePath} bios=${launchRequest.bootBios} autotest=${launchRequest.autotestMode}"
+                "Handling launch request destination=$startupDestination path=${launchRequest.gamePath} autotest=${launchRequest.autotestMode}"
             )
             if (startupDestination == null) return@LaunchedEffect
             // Shortcuts and external intents carry an explicit game; boot them
@@ -1112,12 +1068,9 @@ fun AppNavigation(
                 EmulationRoute(
                     gamePath = launchRequest.gamePath,
                     saveSlot = launchRequest.saveSlot,
-                    bootBios = launchRequest.bootBios,
                     bootSmokeProbe = launchRequest.bootSmokeProbe,
                     autotestMode = launchRequest.autotestMode,
                     renderer = launchRequest.renderer,
-                    gsDumpFrames = launchRequest.gsDumpFrames,
-                    gsDumpDelayMs = launchRequest.gsDumpDelayMs,
                     exitAppOnExit = true
                 )
             ) {

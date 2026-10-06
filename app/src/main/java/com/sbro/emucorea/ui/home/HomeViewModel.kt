@@ -68,8 +68,6 @@ data class HomeUiState(
     val isRefreshing: Boolean = false,
     val isBootstrapping: Boolean = true,
     val gameFolderSet: Boolean = false,
-    val biosConfigured: Boolean = false,
-    val biosValid: Boolean = false,
     val setupComplete: Boolean = false,
     val showRecentGames: Boolean = true,
     val showHomeSearch: Boolean = false,
@@ -118,7 +116,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var recentEntries: List<RecentGameEntry> = emptyList()
     private var coverSyncJob: Job? = null
     private var searchJob: Job? = null
-    private var biosInitialized = false
     private var libraryInitialized = false
     private var currentLibraryRoot: String? = null
     private var currentLibraryPaths: List<String> = emptyList()
@@ -261,19 +258,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         viewModelScope.launch {
-            preferences.biosPath.distinctUntilChanged().collect { path ->
-                val biosValid = withContext(Dispatchers.IO) {
-                    BiosValidator.hasUsableBiosFiles(getApplication(), path)
-                }
-                _uiState.value = _uiState.value.copy(
-                    biosConfigured = path != null,
-                    biosValid = biosValid
-                )
-                biosInitialized = true
-                updateBootstrapState()
-            }
-        }
-        viewModelScope.launch {
             preferences.onboardingCompleted.distinctUntilChanged().collect { completed ->
                 _uiState.value = _uiState.value.copy(setupComplete = completed)
             }
@@ -370,18 +354,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             StorageAccess.takePersistableReadPermission(context, uri)
             val rawPath = uri.toString()
             preferences.addGamePath(rawPath)
-        }
-    }
-
-    fun onBiosFolderSelected(uri: Uri) {
-        val context = getApplication<Application>()
-        viewModelScope.launch(Dispatchers.IO) {
-            val previousPath = preferences.biosPath.first()
-            StorageAccess.takePersistableReadPermission(context, uri)
-            preferences.setBiosPath(uri.toString())
-            if (previousPath != uri.toString()) {
-                StorageAccess.releasePersistedPermission(context, previousPath)
-            }
         }
     }
 
@@ -674,8 +646,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             !BiosValidator.isLikelyBiosLibraryEntry(
                 fileName = game.fileName,
                 title = game.title,
-                serial = game.serial,
-                fileSize = game.fileSize
+                serial = game.serial
             ) && (
             query.isBlank() ||
                 normalizeSearchToken(game.title).contains(query) ||
@@ -731,7 +702,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun updateBootstrapState() {
         _uiState.value = _uiState.value.copy(
-            isBootstrapping = !(biosInitialized && libraryInitialized)
+            isBootstrapping = !libraryInitialized
         )
     }
 

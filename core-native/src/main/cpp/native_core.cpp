@@ -1725,9 +1725,7 @@ void NotifyGpuConfigChanged() {
 
 void NotifyGpuDisplayResized() {
     if (PSP_IsInited() && gpu != nullptr) {
-        const DisplayLayoutConfig &layout = g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation());
         gpu->NotifyDisplayResized();
-        (void)layout;
     }
 }
 
@@ -1905,29 +1903,6 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         }
         return;
     }
-    if (key == "audio_capture") {
-#ifndef NDEBUG
-        // Debug-only diagnostic PCM capture, written to <cache>/audio-capture.wav
-        // at shutdown. The capture memcpy runs on the audio callback thread.
-        if (hasBool) {
-            g_audioCaptureEnabled = on;
-            NLOGI("Audio capture: %s", on ? "enabled" : "disabled");
-            if (!on && g_audioDumpActive) {
-                g_audioDumpActive = false;
-                g_audioDumpSamples.clear();
-            }
-        }
-#endif
-        return;
-    }
-    if (key == "log_level") {
-#ifndef NDEBUG
-        ApplyDebugLogLevel(value);
-        NLOGI("Log level set to: %s", value.c_str());
-#endif
-        return;
-    }
-
     // ----- System -----
     if (key == "ppsspp_cpu_core") {
         if (EqualsIgnoreCase(value, "JIT")) g_Config.iCpuCore = (int)CPUCore::JIT;
@@ -1983,13 +1958,6 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
     }
     if (key == "ppsspp_cache_iso") {
         if (hasBool) g_Config.bCacheFullIsoInRam = on;
-        return;
-    }
-    if (key == "ppsspp_cheats") {
-        if (hasBool) {
-            g_Config.bEnableCheats = on;
-            if (on) g_Config.bReloadCheats = true;
-        }
         return;
     }
     if (key == "ppsspp_language") {
@@ -2250,9 +2218,6 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         return;
     }
 
-    // Managed by the frontend's own renderer controls (nativeSetRenderer).
-    if (key == "ppsspp_backend" || key == "ppsspp_software_rendering") return;
-
     NLOGW("Unknown config key: %s", key.c_str());
 }
 
@@ -2377,9 +2342,9 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeBoot(JNIEnv *env, jclass, jstring
     const std::string game = ToString(env, gamePath);
     if (game.empty()) {
         // PPSSPP's loader requires content to identify (an empty path fails
-        // Identify_File before the kernel starts), so a disc-less boot cannot
+        // Identify_File before the kernel starts), so an empty boot cannot
         // succeed. Fail cleanly instead of starting a loader that dies.
-        NLOGW("BIOS-only boot requested, but the core requires a game image");
+        NLOGW("Empty game path rejected: the core requires a game image");
         return JNI_FALSE;
     }
     // The core initializes the GPU on the loader thread, so surface and (for
@@ -2768,16 +2733,6 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeGetFrameSize(JNIEnv *env, jclass)
     jintArray result = env->NewIntArray(2);
     if (result != nullptr) env->SetIntArrayRegion(result, 0, 2, values);
     return result;
-}
-
-JNIEXPORT jlong JNICALL
-Java_com_sbro_emucorea_core_NativePpsspp_nativeGetMemoryPointer(JNIEnv *, jclass) {
-    return reinterpret_cast<jlong>(Memory::GetPointerWriteUnchecked(PSP_GetKernelMemoryBase()));
-}
-
-JNIEXPORT jlong JNICALL
-Java_com_sbro_emucorea_core_NativePpsspp_nativeGetMemorySize(JNIEnv *, jclass) {
-    return static_cast<jlong>(Memory::g_MemorySize);
 }
 
 }  // extern "C"

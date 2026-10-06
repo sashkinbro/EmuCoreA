@@ -216,7 +216,7 @@ class GameRepository {
                         )
                         isDlc = isDlcMetadata(pspMetadata?.category, metadata.title)
                     }
-                    if (BiosValidator.isLikelyBiosLibraryEntry(file.name, metadata.title, metadata.serial, file.length())) {
+                    if (BiosValidator.isLikelyBiosLibraryEntry(file.name, metadata.title, metadata.serial)) {
                         return@forEach
                     }
 
@@ -321,7 +321,7 @@ class GameRepository {
                         isDlc = isDlcMetadata(pspMetadata?.category, metadata.title)
                     }
 
-                    if (BiosValidator.isLikelyBiosLibraryEntry(name, metadata.title, metadata.serial, fileSize)) {
+                    if (BiosValidator.isLikelyBiosLibraryEntry(name, metadata.title, metadata.serial)) {
                         continue
                     }
 

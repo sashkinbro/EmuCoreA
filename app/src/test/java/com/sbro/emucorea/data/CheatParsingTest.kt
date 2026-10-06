@@ -134,7 +134,7 @@ class CheatParsingTest {
     }
 
     @Test
-    fun pcsx2PatchLinesStillParse() {
+    fun ps2PatchLinesStillParse() {
         val raw = "// Some patch\npatch=1,EE,00123456,word,00000001\n"
 
         val blocks = parseCheatBlocks(raw)

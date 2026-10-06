@@ -152,7 +152,6 @@ fun AdaptiveShell(
     onNavigateProfile: (() -> Unit)? = null,
     onBackClick: (() -> Unit)? = null,
     onLaunchGame: (() -> Unit)? = null,
-    onLaunchBios: (() -> Unit)? = null,
     content: @Composable ((() -> Unit)?) -> Unit
 ) {
     val context = LocalContext.current
@@ -190,7 +189,6 @@ fun AdaptiveShell(
             onNavigateAchievements = onNavigateAchievements,
             onNavigateProfile = onNavigateProfile,
             onLaunchGame = onLaunchGame,
-            onLaunchBios = onLaunchBios,
             selectedItemFocusRequester = if (tvUiEnabled) tvNavigationFocusRequester else null,
             topInset = if (tvUiEnabled) 0.dp else appStatusBarTopPadding(),
             onCloseDrawer = { }
@@ -271,7 +269,6 @@ fun AdaptiveShell(
             onNavigateProfile = onNavigateProfile,
             onBackClick = onBackClick,
             onLaunchGame = onLaunchGame,
-            onLaunchBios = onLaunchBios,
             content = content
         )
     }
@@ -304,7 +301,6 @@ private fun CompactAdaptiveShell(
     onNavigateProfile: (() -> Unit)?,
     onBackClick: (() -> Unit)?,
     onLaunchGame: (() -> Unit)?,
-    onLaunchBios: (() -> Unit)?,
     content: @Composable ((() -> Unit)?) -> Unit
 ) {
     val configuration = LocalConfiguration.current
@@ -484,7 +480,6 @@ private fun CompactAdaptiveShell(
                     onNavigateAchievements = onNavigateAchievements,
                     onNavigateProfile = onNavigateProfile,
                     onLaunchGame = onLaunchGame,
-                    onLaunchBios = onLaunchBios,
                     selectedItemFocusRequester = selectedDrawerItemFocusRequester,
                     wrapInSurface = false,
                     topInset = statusPadding,
@@ -520,7 +515,6 @@ private fun SideNavigation(
     onNavigateAchievements: (() -> Unit)?,
     onNavigateProfile: (() -> Unit)?,
     onLaunchGame: (() -> Unit)?,
-    onLaunchBios: (() -> Unit)?,
     selectedItemFocusRequester: FocusRequester? = null,
     wrapInSurface: Boolean = true,
     topInset: androidx.compose.ui.unit.Dp = appStatusBarTopPadding(),
@@ -816,7 +810,7 @@ private fun SideNavigation(
                 if (navigateMemoryCardManager != null && DrawerItemId.MEMORY_CARDS !in hiddenDrawerItems) {
                     ShellAction(
                         icon = Icons.Rounded.Memory,
-                        label = stringResource(R.string.shell_memory_cards),
+                        label = stringResource(R.string.psp_memstick_title),
                         onClick = navigateMemoryCardManager
                     )
                 }

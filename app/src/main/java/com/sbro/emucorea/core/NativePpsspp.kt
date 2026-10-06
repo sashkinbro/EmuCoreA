@@ -133,10 +133,6 @@ object NativePpsspp {
 
     external fun nativeGetFrameSize(): IntArray?
 
-    external fun nativeGetMemoryPointer(): Long
-
-    external fun nativeGetMemorySize(): Long
-
     external fun nativeAchievementsSetEnabled(enabled: Boolean)
 
     external fun nativeAchievementsSetHardcore(enabled: Boolean)

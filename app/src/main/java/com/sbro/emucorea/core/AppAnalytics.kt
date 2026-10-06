@@ -113,16 +113,9 @@ object AppAnalytics {
 }
 
 internal object AnalyticsDimensions {
-    private val launchTypes = setOf("game", "bios", "autotest", "smoke_test")
-    private val failureReasons = setOf("bios_missing", "path_unavailable", "native_start")
+    private val launchTypes = setOf("game", "autotest", "smoke_test")
+    private val failureReasons = setOf("path_unavailable", "native_start")
     private val saveStateActions = setOf("save", "load")
-
-    fun launchType(bootToBios: Boolean, bootSmokeProbe: Boolean, autotestMode: Boolean): String = when {
-        bootSmokeProbe -> "smoke_test"
-        autotestMode -> "autotest"
-        bootToBios -> "bios"
-        else -> "game"
-    }
 
     fun sanitizeLaunchType(value: String): String = value.takeIf(launchTypes::contains) ?: "unknown"
 

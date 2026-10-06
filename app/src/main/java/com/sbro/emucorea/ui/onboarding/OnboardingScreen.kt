@@ -255,7 +255,6 @@ fun OnboardingScreen(
     TvStoragePickerHost(
         request = tvStorageRequest,
         onDismiss = { tvStorageRequest = null },
-        onBiosSelected = viewModel::setBiosPath,
         onGameFolderSelected = viewModel::setGamePath
     )
     val launchGamePicker = rememberDebouncedClick(

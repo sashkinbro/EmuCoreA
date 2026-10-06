@@ -130,7 +130,6 @@ enum class DrawerItemId(val required: Boolean = false) {
     CATALOG_SEARCH,
     HUB,
     LAUNCH_GAME,
-    LAUNCH_BIOS,
     GAME_SETTINGS,
     DATA_TRANSFER,
     RESET_SETTINGS,

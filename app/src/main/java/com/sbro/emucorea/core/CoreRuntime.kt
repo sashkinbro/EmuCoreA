@@ -286,8 +286,8 @@ internal object CoreRuntime {
         NativePpsspp.nativeSetConfig("volume", percent.toString())
     }
 
-    fun start(gamePath: String, biosOnly: Boolean): Boolean = lifecycleLock.withLock {
-        startSession(gamePath, biosOnly)
+    fun start(gamePath: String): Boolean = lifecycleLock.withLock {
+        startSession(gamePath)
     }
 
     /**
@@ -318,7 +318,7 @@ internal object CoreRuntime {
         }
         val savedState = snapshot != null && saveState(snapshot.absolutePath)
         shutdownSession()
-        if (!startSession(gamePath, false)) {
+        if (!startSession(gamePath)) {
             Log.e(TAG, "Renderer restart failed; the game could not be re-booted")
             if (snapshot != null) snapshot.delete()
             reportFailure("The renderer restart failed")
@@ -336,12 +336,12 @@ internal object CoreRuntime {
         true
     }
 
-    private fun startSession(gamePath: String, biosOnly: Boolean): Boolean {
+    private fun startSession(gamePath: String): Boolean {
         val startupStartedAtNanos = System.nanoTime()
-        if (biosOnly || gamePath.isBlank()) {
-            // PPSSPP cannot identify content from an empty path, so a BIOS-only
+        if (gamePath.isBlank()) {
+            // PPSSPP cannot identify content from an empty path, so an empty
             // session is not bootable. Report it instead of crashing.
-            Log.w(TAG, "BIOS-only boot is not supported: nativeBoot requires a game image")
+            Log.w(TAG, "Blank game path is not bootable: nativeBoot requires a game image")
             return false
         }
         if (!isSupportedDiscPath(gamePath)) {
@@ -411,14 +411,6 @@ internal object CoreRuntime {
         val upscale = settings["EmuCoreA/Display:Upscale"]?.toFloatOrNull()
             ?: settings["EmuCoreA:UpscaleMultiplier"]?.toFloatOrNull()
         upscale?.let(::pushInternalResolution)
-        settings["EmuCoreA:EnableFastMem"]?.toBooleanStrictOrNull()?.let { fastMemory ->
-            forwardCoreOption("ppsspp_fast_memory", if (fastMemory) "enabled" else "disabled")
-        }
-        settings["EmuCoreA:EnableEERecompiler"]?.toBooleanStrictOrNull()?.let { jit ->
-            // The app's legacy recompiler toggle maps to the closest CPU core
-            // choice the PSP core exposes.
-            forwardCoreOption("ppsspp_cpu_core", if (jit) "JIT" else "IR JIT")
-        }
         forwardCoreOption("ppsspp_texture_filtering", pspTextureFilterName())
         pushShaderEffect()
         pushShaderPreset()
@@ -1085,10 +1077,6 @@ internal object CoreRuntime {
         val bool = value.toBooleanStrictOrNull()
         val target: Pair<String, String>? = when ("$section:$key") {
             "EmuCoreA/GS:filter" -> "ppsspp_texture_filtering" to pspTextureFilterName()
-            "EmuCoreA:EnableFastMem" ->
-                bool?.let { "ppsspp_fast_memory" to if (it) "enabled" else "disabled" }
-            "EmuCoreA:EnableEERecompiler" ->
-                bool?.let { "ppsspp_cpu_core" to if (it) "JIT" else "IR JIT" }
             "EmuCoreA/Display:Upscale" -> value.toFloatOrNull()?.let {
                 val scale = Math.round(it).coerceIn(1, 10)
                 "ppsspp_internal_resolution" to "${480 * scale}x${272 * scale}"

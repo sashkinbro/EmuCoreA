@@ -182,7 +182,7 @@ fun PspMemoryStickScreen(onBackClick: () -> Unit) {
                 Surface(shape = neonShape(20.dp), color = MaterialTheme.colorScheme.surface) {
                     Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
                         CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
-                        Text(stringResource(R.string.memory_card_loading),
+                        Text(stringResource(R.string.psp_memstick_title),
                             Modifier.padding(start = 12.dp),
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }

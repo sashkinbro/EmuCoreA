@@ -5,10 +5,8 @@ import android.content.Context
 import android.util.Log
 import android.view.Surface
 import java.io.File
-import java.io.FileInputStream
 import java.lang.ref.WeakReference
 import androidx.core.net.toUri
-import android.os.ParcelFileDescriptor
 import android.os.Handler
 import android.os.Looper
 import java.security.MessageDigest
@@ -81,22 +79,6 @@ object NativeApp {
         }
         return fallback
     }
-    @JvmStatic fun isBiosPath(path: String): Boolean = runCatching {
-        val file = File(path)
-        if (file.isDirectory) {
-            BIOS_FIRMWARE_DIRECTORIES.any { File(file, it).isDirectory }
-        } else {
-            file.isFile && file.canRead() && file.extension.lowercase() in BIOS_FIRMWARE_EXTENSIONS
-        }
-    }.getOrDefault(false)
-    /** Takes ownership of [fd] and always closes it before returning. */
-    @JvmStatic fun isBiosFd(fd: Int): Boolean = runCatching {
-        ParcelFileDescriptor.adoptFd(fd).use { descriptor ->
-            FileInputStream(descriptor.fileDescriptor).use { input ->
-                input.read(ByteArray(1)) >= 0
-            }
-        }
-    }.getOrDefault(false)
     @JvmStatic fun setPerformanceMetricsEnabled(visible: Boolean, detailed: Boolean) {
         CoreRuntime.setPerformanceMetricsEnabled(visible, detailed)
     }
@@ -245,7 +227,7 @@ object NativeApp {
     @JvmStatic fun onNativeSurfaceDestroyed() = CoreRuntime.detachSurface()
     @JvmStatic fun runVMThread(path: String): Boolean {
         currentGamePath = path
-        return CoreRuntime.start(path, biosOnly = path.isBlank())
+        return CoreRuntime.start(path)
     }
     @JvmStatic fun restartRenderer(renderer: Int): Boolean = CoreRuntime.restartWithRenderer(renderer)
     @JvmStatic fun changeDisc(path: String): Boolean = CoreRuntime.changeDisc(path)
@@ -576,8 +558,6 @@ object NativeApp {
         .digest(toByteArray())
         .joinToString("") { byte -> "%02x".format(byte) }
 
-    private val BIOS_FIRMWARE_EXTENSIONS = setOf("pbp", "bin", "rom")
-    private val BIOS_FIRMWARE_DIRECTORIES = setOf("flash0", "kd", "vsh")
     private const val PAD_ANALOG_TOGGLE = 125
     private const val PAD_FAST_FORWARD = 126
     private const val PAD_REWIND = 127

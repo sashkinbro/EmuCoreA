@@ -351,13 +351,10 @@ private fun Int.isRightOverlayCorner(): Boolean {
 @Composable
 fun EmulationScreen(
     gamePath: String? = null,
-    bootToBios: Boolean = false,
     bootSmokeProbe: Boolean = false,
     saveSlot: Int? = null,
     autotestMode: Boolean = false,
     rendererOverride: Int? = null,
-    gsDumpFrames: Int? = null,
-    gsDumpDelayMs: Int? = null,
     restoredAfterProcessDeath: Boolean = false,
     onExit: (activePlayTimeMs: Long) -> Unit,
     viewModel: EmulationViewModel = viewModel()
@@ -724,24 +721,18 @@ fun EmulationScreen(
 
     LaunchedEffect(
         gamePath,
-        bootToBios,
         bootSmokeProbe,
         autotestMode,
         rendererOverride,
-        gsDumpFrames,
-        gsDumpDelayMs,
         restoredAfterProcessDeath
     ) {
         if (restoredAfterProcessDeath) return@LaunchedEffect
         viewModel.startEmulation(
             path = gamePath,
             slotToLoad = saveSlot,
-            bootToBios = bootToBios,
             bootSmokeProbe = bootSmokeProbe,
             autotestMode = autotestMode,
-            rendererOverride = rendererOverride,
-            gsDumpFrames = gsDumpFrames,
-            gsDumpDelayMs = gsDumpDelayMs
+            rendererOverride = rendererOverride
         )
     }
 
@@ -1074,7 +1065,6 @@ fun EmulationScreen(
                 "save_failed" -> stringResource(R.string.emulation_save_failed)
                 "loaded" -> stringResource(R.string.emulation_loaded)
                 "load_failed" -> stringResource(R.string.emulation_load_failed)
-                "bios_missing" -> stringResource(R.string.emulation_bios_missing)
                 "launch_failed" -> stringResource(R.string.emulation_launch_failed)
                 "launch_path_error" -> stringResource(R.string.emulation_launch_path_error)
                 "disc_swap_success" -> stringResource(R.string.emulation_swap_disc_success)
@@ -1259,7 +1249,6 @@ fun EmulationScreen(
         ) {
             val statusText = when (uiState.statusMessage) {
                 "status_preparing" -> stringResource(R.string.emulation_status_preparing)
-                "status_checking_bios" -> stringResource(R.string.emulation_status_checking_bios)
                 "status_loading_game" -> stringResource(R.string.emulation_status_loading_game)
                 "status_starting_core" -> stringResource(R.string.emulation_status_starting_core)
                 "status_waiting_vm" -> stringResource(R.string.emulation_status_waiting_vm)

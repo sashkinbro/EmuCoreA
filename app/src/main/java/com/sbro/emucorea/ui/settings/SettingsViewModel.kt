@@ -136,18 +136,14 @@ data class SettingsUiState(
     val showRecentGames: Boolean = true,
     val showHomeSearch: Boolean = false,
     val showDebugOptions: Boolean = false,
-    val debugLogcatGs: Boolean = false,
-    val profilerLogcat: Boolean = false,
     val preferEnglishGameTitles: Boolean = false,
     val hideDlcInLibrary: Boolean = true,
-    val biosPath: String? = null,
     val gamePath: String? = null,
     val gamePaths: List<String> = emptyList(),
     val emulatorDataPath: String? = null,
     val sdCardDataPath: String? = null,
     val coverDownloadBaseUrl: String? = null,
     val coverArtStyle: Int = AppPreferences.COVER_ART_STYLE_3D,
-    val biosValid: Boolean = false,
     val setupComplete: Boolean = false,
     val appVersion: String = BuildConfig.VERSION_NAME,
     val coreName: String = "PPSSPP",
@@ -252,14 +248,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
         }
         viewModelScope.launch {
-            preferences.biosPath.distinctUntilChanged().collect { path ->
-                val biosValid = withContext(Dispatchers.IO) {
-                    BiosValidator.hasUsableBiosFiles(getApplication(), path)
-                }
-                _uiState.value = _uiState.value.copy(biosValid = biosValid)
-            }
-        }
-        viewModelScope.launch {
             proPurchaseManager.state.collect { proState ->
                 _uiState.value = _uiState.value.copy(proState = proState)
             }
@@ -335,11 +323,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             showRecentGames = snapshot.showRecentGames,
             showHomeSearch = snapshot.showHomeSearch,
             showDebugOptions = snapshot.showDebugOptions,
-            debugLogcatGs = snapshot.debugLogcatGs,
-            profilerLogcat = snapshot.profilerLogcat,
             preferEnglishGameTitles = snapshot.preferEnglishGameTitles,
             hideDlcInLibrary = snapshot.hideDlcInLibrary,
-            biosPath = snapshot.biosPath,
             gamePath = snapshot.gamePath,
             gamePaths = snapshot.gamePaths,
             emulatorDataPath = snapshot.emulatorDataPath,
@@ -974,8 +959,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setShowRecentGames(enabled: Boolean) { viewModelScope.launch { preferences.setShowRecentGames(enabled) } }
     fun setShowHomeSearch(enabled: Boolean) { viewModelScope.launch { preferences.setShowHomeSearch(enabled) } }
     fun setShowDebugOptions(enabled: Boolean) { viewModelScope.launch { preferences.setShowDebugOptions(enabled) } }
-    fun setDebugLogcatGs(enabled: Boolean) { viewModelScope.launch { preferences.setDebugLogcatGs(enabled) } }
-    fun setProfilerLogcat(enabled: Boolean) { viewModelScope.launch { preferences.setProfilerLogcat(enabled) } }
     fun setPreferEnglishGameTitles(enabled: Boolean) {
         viewModelScope.launch {
             EmulatorBridge.setSetting("UI", "PreferEnglishGameTitles", "bool", enabled.toString())
@@ -1050,40 +1033,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setGamepadRightStickUpToR2(enabled: Boolean) { viewModelScope.launch { preferences.setGamepadRightStickUpToR2(enabled) } }
     fun setGamepadRightStickDownToL2(enabled: Boolean) { viewModelScope.launch { preferences.setGamepadRightStickDownToL2(enabled) } }
     fun setGamepadButtonHaptics(enabled: Boolean) { viewModelScope.launch { preferences.setGamepadButtonHaptics(enabled) } }
-
-    fun setBiosPath(uri: Uri) {
-        val application = getApplication<Application>()
-        viewModelScope.launch(Dispatchers.IO) {
-            val previousPath = preferences.biosPath.first()
-            StorageAccess.takePersistableReadPermission(application, uri)
-            preferences.setBiosPath(uri.toString())
-            if (previousPath != uri.toString()) {
-                StorageAccess.releasePersistedPermission(application, previousPath)
-            }
-            EmulatorBridge.applyRuntimeConfig(
-                biosPath = uri.toString(),
-                emulatorDataPath = _uiState.value.emulatorDataPath,
-                renderer = _uiState.value.renderer,
-                upscaleMultiplier = _uiState.value.upscaleMultiplier,
-                gpuDriverType = _uiState.value.gpuDriverType,
-                customDriverPath = _uiState.value.customDriverPath,
-                gpuHardwareProfile = GpuHardwareProfiles.detectHardwareProfile(),
-                mediatekAngleOpenGl = _uiState.value.mediatekAngleOpenGl,
-                aspectRatio = _uiState.value.aspectRatio,
-                audioVolume = _uiState.value.audioVolume,
-                audioFastForwardVolume = _uiState.value.audioFastForwardVolume,
-                audioMuted = _uiState.value.audioMuted,
-                audioBackend = _uiState.value.audioBackend,
-                audioOutputLatencyMs = _uiState.value.audioOutputLatencyMs,
-                audioMinimalOutputLatency = _uiState.value.audioMinimalOutputLatency,
-                frameLimitEnabled = _uiState.value.frameLimitEnabled,
-                vSyncEnabled = _uiState.value.vSyncEnabled,
-                targetFps = _uiState.value.targetFps,
-                ntscFramerate = _uiState.value.ntscFramerate,
-                palFramerate = _uiState.value.palFramerate,
-            )
-        }
-    }
 
     fun setGamePath(uri: Uri) {
         val application = getApplication<Application>()

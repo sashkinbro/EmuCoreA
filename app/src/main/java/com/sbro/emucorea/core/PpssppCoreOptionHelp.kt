@@ -15,7 +15,6 @@ fun ppssppCoreOptionHelpRes(key: String): Int? = when {
     key.startsWith("ppsspp_change_mac_address") -> R.string.settings_help_core_mac_address
     key.startsWith("ppsspp_pro_ad_hoc_server_address") -> R.string.settings_help_core_pro_ad_hoc_server_address
     key == "ppsspp_frameskip" -> R.string.settings_help_core_frameskip
-    key == "ppsspp_frameskiptype" -> R.string.settings_help_core_frameskiptype
     key == "ppsspp_auto_frameskip" -> R.string.settings_help_core_auto_frameskip
     key == "ppsspp_gpu_hardware_transform" -> R.string.settings_help_core_gpu_hardware_transform
     key == "ppsspp_texture_scaling_type" -> R.string.settings_help_core_texture_scaling_type
@@ -56,11 +55,8 @@ fun ppssppCoreOptionHelpRes(key: String): Int? = when {
     key == "ppsspp_analog_sensitivity" -> R.string.settings_help_core_analog_sensitivity
     key == "ppsspp_skip_buffer_effects" -> R.string.settings_help_core_skip_buffer_effects
     key == "ppsspp_skip_gpu_readbacks" -> R.string.settings_help_core_skip_gpu_readbacks
-    key == "ppsspp_lazy_texture_caching" -> R.string.settings_help_core_lazy_texture_caching
     key == "ppsspp_spline_quality" -> R.string.settings_help_core_spline_quality
     key == "ppsspp_lower_resolution_for_effects" -> R.string.settings_help_core_lower_resolution_for_effects
-    key == "ppsspp_software_skinning" -> R.string.settings_help_core_software_skinning
-    key == "ppsspp_hardware_tesselation" -> R.string.settings_help_core_hardware_tesselation
     key == "ppsspp_texture_scaling_level" -> R.string.settings_help_core_texture_scaling_level
     key == "ppsspp_texture_deposterize" -> R.string.settings_help_core_texture_deposterize
     key == "ppsspp_texture_shader" -> R.string.settings_help_core_texture_shader

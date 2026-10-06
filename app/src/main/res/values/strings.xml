@@ -88,14 +88,12 @@
     <string name="emulation_save_failed">Failed to save the game state.</string>
     <string name="emulation_loaded">Loaded</string>
     <string name="emulation_load_failed">Failed to load save state.</string>
-    <string name="emulation_bios_missing">Add a BIOS file first.</string>
     <string name="emulation_launch_failed">Unable to open this game.</string>
     <string name="emulation_launch_path_error">Unable to open this file.</string>
     <string name="emulation_session_restored_unavailable">The previous emulation session was closed in the background. Launch the game again from your library.</string>
     <string name="emulation_show_controls">Show controls</string>
     <string name="emulation_hide_controls">Hide controls</string>
     <string name="emulation_status_preparing">Preparing…</string>
-    <string name="emulation_status_checking_bios">Checking BIOS file…</string>
     <string name="emulation_status_loading_game">Loading game…</string>
     <string name="emulation_status_starting_core">Starting emulation core…</string>
     <string name="emulation_status_waiting_vm">Waiting for virtual machine…</string>
@@ -183,82 +181,6 @@
     <string name="settings_language_native_polish">Polski</string>
     <string name="settings_language_czech">Czech</string>
     <string name="settings_language_native_czech">Čeština</string>
-    <string name="gamedb_browser_title">GameDB Browser</string>
-    <string name="gamedb_browser_subtitle">%1$d games with automatic settings</string>
-    <string name="gamedb_browser_loading">Reading the bundled GameDB…</string>
-    <string name="gamedb_browser_search_hint">Search games</string>
-    <string name="gamedb_browser_clear_search">Clear search</string>
-    <string name="gamedb_browser_filter_all">All</string>
-    <string name="gamedb_browser_filter_core">Core</string>
-    <string name="gamedb_browser_filter_graphics">Graphics</string>
-    <string name="gamedb_browser_load_failed">GameDB could not be opened</string>
-    <string name="gamedb_browser_load_failed_desc">The bundled GameIndex file is missing or could not be read.</string>
-    <string name="gamedb_browser_no_results">No matching games</string>
-    <string name="gamedb_browser_no_results_desc">Try a title, disc serial, region, or setting name.</string>
-    <string name="gamedb_browser_core_count">%1$d core</string>
-    <string name="gamedb_browser_graphics_count">%1$d graphics</string>
-    <string name="gamedb_browser_show_details">Show all settings</string>
-    <string name="gamedb_browser_show_less">Show less</string>
-    <string name="gamedb_browser_category_core">Core game fixes</string>
-    <string name="gamedb_browser_category_round">Round mode overrides</string>
-    <string name="gamedb_browser_category_clamp">Clamp mode overrides</string>
-    <string name="gamedb_browser_category_speedhack">Speed hack overrides</string>
-    <string name="gamedb_browser_category_graphics">Graphics compatibility fixes</string>
-    <string name="gamedb_browser_enabled">Enabled</string>
-    <string name="gamedb_browser_controlled_by_toggle">Controlled by the GameDB Fixes switch</string>
-    <string name="gamedb_browser_graphics_always_applied">GameDB graphics rule. The GameDB Fixes switch controls core fixes only.</string>
-    <string name="gamedb_setting_unknown">%1$s</string>
-    <string name="gamedb_setting_value_mode">Mode %1$s</string>
-    <string name="gamedb_setting_value_rate">Rate %1$s</string>
-    <string name="gamedb_setting_value_builtin_rule">Built-in game-specific rule</string>
-    <string name="gamedb_setting_ee_div_round_mode">EE division round mode</string>
-    <string name="gamedb_setting_vu_round_mode">Vector units round mode</string>
-    <string name="gamedb_setting_vu_clamping">Vector units clamping</string>
-    <string name="gamedb_setting_mvu_flag">microVU flag optimization</string>
-    <string name="gamedb_setting_accurate_alpha_test">Accurate alpha test</string>
-    <string name="gamedb_setting_before_draw">Before-draw handler</string>
-    <string name="gamedb_setting_deinterlace_mode">Deinterlace mode</string>
-    <string name="gamedb_setting_skip_draw_handler">Skip-draw handler</string>
-    <string name="gamedb_setting_limit_24_bit_depth">Limit 24-bit color depth</string>
-    <string name="gamedb_setting_minimum_blending">Minimum blending level</string>
-    <string name="gamedb_setting_recommended_blending">Recommended blending level</string>
-    <string name="gamedb_setting_maximum_blending">Maximum blending level</string>
-    <string name="gamedb_setting_move_handler">Texture move handler</string>
-    <string name="gamedb_setting_pcrtc_offsets">PCRTC offsets</string>
-    <string name="gamedb_setting_pcrtc_overscan">PCRTC overscan</string>
-    <string name="gamedb_fix_blit_internal_fps">Internal FPS blit fix</string>
-    <string name="gamedb_fix_dma_busy">DMA busy timing fix</string>
-    <string name="gamedb_fix_ee_timing">EE timing fix</string>
-    <string name="gamedb_fix_fpu_multiply">FPU multiplication fix</string>
-    <string name="gamedb_fix_full_vu0_sync">Full VU0 synchronization</string>
-    <string name="gamedb_fix_gif_fifo">GIF FIFO fix</string>
-    <string name="gamedb_fix_goemon_tlb">Goemon TLB fix</string>
-    <string name="gamedb_fix_i_bit">I-bit timing fix</string>
-    <string name="gamedb_fix_instant_dma">Instant DMA fix</string>
-    <string name="gamedb_fix_oph_flag">OPH flag fix</string>
-    <string name="gamedb_fix_skip_mpeg">Skip MPEG fix</string>
-    <string name="gamedb_fix_software_renderer_fmv">Software renderer for FMV</string>
-    <string name="gamedb_fix_vif1_stall">VIF1 stall fix</string>
-    <string name="gamedb_fix_vif_fifo">VIF FIFO fix</string>
-    <string name="gamedb_fix_vu_add_sub">VU add/subtract fix</string>
-    <string name="gamedb_fix_vu_overflow">VU overflow fix</string>
-    <string name="gamedb_fix_vu_sync">VU synchronization fix</string>
-    <string name="gamedb_fix_xgkick">XGKICK timing fix</string>
-    <string name="settings_ee_fpu_round_mode">EE FPU Round Mode</string>
-    <string name="settings_vu0_round_mode">VU0 Round Mode</string>
-    <string name="settings_vu1_round_mode">VU1 Round Mode</string>
-    <string name="settings_ee_fpu_clamping">EE/FPU Clamping</string>
-    <string name="settings_vu0_clamping">VU0 Clamping</string>
-    <string name="settings_vu1_clamping">VU1 Clamping</string>
-    <string name="settings_float_round_nearest">Nearest</string>
-    <string name="settings_float_round_negative">Negative</string>
-    <string name="settings_float_round_positive">Positive</string>
-    <string name="settings_float_round_chop">Chop</string>
-    <string name="settings_clamping_none">None</string>
-    <string name="settings_clamping_normal">Normal</string>
-    <string name="settings_clamping_extra">Extra</string>
-    <string name="settings_clamping_full">Full</string>
-    <string name="settings_clamping_extra_sign">Extra+Sign</string>
     <string name="settings_renderer">Graphics Mode</string>
     <string name="settings_renderer_vulkan">Vulkan</string>
     <string name="settings_renderer_opengl">OpenGL</string>
@@ -382,8 +304,8 @@
     <string name="settings_help_hide_dlc_in_library">Downloadable content packages appear in the library next to full games. When enabled, DLC is hidden from the library and search. Turn it off to see every scanned entry.</string>
     <string name="home_dlc_title">Downloadable content</string>
     <string name="settings_help_home_search">Shows the library search bar directly on the home screen. Leave it on for big libraries; turn it off if you prefer a cleaner layout and rarely search by name.</string>
-    <string name="settings_help_prefer_english_game_titles">Uses English titles from EmuCoreA\'s GameIndex database for games that ship with Japanese or other regional names. This mainly helps imported releases read more clearly in the library, while games without an English database title keep their normal name.</string>
-    <string name="settings_help_game_path">Adds folders to the game library. EmuCoreA scans every selected folder recursively and merges the results without duplicate file paths. Tap a listed folder to remove it. The current core supports .cue and .bin disc images.</string>
+    <string name="settings_help_prefer_english_game_titles">Uses English titles from EmuCoreA\'s PSP title database for games that ship with Japanese or other regional names. This mainly helps imported releases read more clearly in the library, while games without an English database title keep their normal name.</string>
+    <string name="settings_help_game_path">Adds folders to the game library. EmuCoreA scans every selected folder recursively and merges the results without duplicate file paths. Tap a listed folder to remove it. The current core supports .iso, .cso, .chd, .pbp, .elf, .prx, .plf and .zip images.</string>
     <string name="settings_help_renderer">Selects the graphics backend used for hardware rendering. Vulkan is usually the fastest on modern devices, OpenGL can be safer for compatibility on some GPUs, and Software is mainly a fallback for testing or games that break badly in hardware mode.</string>
     <string name="settings_help_aspect_ratio">Controls how the final image is framed on your display. Auto follows the game, 4:3 keeps the original look for most PSP titles, 16:9 suits widescreen-patched games, and Stretch should only be used if you do not mind geometric distortion.</string>
     <string name="settings_help_overlay_scale">Changes the size of on-screen buttons and sticks. Increase it if touch accuracy matters more than screen space; lower it if the overlay covers too much of the image.</string>
@@ -433,9 +355,7 @@
     <string name="shell_data_transfer">Data Transfer</string>
     <string name="shell_launch_game_unsupported">Unsupported game image format.</string>
     <string name="shell_save_states">Save Manager</string>
-    <string name="shell_memory_cards">Memory Cards</string>
     <string name="shell_texture_manager">Texture Manager</string>
-    <string name="shell_launch_bios">Launch BIOS</string>
 
     <!-- Texture Manager -->
     <string name="texture_manager_title">Texture Manager</string>
@@ -507,12 +427,6 @@
     <string name="settings_gamepad_assignment_reset">Reset to Automatic</string>
     <string name="settings_gamepad_hide_overlay">Hide Overlay on Gamepad</string>
 
-    <!-- Performance Settings -->
-    <string name="settings_ee_cycle_rate">EE Cycle Rate</string>
-    <string name="settings_mtvu">MTVU (Multi-Threaded VU1)</string>
-    <string name="settings_instant_vu1">Instant VU1</string>
-    <string name="settings_half_pixel_offset">Half-Pixel Offset</string>
-
     <!-- Settings - additional localized labels -->
     <string name="settings_touch_controls">Touch Controls</string>
     <string name="settings_gamepad_section">Gamepad</string>
@@ -522,71 +436,9 @@
     <string name="settings_device_profile_family_exynos">Exynos</string>
     <string name="settings_device_profile_family_tensor">Tensor</string>
     <string name="settings_device_profile_family_generic">Generic Android</string>
-    <string name="settings_ee_cycle_disabled">Disabled</string>
-    <string name="settings_ee_cycle_mild">Mild</string>
-    <string name="settings_ee_cycle_moderate">Moderate</string>
-    <string name="settings_ee_cycle_maximum">Maximum</string>
-    <string name="settings_texture_preloading">Texture Preloading</string>
-    <string name="settings_hw_mipmapping">Mipmapping</string>
-    <string name="settings_cpu_sprite_render_size">CPU Sprite Render Size</string>
-    <string name="settings_cpu_sprite_render_level">CPU Sprite Render Level</string>
-    <string name="settings_software_clut_render">Software CLUT Render</string>
-    <string name="settings_gpu_target_clut">GPU Target CLUT</string>
-    <string name="settings_auto_flush_hardware">Auto Flush (Hardware)</string>
-    <string name="settings_cpu_framebuffer_conversion">CPU Framebuffer Conversion</string>
-    <string name="settings_preload_frame_data">Preload Frame Data</string>
-    <string name="settings_disable_partial_invalidation">Disable Partial Invalidation</string>
-    <string name="settings_texture_inside_rt">Texture Inside RT</string>
-    <string name="settings_read_targets_on_close">Read Targets When Closing</string>
-    <string name="settings_estimate_texture_region">Estimate Texture Region</string>
-    <string name="settings_gpu_palette_conversion">GPU Palette Conversion</string>
-    <string name="settings_half_pixel_off">Off</string>
-    <string name="settings_half_pixel_normal">Normal</string>
-    <string name="settings_half_pixel_special">Special</string>
-    <string name="settings_half_pixel_special_aggressive">Special Aggressive</string>
-    <string name="settings_half_pixel_native">Align to Native</string>
-    <string name="settings_half_pixel_native_tex">Native + Texture Offset</string>
-    <string name="settings_native_scaling">Native Scaling</string>
-    <string name="settings_native_scaling_off">Off</string>
-    <string name="settings_native_scaling_normal">Normal</string>
-    <string name="settings_native_scaling_aggressive">Aggressive</string>
-    <string name="settings_native_scaling_normal_maintain_upscale">Normal (Maintain Upscale)</string>
-    <string name="settings_native_scaling_aggressive_maintain_upscale">Aggressive (Maintain Upscale)</string>
-    <string name="settings_round_sprite">Round Sprite</string>
-    <string name="settings_round_sprite_half">Half</string>
-    <string name="settings_round_sprite_full">Full</string>
-    <string name="settings_bilinear_upscale">Bilinear Upscale</string>
-    <string name="settings_align_sprite">Align Sprite</string>
-    <string name="settings_merge_sprite">Merge Sprite</string>
-    <string name="settings_force_even_sprite_position">Force Even Sprite Position</string>
-    <string name="settings_native_palette_draw">Unscaled Palette Texture Draws</string>
     <string name="emulation_cheats_title">Cheats</string>
     <string name="emulation_cheats_empty">No cheats were found for this game.</string>
     <string name="emulation_cheats_group_enable">Enable all in group</string>
-    <string name="settings_trilinear_filtering_auto">Automatic</string>
-    <string name="settings_blending_accuracy_minimum">Minimum</string>
-    <string name="settings_blending_accuracy_basic">Basic</string>
-    <string name="settings_blending_accuracy_medium">Medium</string>
-    <string name="settings_blending_accuracy_high">High</string>
-    <string name="settings_blending_accuracy_full">Full</string>
-    <string name="settings_blending_accuracy_maximum">Maximum</string>
-    <string name="settings_texture_preloading_none">None</string>
-    <string name="settings_texture_preloading_partial">Partial</string>
-    <string name="settings_texture_preloading_full">Full</string>
-    <string name="settings_disabled_short">Disabled</string>
-    <string name="settings_normal_short">Normal</string>
-    <string name="settings_aggressive_short">Aggressive</string>
-    <string name="settings_cpu_sprite_render_level_sprites">Sprites</string>
-    <string name="settings_cpu_sprite_render_level_triangles">Sprites + Triangles</string>
-    <string name="settings_cpu_sprite_render_level_blended">Blended</string>
-    <string name="settings_gpu_target_clut_exact">Exact Match</string>
-    <string name="settings_gpu_target_clut_inside">Inside Target</string>
-    <string name="settings_auto_flush_sprites">Sprites Only</string>
-    <string name="settings_auto_flush_all">All Primitives</string>
-    <string name="settings_texture_inside_rt_inside">Inside Target</string>
-    <string name="settings_texture_inside_rt_merge">Merge Targets</string>
-    <string name="settings_bilinear_upscale_force_bilinear">Force Bilinear</string>
-    <string name="settings_bilinear_upscale_force_nearest">Force Nearest</string>
     <string name="settings_more_options">More options</string>
     <string name="settings_reset_all_title">Reset all settings</string>
     <string name="settings_reset_all_action">Reset all settings</string>
@@ -662,7 +514,6 @@
     <string name="settings_mediatek_notice_message">MediaTek support is still experimental. Crashes, visual artifacts, and unstable behavior may occur while we continue improving compatibility and performance.\n\nIf you experience graphics issues, try OpenGL with ANGLE enabled. If the issues persist, use the Software renderer.</string>
     <string name="onboarding_title">Get ready to play</string>
     <string name="onboarding_subtitle">Choose your PSP game folders and grant file access.</string>
-    <string name="onboarding_bios_desc">Select PSP firmware: a flash0 folder or the official EBOOT.PBP update. This step is optional.</string>
     <string name="onboarding_games_title">Add game folders</string>
     <string name="onboarding_games_desc">Add one or more folders that contain your games.</string>
     <string name="onboarding_games_selected_count">%1$d folders selected. Tap to add another.</string>
@@ -788,7 +639,6 @@
     <string name="save_manager_delete_confirm_body">%1$s, slot %2$d will be deleted permanently.</string>
     <string name="save_manager_delete_confirm_body_named">%1$s, %2$s will be deleted permanently.</string>
     <string name="save_manager_load_unavailable">Game file not found in the library</string>
-    <string name="memory_card_loading">Loading memory cards…</string>
     <string name="settings_reset_to_default_toast">Restored default value.</string>
     <string name="shell_game_settings_manager">Game Manager</string>
     <string name="game_settings_manager_title">Game Manager</string>
@@ -850,7 +700,6 @@
     <string name="settings_help_gyro_smoothing">Filters sensor noise and hand shake. Lower values react faster; higher values feel steadier but add a small amount of latency.</string>
     <string name="settings_help_upscale">Renders the game at a higher internal resolution and then scales the image to your screen. Higher values make 3D games look much sharper and cleaner, but they load the GPU heavily, so demanding titles may drop frames or get hot. Raise it step by step while watching the FPS counter: use Native for the best performance, 2x for a good balance on most phones, and higher values only on powerful devices or in simple games.</string>
     <string name="settings_help_core_frameskip">Skips up to the chosen number of rendered frames per second. Skipping frames can make a struggling game respond faster, but motion becomes choppy and timing-sensitive games may speed up or glitch. Leave it disabled unless a game cannot reach full speed and other speedups are not enough.</string>
-    <string name="settings_help_core_frameskiptype">Chooses how frameskip is measured. Number of frames skips a fixed amount, while Percent of FPS skips a share of the current frame rate and adapts better when a game changes speed. Use Percent of FPS if skips feel uneven in games with variable frame rates.</string>
     <string name="settings_help_core_auto_frameskip">Lets the emulator skip frames automatically to hold the target speed. It helps unstable games feel smoother on slower devices, but the automatic skipping can make animation uneven. Enable it only when a game struggles to reach full speed; keep it disabled on powerful devices.</string>
     <string name="settings_help_core_gpu_hardware_transform">Calculates vertex transforms on the GPU instead of the CPU. It usually improves performance and lowers CPU load in 3D games; disable it if a game shows broken, stretched, or missing models. Keep it enabled by default and turn it off only for glitchy titles.</string>
     <string name="settings_help_core_texture_scaling_type">Selects the algorithm used when CPU texture upscaling is enabled. xBRZ sharpens 2D art with the cleanest edges, Hybrid balances sharpness with softer shading, and the Bicubic options use standard smooth scaling. Heavier types cost more CPU, so pick the fastest one that looks good.</string>
@@ -1368,7 +1217,7 @@
     <string name="hub_filter_all_topics">All topics</string>
     <string name="hub_filter_emucorea">EmuCoreA</string>
     <string name="hub_filter_emucorev">EmuCoreAV</string>
-    <string name="hub_filter_ps1">PSP</string>
+    <string name="hub_filter_psp">PSP</string>
     <string name="hub_filter_other_emulators">Other emulators</string>
     <string name="hub_clear_filters">Clear filters</string>
     <string name="hub_scroll_to_top">Scroll to top</string>
@@ -1440,7 +1289,7 @@
     <string name="discord_share_serial">Show game serial</string>
     <string name="discord_preview_game_title">Game title</string>
     <string name="discord_preview_serial">Serial number</string>
-    <string name="discord_share_serial_desc">Include the PSP disc serial, such as SLUS-12345</string>
+    <string name="discord_share_serial_desc">Include the PSP disc serial, such as ULUS-12345</string>
     <string name="discord_preview_title">Status preview</string>
     <string name="discord_privacy_note">Sign-in uses Discord OAuth with PKCE. The access token is encrypted by Android Keystore and never sent to EmuCoreA servers.</string>
     <string name="discord_status_disabled">Disabled</string>
@@ -1461,7 +1310,7 @@
     <string name="discord_friends_empty">No Discord friends are using EmuCoreA right now.</string>
     <string name="settings_theme_neon">Neon</string>
 
-    <!-- SwanStation core options -->
+    <!-- Core options -->
 
 
     <string name="settings_frame_limit">Frame limit</string>
@@ -1546,11 +1395,8 @@
     <string name="settings_help_core_analog_sensitivity">Additional sensitivity factor to apply after frontend input.</string>
     <string name="settings_help_core_skip_buffer_effects">Faster, but nothing may draw in some games.</string>
     <string name="settings_help_core_skip_gpu_readbacks">Some games require GPU readbacks, so be careful.</string>
-    <string name="settings_help_core_lazy_texture_caching">Faster, but can cause text problems in a few games.</string>
     <string name="settings_help_core_spline_quality">Only used by some games, controls smoothness of curves.</string>
     <string name="settings_help_core_lower_resolution_for_effects">Reduces artifacts.</string>
-    <string name="settings_help_core_software_skinning">Combine skinned model draws on the CPU, faster in most games.</string>
-    <string name="settings_help_core_hardware_tesselation">Uses hardware to make curves.</string>
     <string name="settings_help_core_texture_scaling_level">CPU heavy, some scaling may be delayed to avoid stutter.</string>
     <string name="settings_help_core_texture_deposterize">Fixes visual banding glitches in upscaled textures.</string>
     <string name="settings_help_core_texture_shader">Vulkan only, overrides \'Texture Scaling Type\'.</string>
@@ -1617,7 +1463,7 @@
     <string name="drive_core_warning">This backup uses a different core version. Save states may be incompatible; memory cards are the safer option.</string>
     <string name="drive_delete">Delete</string>
     <string name="drive_delete_warning">Move this backup to the Google Drive trash? Local saves will not be affected.</string>
-    <string name="drive_description">Back up settings, memory cards, save states, cheats and appearance to your own Drive. Games, BIOS, caches and sign-in data are excluded.</string>
+    <string name="drive_description">Back up settings, memory cards, save states, cheats and appearance to your own Drive. Games, caches and sign-in data are excluded.</string>
     <string name="drive_disconnect">Disconnect</string>
     <string name="drive_disconnect_warning">Automatic backups will stop. Copies already on Google Drive will remain. This does not sign you out of your EmuCoreA profile.</string>
     <string name="drive_downloading">Downloading backup…</string>
@@ -1642,7 +1488,7 @@
     <string name="drive_reconnect">Reconnect Google Drive</string>
     <string name="drive_refresh">Refresh</string>
     <string name="drive_restore">Restore</string>
-    <string name="drive_restore_warning">Selected data will replace matching local files. A recovery copy is made first. Stop the game before restoring. On another device, select your games and BIOS again.</string>
+    <string name="drive_restore_warning">Selected data will replace matching local files. A recovery copy is made first. Stop the game before restoring. On another device, select your games again.</string>
     <string name="drive_restored">Restore completed. Reopen screens to reload restored settings.</string>
     <string name="drive_restoring">Restoring data…</string>
     <string name="drive_retention">Keep %1$d recent copies per device</string>
@@ -1690,10 +1536,10 @@
     <string name="profile_cloud_count">Cloud · %1$d</string>
     <string name="profile_cloud_delete">Delete cloud profile</string>
     <string name="profile_cloud_deleted">Cloud profile deleted.</string>
-    <string name="profile_cloud_description">Save up to 5 named profiles. Only your emulator and per-game settings are synced. Your games, BIOS files, save states (quick saves), memory card files and custom drivers stay only on this device and are not synced.</string>
+    <string name="profile_cloud_description">Save up to 5 named profiles. Only your emulator and per-game settings are synced. Your games, save states (quick saves), memory card files and custom drivers stay only on this device and are not synced.</string>
     <string name="profile_cloud_name">Profile name</string>
     <string name="profile_cloud_restore">Restore</string>
-    <string name="profile_cloud_restore_warning">This replaces the emulator and per-game settings on this device. Your games, BIOS files, save states and memory cards will not be changed.</string>
+    <string name="profile_cloud_restore_warning">This replaces the emulator and per-game settings on this device. Your games, save states and memory cards will not be changed.</string>
     <string name="profile_cloud_restored">Emulator settings restored. Restart a running game to apply them.</string>
     <string name="profile_cloud_save_current">Save current settings</string>
     <string name="profile_cloud_saved">Emulator settings saved to your profile.</string>
@@ -1866,15 +1712,15 @@
     <string name="welcome_title">Welcome to EmuCoreA</string>
 
 
-    <!-- EmuCoreA achievements: PS1 classics and PSP headline games -->
-    <string name="achievement_ps1_debut_title">PlayStation veteran</string>
-    <string name="achievement_ps1_debut_description">Launch a PlayStation 1 classic.</string>
-    <string name="achievement_ps1_library_title">PS1 collector — %1$d</string>
-    <string name="achievement_ps1_library_description">Play %1$d different PlayStation 1 games.</string>
-    <string name="achievement_ps1_time_title">PS1 resident — %1$d min</string>
-    <string name="achievement_ps1_time_description">Spend %1$d minutes in PlayStation 1 games.</string>
-    <string name="achievement_ps1_sessions_title">Retro session — %1$d</string>
-    <string name="achievement_ps1_sessions_description">Complete %1$d PlayStation 1 sessions.</string>
+    <!-- EmuCoreA achievements -->
+    <string name="achievement_psp_debut_title">PSP veteran</string>
+    <string name="achievement_psp_debut_description">Launch a PSP game.</string>
+    <string name="achievement_psp_library_title">PSP collector — %1$d</string>
+    <string name="achievement_psp_library_description">Play %1$d different PSP games.</string>
+    <string name="achievement_psp_time_title">PSP resident — %1$d min</string>
+    <string name="achievement_psp_time_description">Spend %1$d minutes in PSP games.</string>
+    <string name="achievement_psp_sessions_title">Portable session — %1$d</string>
+    <string name="achievement_psp_sessions_description">Complete %1$d PSP sessions.</string>
     <string name="achievement_gow_chains_title">Ghost of Sparta</string>
     <string name="achievement_gow_chains_description">Spend 2 hours in God of War: Chains of Olympus.</string>
     <string name="achievement_gta_lcs_title">Liberty City stories</string>
@@ -1891,7 +1737,7 @@
     <string name="touch_control_creator_unlock">Unlock PRO</string>
     <string name="core_update_reset_title">Core update</string>
     <string name="core_update_reset_body">This update includes changes to the emulator core. Reset the emulator cache and configuration so the new core runs without glitches.</string>
-    <string name="core_update_reset_kept">BIOS, game folders, controls, saves, memory cards and covers are kept.</string>
+    <string name="core_update_reset_kept">Game folders, controls, saves, memory cards and covers are kept.</string>
     <string name="core_update_reset_action">Reset settings</string>
     <string name="core_update_reset_keep">Keep current settings</string>
     <string name="core_update_reset_done">Settings have been reset</string>

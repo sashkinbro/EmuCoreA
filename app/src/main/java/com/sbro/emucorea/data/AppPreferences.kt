@@ -94,12 +94,8 @@ data class SettingsSnapshot(
     val showRecentGames: Boolean = true,
     val showHomeSearch: Boolean = false,
     val showDebugOptions: Boolean = false,
-    val debugLogcatGs: Boolean = false,
-    val profilerLogcat: Boolean = false,
     val preferEnglishGameTitles: Boolean = false,
     val hideDlcInLibrary: Boolean = true,
-    val biosPath: String? = null,
-    val biosValid: Boolean = false,
     val gamePath: String? = null,
     val gamePaths: List<String> = emptyList(),
     val emulatorDataPath: String? = null,
@@ -194,7 +190,7 @@ class AppPreferences(private val context: Context) {
         /**
          * Portable emulator/frontend settings that are safe to keep in a Firestore profile.
          *
-         * Deliberately excludes library paths, BIOS/game locations, memory-card paths,
+         * Deliberately excludes library paths, game locations, memory-card paths,
          * custom GPU-driver paths, RetroAchievements credentials, networking identities,
          * locale and manager UI.
          */
@@ -383,7 +379,6 @@ class AppPreferences(private val context: Context) {
         private val UPSCALE_LEGACY = intPreferencesKey("upscale_multiplier")
         private val SHADER_CHAIN_ENABLED = booleanPreferencesKey("shader_chain_enabled")
         private val SHADER_CHAIN_PRESET = stringPreferencesKey("shader_chain_preset")
-        private val BIOS_PATH = stringPreferencesKey("bios_path")
         private val GAME_PATH = stringPreferencesKey("game_path")
         private val GAME_PATHS = stringPreferencesKey("game_paths")
         private val EMULATOR_DATA_PATH = stringPreferencesKey("emulator_data_path")
@@ -419,8 +414,6 @@ class AppPreferences(private val context: Context) {
         private val SHOW_RECENT_GAMES = booleanPreferencesKey("show_recent_games")
         private val SHOW_HOME_SEARCH = booleanPreferencesKey("show_home_search")
         private val SHOW_DEBUG_OPTIONS = booleanPreferencesKey("show_debug_options")
-        private val DEBUG_LOGCAT_GS = booleanPreferencesKey("debug_logcat_gs")
-        private val PROFILER_LOGCAT = booleanPreferencesKey("profiler_logcat")
         private val PREFER_ENGLISH_GAME_TITLES = booleanPreferencesKey("prefer_english_game_titles")
         private val HIDE_DLC_IN_LIBRARY = booleanPreferencesKey("hide_dlc_in_library")
         private val RECENT_GAMES = stringPreferencesKey("recent_games")
@@ -1079,15 +1072,6 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[UPSCALE] = normalizeUpscale(value) }
     }
 
-    // BIOS Path
-    val biosPath: Flow<String?> = context.dataStore.data.map { prefs ->
-        prefs[BIOS_PATH]
-    }
-
-    suspend fun setBiosPath(path: String) {
-        context.dataStore.edit { it[BIOS_PATH] = path }
-    }
-
     // Game Path
     val gamePaths: Flow<List<String>> = context.dataStore.data.map(::readGamePaths)
 
@@ -1287,7 +1271,6 @@ class AppPreferences(private val context: Context) {
 
     val settingsSnapshot: Flow<SettingsSnapshot> = context.dataStore.data
         .map { prefs ->
-            val biosPath = prefs[BIOS_PATH]
             val performanceProfile = resolvePerformanceProfile(prefs)
             val gpuHardwareProfile = resolveGpuHardwareProfile()
             SettingsSnapshot(
@@ -1375,11 +1358,8 @@ class AppPreferences(private val context: Context) {
                 showRecentGames = prefs[SHOW_RECENT_GAMES] ?: true,
                 showHomeSearch = prefs[SHOW_HOME_SEARCH] ?: false,
                 showDebugOptions = prefs[SHOW_DEBUG_OPTIONS] ?: false,
-                debugLogcatGs = prefs[DEBUG_LOGCAT_GS] ?: false,
-                profilerLogcat = prefs[PROFILER_LOGCAT] ?: false,
                 preferEnglishGameTitles = prefs[PREFER_ENGLISH_GAME_TITLES] ?: false,
                 hideDlcInLibrary = prefs[HIDE_DLC_IN_LIBRARY] ?: true,
-                biosPath = biosPath,
                 gamePath = readGamePaths(prefs).firstOrNull(),
                 gamePaths = readGamePaths(prefs),
                 emulatorDataPath = prefs[EMULATOR_DATA_PATH],
@@ -1683,34 +1663,6 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setShowDebugOptions(enabled: Boolean) {
         context.dataStore.edit { it[SHOW_DEBUG_OPTIONS] = enabled }
-    }
-
-    val debugLogcatGs: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[DEBUG_LOGCAT_GS] ?: false
-    }
-
-    suspend fun setDebugLogcatGs(enabled: Boolean) {
-        context.dataStore.edit { it[DEBUG_LOGCAT_GS] = enabled }
-    }
-
-    fun debugLogcatGsSync(): Boolean {
-        return kotlinx.coroutines.runBlocking {
-            context.dataStore.data.map { it[DEBUG_LOGCAT_GS] ?: false }.first()
-        }
-    }
-
-    val profilerLogcat: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[PROFILER_LOGCAT] ?: false
-    }
-
-    suspend fun setProfilerLogcat(enabled: Boolean) {
-        context.dataStore.edit { it[PROFILER_LOGCAT] = enabled }
-    }
-
-    fun profilerLogcatSync(): Boolean {
-        return kotlinx.coroutines.runBlocking {
-            context.dataStore.data.map { it[PROFILER_LOGCAT] ?: false }.first()
-        }
     }
 
     val preferEnglishGameTitles: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -2662,7 +2614,6 @@ class AppPreferences(private val context: Context) {
             put("upscaleMultiplier", readUpscale(prefs).toDouble())
             put("shaderChainEnabled", prefs[SHADER_CHAIN_ENABLED] ?: false)
             put("shaderChainPreset", prefs[SHADER_CHAIN_PRESET].orEmpty())
-            put("biosPath", prefs[BIOS_PATH])
             put("gamePath", prefs[GAME_PATH])
             put("gamePaths", JSONArray(readGamePaths(prefs)))
             put("emulatorDataPath", prefs[EMULATOR_DATA_PATH])
@@ -2691,8 +2642,6 @@ class AppPreferences(private val context: Context) {
             put("showRecentGames", prefs[SHOW_RECENT_GAMES] ?: true)
             put("showHomeSearch", prefs[SHOW_HOME_SEARCH] ?: false)
             put("showDebugOptions", prefs[SHOW_DEBUG_OPTIONS] ?: false)
-            put("debugLogcatGs", prefs[DEBUG_LOGCAT_GS] ?: false)
-            put("profilerLogcat", prefs[PROFILER_LOGCAT] ?: false)
             put("preferEnglishGameTitles", prefs[PREFER_ENGLISH_GAME_TITLES] ?: false)
             put("hideDlcInLibrary", prefs[HIDE_DLC_IN_LIBRARY] ?: true)
             put("recentGames", prefs[RECENT_GAMES] ?: "[]")
@@ -2888,7 +2837,6 @@ class AppPreferences(private val context: Context) {
             json.optString("shaderChainPreset").trim().takeIf(String::isNotEmpty)?.let {
                 prefs[SHADER_CHAIN_PRESET] = it
             } ?: prefs.remove(SHADER_CHAIN_PRESET)
-            json.optString("biosPath").takeIf { it.isNotBlank() }?.let { prefs[BIOS_PATH] = it } ?: prefs.remove(BIOS_PATH)
             val importedGamePaths = json.optJSONArray("gamePaths")?.let { array ->
                 buildList {
                     for (index in 0 until array.length()) {
@@ -2956,8 +2904,6 @@ class AppPreferences(private val context: Context) {
             prefs[SHOW_RECENT_GAMES] = json.optBoolean("showRecentGames", true)
             prefs[SHOW_HOME_SEARCH] = json.optBoolean("showHomeSearch", false)
             prefs[SHOW_DEBUG_OPTIONS] = json.optBoolean("showDebugOptions", false)
-            prefs[DEBUG_LOGCAT_GS] = json.optBoolean("debugLogcatGs", false)
-            prefs[PROFILER_LOGCAT] = json.optBoolean("profilerLogcat", false)
             prefs[PREFER_ENGLISH_GAME_TITLES] = json.optBoolean("preferEnglishGameTitles", false)
             prefs[HIDE_DLC_IN_LIBRARY] = json.optBoolean("hideDlcInLibrary", true)
             prefs[RECENT_GAMES] = json.optString("recentGames", "[]")

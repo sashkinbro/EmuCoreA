@@ -327,7 +327,6 @@ object EmulatorBridge {
     fun getContext(): Context? = contextRef?.get()
 
     suspend fun applyRuntimeConfig(
-        biosPath: String?,
         emulatorDataPath: String? = null,
         renderer: Int,
         upscaleMultiplier: Float,
@@ -354,8 +353,6 @@ object EmulatorBridge {
 
         val context = getContext() ?: return@withContext
         val resolvedRenderer = normalizeRenderer(renderer)
-        // Materializes a SAF-selected firmware so the BIOS validator can see it.
-        DocumentPathResolver.prepareBiosSelection(context, biosPath)
         // Keep the native layer on the same data root as the runtime directories;
         // saves and memory cards previously ignored the configured location.
         NativeApp.reloadDataRoot(emulatorDataPath ?: "")
@@ -435,14 +432,13 @@ object EmulatorBridge {
     suspend fun startEmulation(
         path: String,
         saveStateIdentityPath: String? = null,
-        bootSmokeProbe: Boolean = false,
-        allowBiosBoot: Boolean = false
+        bootSmokeProbe: Boolean = false
     ): Boolean {
         if (!isNativeLoaded) {
             Log.e(TAG, "startEmulation skipped: native library is not loaded")
             return false
         }
-        if (path.isBlank() && !allowBiosBoot && !bootSmokeProbe) {
+        if (path.isBlank() && !bootSmokeProbe) {
             Log.e(TAG, "startEmulation rejected blank game path")
             return false
         }
@@ -451,12 +447,12 @@ object EmulatorBridge {
         NativeApp.setSaveStateIdentityPath(saveStateIdentityPath ?: path)
         val pathType = when {
             path.startsWith("content://") -> "content"
-            path.isBlank() -> "bios"
+            path.isBlank() -> "smoke"
             else -> "file"
         }
         NativeApp.logCrashBreadcrumb("startEmulation requested pathType=$pathType vmActive=$isVmActive")
         Log.i(TAG, "startEmulation requested pathType=$pathType bootSmoke=$bootSmokeProbe vmActive=$isVmActive")
-        val shouldAutoProgressiveScanHold = shouldStartAutoProgressiveScanHold(path, bootSmokeProbe, allowBiosBoot)
+        val shouldAutoProgressiveScanHold = shouldStartAutoProgressiveScanHold(path, bootSmokeProbe)
 
         return BackupSessionGate.start(active = { isVmActive }) {
             getContext()?.let { com.sbro.emucorea.data.drive.DriveBackupArchive(it).recoverPending() }
@@ -473,10 +469,10 @@ object EmulatorBridge {
                     Log.e(TAG, "startEmulation native call failed", error)
                     false
                 }
-                if (result && !bootSmokeProbe && !allowBiosBoot && !path.isBlank()) {
-                    // The bundled core silently boots the BIOS when a disc image
-                    // cannot be opened. Surface that as a failed launch instead of
-                    // leaving the user on a misleading BIOS screen.
+                if (result && !bootSmokeProbe && !path.isBlank()) {
+                    // The bundled core silently boots its own shell when a disc
+                    // image cannot be opened. Surface that as a failed launch
+                    // instead of leaving the user on a misleading empty screen.
                     if (!NativeApp.hasDiscMedia()) {
                         NativeApp.logCrashBreadcrumb("disc image failed to mount; aborting launch")
                         Log.w(TAG, "Disc image could not be mounted; aborting $pathType launch")
@@ -490,9 +486,6 @@ object EmulatorBridge {
                     stopAutoProgressiveScanHold()
                 }
                 isVmActive = NativeApp.hasOwnedVm()
-                if (!isVmActive) {
-                    DocumentPathResolver.releasePreparedLaunchHandles()
-                }
                 NativeApp.logCrashBreadcrumb("startEmulation finished result=$result")
                 Log.i(TAG, "startEmulation finished result=$result")
                 result
@@ -502,10 +495,9 @@ object EmulatorBridge {
 
     private suspend fun shouldStartAutoProgressiveScanHold(
         path: String,
-        bootSmokeProbe: Boolean,
-        allowBiosBoot: Boolean
+        bootSmokeProbe: Boolean
     ): Boolean {
-        if (bootSmokeProbe || allowBiosBoot || path.isBlank()) return false
+        if (bootSmokeProbe || path.isBlank()) return false
         return runCatching {
             getContext()?.let { AppPreferences(it).autoProgressiveScan.first() } == true
         }.getOrDefault(false)
@@ -580,7 +572,6 @@ object EmulatorBridge {
             try {
                 NativeApp.shutdown()
                 isVmActive = false
-                DocumentPathResolver.releasePreparedLaunchHandles()
             } finally {
                 // A failed teardown must retain ownership and its descriptors.
                 shutdownRequested = false

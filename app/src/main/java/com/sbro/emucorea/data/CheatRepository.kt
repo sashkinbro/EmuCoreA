@@ -105,7 +105,7 @@ class CheatRepository(private val context: Context) {
                 .toSet()
         val importedBlocks = parseCheatBlocks(contents, serialFromGameKey(normalizedGameKey))
         if (importedBlocks.isEmpty()) return@synchronized 0
-        // The PSP core only runs CWCheat codes. PCSX2 patch files parse into
+        // The PSP core only runs CWCheat codes. PS2 patch files parse into
         // blocks but convert to nothing, so reject them instead of reporting a
         // successful import that never reaches the game.
         if (importedBlocks.none { convertCheatBlock(it) != null }) return@synchronized 0

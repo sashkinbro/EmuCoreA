@@ -26,9 +26,9 @@ enum class EmuAchievementMetric {
     GamesPlayed,
     TotalPlayTimeMinutes,
     TotalSessions,
-    Ps1Games,
-    Ps1Minutes,
-    Ps1Sessions,
+    PspGames,
+    PspMinutes,
+    PspSessions,
     LongestGameMinutes,
     MaxGameSessions,
     MatchingTitleMinutes,
@@ -76,7 +76,7 @@ internal fun resolveAchievementState(
 }
 
 object EmuCoreAAchievementCatalog {
-    const val VERSION = 2
+    const val VERSION = 3
 
     val definitions = buildList {
         addAll(listOf(
@@ -87,7 +87,7 @@ object EmuCoreAAchievementCatalog {
         EmuAchievementDefinition("ten_hours", R.string.achievement_ten_hours_title, R.string.achievement_ten_hours_description, EmuAchievementMetric.TotalPlayTimeMinutes, 600, 40),
         EmuAchievementDefinition("hundred_hours", R.string.achievement_hundred_hours_title, R.string.achievement_hundred_hours_description, EmuAchievementMetric.TotalPlayTimeMinutes, 6_000, 100),
         EmuAchievementDefinition("ten_sessions", R.string.achievement_ten_sessions_title, R.string.achievement_ten_sessions_description, EmuAchievementMetric.TotalSessions, 10, 20),
-        EmuAchievementDefinition("ps1_debut", R.string.achievement_ps1_debut_title, R.string.achievement_ps1_debut_description, EmuAchievementMetric.Ps1Games, 1, 25),
+        EmuAchievementDefinition("ps1_debut", R.string.achievement_psp_debut_title, R.string.achievement_psp_debut_description, EmuAchievementMetric.PspGames, 1, 25),
         EmuAchievementDefinition("dedicated", R.string.achievement_dedicated_title, R.string.achievement_dedicated_description, EmuAchievementMetric.LongestGameMinutes, 600, 60, hidden = true),
         EmuAchievementDefinition("god_of_war_secret", R.string.achievement_gow_chains_title, R.string.achievement_gow_chains_description, EmuAchievementMetric.GodOfWarMinutes, 120, 50, hidden = true),
         EmuAchievementDefinition("liberty_city_secret", R.string.achievement_gta_lcs_title, R.string.achievement_gta_lcs_description, EmuAchievementMetric.GtaLcsMinutes, 120, 50, hidden = true),
@@ -114,9 +114,9 @@ object EmuCoreAAchievementCatalog {
         milestones("sessions", EmuAchievementMetric.TotalSessions, listOf(1, 5, 25, 50, 100, 250, 500, 1_000), R.string.achievement_sessions_title, R.string.achievement_sessions_description)
         milestones("single_game_minutes", EmuAchievementMetric.LongestGameMinutes, listOf(30, 60, 120, 300, 1_200, 3_000, 6_000), R.string.achievement_single_game_time_title, R.string.achievement_single_game_time_description, hidden = true)
         milestones("single_game_sessions", EmuAchievementMetric.MaxGameSessions, listOf(2, 5, 10, 25, 50, 100), R.string.achievement_single_game_sessions_title, R.string.achievement_single_game_sessions_description)
-        milestones("ps1_library", EmuAchievementMetric.Ps1Games, listOf(2, 3, 5, 10, 20), R.string.achievement_ps1_library_title, R.string.achievement_ps1_library_description)
-        milestones("ps1_minutes", EmuAchievementMetric.Ps1Minutes, listOf(30, 60, 180, 300, 600, 1_500), R.string.achievement_ps1_time_title, R.string.achievement_ps1_time_description)
-        milestones("ps1_sessions", EmuAchievementMetric.Ps1Sessions, listOf(1, 5, 10, 25, 50), R.string.achievement_ps1_sessions_title, R.string.achievement_ps1_sessions_description)
+        milestones("ps1_library", EmuAchievementMetric.PspGames, listOf(2, 3, 5, 10, 20), R.string.achievement_psp_library_title, R.string.achievement_psp_library_description)
+        milestones("ps1_minutes", EmuAchievementMetric.PspMinutes, listOf(30, 60, 180, 300, 600, 1_500), R.string.achievement_psp_time_title, R.string.achievement_psp_time_description)
+        milestones("ps1_sessions", EmuAchievementMetric.PspSessions, listOf(1, 5, 10, 25, 50), R.string.achievement_psp_sessions_title, R.string.achievement_psp_sessions_description)
 
         val topGames = listOf(
             "God of War: Chains of Olympus" to "chains of olympus",
@@ -322,9 +322,9 @@ class EmuAchievementRepository(context: Context) {
             EmuAchievementMetric.GamesPlayed -> gamesPlayed
             EmuAchievementMetric.TotalPlayTimeMinutes -> totalPlayTimeMs / 60_000L
             EmuAchievementMetric.TotalSessions -> games.sumOf { it.sessions }
-            EmuAchievementMetric.Ps1Games -> ps1Games().size.toLong()
-            EmuAchievementMetric.Ps1Minutes -> ps1Games().sumOf { it.totalPlayTimeMs } / 60_000L
-            EmuAchievementMetric.Ps1Sessions -> ps1Games().sumOf { it.sessions }
+            EmuAchievementMetric.PspGames -> pspGames().size.toLong()
+            EmuAchievementMetric.PspMinutes -> pspGames().sumOf { it.totalPlayTimeMs } / 60_000L
+            EmuAchievementMetric.PspSessions -> pspGames().sumOf { it.sessions }
             EmuAchievementMetric.LongestGameMinutes -> (games.maxOfOrNull { it.totalPlayTimeMs } ?: 0L) / 60_000L
             EmuAchievementMetric.MaxGameSessions -> games.maxOfOrNull { it.sessions } ?: 0L
             EmuAchievementMetric.MatchingTitleMinutes -> matching(definition).sumOf { it.totalPlayTimeMs } / 60_000L
@@ -335,11 +335,11 @@ class EmuAchievementRepository(context: Context) {
             EmuAchievementMetric.TekkenDrMinutes -> minutesForTitle("tekken")
         }
 
-        // PlayStation 1 disc serials (SLUS/SCUS/SLPS/SCES/SLES/SCPS/SLPM...) start with SL or SC,
-        // while PSP titles use ULUS/ULES/ULJM/NPJH style prefixes.
-        private fun ps1Games() = games.filter { game ->
+        // PSP disc serials use ULUS/ULES/ULJM/UCUS/UCES prefixes, while
+        // PSN releases use NPJH/NPUG style prefixes.
+        private fun pspGames() = games.filter { game ->
             val serial = game.serial.orEmpty().uppercase(Locale.ROOT)
-            serial.startsWith("SL") || serial.startsWith("SC")
+            serial.startsWith("UL") || serial.startsWith("UC") || serial.startsWith("NP")
         }
 
         private fun matching(definition: EmuAchievementDefinition): List<AchievementGame> = games.filter { game ->

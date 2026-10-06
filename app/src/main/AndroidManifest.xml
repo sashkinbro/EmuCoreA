@@ -111,8 +111,6 @@
                 <data android:scheme="file" android:pathPattern=".*\\.PLF" />
                 <data android:scheme="file" android:pathPattern=".*\\.zip" />
                 <data android:scheme="file" android:pathPattern=".*\\.ZIP" />
-                <data android:scheme="file" android:pathPattern=".*\\.bin" />
-                <data android:scheme="file" android:pathPattern=".*\\.BIN" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -120,7 +118,6 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="content" android:mimeType="application/octet-stream" />
                 <data android:scheme="file" android:mimeType="application/octet-stream" />
-                <data android:scheme="content" android:mimeType="application/x-cue" />
                 <data android:scheme="content" android:mimeType="application/x-iso9660-image" />
                 <data android:scheme="content" android:mimeType="application/x-cd-image" />
                 <data android:scheme="content" android:mimeType="application/x-raw-disk-image" />

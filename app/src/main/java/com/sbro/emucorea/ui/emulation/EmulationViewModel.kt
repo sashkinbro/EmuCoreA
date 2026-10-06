@@ -236,7 +236,6 @@ data class EmulationUiState(
 
 private data class EmulationLaunchConfig(
     val performanceProfile: Int,
-    val biosPath: String?,
     val emulatorDataPath: String?,
     val renderer: Int,
     val upscaleMultiplier: Float,
@@ -361,7 +360,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     private var playTimeSyncJob: Job? = null
     private var lastCloudPlayTimeSyncAtMs: Long = 0L
     private var shouldCountCurrentProfileSession = false
-    /** Profile play time is only tracked for real game launches, never for BIOS or autotests. */
+    /** Profile play time is only tracked for real game launches, never for autotests or smoke probes. */
     private var shouldTrackCurrentProfilePlayTime = false
     private val playTimeSyncMutex = Mutex()
     init {
@@ -899,29 +898,25 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     fun startEmulation(
         path: String?,
         slotToLoad: Int? = null,
-        bootToBios: Boolean = false,
         bootSmokeProbe: Boolean = false,
         autotestMode: Boolean = false,
-        rendererOverride: Int? = null,
-        gsDumpFrames: Int? = null,
-        gsDumpDelayMs: Int? = null
+        rendererOverride: Int? = null
     ) {
         val analyticsLaunchType = when {
             bootSmokeProbe -> "smoke_test"
             autotestMode -> "autotest"
-            bootToBios -> "bios"
             else -> "game"
         }
         Log.i(
             TAG,
-            "startEmulation requested path=$path bootBios=$bootToBios bootSmoke=$bootSmokeProbe autotest=$autotestMode"
+            "startEmulation requested path=$path bootSmoke=$bootSmokeProbe autotest=$autotestMode"
         )
         if (_uiState.value.isStarting) {
             Log.w(TAG, "startEmulation skipped because another start is in progress")
             return
         }
         val normalizedSlotToLoad = slotToLoad?.let { normalizeSaveSlot(it) }
-        val hasPendingStateLoad = !bootToBios && !bootSmokeProbe && normalizedSlotToLoad != null
+        val hasPendingStateLoad = !bootSmokeProbe && normalizedSlotToLoad != null
         var analyticsPerformanceProfile = PerformanceProfiles.SAFE
         cancelPendingStart = false
         pausedForBackground = false
@@ -932,7 +927,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
         }
-        currentGamePath = if (bootToBios) null else path?.takeIf { it.isNotBlank() }
+        currentGamePath = path?.takeIf { it.isNotBlank() }
         currentTouchControlsLayoutProfile = null
         currentCustomTouchControlsProfile = null
         currentGameCoverArtPath = null
@@ -963,7 +958,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
 
                 _uiState.value = _uiState.value.copy(
                     isStarting = true,
-                    statusMessage = "status_checking_bios"
+                    statusMessage = "status_starting_core"
                 )
 
                 val config = loadLaunchConfig()
@@ -972,11 +967,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 val renderer = rendererOverride ?: config.renderer
                 Log.i(
                     TAG,
-                    "Launch config loaded bios=${config.biosPath} renderer=$renderer override=${rendererOverride != null}"
+                    "Launch config loaded renderer=$renderer override=${rendererOverride != null}"
                 )
-
-                // PPSSPP boots without a firmware dump; a configured BIOS is
-                // staged by CoreRuntime when one is present and usable.
 
                 _uiState.value = _uiState.value.copy(
                     statusMessage = "status_applying_config"
@@ -984,7 +976,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 delay(200.milliseconds)
 
                 EmulatorBridge.applyRuntimeConfig(
-                    biosPath = config.biosPath,
                     emulatorDataPath = config.emulatorDataPath,
                     renderer = renderer,
                     upscaleMultiplier = config.upscaleMultiplier,
@@ -1014,7 +1005,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 delay(200.milliseconds)
 
                 val launchPath = when {
-                    bootToBios -> ""
                     path.isNullOrBlank() -> null
                     path.startsWith("content://") && DocumentPathResolver.getDisplayName(getApplication(), path)
                         .substringAfterLast('.', "").equals("elf", ignoreCase = true) ->
@@ -1022,7 +1012,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     else -> DocumentPathResolver.prepareGameLaunchPath(getApplication(), path)
                 }
 
-                if (!bootToBios && launchPath.isNullOrBlank()) {
+                if (launchPath.isNullOrBlank()) {
                     _uiState.value = _uiState.value.copy(
                         isStarting = false,
                         statusMessage = null,
@@ -1034,28 +1024,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 finalLaunchPath = launchPath
-                Log.i(TAG, "Prepared launch path=$launchPath originalPath=$path bootBios=$bootToBios")
-                if (bootToBios) {
-                    currentGameTitle = "PlayStation BIOS"
-                    currentGamePath = null
-                    currentGameSerial = ""
-                    currentGameRegionLabel = ""
-                    currentGameCoverArtPath = null
-                    currentGameCrc = ""
-                    currentGameSource = "bios_only"
-                    shouldCountCurrentProfileSession = false
-                    shouldTrackCurrentProfilePlayTime = false
-                    pendingPerGameCoreOptions = emptyMap()
-                    _uiState.value = _uiState.value.copy(
-                        currentGameTitle = currentGameTitle,
-                        currentGameSubtitle = currentGameSubtitle(),
-                        currentGameCoverPath = currentGameCoverArtPath,
-                        gameSettingsProfileActive = false,
-                        perGameCoreOptions = emptyMap(),
-                        cheatsGameKey = null,
-                        availableCheats = emptyList()
-                    )
-                } else if (autotestMode) {
+                Log.i(TAG, "Prepared launch path=$launchPath originalPath=$path")
+                if (autotestMode) {
                     val safePath = path.orEmpty()
                     currentGameTitle = File(safePath).nameWithoutExtension.ifBlank { "Autotest ELF" }
                     currentGameSerial = ""
@@ -1135,7 +1105,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     statusMessage = "status_starting_core"
                 )
                 refreshSaveStateMetadata()
-                if (!autotestMode && !bootSmokeProbe && !bootToBios && !path.isNullOrBlank()) {
+                if (!autotestMode && !bootSmokeProbe && !path.isNullOrBlank()) {
                     preferences.markGameLaunched(
                         path = path,
                         title = currentGameTitle.ifBlank {
@@ -1288,8 +1258,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 EmulatorBridge.startEmulation(
                     pathToLaunch,
                     saveStateIdentityPath = currentGamePath,
-                    bootSmokeProbe = bootSmokeProbe,
-                    allowBiosBoot = bootToBios
+                    bootSmokeProbe = bootSmokeProbe
                 )
             } catch (error: Exception) {
                 Log.e(TAG, "EmulatorBridge.startEmulation failed", error)
@@ -1467,7 +1436,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
      *
      * Core options edited in-game belong to the running game, so they are stored
      * in that game's profile instead of the global core-option store. A change
-     * made while the core is live (BIOS only) still persists globally.
+     * made while the core is live without an active game profile still persists globally.
      */
     fun setCoreOption(key: String, value: String) {
         viewModelScope.launch {
@@ -2144,8 +2113,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
 
     private fun resolvePerGameTitle(state: EmulationUiState): String {
         return state.currentGameTitle
-            .takeIf { it.isNotBlank() && it != "PlayStation BIOS" }
-            ?: currentGameTitle.takeIf { it.isNotBlank() && it != "PlayStation BIOS" }
+            .takeIf { it.isNotBlank() }
+            ?: currentGameTitle.takeIf { it.isNotBlank() }
             ?: activePerGameKey()?.let { DocumentPathResolver.getDisplayName(getApplication(), it).substringBeforeLast('.') }
             ?: "Unknown Game"
     }
@@ -2371,7 +2340,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         }
         val mergedConfig = EmulationLaunchConfig(
             performanceProfile = settings.performanceProfile,
-            biosPath = settings.biosPath,
             emulatorDataPath = settings.emulatorDataPath,
             renderer = settings.renderer,
             upscaleMultiplier = settings.upscaleMultiplier,
@@ -3010,7 +2978,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                         delay(50.milliseconds)
                         waitTime += 50
                     }
-                    DocumentPathResolver.releasePreparedLaunchHandles()
                 } catch (_: Exception) { }
                 _uiState.value = _uiState.value.copy(
                     isRunning = false,

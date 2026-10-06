@@ -34,7 +34,7 @@ import java.util.zip.ZipOutputStream
 
 data class DriveSnapshot(val file: File, val digest: String, val manifest: JSONObject)
 
-/** An explicit data allowlist; never archives filesDir, databases, credentials, games or BIOS. */
+/** An explicit data allowlist; never archives filesDir, databases, credentials or games. */
 class DriveBackupArchive(private val context: Context) {
     private val preferences = AppPreferences(context)
     private val perGame = PerGameSettingsRepository(context)
@@ -332,7 +332,7 @@ class DriveBackupArchive(private val context: Context) {
         const val FORMAT = "emucorea-drive-backup"
         val ALL_CATEGORIES = setOf("settings", "memory-stick", "memory-cards", "save-states", "cheat-files", "patches", "customization", "textures")
         private val JSON_FILES = setOf("settings.json", "per-game.json", "cheats.json")
-        private val LOCAL_KEYS = setOf("hiddenGamePaths", "biosPath", "gamePath", "gamePaths", "emulatorDataPath", "customDriverPath", "gpuDriverType", "gpuHardwareProfile", "onboardingCompleted", "coverDownloadBaseUrl", "arcadeCoverDownloadBaseUrl")
+        private val LOCAL_KEYS = setOf("hiddenGamePaths", "gamePath", "gamePaths", "emulatorDataPath", "customDriverPath", "gpuDriverType", "gpuHardwareProfile", "onboardingCompleted", "coverDownloadBaseUrl", "arcadeCoverDownloadBaseUrl")
         private val STYLE_KEYS = setOf("themeMode", "customTheme", "customThemeLibrary", "appFontChoice", "appFontScale", "customFontName", "homeGridScale", "homeBackgroundDim", "homeBackgroundType", "homeBackgroundPreset", "emulationSideArtworkDim", "emulationSideArtwork", "touchControlVisualStyle", "touchControlPressEffect", "gameMenuLayoutStyle", "drawerVisualStyle", "coverArtStyle")
         private const val MAX_JSON_BYTES = 32L * 1024 * 1024
         private const val SPACE_RESERVE = 32L * 1024 * 1024
