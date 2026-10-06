@@ -12,9 +12,9 @@ class PspCatalogRepository(private val context: Context) {
 
     companion object {
         private const val TAG = "PspCatalogRepository"
-        // Keep the platform in the extracted filename so an older cache
-        // cannot be mistaken for the bundled PSP database.
-        private const val DB_NAME = "psp_games.db"
+        // Keep the platform and catalog revision in the extracted filename so
+        // an older cache cannot be mistaken for the bundled PSP database.
+        private const val DB_NAME = "psp_games_v2.db"
         private const val ASSET_PATH = "catalog/games.db"
     }
 
