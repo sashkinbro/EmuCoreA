@@ -229,7 +229,6 @@ data class EmulationUiState(
     val autoSaveLastModified: Long = 0L,
     val isAutoSaveInProgress: Boolean = false,
     val activePlayTimeMs: Long = 0L,
-    val showDebugOptions: Boolean = false,
     val audioVolume: Int = AudioDefaults.VOLUME_DEFAULT,
     val audioMuted: Boolean = false
 )
@@ -340,7 +339,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentGameTitle: String = ""
     @Volatile
     private var currentGamePath: String? = null
-    private var currentAnalyticsAudioBackend: Int = AudioDefaults.BACKEND_DEFAULT
     @Volatile
     private var currentGameSerial: String = ""
     @Volatile
@@ -521,11 +519,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 val updated = _uiState.value.copy(fpsOverlayMetrics = metrics)
                 _uiState.value = updated
                 syncNativePerformanceOverlayState(updated)
-            }
-        }
-        viewModelScope.launch {
-            preferences.showDebugOptions.collect { enabled ->
-                _uiState.value = _uiState.value.copy(showDebugOptions = enabled)
             }
         }
         viewModelScope.launch {
@@ -902,11 +895,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         autotestMode: Boolean = false,
         rendererOverride: Int? = null
     ) {
-        val analyticsLaunchType = when {
-            bootSmokeProbe -> "smoke_test"
-            autotestMode -> "autotest"
-            else -> "game"
-        }
         Log.i(
             TAG,
             "startEmulation requested path=$path bootSmoke=$bootSmokeProbe autotest=$autotestMode"
@@ -917,7 +905,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         }
         val normalizedSlotToLoad = slotToLoad?.let { normalizeSaveSlot(it) }
         val hasPendingStateLoad = !bootSmokeProbe && normalizedSlotToLoad != null
-        var analyticsPerformanceProfile = PerformanceProfiles.SAFE
         cancelPendingStart = false
         pausedForBackground = false
         if (pendingPlayTimeSyncMs > 0L) {
@@ -962,8 +949,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 )
 
                 val config = loadLaunchConfig()
-                analyticsPerformanceProfile = config.performanceProfile
-                currentAnalyticsAudioBackend = config.audioBackend
                 val renderer = rendererOverride ?: config.renderer
                 Log.i(
                     TAG,
@@ -1489,13 +1474,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             preferences.setHideOverlayOnGamepad(enabled)
             _uiState.value = _uiState.value.copy(hideOverlayOnGamepad = enabled)
-        }
-    }
-
-    fun setCompactControls(enabled: Boolean) {
-        viewModelScope.launch {
-            preferences.setCompactControls(enabled)
-            _uiState.value = _uiState.value.copy(compactControls = enabled)
         }
     }
 
@@ -2960,8 +2938,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             if (!_uiState.value.isRunning && !_uiState.value.isStarting &&
                 !EmulatorBridge.isVmActive() && EmulatorBridge.runtimeFailure.value == null) return
             if (isShuttingDown) return
-            val analyticsState = _uiState.value
-            val completedRunningSession = analyticsState.isRunning
             isShuttingDown = true
             pausedForBackground = false
             try {

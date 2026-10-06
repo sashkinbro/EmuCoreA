@@ -136,9 +136,6 @@ object CatalogSearchRoute
 object HubRoute
 
 @Serializable
-data class HubDetailRoute(val contentId: String)
-
-@Serializable
 object SupportedFormatsRoute
 
 @Serializable

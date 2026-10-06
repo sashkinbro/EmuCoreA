@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">Emulasi dihentikan</string>
     <string name="emulation_runtime_failure_description">Runtime mengalami error dan tidak dapat melanjutkan dengan aman. Keluar dari sesi ini dan mulai ulang game. Renderer tidak diubah secara otomatis.\n\nDetail:\n</string>
-    <string name="onboarding_core_title">Dibuat untuk PSP</string>
-    <string name="onboarding_core_subtitle">Core PSP yang bersih dengan interpreter referensi, JIT ARM64, dan renderer Vulkan.</string>
-    <string name="onboarding_core_card_title">Arsitektur PSP native</string>
-    <string name="onboarding_core_card_cpu">Eksekusi R3000A menggunakan interpreter yang mengutamakan ketepatan dan JIT ARM64.</string>
-    <string name="onboarding_core_card_gpu">GPU PSP dirender melalui Vulkan dengan jalur referensi perangkat lunak.</string>
-    <string name="onboarding_core_card_reference">Tidak diperlukan tingkat pembelian; semua fitur core tersedia.</string>
     <string name="app_name">EmuCoreA</string>
 
     <!-- Navigation -->
@@ -218,7 +212,6 @@
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
     <string name="settings_cover_download_url_use_default">Gunakan default</string>
     <string name="settings_cover_download_url_invalid">Masukkan URL HTTP atau HTTPS yang valid.</string>
-    <string name="settings_cover_download_url_copied">URL contoh disalin.</string>
     <string name="settings_not_set">Belum diatur</string>
     <string name="settings_about">Tentang</string>
     <string name="settings_version">Versi</string>
@@ -470,12 +463,6 @@
     <string name="onboarding_page_3_subtitle">Bangun pustaka game pribadi Anda dengan sampul indah, informasi mendetail, dan akses cepat ke game favorit Anda.</string>
     <string name="onboarding_page_4_title">Siap Bermain</string>
     <string name="onboarding_page_4_subtitle">Pilih folder game dan lokasi data emulator untuk memulai.</string>
-    <string name="onboarding_profile_title">Pilih profil awal Anda</string>
-    <string name="onboarding_profile_subtitle">Aman disarankan untuk sebagian besar perangkat dan game. Cepat dapat meningkatkan kecepatan pada ponsel yang lebih lemah, namun mungkin mengurangi kompatibilitas dan stabilitas.</string>
-    <string name="onboarding_profile_safe_title">Optimal / Aman</string>
-    <string name="onboarding_profile_safe_desc">Keseimbangan terbaik untuk sebagian besar perangkat menengah dan kelas atas. Menjaga kompatibilitas yang lebih kuat dengan banyak game.</string>
-    <string name="onboarding_profile_fast_title">Cepat / Tidak Aman</string>
-    <string name="onboarding_profile_fast_desc">Untuk perangkat lebih lemah yang membutuhkan kecepatan ekstra. Beberapa game mungkin menunjukkan lebih banyak gangguan atau menjadi kurang stabil.</string>
     <string name="onboarding_chipset_dialog_title">Prosesor yang terdeteksi</string>
     <string name="onboarding_chipset_dialog_family">Keluarga</string>
     <string name="onboarding_chipset_dialog_recommended">Pilihan yang disarankan</string>
@@ -530,15 +517,7 @@
     <string name="catalog_empty_title">Tidak ada kecocokan ditemukan</string>
     <string name="catalog_empty_body">Coba nama game lain atau frasa penelusuran yang lebih pendek.</string>
     <string name="formats_title">Format yang Didukung</string>
-    <string name="formats_overview_title">Format Game</string>
-    <string name="formats_overview_body">EmuCoreA membuka game PSP dengan core PPSSPP bawaan.</string>
     <string name="formats_converter_unavailable">Konversi ISO ke CHD tidak tersedia di build (versi) ini.</string>
-    <string name="formats_converter_status_idle">Siap memilih gambar ISO.</string>
-    <string name="formats_converter_status_preparing">Mempersiapkan ISO yang dipilih…</string>
-    <string name="formats_converter_status_ready">CHD telah siap. Pilih di mana Anda ingin menyimpannya.</string>
-    <string name="formats_converter_status_saving">Menyimpan CHD yang dikonversi…</string>
-    <string name="formats_converter_status_done">CHD berhasil disimpan.</string>
-    <string name="formats_converter_status_failed">Konversi tidak selesai.</string>
     <string name="formats_converter_success_title">Konversi Selesai</string>
     <string name="formats_converter_failed_title">Konversi gagal</string>
     <string name="formats_converter_invalid_iso_body">Pilihlah file `.iso` untuk memulai proses konversi.</string>

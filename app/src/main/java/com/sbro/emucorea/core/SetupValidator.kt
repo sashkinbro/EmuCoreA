@@ -8,7 +8,7 @@ import androidx.documentfile.provider.DocumentFile
 import java.io.File
 
 object SetupValidator {
-    private val supportedDiscExtensions = PspGameFormats.extensions
+
     private const val MAX_GAME_READ_PROBE_FILES = 24
     private const val MAX_GAME_READ_PROBE_DIRECTORIES = 96
 

@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">エミュレーションを停止しました</string>
     <string name="emulation_runtime_failure_description">ランタイムでエラーが発生し、安全に続行できません。このセッションを終了してゲームを再起動してください。レンダラーは自動的に変更されていません。\n\n詳細:\n</string>
-    <string name="onboarding_core_title">PSPのために作られました</string>
-    <string name="onboarding_core_subtitle">リファレンスインタプリタ、ARM64 JIT、Vulkanレンダラーを備えたクリーンなPSPコア。</string>
-    <string name="onboarding_core_card_title">ネイティブPSPアーキテクチャ</string>
-    <string name="onboarding_core_card_cpu">R3000Aの実行には、正確さを優先したインタプリタとARM64 JITを使用します。</string>
-    <string name="onboarding_core_card_gpu">PSP GPUはソフトウェアリファレンスパスを備えたVulkanでレンダリングされます。</string>
-    <string name="onboarding_core_card_reference">有料プランは不要で、すべてのコア機能を利用できます。</string>
     <string name="app_name">EmuCoreA</string>
 
     <string name="shell_library">ライブラリ</string>
@@ -199,7 +193,6 @@
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
     <string name="settings_cover_download_url_use_default">デフォルトを使用</string>
     <string name="settings_cover_download_url_invalid">有効なHTTPまたはHTTPSのURLを入力してください。</string>
-    <string name="settings_cover_download_url_copied">サンプルURLをコピーしました。</string>
     <string name="settings_not_set">未設定</string>
     <string name="settings_about">情報</string>
     <string name="settings_version">バージョン</string>
@@ -361,12 +354,6 @@
     <string name="onboarding_page_3_subtitle">美しいカバー、詳細な情報、お気に入りへの素早いアクセスを備えた個人的なゲームライブラリを構築します。</string>
     <string name="onboarding_page_4_title">プレイの準備</string>
     <string name="onboarding_page_4_subtitle">開始するには、ゲームフォルダとエミュレータデータの保存先を選択してください。</string>
-    <string name="onboarding_profile_title">スタートアッププロファイルを選択</string>
-    <string name="onboarding_profile_subtitle">「最適 / 安全」は、ほとんどのデバイスとゲームにお勧めです。「高速」は、パフォーマンスの低いスマートフォンで速度を向上させることができますが、互換性と安定性が低下する可能性があります。</string>
-    <string name="onboarding_profile_safe_title">最適 / 安全</string>
-    <string name="onboarding_profile_safe_desc">ほとんどのミッドレンジおよびハイエンドデバイスに最適なバランスです。ゲームとの強力な互換性を維持します。</string>
-    <string name="onboarding_profile_fast_title">高速 / 安全ではない</string>
-    <string name="onboarding_profile_fast_desc">追加の速度が必要な弱いデバイス向けです。一部のゲームでは、より多くのグリッチが表示されたり、安定性が低下したりする可能性があります。</string>
     <string name="onboarding_title">プレイの準備をしましょう</string>
     <string name="onboarding_subtitle">PSP ゲームのフォルダーを選び、ファイルへのアクセスを許可してください。</string>
     <string name="onboarding_games_title">ゲームフォルダを選択</string>
@@ -401,15 +388,7 @@
     <string name="catalog_empty_title">一致する結果が見つかりません</string>
     <string name="catalog_empty_body">別のゲーム名を試すか、検索語句を短くしてください。</string>
     <string name="formats_title">対応フォーマット</string>
-    <string name="formats_overview_title">ゲーム形式</string>
-    <string name="formats_overview_body">EmuCoreA は内蔵の PPSSPP コアで PSP ゲームを開きます。</string>
     <string name="formats_converter_unavailable">このビルドではISOからCHDへの変換は利用できません。</string>
-    <string name="formats_converter_status_idle">ISOイメージを選択する準備ができました。</string>
-    <string name="formats_converter_status_preparing">選択したISOを準備中…</string>
-    <string name="formats_converter_status_ready">CHDの準備ができました。保存先を選択してください。</string>
-    <string name="formats_converter_status_saving">変換されたCHDを保存中…</string>
-    <string name="formats_converter_status_done">CHDが正常に保存されました。</string>
-    <string name="formats_converter_status_failed">変換が完了しませんでした。</string>
     <string name="formats_converter_success_title">変換完了</string>
     <string name="formats_converter_failed_title">変換失敗</string>
     <string name="formats_converter_invalid_iso_body">変換する `.iso` ファイルを選択してください。</string>

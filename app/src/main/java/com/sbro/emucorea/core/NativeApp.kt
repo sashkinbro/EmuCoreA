@@ -212,9 +212,6 @@ object NativeApp {
     @JvmStatic fun achievementsUnloadGame() {
         if (hasNativeCore) NativePpsspp.nativeAchievementsUnloadGame()
     }
-    @JvmStatic fun achievementsPump() {
-        if (hasNativeCore) NativePpsspp.nativeAchievementsPump()
-    }
     @JvmStatic fun achievementsStateJson(): String =
         if (hasNativeCore) NativePpsspp.nativeAchievementsStateJson() else "{}"
     @JvmStatic fun achievementsAchievementsJson(): String =
@@ -326,19 +323,6 @@ object NativeApp {
         Log.i(TAG, message)
         CrashLogger.logInfo("Native", message)
     }
-
-    @JvmStatic
-    fun openContentUri(uriString: String): Int {
-        val context = getContext() ?: return -1
-        return try {
-            val sanitized = uriString.substringBefore('|')
-            val descriptor = context.contentResolver.openFileDescriptor(sanitized.toUri(), "r")
-            descriptor?.detachFd() ?: -1
-        } catch (_: Exception) {
-            -1
-        }
-    }
-
 
     /** Root directory that stores native core data such as caches, settings and memory cards. */
     @JvmStatic

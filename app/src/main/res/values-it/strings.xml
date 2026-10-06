@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">Emulazione arrestata</string>
     <string name="emulation_runtime_failure_description">Il runtime ha rilevato un errore e non può continuare in sicurezza. Esci da questa sessione e avvia di nuovo il gioco. Il renderer non è stato modificato automaticamente.\n\nDettagli:\n</string>
-    <string name="onboarding_core_title">Creato per PSP</string>
-    <string name="onboarding_core_subtitle">Un core PSP pulito con interprete di riferimento, JIT ARM64 e renderer Vulkan.</string>
-    <string name="onboarding_core_card_title">Architettura PSP nativa</string>
-    <string name="onboarding_core_card_cpu">L’esecuzione del R3000A usa un interprete orientato alla correttezza e un JIT ARM64.</string>
-    <string name="onboarding_core_card_gpu">La GPU PSP viene renderizzata tramite Vulkan con un percorso di riferimento software.</string>
-    <string name="onboarding_core_card_reference">Non è richiesto alcun livello a pagamento; tutte le funzionalità del core sono disponibili.</string>
     <string name="app_name">EmuCoreA</string>
 
     <string name="shell_library">Libreria</string>
@@ -168,7 +162,6 @@
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
     <string name="settings_cover_download_url_use_default">Usa predefinito</string>
     <string name="settings_cover_download_url_invalid">Inserisci un URL HTTP o HTTPS valido.</string>
-    <string name="settings_cover_download_url_copied">URL di esempio copiati.</string>
     <string name="settings_not_set">Non impostato</string>
     <string name="settings_about">Informazioni</string>
     <string name="settings_version">Versione</string>
@@ -330,12 +323,6 @@
     <string name="onboarding_page_3_subtitle">Costruisci la tua libreria personale di giochi con bellissime copertine, informazioni dettagliate e accesso rapido ai tuoi preferiti.</string>
     <string name="onboarding_page_4_title">Pronto a giocare</string>
     <string name="onboarding_page_4_subtitle">Scegli le cartelle dei giochi e dove salvare i dati dell\'emulatore per iniziare.</string>
-    <string name="onboarding_profile_title">Scegli il tuo profilo di avvio</string>
-    <string name="onboarding_profile_subtitle">"Ottimale/Sicuro" è consigliato per la maggior parte dei dispositivi e giochi. "Veloce" può migliorare la velocità sui telefoni più deboli, ma potrebbe ridurre la compatibilità e la stabilità.</string>
-    <string name="onboarding_profile_safe_title">Ottimale / Sicuro</string>
-    <string name="onboarding_profile_safe_desc">Miglior equilibrio per la maggior parte dei dispositivi di fascia media e alta. Mantiene una maggiore compatibilità con i giochi.</string>
-    <string name="onboarding_profile_fast_title">Veloce / Non sicuro</string>
-    <string name="onboarding_profile_fast_desc">Per i dispositivi più deboli che necessitano di velocità extra. Alcuni giochi potrebbero mostrare più glitch o diventare meno stabili.</string>
     <string name="onboarding_title">Preparati a giocare</string>
     <string name="onboarding_subtitle">Scegli le cartelle dei giochi PSP e concedi accesso ai file.</string>
     <string name="onboarding_games_title">Scegli cartella giochi</string>
@@ -370,15 +357,7 @@
     <string name="catalog_empty_title">Nessuna corrispondenza trovata</string>
     <string name="catalog_empty_body">Prova con un nome di gioco diverso o una frase di ricerca più breve.</string>
     <string name="formats_title">Formati supportati</string>
-    <string name="formats_overview_title">Formati di gioco</string>
-    <string name="formats_overview_body">EmuCoreA apre i giochi PSP con il core PPSSPP integrato.</string>
     <string name="formats_converter_unavailable">La conversione da ISO a CHD non è disponibile in questa build.</string>
-    <string name="formats_converter_status_idle">Pronto a scegliere un\'immagine ISO.</string>
-    <string name="formats_converter_status_preparing">Preparazione dell\'ISO selezionata…</string>
-    <string name="formats_converter_status_ready">Il CHD è pronto. Scegli dove salvarlo.</string>
-    <string name="formats_converter_status_saving">Salvataggio del CHD convertito…</string>
-    <string name="formats_converter_status_done">CHD salvato con successo.</string>
-    <string name="formats_converter_status_failed">La conversione non è terminata.</string>
     <string name="formats_converter_success_title">Conversione completata</string>
     <string name="formats_converter_failed_title">Conversione fallita</string>
     <string name="formats_converter_invalid_iso_body">Scegli un file `.iso` per la conversione.</string>

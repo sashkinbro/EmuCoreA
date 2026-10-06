@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">Emulacja zatrzymana</string>
     <string name="emulation_runtime_failure_description">Środowisko wykonawcze napotkało błąd i nie może bezpiecznie kontynuować. Zakończ tę sesję i uruchom grę ponownie. Renderer nie został zmieniony automatycznie.\n\nSzczegóły:\n</string>
-    <string name="onboarding_core_title">Stworzone dla PSP</string>
-    <string name="onboarding_core_subtitle">Czyste jądro PSP z interpreterem referencyjnym, JIT ARM64 i rendererem Vulkan.</string>
-    <string name="onboarding_core_card_title">Natywna architektura PSP</string>
-    <string name="onboarding_core_card_cpu">Wykonywanie R3000A korzysta z interpretera nastawionego na poprawność i JIT ARM64.</string>
-    <string name="onboarding_core_card_gpu">GPU PSP jest renderowane przez Vulkan ze ścieżką referencyjną w oprogramowaniu.</string>
-    <string name="onboarding_core_card_reference">Żaden płatny poziom nie jest wymagany; wszystkie funkcje jądra są dostępne.</string>
     <string name="app_name">EmuCoreA</string>
 
     <!-- Navigation -->
@@ -224,7 +218,6 @@
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
     <string name="settings_cover_download_url_use_default">Użyj domyślnego</string>
     <string name="settings_cover_download_url_invalid">Wprowadź prawidłowy adres URL HTTP lub HTTPS.</string>
-    <string name="settings_cover_download_url_copied">Przykładowe adresy URL skopiowane.</string>
     <string name="settings_not_set">Nie ustawiono</string>
     <string name="settings_about">O aplikacji</string>
     <string name="settings_version">Wersja</string>
@@ -489,12 +482,6 @@
     <string name="onboarding_page_3_subtitle">Uporządkuj listę. Stwórz, pobierz i wyświetl listę gier przypisanych w bazie PCSX. Wspierane szybkie ustawienie ze specjalnie dodanym narzędziem w menu z urozmaiconymi okładkami, danymi opisu czy szybkiego dostępu.</string>
     <string name="onboarding_page_4_title">Gotowy?</string>
     <string name="onboarding_page_4_subtitle">Wybierz foldery z grami oraz miejsce przechowywania danych emulatora, aby rozpocząć.</string>
-    <string name="onboarding_profile_title">Wybierz początkowy profil emulacji wydajności z optymalnym dla układu Android ujęciem na klatki.</string>
-    <string name="onboarding_profile_subtitle">Profil \"Bezpieczny\" zapewnia solidną wspieraną w większości na rynkowych wyższych sprzętach dobrą bezbłędną współpracę w emulacji układu gier od Sony / PSP. W przypadku sprzętów z dolnej półki wykorzystaj domyślne przydzielenie hacków i odepnij parę blokad dla wyższej ilości FPS.</string>
-    <string name="onboarding_profile_safe_title">Optymalny / Bezpieczny</string>
-    <string name="onboarding_profile_safe_desc">Idealnie dopracowane na wysokiej próbie średniozaawansowanych oraz high-endowych urządzeń zachowujących solidną moc CPU/GPU i świetną kompatybilność podczas emulowania gier, blokując artefakty po hackowaniu.</string>
-    <string name="onboarding_profile_fast_title">Szybki / Profil niestabilny z wbudowanymi Hackami (Unsafe)</string>
-    <string name="onboarding_profile_fast_desc">Wymuszany start i render z obcięciem dla wolniejszych czy starych już modeli/urządzeń komórkowych polegający na dodawanych przez emulator modyfikacjach z opcji wydajności odznaczających limity błędów celem zdobywania fps-ów ale z ubytkami po stabilności z dużą gęstością od crash\'y (błędów wylotu emulacji). Uważaj i powielaj na to uwagą grając.</string>
     <string name="onboarding_chipset_dialog_title">Wykryty z powodzeniem w systemie odpowiedni chip graficzno-procesorowy ze smartfonu.</string>
     <string name="onboarding_chipset_dialog_family">Rodzina układu grafiki i środowiska procesora wspierana domyślnie:</string>
     <string name="onboarding_chipset_dialog_recommended">Zalecany do ustawień na ten moment docelowo wskazany rodzaj działania odpowiednio przygotowanego w menu układu w aplikacji:</string>
@@ -551,15 +538,7 @@
     <string name="catalog_empty_title">Brak pasujących wyników</string>
     <string name="catalog_empty_body">Spróbuj wpisać inną nazwę gry lub krótszą frazę wyszukiwania.</string>
     <string name="formats_title">Obsługiwane formaty</string>
-    <string name="formats_overview_title">Formaty gier</string>
-    <string name="formats_overview_body">EmuCoreA otwiera gry PSP za pomocą wbudowanego rdzenia PPSSPP.</string>
     <string name="formats_converter_unavailable">Konwersja ISO do CHD nie jest dostępna w tej kompilacji.</string>
-    <string name="formats_converter_status_idle">Gotowe do wyboru obrazu ISO.</string>
-    <string name="formats_converter_status_preparing">Przygotowywanie wybranego pliku ISO…</string>
-    <string name="formats_converter_status_ready">Plik CHD jest gotowy. Wybierz miejsce do jego zapisania.</string>
-    <string name="formats_converter_status_saving">Zapisywanie przekonwertowanego pliku CHD…</string>
-    <string name="formats_converter_status_done">Plik CHD został pomyślnie zapisany.</string>
-    <string name="formats_converter_status_failed">Konwersja nie została zakończona.</string>
     <string name="formats_converter_success_title">Konwersja zakończona</string>
     <string name="formats_converter_failed_title">Konwersja nie powiodła się</string>
     <string name="formats_converter_invalid_iso_body">Wybierz plik `.iso` do konwersji.</string>

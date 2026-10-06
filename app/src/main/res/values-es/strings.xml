@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">Emulación detenida</string>
     <string name="emulation_runtime_failure_description">El entorno de ejecución encontró un error y no puede continuar de forma segura. Sal de esta sesión y vuelve a iniciar el juego. El renderizador no se cambió automáticamente.\n\nDetalles:\n</string>
-    <string name="onboarding_core_title">Hecho para PSP</string>
-    <string name="onboarding_core_subtitle">Un núcleo de PSP limpio con intérprete de referencia, JIT ARM64 y renderizador Vulkan.</string>
-    <string name="onboarding_core_card_title">Arquitectura nativa de PSP</string>
-    <string name="onboarding_core_card_cpu">La ejecución del R3000A usa un intérprete centrado en la precisión y un JIT ARM64.</string>
-    <string name="onboarding_core_card_gpu">La GPU de PSP se renderiza mediante Vulkan con una ruta de referencia por software.</string>
-    <string name="onboarding_core_card_reference">No se requiere ningún nivel de pago; todas las funciones del núcleo están disponibles.</string>
     <string name="app_name">EmuCoreA</string>
 
     <string name="shell_library">Biblioteca</string>
@@ -253,15 +247,7 @@
     <string name="catalog_empty_title">No se encontraron coincidencias</string>
     <string name="catalog_empty_body">Prueba con un nombre de juego diferente o una frase de búsqueda más corta.</string>
     <string name="formats_title">Formatos compatibles</string>
-    <string name="formats_overview_title">Formatos de juego</string>
-    <string name="formats_overview_body">EmuCoreA abre juegos de PSP con el núcleo PPSSPP integrado.</string>
     <string name="formats_converter_unavailable">La conversión de ISO a CHD no está disponible en esta compilación.</string>
-    <string name="formats_converter_status_idle">Listo para elegir una imagen ISO.</string>
-    <string name="formats_converter_status_preparing">Preparando la ISO seleccionada…</string>
-    <string name="formats_converter_status_ready">El archivo CHD está listo. Elige dónde guardarlo.</string>
-    <string name="formats_converter_status_saving">Guardando el CHD convertido…</string>
-    <string name="formats_converter_status_done">CHD guardado correctamente.</string>
-    <string name="formats_converter_status_failed">La conversión no terminó.</string>
     <string name="formats_converter_success_title">Conversión completada</string>
     <string name="formats_converter_failed_title">Conversión fallida</string>
     <string name="formats_converter_invalid_iso_body">Por favor, elige un archivo `.iso` para la conversión.</string>
@@ -393,7 +379,6 @@
     <string name="settings_cover_download_url_custom">Fuente personalizada</string>
     <string name="settings_cover_download_url_disabled">Desactivado</string>
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
-    <string name="settings_cover_download_url_copied">URL de ejemplo copiadas.</string>
     <string name="detail_igdb_source_note">La descripción del juego y los metadatos en esta pantalla se proporcionan a través de la API de IGDB.</string>
     <string name="settings_prefer_english_game_titles">Preferir títulos de juegos en inglés</string>
     <string name="settings_prefer_english_game_titles_desc">Usar nombres en inglés de la base de datos de juegos de EmuCoreA cuando estén disponibles.</string>
@@ -401,12 +386,6 @@
     <string name="emulation_session_restored_unavailable">La sesión de emulación anterior se cerró en segundo plano. Vuelve a iniciar el juego desde tu biblioteca.</string>
     <string name="settings_gamepad_action_left_input_toggle">Alternar entrada izquierda</string>
     <string name="controls_editor_done">Hecho</string>
-    <string name="onboarding_profile_title">Elige tu perfil de inicio</string>
-    <string name="onboarding_profile_subtitle">Se recomienda "Seguro" para la mayoría de dispositivos y juegos. "Rápido" puede mejorar la velocidad en teléfonos menos potentes, pero puede reducir la compatibilidad y la estabilidad.</string>
-    <string name="onboarding_profile_safe_title">Óptimo / Seguro</string>
-    <string name="onboarding_profile_safe_desc">El mejor equilibrio para la mayoría de dispositivos de gama media y alta. Mantiene una mayor compatibilidad con los juegos.</string>
-    <string name="onboarding_profile_fast_title">Rápido / Inseguro</string>
-    <string name="onboarding_profile_fast_desc">Para dispositivos menos potentes que necesitan velocidad extra. Algunos juegos pueden mostrar más errores visuales o volverse menos estables.</string>
     <string name="emulation_quick_save_confirm_title">¿Guardar estado?</string>
     <string name="emulation_quick_save_confirm_desc">Esto sobrescribirá la ranura %1$d con el estado actual del juego.</string>
     <string name="emulation_quick_load_confirm_title">¿Cargar estado?</string>

@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">شبیه‌سازی متوقف شد</string>
     <string name="emulation_runtime_failure_description">محیط اجرا با خطایی مواجه شد و نمی‌تواند با خیال راحت ادامه دهد. از این نشست خارج شوید و بازی را دوباره شروع کنید. رندرر به‌صورت خودکار تغییر نکرد.\n\nجزئیات:\n</string>
-    <string name="onboarding_core_title">ساخته‌شده برای PSP</string>
-    <string name="onboarding_core_subtitle">یک هسته پاک PSP با مفسر مرجع، JIT ARM64 و رندرر Vulkan.</string>
-    <string name="onboarding_core_card_title">معماری بومی PSP</string>
-    <string name="onboarding_core_card_cpu">اجرای R3000A از یک مفسر با اولویت صحت و JIT ARM64 استفاده می‌کند.</string>
-    <string name="onboarding_core_card_gpu">GPU PSP 1 از طریق Vulkan با یک مسیر مرجع نرم‌افزاری رندر می‌شود.</string>
-    <string name="onboarding_core_card_reference">هیچ سطح پرداختی لازم نیست؛ همه ویژگی‌های هسته در دسترس هستند.</string>
     <string name="app_name">EmuCoreA</string>
 
     <!-- Navigation -->
@@ -218,7 +212,6 @@
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
     <string name="settings_cover_download_url_use_default">استفاده از پیش‌فرض</string>
     <string name="settings_cover_download_url_invalid">یک URL معتبر HTTP یا HTTPS وارد کنید.</string>
-    <string name="settings_cover_download_url_copied">URLهای مثال کپی شدند.</string>
     <string name="settings_not_set">تنظیم نشده</string>
     <string name="settings_about">درباره</string>
     <string name="settings_version">نسخه</string>
@@ -470,12 +463,6 @@
     <string name="onboarding_page_3_subtitle">کتابخانه بازی شخصی خود را با کاورهای زیبا، اطلاعات دقیق و دسترسی سریع به موارد دلخواه خود بسازید.</string>
     <string name="onboarding_page_4_title">آماده بازی</string>
     <string name="onboarding_page_4_subtitle">برای شروع، پوشه بازی‌ها و محل ذخیره داده‌های شبیه‌ساز را انتخاب کنید.</string>
-    <string name="onboarding_profile_title">پروفایل راه‌اندازی خود را انتخاب کنید</string>
-    <string name="onboarding_profile_subtitle">امن برای اکثر دستگاه‌ها و بازی‌ها توصیه می‌شود. سریع می‌تواند سرعت را در تلفن‌های ضعیف‌تر بهبود بخشد، اما ممکن است سازگاری و ثبات را کاهش دهد.</string>
-    <string name="onboarding_profile_safe_title">بهینه / امن</string>
-    <string name="onboarding_profile_safe_desc">بهترین تعادل برای اکثر دستگاه‌های میان‌رده و رده بالا. سازگاری قوی‌تری با بازی‌ها حفظ می‌کند.</string>
-    <string name="onboarding_profile_fast_title">سریع / ناامن</string>
-    <string name="onboarding_profile_fast_desc">برای دستگاه‌های ضعیف‌تر که نیاز به سرعت اضافی دارند. ممکن است برخی بازی‌ها دارای اشکالات بیشتر یا پایداری کمتری باشند.</string>
     <string name="onboarding_chipset_dialog_title">پردازنده شناسایی شده</string>
     <string name="onboarding_chipset_dialog_family">خانواده</string>
     <string name="onboarding_chipset_dialog_recommended">انتخاب پیشنهادی</string>
@@ -530,15 +517,7 @@
     <string name="catalog_empty_title">هیچ مطابقتی یافت نشد</string>
     <string name="catalog_empty_body">یک نام بازی متفاوت یا یک عبارت جستجوی کوتاه‌تر را امتحان کنید.</string>
     <string name="formats_title">فرمت‌های پشتیبانی شده</string>
-    <string name="formats_overview_title">فرمت‌های بازی</string>
-    <string name="formats_overview_body">EmuCoreA بازی‌های PSP را با هستهٔ داخلی PPSSPP باز می‌کند.</string>
     <string name="formats_converter_unavailable">تبدیل ISO به CHD در این نسخه در دسترس نیست.</string>
-    <string name="formats_converter_status_idle">آماده انتخاب تصویر ISO.</string>
-    <string name="formats_converter_status_preparing">آماده‌سازی ISO انتخاب شده…</string>
-    <string name="formats_converter_status_ready">CHD آماده است. انتخاب کنید کجا ذخیره شود.</string>
-    <string name="formats_converter_status_saving">در حال ذخیره CHD تبدیل شده…</string>
-    <string name="formats_converter_status_done">CHD با موفقیت ذخیره شد.</string>
-    <string name="formats_converter_status_failed">تبدیل به پایان نرسید.</string>
     <string name="formats_converter_success_title">تبدیل کامل شد</string>
     <string name="formats_converter_failed_title">تبدیل ناموفق بود</string>
     <string name="formats_converter_invalid_iso_body">لطفاً یک فایل `.iso` برای تبدیل انتخاب کنید.</string>

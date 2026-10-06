@@ -112,19 +112,6 @@ class PerGameSettingsRepository(context: Context) {
         writeAll(items.sortedBy { it.gameTitle.lowercase() })
     }
 
-    fun setGpuDriverOverride(gameKey: String, customDriverPath: String?): Boolean {
-        val profile = get(gameKey) ?: return false
-        val overrideKeys = setOf("gpuDriverType", "customDriverPath")
-        save(
-            profile.copy(
-                gpuDriverType = if (customDriverPath.isNullOrBlank()) 0 else 1,
-                customDriverPath = customDriverPath?.takeIf { it.isNotBlank() },
-                providedKeys = profile.providedKeys?.plus(overrideKeys)
-            )
-        )
-        return true
-    }
-
     fun delete(gameKey: String) {
         writeAll(loadAll().filterNot { it.gameKey == gameKey })
     }

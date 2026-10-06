@@ -929,10 +929,6 @@ object EmulatorBridge {
         settingsCache[cacheKey] = value
     }
 
-    suspend fun setVSyncEnabled(enabled: Boolean) {
-        setSetting("EmuCoreA/GS", "VsyncEnable", "bool", enabled.toString())
-    }
-
     suspend fun setTargetFps(
         targetFps: Int,
         ntscFramerate: Float = AppPreferences.DEFAULT_NTSC_FRAMERATE,

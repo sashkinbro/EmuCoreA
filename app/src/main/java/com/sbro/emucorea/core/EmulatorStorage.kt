@@ -93,14 +93,6 @@ object EmulatorStorage {
         return defaultRoot(context).apply { ensureRootDirectories(this) }
     }
 
-    fun prepareCustomDataRoot(customRootPath: String?): Boolean {
-        val customRoot = customRootPath
-            ?.takeIf { it.isNotBlank() }
-            ?.let(::File)
-            ?: return false
-        return prepareRoot(customRoot)
-    }
-
     fun saveStatesDir(context: Context, customRootPath: String? = null): File =
         File(root(context, customRootPath), "sstates").apply { mkdirs() }
 
@@ -119,9 +111,6 @@ object EmulatorStorage {
 
     fun patchesDir(context: Context, customRootPath: String? = null): File =
         File(root(context, customRootPath), "patches").apply { mkdirs() }
-
-    fun logDir(context: Context, customRootPath: String? = null): File =
-        File(root(context, customRootPath), "logs").apply { mkdirs() }
 
     fun runtimeDirectories(context: Context, customRootPath: String? = null): RuntimeDirectories {
         val root = root(context, customRootPath)

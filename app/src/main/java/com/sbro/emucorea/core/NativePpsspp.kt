@@ -151,8 +151,6 @@ object NativePpsspp {
 
     external fun nativeAchievementsUnloadGame()
 
-    external fun nativeAchievementsPump()
-
     external fun nativeAchievementsStateJson(): String
 
     external fun nativeAchievementsAchievementsJson(): String

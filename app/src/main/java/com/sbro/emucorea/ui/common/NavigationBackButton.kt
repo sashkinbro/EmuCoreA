@@ -41,7 +41,6 @@ import com.sbro.emucorea.ui.theme.neon.NeonRed
 import com.sbro.emucorea.ui.theme.neon.NeonTricolorDivider
 import com.sbro.emucorea.ui.theme.neon.NeonYellow
 import com.sbro.emucorea.ui.theme.neon.neonShape
-import com.sbro.emucorea.ui.theme.neon.neonShapeRight
 
 @Composable
 private fun defaultBackContainer(): Color =

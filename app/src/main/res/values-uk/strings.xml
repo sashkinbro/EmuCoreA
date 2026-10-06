@@ -1,14 +1,8 @@
 
 <resources>
-    <string name="onboarding_core_title">Створено для PSP</string>
-    <string name="onboarding_core_subtitle">Чисте ядро PSP з еталонним інтерпретатором, ARM64 JIT і рендерером Vulkan.</string>
     <string name="emulation_runtime_failure_title">Емуляцію зупинено</string>
     <string name="emulation_runtime_failure_description">Під час роботи виникла помилка, і коректно продовжити сеанс неможливо. Вийдіть із сеансу та запустіть гру знову. Рендерер не змінювався автоматично.\n\nПодробиці:\n</string>
     <string name="app_name">EmuCoreA</string>
-    <string name="onboarding_core_card_title">Нативна архітектура PSP</string>
-    <string name="onboarding_core_card_cpu">R3000A працює через точний інтерпретатор і ARM64 JIT.</string>
-    <string name="onboarding_core_card_gpu">Графіка PSP виводиться через Vulkan із програмним еталонним шляхом.</string>
-    <string name="onboarding_core_card_reference">Усі можливості ядра доступні без платної підписки.</string>
 
     <string name="shell_library">Бібліотека</string>
     <string name="shell_catalog_search">Пошук PSP</string>
@@ -220,12 +214,6 @@
     <string name="onboarding_page_3_subtitle">Створіть особисту бібліотеку ігор з гарними обкладинками, детальною інформацією та швидким доступом до улюблених ігор.</string>
     <string name="onboarding_page_4_title">Готові до гри</string>
     <string name="onboarding_page_4_subtitle">Виберіть папки з іграми та місце зберігання даних емулятора, щоб почати.</string>
-    <string name="onboarding_profile_title">Виберіть стартовий профіль</string>
-    <string name="onboarding_profile_subtitle">Безпечний профіль рекомендований для більшості пристроїв та ігор. Швидкий може дати більше швидкості на слабких телефонах, але знижує сумісність і стабільність.</string>
-    <string name="onboarding_profile_safe_title">Оптимальний / Безпечний</string>
-    <string name="onboarding_profile_safe_desc">Найкращий баланс для більшості середніх і потужних пристроїв. Дає кращу сумісність з іграми.</string>
-    <string name="onboarding_profile_fast_title">Швидкий / Небезпечний</string>
-    <string name="onboarding_profile_fast_desc">Для слабших пристроїв, яким потрібна додаткова швидкість. У частини ігор може бути більше графічних помилок або гірша стабільність.</string>
     <string name="onboarding_title">Готуйтеся до гри</string>
     <string name="onboarding_subtitle">Виберіть папки з іграми PSP та надайте доступ до файлів.</string>
     <string name="onboarding_games_title">Виберіть папку з іграми</string>
@@ -260,15 +248,7 @@
     <string name="catalog_empty_title">Збігів не знайдено</string>
     <string name="catalog_empty_body">Спробуйте іншу назву гри або коротшу пошукову фразу.</string>
     <string name="formats_title">Підтримувані формати</string>
-    <string name="formats_overview_title">Формати Ігор</string>
-    <string name="formats_overview_body">EmuCoreA відкриває ігри PSP через вбудоване ядро PPSSPP.</string>
     <string name="formats_converter_unavailable">Конвертація ISO в CHD недоступна в цій збірці.</string>
-    <string name="formats_converter_status_idle">Готово до вибору ISO-образу.</string>
-    <string name="formats_converter_status_preparing">Підготовка вибраного ISO…</string>
-    <string name="formats_converter_status_ready">CHD готовий. Виберіть, куди його зберегти.</string>
-    <string name="formats_converter_status_saving">Збереження готового CHD…</string>
-    <string name="formats_converter_status_done">CHD успішно збережено.</string>
-    <string name="formats_converter_status_failed">Конвертацію не вдалося завершити.</string>
     <string name="formats_converter_success_title">Конвертацію завершено</string>
     <string name="formats_converter_failed_title">Помилка конвертації</string>
     <string name="formats_converter_invalid_iso_body">Для конвертації виберіть файл `.iso`.</string>
@@ -415,7 +395,6 @@
     <string name="settings_cover_download_url_custom">Власне джерело</string>
     <string name="settings_cover_download_url_disabled">Вимкнено</string>
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
-    <string name="settings_cover_download_url_copied">Приклади URL-адрес скопійовано.</string>
     <string name="detail_igdb_source_note">Опис гри та метадані на цьому екрані надаються через API IGDB.</string>
     <string name="settings_prefer_english_game_titles">Надавати перевагу англійським назвам ігор</string>
     <string name="settings_prefer_english_game_titles_desc">Використовувати англійські назви з бази даних ігор EmuCoreA, якщо вони доступні.</string>

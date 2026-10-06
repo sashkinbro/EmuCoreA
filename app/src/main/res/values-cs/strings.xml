@@ -1,12 +1,6 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <string name="emulation_runtime_failure_title">Emulace zastavena</string>
     <string name="emulation_runtime_failure_description">Běhové prostředí narazilo na chybu a nemůže bezpečně pokračovat. Ukončete tuto relaci a spusťte hru znovu. Renderer nebyl automaticky změněn.\n\nPodrobnosti:\n</string>
-    <string name="onboarding_core_title">Vytvořeno pro PSP</string>
-    <string name="onboarding_core_subtitle">Čisté jádro PSP s referenčním interpretem, JIT ARM64 a rendererem Vulkan.</string>
-    <string name="onboarding_core_card_title">Nativní architektura PSP</string>
-    <string name="onboarding_core_card_cpu">Spouštění R3000A používá interpret kladoucí důraz na správnost a JIT ARM64.</string>
-    <string name="onboarding_core_card_gpu">GPU PSP je vykreslováno přes Vulkan se softwarovou referenční cestou.</string>
-    <string name="onboarding_core_card_reference">Není vyžadována žádná placená úroveň; všechny funkce jádra jsou dostupné.</string>
     <string name="app_name">EmuCoreA</string>
 
     <!-- Navigation -->
@@ -226,7 +220,6 @@
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
     <string name="settings_cover_download_url_use_default">Použít výchozí</string>
     <string name="settings_cover_download_url_invalid">Zadejte platnou URL adresu HTTP nebo HTTPS.</string>
-    <string name="settings_cover_download_url_copied">Ukázkové adresy URL byly zkopírovány.</string>
     <string name="settings_not_set">Nenastaveno</string>
 
     <string name="settings_about">O aplikaci</string>
@@ -492,12 +485,6 @@
     <string name="onboarding_page_3_subtitle">Sestavte si svou osobní herní knihovnu s krásnými přebaly, podrobnými informacemi a rychlým přístupem k oblíbeným titulům.</string>
     <string name="onboarding_page_4_title">Připraveno ke Hraní (Ready to Play)</string>
     <string name="onboarding_page_4_subtitle">Vyberte jednu či více herních složek a umístění dat emulátoru a můžete začít.</string>
-    <string name="onboarding_profile_title">Vyberte si startovací profil</string>
-    <string name="onboarding_profile_subtitle">Možnost "Bezpečný" (Safe) je doporučena pro většinu zařízení a her. "Rychlý" (Fast) může zvýšit rychlost na slabších telefonech, ale může snížit kompatibilitu a stabilitu.</string>
-    <string name="onboarding_profile_safe_title">Optimální / Bezpečný</string>
-    <string name="onboarding_profile_safe_desc">Nejlepší rovnováha pro většinu zařízení střední a vyšší třídy. Udržuje vyšší kompatibilitu s hrami.</string>
-    <string name="onboarding_profile_fast_title">Rychlý / Nebezpečný (Unsafe)</string>
-    <string name="onboarding_profile_fast_desc">Pro slabší zařízení, která potřebují vyšší rychlost. Některé hry mohou vykazovat více vizuálních chyb nebo se mohou stát méně stabilními.</string>
     <string name="onboarding_chipset_dialog_title">Rozpoznán/Zdetekován procesor</string>
     <string name="onboarding_chipset_dialog_family">Rodina (Family)</string>
     <string name="onboarding_chipset_dialog_recommended">Doporučená volba (výběr)</string>
@@ -554,15 +541,7 @@
     <string name="catalog_empty_title">Nebyly nalezeny žádné shody</string>
     <string name="catalog_empty_body">Zkuste jiný název hry nebo kratší hledanou frázi.</string>
     <string name="formats_title">Podporované formáty</string>
-    <string name="formats_overview_title">Formáty her</string>
-    <string name="formats_overview_body">EmuCoreA otevírá hry PSP pomocí přibaleného jádra PPSSPP.</string>
     <string name="formats_converter_unavailable">Převod ISO na CHD není v tomto sestavení k dispozici.</string>
-    <string name="formats_converter_status_idle">Připraveno k výběru obrazu ISO.</string>
-    <string name="formats_converter_status_preparing">Příprava vybraného ISO…</string>
-    <string name="formats_converter_status_ready">CHD je připraveno. Vyberte, kam jej uložit.</string>
-    <string name="formats_converter_status_saving">Ukládání převedeného CHD…</string>
-    <string name="formats_converter_status_done">CHD bylo úspěšně uloženo.</string>
-    <string name="formats_converter_status_failed">Převod nebyl dokončen.</string>
     <string name="formats_converter_success_title">Převod dokončen</string>
     <string name="formats_converter_failed_title">Převod selhal</string>
     <string name="formats_converter_invalid_iso_body">K převodu prosím vyberte soubor `.iso`.</string>

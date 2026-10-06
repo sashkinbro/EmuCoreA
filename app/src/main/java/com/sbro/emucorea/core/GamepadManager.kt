@@ -225,7 +225,6 @@ object GamepadManager {
         const val RightStickRight = 121
         const val RightStickDown = 122
         const val RightStickLeft = 123
-        const val Pressure = 124
         const val AnalogToggle = 125
         const val FastForward = 126
         const val Rewind = 127

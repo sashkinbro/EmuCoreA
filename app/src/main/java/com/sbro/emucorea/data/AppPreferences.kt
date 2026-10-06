@@ -93,7 +93,6 @@ data class SettingsSnapshot(
     val respectDisplayCutout: Boolean = false,
     val showRecentGames: Boolean = true,
     val showHomeSearch: Boolean = false,
-    val showDebugOptions: Boolean = false,
     val preferEnglishGameTitles: Boolean = false,
     val hideDlcInLibrary: Boolean = true,
     val gamePath: String? = null,
@@ -101,13 +100,11 @@ data class SettingsSnapshot(
     val emulatorDataPath: String? = null,
     val coverDownloadBaseUrl: String? = null,
     val coverArtStyle: Int = AppPreferences.COVER_ART_STYLE_3D,
-    val setupComplete: Boolean = false,
     val proUnlocked: Boolean = false,
     val enableCheats: Boolean = false,
     val performancePreset: Int = PerformancePresets.CUSTOM,
     val overlayScale: Int = 100,
     val overlayOpacity: Int = AppPreferences.DEFAULT_OVERLAY_OPACITY,
-    val overlayShow: Boolean = true,
     val racingMode: Boolean = false,
     val stickyButtons: Set<String> = emptySet(),
     val touchscreenRightStick: Boolean = AppPreferences.DEFAULT_TOUCHSCREEN_RIGHT_STICK,
@@ -134,7 +131,6 @@ data class SettingsSnapshot(
     val gamepadRightStickUpToR2: Boolean = false,
     val gamepadRightStickDownToL2: Boolean = false,
     val gamepadButtonHaptics: Boolean = false,
-    val gamepadBindings: Map<String, Int> = emptyMap(),
     val gamepadBindingsByPad: Map<Int, Map<String, Int>> = emptyMap(),
     val gamepadDeviceAssignments: Map<Int, String> = emptyMap(),
     val ignoredGamepadDevices: Set<String> = emptySet(),
@@ -207,17 +203,14 @@ class AppPreferences(private val context: Context) {
             "gyroSensitivity", "gyroSmoothing", "gyroInvertX", "gyroInvertY",
             "gamepadStickDeadzone", "gamepadLeftStickSensitivity", "gamepadRightStickSensitivity",
             "gamepadRightStickUpToR2", "gamepadRightStickDownToL2", "gamepadButtonHaptics",
-            "enableCheats", "textureReplacementsEnabled", "textureReplacementsAsync",
+            "enableCheats", "textureReplacementsEnabled",
             "textureReplacementsPrecache", "textureDumpingEnabled", "enableAutoGamepad",
             "hideOverlayOnGamepad", "orientationLock", "emulationAllowsBothOrientations",
             "frameLimitEnabled", "rewindEnabled", "vSyncEnabled"
         )
 
-        const val DEFAULT_LOCAL_LINK_PORT = 19072
         private const val CURRENT_OVERLAY_LAYOUT_VERSION = 18
         const val DEFAULT_NTSC_FRAMERATE = 59.94f
-        const val MIN_REGION_FRAMERATE = 50f
-        const val MAX_REGION_FRAMERATE = 65f
         const val DEFAULT_PAL_FRAMERATE = 50f
         const val DEFAULT_APP_FONT_SCALE = 1.0f
         const val MIN_APP_FONT_SCALE = 0.75f
@@ -391,7 +384,6 @@ class AppPreferences(private val context: Context) {
         private val LAST_CORE_BINARY_FINGERPRINT =
             stringPreferencesKey("last_core_binary_fingerprint")
         private val PERFORMANCE_PROFILE = intPreferencesKey("performance_profile")
-        private val GPU_HARDWARE_PROFILE = intPreferencesKey("gpu_hardware_profile")
         private val LANGUAGE_TAG = stringPreferencesKey("language_tag")
     private val ASPECT_RATIO = intPreferencesKey("aspect_ratio")
     private val AUDIO_VOLUME = intPreferencesKey("audio_volume")
@@ -413,7 +405,6 @@ class AppPreferences(private val context: Context) {
         private val RESPECT_DISPLAY_CUTOUT = booleanPreferencesKey("respect_display_cutout")
         private val SHOW_RECENT_GAMES = booleanPreferencesKey("show_recent_games")
         private val SHOW_HOME_SEARCH = booleanPreferencesKey("show_home_search")
-        private val SHOW_DEBUG_OPTIONS = booleanPreferencesKey("show_debug_options")
         private val PREFER_ENGLISH_GAME_TITLES = booleanPreferencesKey("prefer_english_game_titles")
         private val HIDE_DLC_IN_LIBRARY = booleanPreferencesKey("hide_dlc_in_library")
         private val RECENT_GAMES = stringPreferencesKey("recent_games")
@@ -429,7 +420,6 @@ class AppPreferences(private val context: Context) {
     private val TOUCHSCREEN_RIGHT_STICK_SENSITIVITY = intPreferencesKey("touchscreen_right_stick_sensitivity")
     private val ENABLE_CHEATS = booleanPreferencesKey("enable_cheats")
     private val TEXTURE_REPLACEMENTS_ENABLED = booleanPreferencesKey("texture_replacements_enabled")
-        private val TEXTURE_REPLACEMENTS_ASYNC = booleanPreferencesKey("texture_replacements_async")
         private val TEXTURE_REPLACEMENTS_PRECACHE = booleanPreferencesKey("texture_replacements_precache")
     private val TEXTURE_DUMPING_ENABLED = booleanPreferencesKey("texture_dumping_enabled")
     private val PERFORMANCE_PRESET = intPreferencesKey("performance_preset")
@@ -882,11 +872,6 @@ class AppPreferences(private val context: Context) {
         PerformanceProfiles.normalize(prefs[PERFORMANCE_PROFILE] ?: PerformanceProfiles.SAFE)
     }
 
-    val gpuHardwareProfile: Flow<Int> = context.dataStore.data.map { prefs ->
-        GpuHardwareProfiles.normalize(prefs[GPU_HARDWARE_PROFILE] ?: GpuHardwareProfiles.ADRENO)
-    }
-
-
     val gpuDriverType: Flow<Int> = context.dataStore.data.map { prefs ->
         prefs[GPU_DRIVER_TYPE] ?: 0
     }
@@ -906,10 +891,6 @@ class AppPreferences(private val context: Context) {
             prefs[SHADER_CHAIN_ENABLED] = enabled
             prefs[SHADER_CHAIN_PRESET] = preset
         }
-    }
-
-    suspend fun setPerformanceProfile(value: Int) {
-        context.dataStore.edit { it[PERFORMANCE_PROFILE] = PerformanceProfiles.normalize(value) }
     }
 
     private fun normalizeRendererPreference(value: Int?): Int {
@@ -949,14 +930,6 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setAudioVolume(value: Int) {
         context.dataStore.edit { it[AUDIO_VOLUME] = AudioDefaults.coerceVolume(value) }
-    }
-
-    val audioFastForwardVolume: Flow<Int> = context.dataStore.data.map { prefs ->
-        AudioDefaults.coerceVolume(prefs[AUDIO_FAST_FORWARD_VOLUME] ?: AudioDefaults.VOLUME_DEFAULT)
-    }
-
-    suspend fun setAudioFastForwardVolume(value: Int) {
-        context.dataStore.edit { it[AUDIO_FAST_FORWARD_VOLUME] = AudioDefaults.coerceVolume(value) }
     }
 
     val audioMuted: Flow<Boolean> = context.dataStore.data.map { prefs -> prefs[AUDIO_MUTED] ?: false }
@@ -1007,10 +980,6 @@ class AppPreferences(private val context: Context) {
         prefs[VSYNC_ENABLED] ?: true
     }
 
-    suspend fun setVSyncEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[VSYNC_ENABLED] = enabled }
-    }
-
     val targetFps: Flow<Int> = context.dataStore.data.map { prefs ->
         prefs[TARGET_FPS] ?: 0
     }
@@ -1023,16 +992,8 @@ class AppPreferences(private val context: Context) {
         sanitizeRegionFramerate(prefs[NTSC_FRAMERATE], DEFAULT_NTSC_FRAMERATE)
     }
 
-    suspend fun setNtscFramerate(value: Float) {
-        context.dataStore.edit { it[NTSC_FRAMERATE] = sanitizeRegionFramerate(value, DEFAULT_NTSC_FRAMERATE) }
-    }
-
     val palFramerate: Flow<Float> = context.dataStore.data.map { prefs ->
         sanitizeRegionFramerate(prefs[PAL_FRAMERATE], DEFAULT_PAL_FRAMERATE)
-    }
-
-    suspend fun setPalFramerate(value: Float) {
-        context.dataStore.edit { it[PAL_FRAMERATE] = sanitizeRegionFramerate(value, DEFAULT_PAL_FRAMERATE) }
     }
 
     val autoSaveEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -1074,25 +1035,6 @@ class AppPreferences(private val context: Context) {
 
     // Game Path
     val gamePaths: Flow<List<String>> = context.dataStore.data.map(::readGamePaths)
-
-    val gamePath: Flow<String?> = gamePaths.map { it.firstOrNull() }
-
-    suspend fun setGamePath(path: String) {
-        setGamePaths(listOf(path))
-    }
-
-    suspend fun setGamePaths(paths: List<String>) {
-        val normalized = paths.map(String::trim).filter(String::isNotBlank).distinct()
-        context.dataStore.edit { prefs ->
-            if (normalized.isEmpty()) {
-                prefs.remove(GAME_PATHS)
-                prefs.remove(GAME_PATH)
-            } else {
-                prefs[GAME_PATHS] = JSONArray(normalized).toString()
-                prefs[GAME_PATH] = normalized.first()
-            }
-        }
-    }
 
     suspend fun addGamePath(path: String) {
         val normalized = path.trim()
@@ -1357,7 +1299,6 @@ class AppPreferences(private val context: Context) {
                 respectDisplayCutout = prefs[RESPECT_DISPLAY_CUTOUT] ?: false,
                 showRecentGames = prefs[SHOW_RECENT_GAMES] ?: true,
                 showHomeSearch = prefs[SHOW_HOME_SEARCH] ?: false,
-                showDebugOptions = prefs[SHOW_DEBUG_OPTIONS] ?: false,
                 preferEnglishGameTitles = prefs[PREFER_ENGLISH_GAME_TITLES] ?: false,
                 hideDlcInLibrary = prefs[HIDE_DLC_IN_LIBRARY] ?: true,
                 gamePath = readGamePaths(prefs).firstOrNull(),
@@ -1365,14 +1306,12 @@ class AppPreferences(private val context: Context) {
                 emulatorDataPath = prefs[EMULATOR_DATA_PATH],
                 coverDownloadBaseUrl = prefs[COVER_DOWNLOAD_BASE_URL],
                 coverArtStyle = readCoverArtStyle(prefs),
-                setupComplete = prefs[ONBOARDING_COMPLETED] ?: false,
                 proUnlocked = prefs[PRO_UNLOCKED] ?: false,
                 enableCheats = prefs[ENABLE_CHEATS] ?: false,
                 performancePreset = PerformancePresets.CUSTOM,
                 overlayScale = prefs[OVERLAY_SCALE] ?: 100,
                 overlayOpacity = (prefs[OVERLAY_OPACITY] ?: DEFAULT_OVERLAY_OPACITY)
                     .coerceIn(OVERLAY_OPACITY_MIN, OVERLAY_OPACITY_MAX),
-                overlayShow = prefs[OVERLAY_SHOW] ?: true,
                 racingMode = prefs[RACING_MODE] ?: false,
                 stickyButtons = prefs[STICKY_BUTTONS] ?: emptySet(),
                 touchscreenRightStick = prefs[TOUCHSCREEN_RIGHT_STICK] ?: DEFAULT_TOUCHSCREEN_RIGHT_STICK,
@@ -1403,7 +1342,6 @@ class AppPreferences(private val context: Context) {
                 gamepadRightStickUpToR2 = prefs[GAMEPAD_RIGHT_STICK_UP_TO_R2] ?: false,
                 gamepadRightStickDownToL2 = prefs[GAMEPAD_RIGHT_STICK_DOWN_TO_L2] ?: false,
                 gamepadButtonHaptics = prefs[GAMEPAD_BUTTON_HAPTICS] ?: false,
-                gamepadBindings = decodeGamepadBindings(prefs[GAMEPAD_BINDINGS]),
                 gamepadBindingsByPad = decodeGamepadBindingsByPad(prefs[GAMEPAD_BINDINGS]),
                 gamepadDeviceAssignments = decodeGamepadDeviceAssignments(prefs[GAMEPAD_DEVICE_ASSIGNMENTS]),
                 ignoredGamepadDevices = decodeIgnoredGamepadDevices(prefs[GAMEPAD_IGNORED_DEVICES]),
@@ -1479,10 +1417,6 @@ class AppPreferences(private val context: Context) {
 
     val autoProgressiveScan: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[AUTO_PROGRESSIVE_SCAN] ?: false
-    }
-
-    suspend fun setAutoProgressiveScan(enabled: Boolean) {
-        context.dataStore.edit { it[AUTO_PROGRESSIVE_SCAN] = enabled }
     }
 
     private fun normalizeAspectRatioPreference(value: Int?): Int {
@@ -1621,10 +1555,6 @@ class AppPreferences(private val context: Context) {
         prefs[COMPACT_CONTROLS] ?: true
     }
 
-    suspend fun setCompactControls(enabled: Boolean) {
-        context.dataStore.edit { it[COMPACT_CONTROLS] = enabled }
-    }
-
     val keepScreenOn: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEEP_SCREEN_ON] ?: true
     }
@@ -1655,14 +1585,6 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setShowHomeSearch(enabled: Boolean) {
         context.dataStore.edit { it[SHOW_HOME_SEARCH] = enabled }
-    }
-
-    val showDebugOptions: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[SHOW_DEBUG_OPTIONS] ?: false
-    }
-
-    suspend fun setShowDebugOptions(enabled: Boolean) {
-        context.dataStore.edit { it[SHOW_DEBUG_OPTIONS] = enabled }
     }
 
     val preferEnglishGameTitles: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -1782,10 +1704,6 @@ class AppPreferences(private val context: Context) {
                 if (legacy.isEmpty()) emptyMap() else mapOf(0 to legacy)
             }
         }.getOrDefault(emptyMap())
-    }
-
-    private fun decodeGamepadBindings(raw: String?): Map<String, Int> {
-        return decodeGamepadBindingsByPad(raw)[0].orEmpty()
     }
 
     private fun encodeGamepadBindingsByPad(bindingsByPad: Map<Int, Map<String, Int>>): String {
@@ -2002,24 +1920,12 @@ class AppPreferences(private val context: Context) {
         prefs[MEDIATEK_ANGLE_OPENGL] ?: false
     }
 
-    suspend fun setMediatekAngleOpenGl(enabled: Boolean) {
-        context.dataStore.edit { it[MEDIATEK_ANGLE_OPENGL] = enabled }
-    }
-
     val textureReplacementsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[TEXTURE_REPLACEMENTS_ENABLED] ?: true
     }
 
     suspend fun setTextureReplacementsEnabled(enabled: Boolean) {
         context.dataStore.edit { it[TEXTURE_REPLACEMENTS_ENABLED] = enabled }
-    }
-
-    val textureReplacementsAsync: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[TEXTURE_REPLACEMENTS_ASYNC] ?: true
-    }
-
-    suspend fun setTextureReplacementsAsync(enabled: Boolean) {
-        context.dataStore.edit { it[TEXTURE_REPLACEMENTS_ASYNC] = enabled }
     }
 
     val textureReplacementsPrecache: Flow<Boolean> = context.dataStore.data.map { prefs ->
@@ -2032,10 +1938,6 @@ class AppPreferences(private val context: Context) {
 
     val textureDumpingEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[TEXTURE_DUMPING_ENABLED] ?: false
-    }
-
-    suspend fun setTextureDumpingEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[TEXTURE_DUMPING_ENABLED] = enabled }
     }
 
     val performancePreset: Flow<Int> = context.dataStore.data.map { prefs ->
@@ -2641,7 +2543,6 @@ class AppPreferences(private val context: Context) {
             put("respectDisplayCutout", prefs[RESPECT_DISPLAY_CUTOUT] ?: false)
             put("showRecentGames", prefs[SHOW_RECENT_GAMES] ?: true)
             put("showHomeSearch", prefs[SHOW_HOME_SEARCH] ?: false)
-            put("showDebugOptions", prefs[SHOW_DEBUG_OPTIONS] ?: false)
             put("preferEnglishGameTitles", prefs[PREFER_ENGLISH_GAME_TITLES] ?: false)
             put("hideDlcInLibrary", prefs[HIDE_DLC_IN_LIBRARY] ?: true)
             put("recentGames", prefs[RECENT_GAMES] ?: "[]")
@@ -2683,7 +2584,6 @@ class AppPreferences(private val context: Context) {
             put("gamepadButtonHaptics", prefs[GAMEPAD_BUTTON_HAPTICS] ?: false)
             put("enableCheats", prefs[ENABLE_CHEATS] ?: false)
             put("textureReplacementsEnabled", prefs[TEXTURE_REPLACEMENTS_ENABLED] ?: true)
-            put("textureReplacementsAsync", prefs[TEXTURE_REPLACEMENTS_ASYNC] ?: true)
             put("textureReplacementsPrecache", prefs[TEXTURE_REPLACEMENTS_PRECACHE] ?: false)
             put("textureDumpingEnabled", prefs[TEXTURE_DUMPING_ENABLED] ?: false)
             put("performancePreset", PerformancePresets.CUSTOM)
@@ -2825,7 +2725,6 @@ class AppPreferences(private val context: Context) {
             val gpuHardwareProfile = GpuHardwareProfiles.normalize(
                 json.optInt("gpuHardwareProfile", GpuHardwareProfiles.ADRENO)
             )
-            prefs[GPU_HARDWARE_PROFILE] = gpuHardwareProfile
             val importedRenderer = normalizeRendererPreference(
                 if (json.has("renderer")) json.optInt("renderer") else null
             )
@@ -2903,7 +2802,6 @@ class AppPreferences(private val context: Context) {
             prefs[RESPECT_DISPLAY_CUTOUT] = json.optBoolean("respectDisplayCutout", false)
             prefs[SHOW_RECENT_GAMES] = json.optBoolean("showRecentGames", true)
             prefs[SHOW_HOME_SEARCH] = json.optBoolean("showHomeSearch", false)
-            prefs[SHOW_DEBUG_OPTIONS] = json.optBoolean("showDebugOptions", false)
             prefs[PREFER_ENGLISH_GAME_TITLES] = json.optBoolean("preferEnglishGameTitles", false)
             prefs[HIDE_DLC_IN_LIBRARY] = json.optBoolean("hideDlcInLibrary", true)
             prefs[RECENT_GAMES] = json.optString("recentGames", "[]")
@@ -2945,7 +2843,6 @@ class AppPreferences(private val context: Context) {
             prefs[GAMEPAD_BUTTON_HAPTICS] = json.optBoolean("gamepadButtonHaptics", false)
             prefs[ENABLE_CHEATS] = json.optBoolean("enableCheats", false)
             prefs[TEXTURE_REPLACEMENTS_ENABLED] = json.optBoolean("textureReplacementsEnabled", true)
-            prefs[TEXTURE_REPLACEMENTS_ASYNC] = json.optBoolean("textureReplacementsAsync", true)
             prefs[TEXTURE_REPLACEMENTS_PRECACHE] = json.optBoolean("textureReplacementsPrecache", false)
             prefs[TEXTURE_DUMPING_ENABLED] = json.optBoolean("textureDumpingEnabled", false)
             prefs[ENABLE_AUTO_GAMEPAD] = json.optBoolean("enableAutoGamepad", true)

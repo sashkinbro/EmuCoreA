@@ -394,7 +394,6 @@ fun ControlsEditorScreen(
     val selectedCustomControl = selectedCustomControlId?.let { id ->
         editorCustomControls.controls.firstOrNull { it.id == id }
     }
-    val selectedIsCustom = selectedCustomControl != null
     val selectedIsGroup = selectedControlId?.let { it in ControlGroupIds } == true
     val selectedIsStick = selectedControlId == "left_stick" || selectedControlId == "right_stick"
     val selectedStickSurfaceMode = selectedIsStick && (selectedLayout?.surfaceOnly == true)

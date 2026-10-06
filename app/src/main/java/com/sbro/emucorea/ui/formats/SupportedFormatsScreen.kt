@@ -130,20 +130,6 @@ fun SupportedFormatsScreen(
         }
     }
 
-    val launchConversion = rememberDebouncedClick {
-        if (!isConverterAvailable ||
-            conversionState == ConversionUiState.Preparing ||
-            conversionState == ConversionUiState.Saving
-        ) {
-            return@rememberDebouncedClick
-        }
-        if (pendingOutputFile != null) {
-            saveChdLauncher.launch(pendingOutputName)
-        } else {
-            pickIsoLauncher.launch(ImageConversionManager.isoMimeTypes)
-        }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -263,34 +249,6 @@ private fun FormatsTopBar(
                 )
             }
         }
-    }
-}
-
-@Composable
-private fun StatusPill(
-    status: ConversionUiState,
-    isConverterAvailable: Boolean
-) {
-    val label = when {
-        !isConverterAvailable -> stringResource(R.string.formats_converter_unavailable)
-        status == ConversionUiState.Preparing -> stringResource(R.string.formats_converter_status_preparing)
-        status == ConversionUiState.ReadyToSave -> stringResource(R.string.formats_converter_status_ready)
-        status == ConversionUiState.Saving -> stringResource(R.string.formats_converter_status_saving)
-        status == ConversionUiState.Success -> stringResource(R.string.formats_converter_status_done)
-        status == ConversionUiState.Error -> stringResource(R.string.formats_converter_status_failed)
-        else -> stringResource(R.string.formats_converter_status_idle)
-    }
-
-    Surface(
-        shape = neonShape(14.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
     }
 }
 

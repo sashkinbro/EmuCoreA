@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">Emülasyon durduruldu</string>
     <string name="emulation_runtime_failure_description">Çalışma zamanı bir hatayla karşılaştı ve güvenle devam edemiyor. Bu oturumdan çıkıp oyunu yeniden başlatın. İşleyici otomatik olarak değiştirilmedi.\n\nAyrıntılar:\n</string>
-    <string name="onboarding_core_title">PSP için tasarlandı</string>
-    <string name="onboarding_core_subtitle">Referans yorumlayıcı, ARM64 JIT ve Vulkan işleyicisi içeren temiz bir PSP çekirdeği.</string>
-    <string name="onboarding_core_card_title">Yerel PSP mimarisi</string>
-    <string name="onboarding_core_card_cpu">R3000A yürütmesi, doğruluk öncelikli bir yorumlayıcı ve ARM64 JIT kullanır.</string>
-    <string name="onboarding_core_card_gpu">PSP GPU’su, yazılım referans yoluyla Vulkan üzerinden işlenir.</string>
-    <string name="onboarding_core_card_reference">Ücretli bir kademe gerekmez; tüm çekirdek özellikleri kullanılabilir.</string>
     <string name="app_name">EmuCoreA</string>
 
     <string name="shell_library">Kütüphane</string>
@@ -199,7 +193,6 @@
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
     <string name="settings_cover_download_url_use_default">Varsayılanı kullan</string>
     <string name="settings_cover_download_url_invalid">Geçerli bir HTTP veya HTTPS URL\'si girin.</string>
-    <string name="settings_cover_download_url_copied">Örnek URL\'ler kopyalandı.</string>
     <string name="settings_not_set">Ayarlanmadı</string>
     <string name="settings_about">Hakkında</string>
     <string name="settings_version">Sürüm</string>
@@ -361,12 +354,6 @@
     <string name="onboarding_page_3_subtitle">Güzel kapaklar, detaylı bilgiler ve favorilerinize hızlı erişim ile kişisel oyun kütüphanenizi oluşturun.</string>
     <string name="onboarding_page_4_title">Oynamaya Hazır</string>
     <string name="onboarding_page_4_subtitle">Başlamak için oyun klasörlerinizi ve emülatör verilerinin konumunu seçin.</string>
-    <string name="onboarding_profile_title">Başlangıç profilinizi seçin</string>
-    <string name="onboarding_profile_subtitle">Çoğu cihaz ve oyun için Güvenli (Safe) önerilir. Hızlı (Fast) modu daha zayıf telefonlarda hızı artırabilir, ancak uyumluluğu ve kararlılığı azaltabilir.</string>
-    <string name="onboarding_profile_safe_title">Optimal / Güvenli</string>
-    <string name="onboarding_profile_safe_desc">Çoğu orta ve üst düzey cihaz için en iyi denge. Oyunlarla daha güçlü uyumluluk sağlar.</string>
-    <string name="onboarding_profile_fast_title">Hızlı / Güvenli Olmayan</string>
-    <string name="onboarding_profile_fast_desc">Ekstra hıza ihtiyaç duyan daha zayıf cihazlar için. Bazı oyunlar daha fazla hata gösterebilir veya daha az kararlı hale gelebilir.</string>
     <string name="onboarding_title">Oynamak için hazırlanın</string>
     <string name="onboarding_subtitle">PSP oyun klasörlerini seçin ve dosya erişimine izin verin.</string>
     <string name="onboarding_games_title">Oyun klasörünü seç</string>
@@ -401,15 +388,7 @@
     <string name="catalog_empty_title">Eşleşme bulunamadı</string>
     <string name="catalog_empty_body">Farklı bir oyun ismi veya daha kısa bir arama ifadesi deneyin.</string>
     <string name="formats_title">Desteklenen Formatlar</string>
-    <string name="formats_overview_title">Oyun Formatları</string>
-    <string name="formats_overview_body">EmuCoreA, PSP oyunlarını yerleşik PPSSPP çekirdeğiyle açar.</string>
     <string name="formats_converter_unavailable">ISO\'dan CHD\'ye dönüştürme bu sürümde mevcut değil.</string>
-    <string name="formats_converter_status_idle">Bir ISO imajı seçmeye hazır.</string>
-    <string name="formats_converter_status_preparing">Seçilen ISO hazırlanıyor…</string>
-    <string name="formats_converter_status_ready">CHD hazır. Nereye kaydedileceğini seçin.</string>
-    <string name="formats_converter_status_saving">Dönüştürülen CHD kaydediliyor…</string>
-    <string name="formats_converter_status_done">CHD başarıyla kaydedildi.</string>
-    <string name="formats_converter_status_failed">Dönüştürme bitmedi.</string>
     <string name="formats_converter_success_title">Dönüştürme tamamlandı</string>
     <string name="formats_converter_failed_title">Dönüştürme başarısız oldu</string>
     <string name="formats_converter_invalid_iso_body">Lütfen dönüştürme için bir `.iso` dosyası seçin.</string>

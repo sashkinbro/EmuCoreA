@@ -158,8 +158,6 @@ class ProfileDeviceRepository(context: Context) {
             document.id != local.deviceId &&
                 document.toPlayerDevice()?.sameHardwareProfile(local) == true
         }
-        val legacyDuplicates = hardwareDuplicates.filter { !it.id.startsWith(STABLE_ID_PREFIX) }
-        val stableDuplicates = hardwareDuplicates.filter { it.id.startsWith(STABLE_ID_PREFIX) }
         // Default to visible: if no device is public yet, make current public (first install and reinstalls)
         // This ensures every user has at least one visible device by default, but still allows manual hide afterwards
         // (hide will be respected until next reinstall/new device, when it will become public again)
@@ -291,8 +289,6 @@ class ProfileDeviceRepository(context: Context) {
             if (key in seenHardware) false else { seenHardware.add(key); true }
         }.distinctBy(PlayerDevice::deviceId)
     }
-
-    private fun List<PlayerDevice>.hideMigratedDuplicates(): List<PlayerDevice> = deduplicateDevices()
 
     private fun PlayerDevice.sameHardwareProfile(other: PlayerDevice): Boolean =
         manufacturer.equals(other.manufacturer, ignoreCase = true) &&

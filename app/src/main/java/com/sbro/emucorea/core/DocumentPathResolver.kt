@@ -24,11 +24,6 @@ object DocumentPathResolver {
         return findFileInPersistedTree(context, uri, fileName)
     }
 
-    fun resolveDirectoryPath(rawPath: String): String? {
-        if (!rawPath.startsWith("content://")) return rawPath
-        return resolveExternalStoragePath(rawPath.toUri())
-    }
-
     fun findAccessibleTreeUriForRawPath(context: Context, rawPath: String): Uri? {
         if (rawPath.startsWith("content://")) return rawPath.toUri()
 

@@ -472,7 +472,6 @@ fun VectorDpadCluster(
 
     val density = LocalDensity.current
     val arrowSize = size * OverlayDpadClusterArrowScale
-    val arrowSizePx = with(density) { arrowSize.toPx() }
     val surfaceOffsetXPx = with(density) { surface.offset.x.toPx() }
     val surfaceOffsetYPx = with(density) { surface.offset.y.toPx() }
     // Direction zones follow the real arrow anchors so arrows moved by the layout

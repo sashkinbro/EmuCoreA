@@ -76,8 +76,6 @@ internal object CoreRuntime {
     @Volatile private var worker: Thread? = null
 
     private var systemDirectory = ""
-    private var saveDirectory = ""
-    private var coreAssetsDirectory = ""
 
     @Volatile private var running = false
     @Volatile private var paused = false
@@ -91,7 +89,6 @@ internal object CoreRuntime {
     @Volatile private var frameHeight = DEFAULT_FRAME_HEIGHT
     @Volatile private var requestedRenderer = RendererDefaults.defaultForHardware()
     @Volatile private var currentGamePath: String? = null
-    @Volatile private var currentBiosOnly = false
     @Volatile private var performanceMetricsEnabled = false
     @Volatile private var detailedPerformanceMetrics = false
     @Volatile private var metricsResetRequested = false
@@ -157,8 +154,6 @@ internal object CoreRuntime {
         this.context = context.applicationContext
         val root = File(context.filesDir, "ppsspp")
         systemDirectory = File(root, "system").apply { mkdirs() }.absolutePath
-        saveDirectory = File(root, "save").apply { mkdirs() }.absolutePath
-        coreAssetsDirectory = File(root, "assets").apply { mkdirs() }.absolutePath
         nativeDataDirectory = File(root, "native").apply { mkdirs() }.absolutePath
         // The core's memStickDirectory must match the app's emulator data root,
         // otherwise core-owned data (SAVEDATA, TEXTURES, CHEATS, NAND) splits
@@ -363,7 +358,6 @@ internal object CoreRuntime {
             return false
         }
         currentGamePath = gamePath
-        currentBiosOnly = false
         pendingGamePath = prepared
         applyStartOptions()
         for (port in 0..1) {
@@ -1022,8 +1016,6 @@ internal object CoreRuntime {
     fun diagnostics(): String =
         "native core: loaded=${if (nativeInitialized) 1 else 0} booted=${if (booted) 1 else 0} " +
             "renderer=${RendererDefaults.coreRendererName(activeCoreRenderer())}"
-
-    fun gpuBackendSubmissions(): Long = 0L
 
     fun updateSetting(section: String, key: String, value: String): Boolean {
         if ((section == "EmuCoreA" || section == "EmuCoreA/GS") && key == "Renderer") {

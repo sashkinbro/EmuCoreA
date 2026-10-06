@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">एमुलेशन रोका गया</string>
     <string name="emulation_runtime_failure_description">रनटाइम को एक त्रुटि मिली और यह सुरक्षित रूप से जारी नहीं रख सकता। इस सत्र से बाहर निकलें और गेम फिर से शुरू करें। रेंडरर स्वचालित रूप से नहीं बदला गया।\n\nविवरण:\n</string>
-    <string name="onboarding_core_title">PSP के लिए बनाया गया</string>
-    <string name="onboarding_core_subtitle">रेफ़रेंस इंटरप्रेटर, ARM64 JIT और Vulkan रेंडरर वाला एक साफ़ PSP कोर।</string>
-    <string name="onboarding_core_card_title">मूल PSP आर्किटेक्चर</string>
-    <string name="onboarding_core_card_cpu">R3000A निष्पादन शुद्धता-प्राथमिकता वाले इंटरप्रेटर और ARM64 JIT का उपयोग करता है।</string>
-    <string name="onboarding_core_card_gpu">PSP GPU को सॉफ़्टवेयर रेफ़रेंस पथ के साथ Vulkan के ज़रिए रेंडर किया जाता है।</string>
-    <string name="onboarding_core_card_reference">किसी भुगतान स्तर की आवश्यकता नहीं है; कोर की हर सुविधा उपलब्ध है।</string>
     <string name="app_name">EmuCoreA</string>
 
     <string name="shell_library">लाइब्रेरी</string>
@@ -168,7 +162,6 @@
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
     <string name="settings_cover_download_url_use_default">डिफ़ॉल्ट का उपयोग करें</string>
     <string name="settings_cover_download_url_invalid">एक वैध HTTP या HTTPS URL दर्ज करें।</string>
-    <string name="settings_cover_download_url_copied">उदाहरण URL कॉपी किए गए।</string>
     <string name="settings_not_set">सेट नहीं है</string>
     <string name="settings_about">के बारे में</string>
     <string name="settings_version">संस्करण</string>
@@ -330,12 +323,6 @@
     <string name="onboarding_page_3_subtitle">सुंदर कवर, विस्तृत जानकारी और अपने पसंदीदा गेम्स तक त्वरित पहुंच के साथ अपनी व्यक्तिगत गेम लाइब्रेरी बनाएं।</string>
     <string name="onboarding_page_4_title">खेलने के लिए तैयार</string>
     <string name="onboarding_page_4_subtitle">शुरू करने के लिए गेम फ़ोल्डर और एमुलेटर डेटा का स्थान चुनें।</string>
-    <string name="onboarding_profile_title">अपना स्टार्टअप प्रोफ़ाइल चुनें</string>
-    <string name="onboarding_profile_subtitle">अधिकांश उपकरणों और खेलों के लिए Safe की अनुशंसा की जाती है। Fast कमज़ोर फोनों पर गति में सुधार कर सकता है, लेकिन यह संगतता और स्थिरता को कम कर सकता है।</string>
-    <string name="onboarding_profile_safe_title">इष्टतम (Optimal) / सुरक्षित</string>
-    <string name="onboarding_profile_safe_desc">अधिकांश मिड-रेंज और हाई-एंड उपकरणों के लिए सर्वश्रेष्ठ संतुलन। गेम्स के साथ मजबूत संगतता रखता है।</string>
-    <string name="onboarding_profile_fast_title">तेज़ / असुरक्षित</string>
-    <string name="onboarding_profile_fast_desc">कमज़ोर उपकरणों के लिए जिन्हें अतिरिक्त गति की आवश्यकता होती है। कुछ गेम्स में अधिक ग्लिच दिख सकते हैं या वे कम स्थिर हो सकते हैं।</string>
     <string name="onboarding_title">खेलने के लिए तैयार हो जाएं</string>
     <string name="onboarding_subtitle">अपने PSP गेम फ़ोल्डर चुनें और फ़ाइल एक्सेस की अनुमति दें।</string>
     <string name="onboarding_games_title">गेम्स फ़ोल्डर चुनें</string>
@@ -370,15 +357,7 @@
     <string name="catalog_empty_title">कोई मिलान नहीं मिला</string>
     <string name="catalog_empty_body">कोई भिन्न गेम नाम या छोटा खोज वाक्यांश आज़माएं।</string>
     <string name="formats_title">समर्थित फॉर्मेट</string>
-    <string name="formats_overview_title">गेम फॉर्मेट</string>
-    <string name="formats_overview_body">EmuCoreA अंतर्निहित PPSSPP कोर से PSP गेम खोलता है।</string>
     <string name="formats_converter_unavailable">ISO से CHD रूपांतरण इस बिल्ड में उपलब्ध नहीं है।</string>
-    <string name="formats_converter_status_idle">एक ISO इमेज चुनने के लिए तैयार।</string>
-    <string name="formats_converter_status_preparing">चयनित ISO तैयार कर रहा है…</string>
-    <string name="formats_converter_status_ready">CHD तैयार है। चुनें कि इसे कहाँ सेव करना है।</string>
-    <string name="formats_converter_status_saving">कनवर्ट की गई CHD सेव कर रहा है…</string>
-    <string name="formats_converter_status_done">CHD सफलतापूर्वक सेव हो गई।</string>
-    <string name="formats_converter_status_failed">रूपांतरण समाप्त नहीं हुआ।</string>
     <string name="formats_converter_success_title">रूपांतरण पूर्ण</string>
     <string name="formats_converter_failed_title">रूपांतरण विफल</string>
     <string name="formats_converter_invalid_iso_body">कृपया रूपांतरण के लिए एक `.iso` फ़ाइल चुनें।</string>

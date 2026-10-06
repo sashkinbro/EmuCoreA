@@ -739,15 +739,6 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsUnloadGame(JNIEnv*, j
     rc_client_unload_game(g_state.client);
 }
 
-extern "C" JNIEXPORT void JNICALL
-Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsPump(JNIEnv*, jclass)
-{
-  std::lock_guard<std::recursive_mutex> lock(g_state.mutex);
-  PumpHttpResponsesLocked();
-  if (g_state.client != nullptr && g_state.has_game.load(std::memory_order_relaxed) && g_state.enabled)
-    rc_client_idle(g_state.client);
-}
-
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsStateJson(JNIEnv* env, jclass)
 {

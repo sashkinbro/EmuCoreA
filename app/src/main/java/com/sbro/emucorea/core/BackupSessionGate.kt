@@ -3,7 +3,6 @@ package com.sbro.emucorea.core
 import com.sbro.emucorea.data.drive.DriveBackupException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.delay
 
 /** Shares one exclusion boundary between VM startup and backup/restore filesystem changes. */
 object BackupSessionGate {
@@ -15,20 +14,6 @@ object BackupSessionGate {
     suspend fun <T> whileStopped(block: suspend () -> T): T = mutex.withLock {
         checkpoint()
         block()
-    }
-
-    /** Background installers wait for gameplay and acquire the same startup boundary atomically. */
-    suspend fun <T> awaitStopped(onWaiting: () -> Unit = {}, block: suspend () -> T): T {
-        while (true) {
-            mutex.lock()
-            if (!gameBusy) {
-                try { return block() }
-                finally { mutex.unlock() }
-            }
-            mutex.unlock()
-            onWaiting()
-            delay(1000)
-        }
     }
 
     suspend fun start(active: () -> Boolean, block: suspend () -> Boolean): Boolean {

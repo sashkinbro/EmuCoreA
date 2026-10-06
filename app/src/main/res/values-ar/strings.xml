@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">تم إيقاف المحاكاة</string>
     <string name="emulation_runtime_failure_description">واجهت بيئة التشغيل خطأً ولا يمكنها المتابعة بأمان. اخرج من هذه الجلسة وابدأ اللعبة من جديد. لم يتم تغيير العارض تلقائيًا.\n\nالتفاصيل:\n</string>
-    <string name="onboarding_core_title">مصمم لـ PSP</string>
-    <string name="onboarding_core_subtitle">نواة PSP نظيفة مزوّدة بمفسّر مرجعي وARM64 JIT وعارض Vulkan.</string>
-    <string name="onboarding_core_card_title">بنية PSP أصلية</string>
-    <string name="onboarding_core_card_cpu">يستخدم تنفيذ R3000A مفسّرًا يركز على الدقة وARM64 JIT.</string>
-    <string name="onboarding_core_card_gpu">تُعرض وحدة GPU الخاصة بـ PSP عبر Vulkan مع مسار مرجعي برمجي.</string>
-    <string name="onboarding_core_card_reference">لا حاجة إلى أي مستوى مدفوع؛ فجميع ميزات النواة متاحة.</string>
     <string name="app_name">EmuCoreA</string>
 
     <string name="shell_library">المكتبة</string>
@@ -199,7 +193,6 @@
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
     <string name="settings_cover_download_url_use_default">استخدام الافتراضي</string>
     <string name="settings_cover_download_url_invalid">أدخل عنوان HTTP أو HTTPS صالحًا.</string>
-    <string name="settings_cover_download_url_copied">تم نسخ روابط المثال.</string>
     <string name="settings_not_set">غير محدد</string>
     <string name="settings_about">حول</string>
     <string name="settings_version">الإصدار</string>
@@ -361,12 +354,6 @@
     <string name="onboarding_page_3_subtitle">قم ببناء مكتبة ألعابك الشخصية مع أغلفة جميلة، ومعلومات مفصلة، ووصول سريع إلى ألعابك المفضلة.</string>
     <string name="onboarding_page_4_title">جاهز للعب</string>
     <string name="onboarding_page_4_subtitle">اختر مجلد الألعاب ومكان تخزين بيانات المحاكي للبدء.</string>
-    <string name="onboarding_profile_title">اختر ملف تعريف بدء التشغيل الخاص بك</string>
-    <string name="onboarding_profile_subtitle">الآمن موصى به لمعظم الأجهزة والألعاب. يمكن للسريع تحسين السرعة على الهواتف الضعيفة، ولكنه قد يقلل من التوافق والاستقرار.</string>
-    <string name="onboarding_profile_safe_title">الأمثل / آمن</string>
-    <string name="onboarding_profile_safe_desc">أفضل توازن لمعظم الأجهزة المتوسطة والعالية الأداء. يحافظ على توافق أقوى مع الألعاب.</string>
-    <string name="onboarding_profile_fast_title">سريع / غير آمن</string>
-    <string name="onboarding_profile_fast_desc">للأجهزة الأضعف التي تحتاج إلى سرعة إضافية. قد تظهر بعض الألعاب المزيد من الأخطاء أو تصبح أقل استقرارًا.</string>
     <string name="onboarding_title">استعد للعب</string>
     <string name="onboarding_subtitle">اختر مجلدات ألعاب PSP وامنح إذن الوصول إلى الملفات.</string>
     <string name="onboarding_games_title">اختر مجلد الألعاب</string>
@@ -401,15 +388,7 @@
     <string name="catalog_empty_title">لم يتم العثور على تطابقات</string>
     <string name="catalog_empty_body">جرب اسم لعبة مختلفًا أو عبارة بحث أقصر.</string>
     <string name="formats_title">الصيغ المدعومة</string>
-    <string name="formats_overview_title">صيغ الألعاب</string>
-    <string name="formats_overview_body">يفتح EmuCoreA ألعاب PSP باستخدام نواة PPSSPP المدمجة.</string>
     <string name="formats_converter_unavailable">تحويل ISO إلى CHD غير متوفر في هذا الإصدار.</string>
-    <string name="formats_converter_status_idle">جاهز لاختيار صورة ISO.</string>
-    <string name="formats_converter_status_preparing">جاري تجهيز صورة ISO المحددة…</string>
-    <string name="formats_converter_status_ready">ملف CHD جاهز. اختر مكان حفظه.</string>
-    <string name="formats_converter_status_saving">جاري حفظ ملف CHD المحول…</string>
-    <string name="formats_converter_status_done">تم حفظ ملف CHD بنجاح.</string>
-    <string name="formats_converter_status_failed">لم يكتمل التحويل.</string>
     <string name="formats_converter_success_title">اكتمل التحويل</string>
     <string name="formats_converter_failed_title">فشل التحويل</string>
     <string name="formats_converter_invalid_iso_body">يرجى اختيار ملف `.iso` للتحويل.</string>

@@ -16,9 +16,6 @@ object PpssppCoreOptions {
         val choices: List<Choice>,
         val defaultValue: String,
     ) {
-        /** The option's short key without the `ppsspp_` prefix. */
-        val shortKey: String get() = key.removePrefix("ppsspp_")
-
         /** True for plain on/off options whose only values are enabled/disabled. */
         val isBooleanToggle: Boolean
             get() = choices.map { it.value.lowercase() }.toSet() == setOf("enabled", "disabled")
@@ -1273,12 +1270,6 @@ object PpssppCoreOptions {
     fun option(key: String): Option? = optionsByKey[key]
 
     fun isManagedKey(key: String): Boolean = key in managedKeys
-
-    fun categoryLabel(categoryKey: String): String =
-        categoryList.firstOrNull { it.key == categoryKey }?.label ?: categoryKey
-
-    fun categoryDescription(categoryKey: String): String =
-        categoryList.firstOrNull { it.key == categoryKey }?.description.orEmpty()
 
     /**
      * Video tab: rendering and display options. Vulkan-only features (MSAA and

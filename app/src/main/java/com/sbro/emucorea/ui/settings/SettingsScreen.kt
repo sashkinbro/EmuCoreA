@@ -308,11 +308,9 @@ fun SettingsScreen(
     val backupExportFailureMessage = stringResource(R.string.settings_backup_export_failed)
     val backupRestoreSuccessMessage = stringResource(R.string.settings_backup_restore_success)
     val backupRestoreFailureMessage = stringResource(R.string.settings_backup_restore_failed)
-    val coverUrlCopiedMessage = stringResource(R.string.settings_cover_download_url_copied)
     val coverUrlInvalidMessage = stringResource(R.string.settings_cover_download_url_invalid)
     val coverCacheClearedMessage = stringResource(R.string.settings_clear_cover_cache_success)
     val coverCachePartiallyClearedMessage = stringResource(R.string.settings_clear_cover_cache_partial)
-    stringResource(R.string.settings_not_set)
     val settingsScrollState = rememberScrollState()
     val proPurchaseMessage = uiState.proPurchaseMessageResId?.let { stringResource(it) }
     LaunchedEffect(proPurchaseMessage) {

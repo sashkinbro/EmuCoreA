@@ -1,12 +1,6 @@
 <resources>
     <string name="emulation_runtime_failure_title">模拟已停止</string>
     <string name="emulation_runtime_failure_description">运行时遇到错误，无法安全继续。请退出本次会话并重新启动游戏。渲染器未自动更改。\n\n详情：\n</string>
-    <string name="onboarding_core_title">为 PSP 打造</string>
-    <string name="onboarding_core_subtitle">干净利落的 PSP 核心，配备参考解释器、ARM64 JIT 和 Vulkan 渲染器。</string>
-    <string name="onboarding_core_card_title">原生 PSP 架构</string>
-    <string name="onboarding_core_card_cpu">R3000A 执行采用正确性优先的解释器和 ARM64 JIT。</string>
-    <string name="onboarding_core_card_gpu">PSP GPU 通过 Vulkan 渲染，并提供软件参考路径。</string>
-    <string name="onboarding_core_card_reference">无需付费层级；所有核心功能均可使用。</string>
     <string name="app_name">EmuCoreA</string>
 
     <string name="shell_library">遊戲庫</string>
@@ -253,15 +247,7 @@
     <string name="catalog_empty_title">找不到符合的結果</string>
     <string name="catalog_empty_body">請嘗試其他遊戲名稱或較短的搜尋關鍵字。</string>
     <string name="formats_title">支援的格式</string>
-    <string name="formats_overview_title">遊戲格式</string>
-    <string name="formats_overview_body">EmuCoreA 使用内置 PPSSPP 核心打开 PSP 游戏。</string>
     <string name="formats_converter_unavailable">此版本不支援 ISO 轉 CHD 功能。</string>
-    <string name="formats_converter_status_idle">準備選擇 ISO 映像檔。</string>
-    <string name="formats_converter_status_preparing">正在準備選取的 ISO…</string>
-    <string name="formats_converter_status_ready">CHD 已準備就緒。請選擇儲存位置。</string>
-    <string name="formats_converter_status_saving">正在儲存轉換後的 CHD…</string>
-    <string name="formats_converter_status_done">CHD 儲存成功。</string>
-    <string name="formats_converter_status_failed">轉換未完成。</string>
     <string name="formats_converter_success_title">轉換完成</string>
     <string name="formats_converter_failed_title">轉換失敗</string>
     <string name="formats_converter_invalid_iso_body">請選擇一個 `.iso` 檔案進行轉換。</string>
@@ -393,7 +379,6 @@
     <string name="settings_cover_download_url_custom">自定义来源</string>
     <string name="settings_cover_download_url_disabled">已禁用</string>
     <string name="settings_cover_download_url_placeholder">https://example.com/covers/default https://example.com/covers/3d</string>
-    <string name="settings_cover_download_url_copied">已复制示例 URL。</string>
     <string name="detail_igdb_source_note">此屏幕上的游戏描述和元数据通过 IGDB API 提供。</string>
     <string name="settings_prefer_english_game_titles">首选英文游戏名</string>
     <string name="settings_prefer_english_game_titles_desc">在可用时使用 EmuCoreA 游戏数据库中的英文名称。</string>
@@ -401,12 +386,6 @@
     <string name="emulation_session_restored_unavailable">先前的模拟会话已在后台关闭。请从您的游戏库中再次启动该游戏。</string>
     <string name="settings_gamepad_action_left_input_toggle">左侧输入切换</string>
     <string name="controls_editor_done">完成</string>
-    <string name="onboarding_profile_title">选择您的启动配置文件</string>
-    <string name="onboarding_profile_subtitle">对于大多数设备和游戏，建议选择“安全”。“快速”可以提高配置较低的手机的速度，但可能会降低兼容性和稳定性。</string>
-    <string name="onboarding_profile_safe_title">最佳 / 安全</string>
-    <string name="onboarding_profile_safe_desc">适合大多数中高端设备的最佳平衡。保持与游戏更强的兼容性。</string>
-    <string name="onboarding_profile_fast_title">快速 / 不安全</string>
-    <string name="onboarding_profile_fast_desc">适用于需要额外速度的低配置设备。某些游戏可能会出现更多图形错误或变得不够稳定。</string>
     <string name="emulation_quick_save_confirm_title">保存状态？</string>
     <string name="emulation_quick_save_confirm_desc">这将使用当前游戏状态覆盖插槽 %1$d。</string>
     <string name="emulation_quick_load_confirm_title">加载状态？</string>

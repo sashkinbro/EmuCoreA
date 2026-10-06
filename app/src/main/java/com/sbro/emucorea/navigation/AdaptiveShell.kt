@@ -104,7 +104,7 @@ import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
 
 enum class PrimaryDestination {
-    Home, Search, Hub, Formats, Achievements, Profile, Discord, Settings, Feedback
+    Home, Search, Hub, Formats, Profile, Discord, Settings, Feedback
 }
 
 private enum class MobileLeadingAction {

@@ -148,16 +148,6 @@ object PpssppCoreOptionLocalization {
     fun coverageAll(assets: AssetManager): List<Coverage> =
         resourceLanguages.map { coverage(assets, it) }
 
-    /** Lookup helpers for callers that only have a persisted option key/value. */
-    fun optionText(context: Context, key: String): Text? =
-        PpssppCoreOptions.option(key)?.let { resolve(context, it) }
-
-    fun localizedLabel(context: Context, key: String): String? =
-        optionText(context, key)?.label
-
-    fun localizedChoiceLabel(context: Context, key: String, value: String): String? =
-        optionText(context, key)?.choices?.firstOrNull { it.value == value }?.label
-
     private fun loadCatalog(assets: AssetManager, language: String): Catalog {
         val file = languageFiles[language] ?: languageFiles.getValue("en")
         val values = LinkedHashMap<String, String>()

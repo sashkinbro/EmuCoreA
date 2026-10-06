@@ -56,49 +56,6 @@ object AppAnalytics {
         }
     }
 
-    fun logEmulationStarted(
-        launchType: String,
-        renderer: Int,
-        audioBackend: Int,
-        upscaleMultiplier: Float,
-        performanceProfile: Int,
-        saveStateLoad: Boolean
-    ) {
-        logEvent("emulation_start") {
-            putString("launch_type", AnalyticsDimensions.sanitizeLaunchType(launchType))
-            putString("renderer", AnalyticsDimensions.renderer(renderer))
-            putString("audio_backend", AnalyticsDimensions.audioBackend(audioBackend))
-            putString("upscale", AnalyticsDimensions.upscale(upscaleMultiplier))
-            putString("performance_profile", AnalyticsDimensions.performanceProfile(performanceProfile))
-            putLong("save_state_load", saveStateLoad.toAnalyticsLong())
-        }
-    }
-
-    fun logEmulationStartFailed(launchType: String, reason: String) {
-        logEvent("emulation_start_failed") {
-            putString("launch_type", AnalyticsDimensions.sanitizeLaunchType(launchType))
-            putString("reason", AnalyticsDimensions.sanitizeFailureReason(reason))
-        }
-    }
-
-    fun logEmulationEnded(activePlayTimeMs: Long, renderer: Int, audioBackend: Int) {
-        val safeDurationMs = activePlayTimeMs.coerceAtLeast(0L)
-        logEvent("emulation_end") {
-            putLong("duration_seconds", safeDurationMs / 1_000L)
-            putString("duration_bucket", AnalyticsDimensions.durationBucket(safeDurationMs))
-            putString("renderer", AnalyticsDimensions.renderer(renderer))
-            putString("audio_backend", AnalyticsDimensions.audioBackend(audioBackend))
-        }
-    }
-
-    fun logSaveStateAction(action: String, automatic: Boolean, success: Boolean) {
-        logEvent("save_state_action") {
-            putString("action", AnalyticsDimensions.sanitizeSaveStateAction(action))
-            putLong("automatic", automatic.toAnalyticsLong())
-            putLong("success", success.toAnalyticsLong())
-        }
-    }
-
     private inline fun logEvent(name: String, buildParams: Bundle.() -> Unit) {
         if (!ready.get()) return
         val analytics = firebaseAnalytics ?: return
@@ -109,50 +66,11 @@ object AppAnalytics {
         }
     }
 
-    private fun Boolean.toAnalyticsLong(): Long = if (this) 1L else 0L
 }
 
 internal object AnalyticsDimensions {
-    private val launchTypes = setOf("game", "autotest", "smoke_test")
-    private val failureReasons = setOf("path_unavailable", "native_start")
-    private val saveStateActions = setOf("save", "load")
-
-    fun sanitizeLaunchType(value: String): String = value.takeIf(launchTypes::contains) ?: "unknown"
-
-    fun sanitizeFailureReason(value: String): String = value.takeIf(failureReasons::contains) ?: "unknown"
-
-    fun sanitizeSaveStateAction(value: String): String = value.takeIf(saveStateActions::contains) ?: "unknown"
-
-    fun renderer(value: Int): String = when (value) {
-        RendererDefaults.OPENGL -> "opengl"
-        RendererDefaults.SOFTWARE -> "software"
-        RendererDefaults.VULKAN -> "vulkan"
-        else -> "unknown"
-    }
-
-    fun audioBackend(value: Int): String = when (AudioDefaults.coerceBackend(value)) {
-        AudioDefaults.BACKEND_OPENSLES -> "opensles"
-        else -> "aaudio"
-    }
-
     fun performanceProfile(value: Int): String = when (PerformanceProfiles.normalize(value)) {
         PerformanceProfiles.FAST -> "fast"
         else -> "safe"
-    }
-
-    fun upscale(value: Float): String = when {
-        !value.isFinite() || value <= 1f -> "native"
-        value < 2.5f -> "2x"
-        value < 3.5f -> "3x"
-        else -> "4x_plus"
-    }
-
-    fun durationBucket(activePlayTimeMs: Long): String = when {
-        activePlayTimeMs < 60_000L -> "under_1m"
-        activePlayTimeMs < 5 * 60_000L -> "1_5m"
-        activePlayTimeMs < 15 * 60_000L -> "5_15m"
-        activePlayTimeMs < 30 * 60_000L -> "15_30m"
-        activePlayTimeMs < 60 * 60_000L -> "30_60m"
-        else -> "over_60m"
     }
 }

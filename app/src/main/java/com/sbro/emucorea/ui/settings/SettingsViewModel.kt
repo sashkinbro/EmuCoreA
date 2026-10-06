@@ -81,7 +81,6 @@ data class SettingsUiState(
     val appFontChoice: AppFontChoice = AppFontChoice.SYSTEM,
     val appFontScale: Float = AppPreferences.DEFAULT_APP_FONT_SCALE,
     val customFontName: String? = null,
-    val customFontRevision: Int = 0,
     val homeGridScale: Float = AppPreferences.DEFAULT_HOME_GRID_SCALE,
     val homeBackgroundType: HomeBackgroundType = HomeBackgroundType.NONE,
     val homeBackgroundPreset: HomeBackgroundPreset = HomeBackgroundPreset.OLYMPUS,
@@ -115,14 +114,10 @@ data class SettingsUiState(
     val renderer: Int = RendererDefaults.defaultForHardware(),
     val upscaleMultiplier: Float = UPSCALE_DEFAULT,
     val aspectRatio: Int = 1,
-    val localMultiplayerMode: Int = AppPreferences.LOCAL_MULTIPLAYER_OFF,
     val audioVolume: Int = AudioDefaults.VOLUME_DEFAULT,
-    val audioFastForwardVolume: Int = AudioDefaults.VOLUME_DEFAULT,
     val audioMuted: Boolean = false,
-    val audioBackend: Int = AudioDefaults.BACKEND_DEFAULT,
     val audioOutputLatencyMs: Int = AudioDefaults.OUTPUT_LATENCY_MS_DEFAULT,
     val audioMinimalOutputLatency: Boolean = AudioDefaults.MINIMAL_OUTPUT_LATENCY_DEFAULT,
-    val autoProgressiveScan: Boolean = false,
     val showFps: Boolean = true,
     val fpsOverlayMode: Int = FPS_OVERLAY_MODE_DETAILED,
     val fpsOverlayCorner: Int = AppPreferences.FPS_OVERLAY_CORNER_TOP_RIGHT,
@@ -135,26 +130,20 @@ data class SettingsUiState(
     val respectDisplayCutout: Boolean = false,
     val showRecentGames: Boolean = true,
     val showHomeSearch: Boolean = false,
-    val showDebugOptions: Boolean = false,
     val preferEnglishGameTitles: Boolean = false,
     val hideDlcInLibrary: Boolean = true,
-    val gamePath: String? = null,
     val gamePaths: List<String> = emptyList(),
     val emulatorDataPath: String? = null,
     val sdCardDataPath: String? = null,
     val coverDownloadBaseUrl: String? = null,
     val coverArtStyle: Int = AppPreferences.COVER_ART_STYLE_3D,
-    val setupComplete: Boolean = false,
     val appVersion: String = BuildConfig.VERSION_NAME,
     val coreName: String = "PPSSPP",
     val coreVersion: String = "",
-    val performanceProfile: Int = PerformanceProfiles.SAFE,
-    val enableCheats: Boolean = false,
     val performancePreset: Int = PerformancePresets.CUSTOM,
     // Overlay
     val overlayScale: Int = 100,
     val overlayOpacity: Int = AppPreferences.DEFAULT_OVERLAY_OPACITY,
-    val overlayShow: Boolean = true,
     val racingMode: Boolean = false,
     val stickyButtons: Set<String> = emptySet(),
     val touchscreenRightStick: Boolean = AppPreferences.DEFAULT_TOUCHSCREEN_RIGHT_STICK,
@@ -183,15 +172,10 @@ data class SettingsUiState(
     val gamepadRightStickUpToR2: Boolean = false,
     val gamepadRightStickDownToL2: Boolean = false,
     val gamepadButtonHaptics: Boolean = false,
-    val gamepadBindings: Map<String, Int> = emptyMap(),
     val gamepadBindingsByPad: Map<Int, Map<String, Int>> = emptyMap(),
-    val gpuDriverType: Int = 0,
-    val mediatekAngleOpenGl: Boolean = false,
-    val customDriverPath: String? = null,
     val appUpdate: AppUpdateUiState = AppUpdateUiState(),
     val frameLimitEnabled: Boolean = true,
     val rewindEnabled: Boolean = false,
-    val vSyncEnabled: Boolean = true,
     val targetFps: Int = 0,
     val ntscFramerate: Float = AppPreferences.DEFAULT_NTSC_FRAMERATE,
     val palFramerate: Float = AppPreferences.DEFAULT_PAL_FRAMERATE
@@ -277,7 +261,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             appFontChoice = snapshot.appFontChoice,
             appFontScale = snapshot.appFontScale,
             customFontName = snapshot.customFontName,
-            customFontRevision = snapshot.customFontRevision,
             homeGridScale = snapshot.homeGridScale,
             homeBackgroundType = snapshot.homeBackgroundType,
             homeBackgroundPreset = snapshot.homeBackgroundPreset,
@@ -302,14 +285,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             renderer = snapshot.renderer,
             upscaleMultiplier = snapshot.upscaleMultiplier,
             aspectRatio = snapshot.aspectRatio,
-            localMultiplayerMode = snapshot.localMultiplayerMode,
             audioVolume = snapshot.audioVolume,
-            audioFastForwardVolume = snapshot.audioFastForwardVolume,
             audioMuted = snapshot.audioMuted,
-            audioBackend = snapshot.audioBackend,
             audioOutputLatencyMs = snapshot.audioOutputLatencyMs,
             audioMinimalOutputLatency = snapshot.audioMinimalOutputLatency,
-            autoProgressiveScan = snapshot.autoProgressiveScan,
             showFps = snapshot.showFps,
             fpsOverlayMode = snapshot.fpsOverlayMode,
             fpsOverlayCorner = snapshot.fpsOverlayCorner,
@@ -322,21 +301,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             respectDisplayCutout = snapshot.respectDisplayCutout,
             showRecentGames = snapshot.showRecentGames,
             showHomeSearch = snapshot.showHomeSearch,
-            showDebugOptions = snapshot.showDebugOptions,
             preferEnglishGameTitles = snapshot.preferEnglishGameTitles,
             hideDlcInLibrary = snapshot.hideDlcInLibrary,
-            gamePath = snapshot.gamePath,
             gamePaths = snapshot.gamePaths,
             emulatorDataPath = snapshot.emulatorDataPath,
             coverDownloadBaseUrl = snapshot.coverDownloadBaseUrl,
             coverArtStyle = snapshot.coverArtStyle,
-            setupComplete = snapshot.setupComplete,
-            performanceProfile = snapshot.performanceProfile,
-            enableCheats = snapshot.enableCheats,
             performancePreset = snapshot.performancePreset,
             overlayScale = snapshot.overlayScale,
             overlayOpacity = snapshot.overlayOpacity,
-            overlayShow = snapshot.overlayShow,
             racingMode = snapshot.racingMode,
             stickyButtons = snapshot.stickyButtons,
             touchscreenRightStick = snapshot.touchscreenRightStick,
@@ -363,14 +336,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             gamepadRightStickUpToR2 = snapshot.gamepadRightStickUpToR2,
             gamepadRightStickDownToL2 = snapshot.gamepadRightStickDownToL2,
             gamepadButtonHaptics = snapshot.gamepadButtonHaptics,
-            gamepadBindings = snapshot.gamepadBindings,
             gamepadBindingsByPad = snapshot.gamepadBindingsByPad,
-            gpuDriverType = snapshot.gpuDriverType,
-            mediatekAngleOpenGl = snapshot.mediatekAngleOpenGl,
-            customDriverPath = snapshot.customDriverPath,
             frameLimitEnabled = snapshot.frameLimitEnabled,
             rewindEnabled = snapshot.rewindEnabled,
-            vSyncEnabled = snapshot.vSyncEnabled,
             targetFps = snapshot.targetFps,
             ntscFramerate = snapshot.ntscFramerate,
             palFramerate = snapshot.palFramerate
@@ -727,12 +695,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun setPerformanceProfile(value: Int) {
-        viewModelScope.launch {
-            preferences.setPerformanceProfile(value)
-        }
-    }
-
     fun loadAppReleaseHistory(showErrors: Boolean = true, force: Boolean = false) {
         if (_uiState.value.appUpdate.historyLoading) return
         viewModelScope.launch(Dispatchers.IO) {
@@ -791,12 +753,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             preferences.setLocalMultiplayerMode(value)
             EmulatorBridge.setLocalMultiplayerMode(value)
-        }
-    }
-
-    fun setAutoProgressiveScan(enabled: Boolean) {
-        viewModelScope.launch {
-            preferences.setAutoProgressiveScan(enabled)
         }
     }
 
@@ -866,7 +822,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             val normalized = AudioDefaults.coerceBackend(value)
             preferences.setAudioBackend(normalized)
-            _uiState.value = _uiState.value.copy(audioBackend = normalized)
             // Rebuilds a running output immediately; idle cores store the choice.
             EmulatorBridge.setSetting(
                 "SPU2/Output",
@@ -958,7 +913,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
     fun setShowRecentGames(enabled: Boolean) { viewModelScope.launch { preferences.setShowRecentGames(enabled) } }
     fun setShowHomeSearch(enabled: Boolean) { viewModelScope.launch { preferences.setShowHomeSearch(enabled) } }
-    fun setShowDebugOptions(enabled: Boolean) { viewModelScope.launch { preferences.setShowDebugOptions(enabled) } }
     fun setPreferEnglishGameTitles(enabled: Boolean) {
         viewModelScope.launch {
             EmulatorBridge.setSetting("UI", "PreferEnglishGameTitles", "bool", enabled.toString())
@@ -984,27 +938,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun setVSyncEnabled(enabled: Boolean) {
-        viewModelScope.launch {
-            preferences.setVSyncEnabled(enabled)
-            EmulatorBridge.setVSyncEnabled(enabled)
-        }
-    }
-
     fun setTargetFps(value: Int) {
         viewModelScope.launch {
             preferences.setTargetFps(if (value <= 0) 0 else value)
             EmulatorBridge.setTargetFps(value, _uiState.value.ntscFramerate, _uiState.value.palFramerate)
-        }
-    }
-
-    fun setMediatekAngleOpenGl(enabled: Boolean) {
-        viewModelScope.launch {
-            val effectiveEnabled = enabled &&
-                GpuHardwareProfiles.isMediaTekHardware() &&
-                EmulatorBridge.isBundledAngleAvailable()
-            preferences.setMediatekAngleOpenGl(effectiveEnabled)
-            EmulatorBridge.setSetting("EmuCoreA/GS", "AndroidUseAngleOpenGL", "bool", effectiveEnabled.toString())
         }
     }
 
