@@ -219,6 +219,7 @@ fun OnboardingScreen(
         0.dp
     }
     val landscapeSetupScrollState = rememberScrollState()
+    val landscapeContentScrollState = rememberScrollState()
     val landscapeSetupScrollProgress by remember(landscapeSetupScrollState) {
         derivedStateOf {
             if (landscapeSetupScrollState.maxValue > 0) {
@@ -238,6 +239,8 @@ fun OnboardingScreen(
         if (pagerState.currentPage != uiState.currentPage) {
             viewModel.setCurrentPage(pagerState.currentPage)
         }
+        if (!isLandscape) return@LaunchedEffect
+        landscapeContentScrollState.scrollTo(0)
     }
 
     LaunchedEffect(uiState.currentPage) {
@@ -477,37 +480,56 @@ fun OnboardingScreen(
                                     2 -> R.string.onboarding_page_3_subtitle
                                     else -> R.string.onboarding_page_4_subtitle
                                 }
-                                Text(
-                                    text = stringResource(subtitleRes),
-                                    style = MaterialTheme.typography.bodyLarge.copy(
-                                        lineHeight = 28.sp,
-                                        fontWeight = FontWeight.Normal,
-                                        letterSpacing = 0.sp
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center,
+                                Column(
                                     modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 40.dp)
-                                        .statusBarsPadding()
-                                        .padding(top = 32.dp)
-                                )
+                                        .fillMaxSize()
+                                        .verticalScroll(landscapeContentScrollState)
+                                        .statusBarsPadding(),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = stringResource(subtitleRes),
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            lineHeight = 28.sp,
+                                            fontWeight = FontWeight.Normal,
+                                            letterSpacing = 0.sp
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 40.dp)
+                                            .padding(vertical = 24.dp)
+                                    )
+                                }
                             } else if (page == 3) {
-                                OnboardingProContent(
-                                    isProUnlocked = uiState.isProUnlocked,
-                                    proPrice = uiState.proPrice,
-                                    isProductLoading = uiState.isProProductLoading,
-                                    isPurchaseInProgress = uiState.isProPurchaseInProgress,
-                                    onPurchase = { (context as? Activity)?.let(viewModel::purchasePro) },
-                                    onShowSupportOptions = if (supportOffers.isNotEmpty()) {
-                                        { showProSupportOptions = true }
-                                    } else {
-                                        null
-                                    },
-                                    requestInitialFocus = tvUiEnabled && pagerState.currentPage == page,
-                                    contentFocusRequester = pageContentFocusRequesters[page],
-                                    modifier = Modifier.padding(horizontal = 32.dp)
-                                )
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(landscapeContentScrollState)
+                                        .statusBarsPadding(),
+                                    verticalArrangement = Arrangement.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    OnboardingProContent(
+                                        isProUnlocked = uiState.isProUnlocked,
+                                        proPrice = uiState.proPrice,
+                                        isProductLoading = uiState.isProProductLoading,
+                                        isPurchaseInProgress = uiState.isProPurchaseInProgress,
+                                        onPurchase = { (context as? Activity)?.let(viewModel::purchasePro) },
+                                        onShowSupportOptions = if (supportOffers.isNotEmpty()) {
+                                            { showProSupportOptions = true }
+                                        } else {
+                                            null
+                                        },
+                                        requestInitialFocus = tvUiEnabled && pagerState.currentPage == page,
+                                        contentFocusRequester = pageContentFocusRequesters[page],
+                                        modifier = Modifier
+                                            .padding(horizontal = 32.dp)
+                                            .padding(vertical = 24.dp)
+                                    )
+                                }
                             } else if (page == 4) {
                                 Box(modifier = Modifier.fillMaxSize()) {
                                     Column(
@@ -827,129 +849,6 @@ private fun OnboardingHeroSetup(
     }
 }
 
-@Composable
-private fun OnboardingHeroProfile(
-    modifier: Modifier = Modifier,
-    showSubtitle: Boolean = true
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.widthIn(max = 480.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.onboarding_profile_title),
-            style = MaterialTheme.typography.displaySmall.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = (-0.5).sp
-            ),
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
-        )
-        if (showSubtitle) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = stringResource(R.string.onboarding_profile_subtitle),
-                style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun OnboardingHeroCore(
-    modifier: Modifier = Modifier,
-    showSubtitle: Boolean = true
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier.widthIn(max = 480.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(112.dp)
-                .clip(neonShape(32.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Memory,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(56.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(28.dp))
-        Text(
-            text = stringResource(R.string.onboarding_core_title),
-            style = MaterialTheme.typography.displaySmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.sp),
-            color = MaterialTheme.colorScheme.onBackground,
-            textAlign = TextAlign.Center
-        )
-        if (showSubtitle) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = stringResource(R.string.onboarding_core_subtitle),
-                style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 24.sp),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.padding(horizontal = 8.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun OnboardingCoreContent(
-    requestInitialFocus: Boolean = false,
-    contentFocusRequester: FocusRequester? = null,
-    modifier: Modifier = Modifier
-) {
-    val coreFocusRequester = contentFocusRequester ?: remember { FocusRequester() }
-    LaunchedEffect(requestInitialFocus) {
-        if (requestInitialFocus) {
-            delay(100.milliseconds)
-            runCatching { coreFocusRequester.requestFocus() }
-        }
-    }
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .focusRequester(coreFocusRequester)
-            .widthIn(max = 520.dp),
-        shape = neonShape(24.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
-        tonalElevation = 4.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.onboarding_core_card_title),
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = stringResource(R.string.onboarding_core_card_cpu),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = stringResource(R.string.onboarding_core_card_gpu),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                text = stringResource(R.string.onboarding_core_card_reference),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
 @Composable
 private fun OnboardingHeroPro(
     modifier: Modifier = Modifier,
@@ -1529,43 +1428,6 @@ private fun OnboardingSetupScrollHint(
 }
 
 @Composable
-private fun OnboardingPerformanceProfileContent(
-    selectedProfile: Int,
-    onSelectProfile: (Int) -> Unit,
-    requestInitialFocus: Boolean = false,
-    contentFocusRequester: FocusRequester? = null,
-    modifier: Modifier = Modifier
-) {
-    val fallbackFocusRequester = remember { FocusRequester() }
-    val firstProfileFocusRequester = contentFocusRequester ?: fallbackFocusRequester
-    LaunchedEffect(requestInitialFocus) {
-        if (requestInitialFocus) {
-            delay(100.milliseconds)
-            runCatching { firstProfileFocusRequester.requestFocus() }
-        }
-    }
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        ProfileCard(
-            title = stringResource(R.string.onboarding_profile_safe_title),
-            description = stringResource(R.string.onboarding_profile_safe_desc),
-            selected = selectedProfile == PerformanceProfiles.SAFE,
-            onClick = { onSelectProfile(PerformanceProfiles.SAFE) },
-            modifier = Modifier.focusRequester(firstProfileFocusRequester)
-        )
-        Spacer(modifier = Modifier.height(12.dp))
-        ProfileCard(
-            title = stringResource(R.string.onboarding_profile_fast_title),
-            description = stringResource(R.string.onboarding_profile_fast_desc),
-            selected = selectedProfile == PerformanceProfiles.FAST,
-            onClick = { onSelectProfile(PerformanceProfiles.FAST) }
-        )
-    }
-}
-
-@Composable
 @Suppress("unused")
 private fun ChipsetInfoDialog(
     chipsetInfo: DeviceChipsetInfo,
@@ -1698,63 +1560,6 @@ private fun CompactProfileCard(
         }
     }
 }
-
-@Composable
-private fun ProfileCard(
-    title: String,
-    description: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .gamepadFocusableCard(
-                shape = neonShape(32.dp),
-                interactionSource = interactionSource,
-                addFocusTarget = false,
-                focusHighlightMode = GamepadFocusHighlightMode.Always
-            ),
-        shape = neonShape(32.dp),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        tonalElevation = if (selected) 6.dp else 2.dp,
-        border = androidx.compose.foundation.BorderStroke(
-            1.dp,
-            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
-            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-        ),
-        interactionSource = interactionSource,
-        onClick = onClick
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 20.dp, vertical = 20.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = if (selected) Icons.Rounded.RadioButtonChecked else Icons.Rounded.RadioButtonUnchecked,
-                contentDescription = null,
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
 
 @Composable
 private fun SetupCard(
