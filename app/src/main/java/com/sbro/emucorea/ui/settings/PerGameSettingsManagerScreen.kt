@@ -173,6 +173,7 @@ fun PerGameSettingsManagerScreen(
     val settingsSnapshot by preferences.settingsSnapshot.collectAsState(initial = SettingsSnapshot())
     val rootPaths by preferences.gamePaths.collectAsState(initial = emptyList())
     val preferEnglishTitles by preferences.preferEnglishGameTitles.collectAsState(initial = false)
+    val hideDlcInLibrary by preferences.hideDlcInLibrary.collectAsState(initial = true)
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
     val profileMutationMutex = remember { Mutex() }
@@ -244,11 +245,12 @@ fun PerGameSettingsManagerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(rootPaths, preferEnglishTitles) {
+    LaunchedEffect(rootPaths, preferEnglishTitles, hideDlcInLibrary) {
         libraryGames = withContext(Dispatchers.IO) {
             rootPaths.takeIf { it.isNotEmpty() }
                 ?.let { libraryCacheRepository.loadSnapshot(GameLibraryCacheRepository.libraryKey(it), preferEnglishTitles).games }
                 .orEmpty()
+                .filter { !hideDlcInLibrary || !it.isDlc }
         }
     }
 

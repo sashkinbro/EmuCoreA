@@ -17,7 +17,7 @@ data class GameLibraryCacheSnapshot(
 class GameLibraryCacheRepository(context: Context) {
 
     companion object {
-        private const val CACHE_SCHEMA_VERSION = 4
+        private const val CACHE_SCHEMA_VERSION = 5
 
         fun libraryKey(paths: List<String>): String =
             paths.map(String::trim).filter(String::isNotBlank).distinct().joinToString("\u001F")
@@ -75,7 +75,8 @@ class GameLibraryCacheRepository(context: Context) {
                                 fileSize = fileSize,
                                 lastModified = game.optLong("last_modified"),
                                 coverArtPath = game.optString("cover_art_path").takeIf { it.isNotBlank() },
-                                serial = serial
+                                serial = serial,
+                                isDlc = game.optBoolean("is_dlc", false)
                             )
                         )
                     }
@@ -126,6 +127,7 @@ class GameLibraryCacheRepository(context: Context) {
                                             put("last_modified", game.lastModified)
                                             put("cover_art_path", game.coverArtPath ?: "")
                                             put("serial", game.serial ?: "")
+                                            put("is_dlc", game.isDlc)
                                         }
                                     )
                                 }

@@ -21,7 +21,8 @@ data class GameItem(
     val fileSize: Long,
     val lastModified: Long,
     val coverArtPath: String? = null,
-    val serial: String? = null
+    val serial: String? = null,
+    val isDlc: Boolean = false
 )
 
 class GameRepository {
@@ -62,6 +63,19 @@ class GameRepository {
             val prefix = if (rootDocumentId.endsWith(':')) rootDocumentId else "$rootDocumentId/"
             if (!targetDocumentId.startsWith(prefix)) return null
             return targetDocumentId.removePrefix(prefix).split('/').filter(String::isNotBlank)
+        }
+
+        /**
+         * PSP DLC packages carry CATEGORY "AC" (additional content) in PARAM.SFO.
+         * Some packages keep the game category, so fall back to the generic
+         * localized "downloadable content" titles those packages ship with.
+         */
+        internal fun isDlcMetadata(category: String?, title: String?): Boolean {
+            if (category?.trim().equals("AC", ignoreCase = true)) return true
+            val normalized = title?.trim()?.lowercase() ?: return false
+            return normalized.contains("downloadable content") ||
+                normalized.contains("загружаемый контент") ||
+                normalized.contains("ダウンロードコンテンツ")
         }
     }
 
@@ -184,8 +198,11 @@ class GameRepository {
                         cachedGame.lastModified == file.lastModified() &&
                         cachedGame.fileName == file.name &&
                         !cachedGame.serial.isNullOrBlank()
-                    val metadata = if (canReuseCachedMetadata) {
-                        com.sbro.emucorea.core.GameMetadata(cachedGame.title, cachedGame.serial)
+                    val metadata: com.sbro.emucorea.core.GameMetadata
+                    val isDlc: Boolean
+                    if (canReuseCachedMetadata) {
+                        metadata = com.sbro.emucorea.core.GameMetadata(cachedGame.title, cachedGame.serial)
+                        isDlc = cachedGame.isDlc
                     } else {
                         val sourcePath = file.absolutePath
                         val sourceMetadata = EmulatorBridge.getGameMetadata(
@@ -193,10 +210,11 @@ class GameRepository {
                             readDiscMetadata = false
                         )
                         val pspMetadata = PspGameMetadataReader.read(context, sourcePath)
-                        sourceMetadata.copy(
+                        metadata = sourceMetadata.copy(
                             title = pspMetadata?.title ?: sourceMetadata.title,
                             serial = pspMetadata?.serial ?: sourceMetadata.serial
                         )
+                        isDlc = isDlcMetadata(pspMetadata?.category, metadata.title)
                     }
                     if (BiosValidator.isLikelyBiosLibraryEntry(file.name, metadata.title, metadata.serial, file.length())) {
                         return@forEach
@@ -221,7 +239,8 @@ class GameRepository {
                             ?: cachedGame?.coverArtPath?.takeIf { File(it).exists() }
                             ?: coverCandidates[normalizeBaseName(file.nameWithoutExtension)]?.absolutePath
                             ?: coverCandidates[normalizeBaseName(cleanGameName(title))]?.absolutePath,
-                        serial = serial
+                        serial = serial,
+                        isDlc = isDlc
                     )
                 }
             }
@@ -283,8 +302,11 @@ class GameRepository {
                         cachedGame.lastModified == lastModified &&
                         cachedGame.fileName == name &&
                         !cachedGame.serial.isNullOrBlank()
-                    val metadata = if (canReuseCachedMetadata) {
-                        com.sbro.emucorea.core.GameMetadata(cachedGame.title, cachedGame.serial)
+                    val metadata: com.sbro.emucorea.core.GameMetadata
+                    val isDlc: Boolean
+                    if (canReuseCachedMetadata) {
+                        metadata = com.sbro.emucorea.core.GameMetadata(cachedGame.title, cachedGame.serial)
+                        isDlc = cachedGame.isDlc
                     } else {
                         val sourcePath = uriPath
                         val sourceMetadata = EmulatorBridge.getGameMetadata(
@@ -292,10 +314,11 @@ class GameRepository {
                             readDiscMetadata = false
                         )
                         val pspMetadata = PspGameMetadataReader.read(context, sourcePath)
-                        sourceMetadata.copy(
+                        metadata = sourceMetadata.copy(
                             title = pspMetadata?.title ?: sourceMetadata.title,
                             serial = pspMetadata?.serial ?: sourceMetadata.serial
                         )
+                        isDlc = isDlcMetadata(pspMetadata?.category, metadata.title)
                     }
 
                     if (BiosValidator.isLikelyBiosLibraryEntry(name, metadata.title, metadata.serial, fileSize)) {
@@ -321,7 +344,8 @@ class GameRepository {
                             ?: cachedGame?.coverArtPath
                             ?: coverCandidates[normalizeBaseName(name.substringBeforeLast('.'))]?.uri?.toString()
                             ?: coverCandidates[normalizeBaseName(cleanGameName(title))]?.uri?.toString(),
-                        serial = serial
+                        serial = serial,
+                        isDlc = isDlc
                     )
                 }
                 SetupValidator.DocumentEntryKind.OTHER -> Unit

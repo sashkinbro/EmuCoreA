@@ -62,6 +62,7 @@ enum class HomeLibraryViewMode {
 
 data class HomeUiState(
     val games: List<GameItem> = emptyList(),
+    val dlcGames: List<GameItem> = emptyList(),
     val recentGames: List<GameItem> = emptyList(),
     val isLoading: Boolean = true,
     val isRefreshing: Boolean = false,
@@ -122,6 +123,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private var currentLibraryRoot: String? = null
     private var currentLibraryPaths: List<String> = emptyList()
     private var preferEnglishGameTitles = false
+    private var hideDlcInLibrary = true
     private var titlesPreferenceInitialized = false
     private var coverArtStyleInitialized = false
     private var coverBaseUrlInitialized = false
@@ -285,6 +287,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 if (currentLibraryPaths.isEmpty()) return@collect
                 allGames = emptyList()
                 requestLibraryScan(currentLibraryPaths)
+            }
+        }
+        viewModelScope.launch {
+            preferences.hideDlcInLibrary.distinctUntilChanged().collect { enabled ->
+                if (hideDlcInLibrary == enabled) return@collect
+                hideDlcInLibrary = enabled
+                publishVisibleGames()
             }
         }
         viewModelScope.launch {
@@ -700,17 +709,22 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     .thenBy { normalizeSortToken(it.title) }
             )
         }
+        val games = sorted.filterNot { it.isDlc }
+        val dlcGames = if (hideDlcInLibrary) emptyList() else sorted.filter { it.isDlc }
         val gamesByPath = allGames.associateBy { it.path }
         val recentGames = recentEntries.mapNotNull { entry ->
             gamesByPath[entry.path]
         }.filter { game ->
-            query.isBlank() ||
-                normalizeSearchToken(game.title).contains(query) ||
-                normalizeSearchToken(game.fileName).contains(query) ||
-                normalizeSearchToken(game.serial).contains(query)
+            !game.isDlc && (
+                query.isBlank() ||
+                    normalizeSearchToken(game.title).contains(query) ||
+                    normalizeSearchToken(game.fileName).contains(query) ||
+                    normalizeSearchToken(game.serial).contains(query)
+                )
         }.takeIf { state.showRecentGames }.orEmpty()
         _uiState.value = _uiState.value.copy(
-            games = sorted,
+            games = games,
+            dlcGames = dlcGames,
             recentGames = recentGames
         )
     }

@@ -237,6 +237,10 @@
     <string name="settings_respect_display_cutout_desc">게임 화면이 카메라 컷아웃 영역을 피하도록 합니다.</string>
     <string name="settings_help_respect_display_cutout">에뮬레이션 화면이 카메라 컷아웃(노치 또는 펀치홀) 아래에 그려지지 않도록 여백을 추가합니다. 컷아웃이 화면을 가리는 가로 모드에서 유용합니다. 에뮬레이션에만 적용되며 나머지 앱 화면은 이미 컷아웃을 고려합니다.</string>
     <string name="settings_help_recent_games">마지막으로 플레이한 게임의 빠른 액세스 행을 표시합니다. 몇 가지 타이틀을 자주 오가는 경우 유용합니다. 더 깔끔한 홈 화면을 원한다면 끄세요.</string>
+    <string name="settings_hide_dlc_in_library">다운로드 콘텐츠 숨기기</string>
+    <string name="settings_hide_dlc_in_library_desc">게임 라이브러리에서 DLC를 숨깁니다.</string>
+    <string name="settings_help_hide_dlc_in_library">다운로드 콘텐츠(DLC) 패키지는 게임 옆에 라이브러리에 표시됩니다. 활성화하면 DLC가 라이브러리와 검색에서 숨겨집니다. 끄면 검색된 모든 항목이 표시됩니다.</string>
+    <string name="home_dlc_title">다운로드 콘텐츠</string>
     <string name="settings_help_home_search">홈 화면에 라이브러리 검색창을 직접 표시합니다. 라이브러리가 크면 켜두고, 이름으로 검색하는 일이 드물고 깔끔한 레이아웃을 선호한다면 끄세요.</string>
     <string name="settings_help_prefer_english_game_titles">일본어 또는 기타 지역 이름으로 출시된 게임에 대해 EmuCoreA의 GameIndex 데이터베이스에 있는 영어 제목을 사용합니다. 주로 수입 게임을 라이브러리에서 더 명확하게 읽을 수 있도록 도와주며, 영어 데이터베이스 제목이 없는 게임은 원래 이름을 유지합니다.</string>
     <string name="settings_help_game_path">EmuCoreA가 게임을 스캔할 라이브러리 폴더를 선택합니다. 스캔은 재귀적으로 이루어지므로 하위 폴더도 허용됩니다. 지원되는 이미지에는 .iso, .bin, .img, .mdf, .gz, .cso, .zso, .chd 및 .elf가 포함됩니다. ISO가 가장 안전한 기준점이며, CHD는 일반적으로 일반적인 사용을 포기하지 않으면서 공간을 절약할 수 있어 장기적으로 가장 좋은 형식입니다.</string>
@@ -818,7 +822,6 @@
     <string name="settings_help_core_locked_cpu_speed">에뮬레이트되는 PSP CPU를 각 게임이 선택하게 두지 않고 고정 클럭으로 잠급니다. 대부분의 게임은 스스로 속도를 관리하므로 꺼 두세요. 낮은 값은 너무 빠르거나 오류가 나는 게임을 고칠 수 있고, 높은 값은 발열과 배터리 소모를 대가로 무거운 게임의 끊김을 줄일 수 있습니다.</string>
     <string name="settings_help_core_memstick_size">에뮬레이트되는 Memory Stick 크기를 설정합니다. 일부 게임은 저장 전에 여유 공간을 확인하거나 카드가 작아 보이면 시작을 거부하므로, 큰 세이브에는 더 큰 크기가 안전합니다. 16 GB면 대부분의 게임에 충분합니다. 게임이 저장 공간을 문제 삼을 때만 늘리세요.</string>
     <string name="settings_help_core_cache_iso">로딩 중 게임 이미지 전체를 RAM에 복사해 이후 디스크 읽기가 저장소를 건드리지 않게 합니다. 오픈 월드 게임의 끊김을 없앨 수 있지만 로딩이 길어지고 충분한 여유 메모리가 필요하므로, RAM이 4 GB 이하인 기기에서는 꺼 두세요.</string>
-    <string name="settings_help_core_cheats">불러온 게임에 대해 PPSSPP 내장 치트 엔진을 켜고 치트 코드가 적용되게 합니다. 치트를 사용할 때만 켜세요. 끄더라도 아무것도 삭제되지 않고 게임은 정상 동작으로 돌아갑니다.</string>
     <string name="settings_help_core_psp_model">에뮬레이트할 PSP 하드웨어 리비전을 선택합니다. PSP-2000/3000은 대부분의 기기와 맞고 기본값으로 가장 좋습니다. PSP-1000은 64 MB 대신 32 MB RAM을 제공하며 일부 초기 게임이 이를 기대합니다. 게임이 콘솔을 잘못 인식하거나 잘못 동작할 때만 바꾸세요.</string>
     <string name="settings_help_core_button_preference">PSP 게임 내 메뉴를 어느 페이스 버튼으로 확인할지 선택합니다. 서양 게임은 십자, 일본 게임은 원을 많이 사용하므로 자신의 게임에 맞는 쪽을 고르세요. 게임 내 버튼 매핑만 바뀌며 에뮬레이터 자체 메뉴에는 영향이 없습니다.</string>
     <string name="settings_help_core_analog_is_circular">물리 게임패드를 사용할 때 원형과 사각형 아날로그 스틱 게이트의 차이를 보정합니다. 게임에서 움직임이 대각선으로 치우치거나 스틱이 모서리에 닿지 않으면 켜세요. PSP 게이트와 이미 일치하는 터치 컨트롤에서는 꺼 두세요.</string>

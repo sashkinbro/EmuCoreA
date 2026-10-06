@@ -528,7 +528,7 @@ fun HomeScreen(
                                 }
                             }
 
-                            if (uiState.games.isEmpty()) {
+                            if (uiState.games.isEmpty() && uiState.dlcGames.isEmpty()) {
                                 item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
                                     NoGamesState()
                                 }
@@ -608,59 +608,53 @@ fun HomeScreen(
                                             .padding(horizontal = horizontalInset),
                                         verticalArrangement = Arrangement.spacedBy(10.dp)
                                     ) {
-                                        uiState.games.chunked(if (isListView) 1 else columnsCount).forEach { rowGames ->
+                                        HomeGameGridRows(
+                                            games = uiState.games,
+                                            columnsCount = columnsCount,
+                                            isListView = isListView,
+                                            isCoverArtDisabled = uiState.isCoverArtDisabled,
+                                            customCoverRepository = customCoverRepository,
+                                            focusFirstGame = uiState.recentGames.isEmpty(),
+                                            initialGamepadFocusRequester = initialGamepadFocusRequester,
+                                            onGameClick = onGameClick,
+                                            onContinueGame = onContinueGame,
+                                            onLoadSaveClick = onLoadSaveClick,
+                                            onManageGameClick = onManageGameClick,
+                                            onCreateShortcutClick = onCreateShortcutClick,
+                                            onOpenGameDbClick = onOpenGameDbClick,
+                                            onLongClickCustomCover = { game -> gameAwaitingPickerLaunch = game }
+                                        )
+                                        if (uiState.dlcGames.isNotEmpty()) {
                                             Row(
-                                                modifier = Modifier.fillMaxWidth(),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(top = sectionTopSpacing, bottom = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
                                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                                             ) {
-                                                rowGames.forEach { game ->
-                                                    val showCoverPlaceholder = uiState.isCoverArtDisabled &&
-                                                        !customCoverRepository.isCustomCoverPath(game.coverArtPath)
-                                                    Box(modifier = Modifier.weight(1f)) {
-                                                        val itemFocusModifier = if (uiState.recentGames.isEmpty() && game == uiState.games.first()) {
-                                                            Modifier.focusRequester(initialGamepadFocusRequester)
-                                                        } else {
-                                                            Modifier
-                                                        }
-                                                        if (isListView) {
-                                                            GameListCard(
-                                                                focusModifier = itemFocusModifier,
-                                                                game = game,
-                                                                showCoverArt = !showCoverPlaceholder,
-                                                                onClick = { onGameClick(game) },
-                                                                onLongClickStart = { onGameClick(game) },
-                                                                onLongClickContinue = { onContinueGame(game) },
-                                                                onLongClickLoadSave = { onLoadSaveClick(game) },
-                                                                onLongClickManage = { onManageGameClick(game) },
-                                                                onLongClickCreateShortcut = { onCreateShortcutClick(game) },
-                                                                onLongClickOpenGameDb = { onOpenGameDbClick(game) },
-                                                                onLongClickCustomCover = {
-                                                                    gameAwaitingPickerLaunch = game
-                                                                }
-                                                            )
-                                                        } else {
-                                                            GameCard(
-                                                                focusModifier = itemFocusModifier,
-                                                                game = game,
-                                                                showCenteredTitlePlaceholder = showCoverPlaceholder,
-                                                                onClick = { onGameClick(game) },
-                                                                onLongClickStart = { onGameClick(game) },
-                                                                onLongClickContinue = { onContinueGame(game) },
-                                                                onLongClickLoadSave = { onLoadSaveClick(game) },
-                                                                onLongClickManage = { onManageGameClick(game) },
-                                                                onLongClickCreateShortcut = { onCreateShortcutClick(game) },
-                                                                onLongClickOpenGameDb = { onOpenGameDbClick(game) },
-                                                                onLongClickCustomCover = {
-                                                                    gameAwaitingPickerLaunch = game
-                                                                }
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                                repeat((if (isListView) 1 else columnsCount) - rowGames.size) {
-                                                    Spacer(modifier = Modifier.weight(1f))
-                                                }
+                                                Text(
+                                                    text = stringResource(R.string.home_dlc_title),
+                                                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                HomeSectionDivider(modifier = Modifier.weight(1f))
                                             }
+                                            HomeGameGridRows(
+                                                games = uiState.dlcGames,
+                                                columnsCount = columnsCount,
+                                                isListView = isListView,
+                                                isCoverArtDisabled = uiState.isCoverArtDisabled,
+                                                customCoverRepository = customCoverRepository,
+                                                focusFirstGame = false,
+                                                initialGamepadFocusRequester = initialGamepadFocusRequester,
+                                                onGameClick = onGameClick,
+                                                onContinueGame = onContinueGame,
+                                                onLoadSaveClick = onLoadSaveClick,
+                                                onManageGameClick = onManageGameClick,
+                                                onCreateShortcutClick = onCreateShortcutClick,
+                                                onOpenGameDbClick = onOpenGameDbClick,
+                                                onLongClickCustomCover = { game -> gameAwaitingPickerLaunch = game }
+                                            )
                                         }
                                     }
                                 }
@@ -2004,5 +1998,74 @@ internal fun formatCompactFileSize(bytes: Long): String {
         bytes >= 1_048_576L -> String.format(Locale.US, "%.1f MB", bytes / 1_048_576.0)
         bytes >= 1024L -> String.format(Locale.US, "%.0f KB", bytes / 1024.0)
         else -> "$bytes B"
+    }
+}
+
+@Composable
+private fun HomeGameGridRows(
+    games: List<GameItem>,
+    columnsCount: Int,
+    isListView: Boolean,
+    isCoverArtDisabled: Boolean,
+    customCoverRepository: CustomGameCoverRepository,
+    focusFirstGame: Boolean,
+    initialGamepadFocusRequester: FocusRequester,
+    onGameClick: (GameItem) -> Unit,
+    onContinueGame: (GameItem) -> Unit,
+    onLoadSaveClick: (GameItem) -> Unit,
+    onManageGameClick: (GameItem) -> Unit,
+    onCreateShortcutClick: (GameItem) -> Unit,
+    onOpenGameDbClick: (GameItem) -> Unit,
+    onLongClickCustomCover: (GameItem) -> Unit
+) {
+    games.chunked(if (isListView) 1 else columnsCount).forEach { rowGames ->
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            rowGames.forEach { game ->
+                val showCoverPlaceholder = isCoverArtDisabled &&
+                    !customCoverRepository.isCustomCoverPath(game.coverArtPath)
+                Box(modifier = Modifier.weight(1f)) {
+                    val itemFocusModifier = if (focusFirstGame && game == games.first()) {
+                        Modifier.focusRequester(initialGamepadFocusRequester)
+                    } else {
+                        Modifier
+                    }
+                    if (isListView) {
+                        GameListCard(
+                            focusModifier = itemFocusModifier,
+                            game = game,
+                            showCoverArt = !showCoverPlaceholder,
+                            onClick = { onGameClick(game) },
+                            onLongClickStart = { onGameClick(game) },
+                            onLongClickContinue = { onContinueGame(game) },
+                            onLongClickLoadSave = { onLoadSaveClick(game) },
+                            onLongClickManage = { onManageGameClick(game) },
+                            onLongClickCreateShortcut = { onCreateShortcutClick(game) },
+                            onLongClickOpenGameDb = { onOpenGameDbClick(game) },
+                            onLongClickCustomCover = { onLongClickCustomCover(game) }
+                        )
+                    } else {
+                        GameCard(
+                            focusModifier = itemFocusModifier,
+                            game = game,
+                            showCenteredTitlePlaceholder = showCoverPlaceholder,
+                            onClick = { onGameClick(game) },
+                            onLongClickStart = { onGameClick(game) },
+                            onLongClickContinue = { onContinueGame(game) },
+                            onLongClickLoadSave = { onLoadSaveClick(game) },
+                            onLongClickManage = { onManageGameClick(game) },
+                            onLongClickCreateShortcut = { onCreateShortcutClick(game) },
+                            onLongClickOpenGameDb = { onOpenGameDbClick(game) },
+                            onLongClickCustomCover = { onLongClickCustomCover(game) }
+                        )
+                    }
+                }
+            }
+            repeat((if (isListView) 1 else columnsCount) - rowGames.size) {
+                Spacer(modifier = Modifier.weight(1f))
+            }
+        }
     }
 }

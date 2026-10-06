@@ -139,6 +139,7 @@ data class SettingsUiState(
     val debugLogcatGs: Boolean = false,
     val profilerLogcat: Boolean = false,
     val preferEnglishGameTitles: Boolean = false,
+    val hideDlcInLibrary: Boolean = true,
     val biosPath: String? = null,
     val gamePath: String? = null,
     val gamePaths: List<String> = emptyList(),
@@ -337,6 +338,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             debugLogcatGs = snapshot.debugLogcatGs,
             profilerLogcat = snapshot.profilerLogcat,
             preferEnglishGameTitles = snapshot.preferEnglishGameTitles,
+            hideDlcInLibrary = snapshot.hideDlcInLibrary,
             biosPath = snapshot.biosPath,
             gamePath = snapshot.gamePath,
             gamePaths = snapshot.gamePaths,
@@ -979,6 +981,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             EmulatorBridge.setSetting("UI", "PreferEnglishGameTitles", "bool", enabled.toString())
             preferences.setPreferEnglishGameTitles(enabled)
         }
+    }
+
+    fun setHideDlcInLibrary(enabled: Boolean) {
+        viewModelScope.launch { preferences.setHideDlcInLibrary(enabled) }
     }
 
     fun setFrameLimitEnabled(enabled: Boolean) {

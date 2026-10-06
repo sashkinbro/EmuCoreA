@@ -12,7 +12,7 @@ import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import java.security.MessageDigest
 
-data class PspGameMetadata(val title: String?, val serial: String?)
+data class PspGameMetadata(val title: String?, val serial: String?, val category: String?)
 
 /**
  * Reads bounded PARAM.SFO and ICON0.PNG assets straight from the game image.
@@ -36,7 +36,11 @@ object PspGameMetadataReader {
     fun read(context: Context, path: String): PspGameMetadata? {
         val bytes = readAsset(context, path, ASSET_PARAM_SFO) ?: return null
         val fields = parseSfo(bytes)
-        return PspGameMetadata(fields["TITLE"]?.takeIf(String::isNotBlank), fields["DISC_ID"]?.takeIf(String::isNotBlank))
+        return PspGameMetadata(
+            title = fields["TITLE"]?.takeIf(String::isNotBlank),
+            serial = fields["DISC_ID"]?.takeIf(String::isNotBlank),
+            category = fields["CATEGORY"]?.takeIf(String::isNotBlank)
+        )
     }
 
     fun extractIcon0(context: Context, path: String): String? = runCatching {
@@ -207,7 +211,7 @@ object PspGameMetadataReader {
             if (keyAt !in bytes.indices || valueLength !in 1..4096 || valueOffset < 0 || valueOffset + valueLength > bytes.size) continue
             val keyEnd = (keyAt until bytes.size).firstOrNull { bytes[it] == 0.toByte() } ?: continue
             val key = String(bytes, keyAt, keyEnd - keyAt, Charsets.UTF_8)
-            if (key != "TITLE" && key != "DISC_ID") continue
+            if (key != "TITLE" && key != "DISC_ID" && key != "CATEGORY") continue
             val value = String(bytes, valueOffset.toInt(), valueLength, Charsets.UTF_8).trimEnd('\u0000').trim()
             result[key] = value
         }

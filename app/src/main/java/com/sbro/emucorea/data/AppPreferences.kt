@@ -97,6 +97,7 @@ data class SettingsSnapshot(
     val debugLogcatGs: Boolean = false,
     val profilerLogcat: Boolean = false,
     val preferEnglishGameTitles: Boolean = false,
+    val hideDlcInLibrary: Boolean = true,
     val biosPath: String? = null,
     val biosValid: Boolean = false,
     val gamePath: String? = null,
@@ -421,6 +422,7 @@ class AppPreferences(private val context: Context) {
         private val DEBUG_LOGCAT_GS = booleanPreferencesKey("debug_logcat_gs")
         private val PROFILER_LOGCAT = booleanPreferencesKey("profiler_logcat")
         private val PREFER_ENGLISH_GAME_TITLES = booleanPreferencesKey("prefer_english_game_titles")
+        private val HIDE_DLC_IN_LIBRARY = booleanPreferencesKey("hide_dlc_in_library")
         private val RECENT_GAMES = stringPreferencesKey("recent_games")
         private val HOME_LIBRARY_VIEW_MODE = intPreferencesKey("home_library_view_mode")
         private const val MAX_RECENT_GAMES = 8
@@ -1376,6 +1378,7 @@ class AppPreferences(private val context: Context) {
                 debugLogcatGs = prefs[DEBUG_LOGCAT_GS] ?: false,
                 profilerLogcat = prefs[PROFILER_LOGCAT] ?: false,
                 preferEnglishGameTitles = prefs[PREFER_ENGLISH_GAME_TITLES] ?: false,
+                hideDlcInLibrary = prefs[HIDE_DLC_IN_LIBRARY] ?: true,
                 biosPath = biosPath,
                 gamePath = readGamePaths(prefs).firstOrNull(),
                 gamePaths = readGamePaths(prefs),
@@ -1716,6 +1719,14 @@ class AppPreferences(private val context: Context) {
 
     suspend fun setPreferEnglishGameTitles(enabled: Boolean) {
         context.dataStore.edit { it[PREFER_ENGLISH_GAME_TITLES] = enabled }
+    }
+
+    val hideDlcInLibrary: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[HIDE_DLC_IN_LIBRARY] ?: true
+    }
+
+    suspend fun setHideDlcInLibrary(enabled: Boolean) {
+        context.dataStore.edit { it[HIDE_DLC_IN_LIBRARY] = enabled }
     }
 
     val recentGames: Flow<List<RecentGameEntry>> = context.dataStore.data.map { prefs ->
@@ -2683,6 +2694,7 @@ class AppPreferences(private val context: Context) {
             put("debugLogcatGs", prefs[DEBUG_LOGCAT_GS] ?: false)
             put("profilerLogcat", prefs[PROFILER_LOGCAT] ?: false)
             put("preferEnglishGameTitles", prefs[PREFER_ENGLISH_GAME_TITLES] ?: false)
+            put("hideDlcInLibrary", prefs[HIDE_DLC_IN_LIBRARY] ?: true)
             put("recentGames", prefs[RECENT_GAMES] ?: "[]")
             put("homeLibraryViewMode", prefs[HOME_LIBRARY_VIEW_MODE] ?: 0)
             put("overlayScale", prefs[OVERLAY_SCALE] ?: 100)
@@ -2947,6 +2959,7 @@ class AppPreferences(private val context: Context) {
             prefs[DEBUG_LOGCAT_GS] = json.optBoolean("debugLogcatGs", false)
             prefs[PROFILER_LOGCAT] = json.optBoolean("profilerLogcat", false)
             prefs[PREFER_ENGLISH_GAME_TITLES] = json.optBoolean("preferEnglishGameTitles", false)
+            prefs[HIDE_DLC_IN_LIBRARY] = json.optBoolean("hideDlcInLibrary", true)
             prefs[RECENT_GAMES] = json.optString("recentGames", "[]")
             prefs[HOME_LIBRARY_VIEW_MODE] = json.optInt("homeLibraryViewMode", 0).coerceIn(0, 2)
             prefs[OVERLAY_SCALE] = json.optInt("overlayScale", 100)

@@ -426,6 +426,10 @@
     <string name="settings_respect_display_cutout_desc">让游戏画面避开摄像头挖孔区域。</string>
     <string name="settings_help_respect_display_cutout">在模拟画面上添加边距，避免其绘制到摄像头挖孔（刘海或打孔）下方。横向时挖孔遮挡画面会很有用。仅影响模拟画面，应用其他界面已适配挖孔。</string>
     <string name="settings_help_recent_games">为您最后玩过的游戏显示一个快速访问行。如果您经常在几个游戏之间切换，这很好；如果您想要一个更干净的主屏幕，请将其关闭。</string>
+    <string name="settings_hide_dlc_in_library">隐藏可下载内容</string>
+    <string name="settings_hide_dlc_in_library_desc">在游戏库中隐藏 DLC。</string>
+    <string name="settings_help_hide_dlc_in_library">可下载内容（DLC）会与游戏一起显示在库中。启用后，DLC 将从库和搜索中隐藏。关闭后可查看所有扫描到的条目。</string>
+    <string name="home_dlc_title">可下载内容</string>
     <string name="settings_help_home_search">直接在主屏幕上显示库搜索栏。对于大型游戏库，请保持开启；如果您喜欢更干净的布局并且很少按名称搜索，请将其关闭。</string>
     <string name="settings_help_renderer">选择用于硬件渲染的图形后端。Vulkan 在现代设备上通常是最快的，OpenGL 在某些 GPU 上的兼容性可能更安全，而 Software（软件）渲染主要作为测试后备或用于在硬件模式下严重损坏的游戏。</string>
     <string name="settings_help_aspect_ratio">控制最终图像在显示器上的取景方式。Auto（自动）跟随游戏，4:3 为大多数 PSP 游戏保留了原始外观，16:9 适合带有宽屏补丁的游戏，只有在您不介意几何失真的情况下才应使用 Stretch（拉伸）。</string>
@@ -820,7 +824,6 @@
     <string name="settings_help_core_locked_cpu_speed">將模擬的 PSP CPU 鎖定在固定時脈，而非讓每個遊戲自行選擇。大多數遊戲會自行管理速度，因此請保持關閉。較低數值可修正跑太快或異常的遊戲；較高數值可減少重度遊戲的卡頓，但會增加發熱與耗電。</string>
     <string name="settings_help_core_memstick_size">設定模擬 Memory Stick 的容量。有些遊戲在存檔前會檢查可用空間，或卡片太小就拒絕啟動，因此較大容量對大型存檔更安全。16 GB 足以應付大多數遊戲；只有在遊戲抱怨空間不足時才調高。</string>
     <string name="settings_help_core_cache_iso">載入時將整個遊戲映像複製到 RAM，之後光碟讀取就不再存取儲存空間。這能消除開放世界遊戲的卡頓，但載入更久且需要足夠的可用記憶體，因此 RAM 為 4 GB 以下的裝置請保持關閉。</string>
-    <string name="settings_help_core_cheats">為載入的遊戲啟用 PPSSPP 內建的金手指引擎，讓金手指碼生效。只在你需要使用金手指時開啟；關閉不會刪除任何內容，遊戲會恢復正常行為。</string>
     <string name="settings_help_core_psp_model">選擇模擬的 PSP 硬體版本。PSP-2000/3000 對應大多數裝置，是最佳預設；PSP-1000 提供 32 MB RAM（而非 64 MB），部分早期遊戲預期如此。僅在遊戲誤判主機或行為異常時更改。</string>
     <string name="settings_help_core_button_preference">選擇 PSP 遊戲中由哪個正面按鈕確認選單。許多歐美遊戲使用叉號，許多日式遊戲使用圓圈，請選擇符合你遊戲的按鈕。這只改變遊戲內的按鍵對應，不影響模擬器本身的選單。</string>
     <string name="settings_help_core_analog_is_circular">使用實體手把時，補償圓形與方形類比搖桿範圍的差異。若遊戲中移動偏向對角線或搖桿到不了邊角，請開啟；觸控操作已符合 PSP 範圍，請保持關閉。</string>

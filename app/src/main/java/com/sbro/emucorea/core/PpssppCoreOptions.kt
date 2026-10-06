@@ -160,16 +160,6 @@ object PpssppCoreOptions {
             defaultValue = "disabled",
         ),
         Option(
-            key = "ppsspp_cheats",
-            label = "Internal Cheats Support",
-            category = "system",
-            choices = listOf(
-                Choice("disabled", "disabled"),
-                Choice("enabled", "enabled"),
-            ),
-            defaultValue = "disabled",
-        ),
-        Option(
             key = "ppsspp_language",
             label = "Game Language",
             category = "system",

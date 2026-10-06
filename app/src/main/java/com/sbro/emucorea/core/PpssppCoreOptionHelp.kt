@@ -28,7 +28,6 @@ fun ppssppCoreOptionHelpRes(key: String): Int? = when {
     key == "ppsspp_locked_cpu_speed" -> R.string.settings_help_core_locked_cpu_speed
     key == "ppsspp_memstick_size" -> R.string.settings_help_core_memstick_size
     key == "ppsspp_cache_iso" -> R.string.settings_help_core_cache_iso
-    key == "ppsspp_cheats" -> R.string.settings_help_core_cheats
     key == "ppsspp_psp_model" -> R.string.settings_help_core_psp_model
     key == "ppsspp_button_preference" -> R.string.settings_help_core_button_preference
     key == "ppsspp_analog_is_circular" -> R.string.settings_help_core_analog_is_circular

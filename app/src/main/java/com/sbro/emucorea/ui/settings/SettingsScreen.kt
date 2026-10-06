@@ -61,6 +61,7 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.FastForward
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.FormatSize
@@ -1206,6 +1207,15 @@ private fun SettingsContent(
                             onCheckedChange = viewModel::setShowRecentGames,
                             helpText = stringResource(R.string.settings_help_recent_games),
                             onResetToDefault = { viewModel.setShowRecentGames(defaults.showRecentGames) }
+                        )
+                        ToggleItem(
+                            icon = Icons.Rounded.Extension,
+                            title = stringResource(R.string.settings_hide_dlc_in_library),
+                            subtitle = stringResource(R.string.settings_hide_dlc_in_library_desc),
+                            checked = uiState.hideDlcInLibrary,
+                            onCheckedChange = viewModel::setHideDlcInLibrary,
+                            helpText = stringResource(R.string.settings_help_hide_dlc_in_library),
+                            onResetToDefault = { viewModel.setHideDlcInLibrary(true) }
                         )
                         ToggleItem(
                             icon = Icons.Rounded.Search,
@@ -3789,6 +3799,7 @@ private fun rememberSettingsSearchEntries(): List<SettingsSearchEntry> {
         entry(SettingsTab.General, R.string.settings_confirm_save_load_actions),
         entry(SettingsTab.General, R.string.settings_floating_quick_actions),
         entry(SettingsTab.General, R.string.settings_show_recent_games),
+        entry(SettingsTab.General, R.string.settings_hide_dlc_in_library),
         entry(SettingsTab.General, R.string.settings_show_home_search),
         entry(SettingsTab.General, R.string.settings_prefer_english_game_titles),
         entry(SettingsTab.Audio, R.string.settings_audio_volume),
