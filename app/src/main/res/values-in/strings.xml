@@ -531,6 +531,10 @@
     <string name="controls_editor_title">Edit Tata Letak</string>
     <string name="controls_editor_done">Selesai</string>
     <string name="controls_editor_opacity_value">Opasitas %1$d%%</string>
+    <string name="controls_editor_reset_selected">Atur ulang elemen terpilih</string>
+    <string name="controls_editor_show_grid">Tampilkan kisi</string>
+    <string name="controls_editor_snap_grid">Snap ke kisi</string>
+    <string name="controls_editor_group_scale_value">Skala grup %1$d%%</string>
     <string name="home_search_clear">Bersihkan pencarian</string>
     <string name="settings_backup_section_title">Cadangkan</string>
     <string name="settings_backup_export_title">Cadangkan semua pengaturan</string>
@@ -785,6 +789,7 @@
     <string name="settings_fps_overlay_metrics">Statistik yang terlihat</string>
     <string name="settings_help_fps_overlay_metrics">Pilih nilai individual yang disertakan dalam hamparan statistik mendetail. Hal ini tidak memengaruhi pengumpulan metrik atau performa emulasi. Model dan beban CPU serta GPU dibaca dari perangkat jika tersedia.</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">Versi</string>
     <string name="settings_fps_metric_speed">Kecepatan</string>
     <string name="settings_fps_metric_renderer">Perender</string>
     <string name="settings_fps_metric_audio">Audio</string>

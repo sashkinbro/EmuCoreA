@@ -259,6 +259,10 @@
     <string name="settings_edit_controls_action">Modifier</string>
     <string name="controls_editor_title">Modifier la disposition</string>
     <string name="controls_editor_opacity_value">Opacité %1$d%%</string>
+    <string name="controls_editor_reset_selected">Réinitialiser l\'élément sélectionné</string>
+    <string name="controls_editor_show_grid">Afficher la grille</string>
+    <string name="controls_editor_snap_grid">Aligner sur la grille</string>
+    <string name="controls_editor_group_scale_value">Échelle du groupe %1$d%%</string>
     <string name="home_search_clear">Effacer la recherche</string>
     <string name="settings_backup_section_title">Sauvegarde</string>
     <string name="settings_backup_export_title">Sauvegarder tous les paramètres</string>
@@ -773,6 +777,7 @@
     <string name="settings_fps_overlay_metrics">Statistiques visibles</string>
     <string name="settings_help_fps_overlay_metrics">Choisissez les valeurs affichées dans la superposition de statistiques détaillées. Cela n\'affecte ni la collecte des métriques ni les performances d\'émulation. Le modèle et la charge du CPU et du GPU sont lus depuis l\'appareil lorsqu\'ils sont disponibles.</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">Version</string>
     <string name="settings_fps_metric_speed">Vitesse</string>
     <string name="settings_fps_metric_renderer">Moteur de rendu</string>
     <string name="settings_fps_metric_audio">Audio</string>

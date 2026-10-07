@@ -325,8 +325,9 @@
     <string name="settings_fps_overlay_scale_value">%1$d%%</string>
     <string name="settings_help_fps_overlay_scale">Zmienia rozmiar tekstu zarówno dla prostego licznika FPS, jak i szczegółowych statystyk. Większe wartości poszerzają również szczegółową nakładkę, aby uniknąć zawijania tekstu.</string>
     <string name="settings_fps_overlay_metrics">Widoczne statystyki</string>
-    <string name="settings_help_fps_overlay_metrics">Wybierz poszczególne wartości, które znajdą się w szczegółowej nakładce statystyk. Wersje aplikacji, kompilacji i rdzenia są zawsze pokazywane na początku. Model i obciążenie CPU i GPU są odczytywane z urządzenia, gdy jest to możliwe.</string>
+    <string name="settings_help_fps_overlay_metrics">Wybierz poszczególne wartości, które znajdą się w szczegółowej nakładce statystyk. Model i obciążenie CPU i GPU są odczytywane z urządzenia, gdy jest to możliwe.</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">Wersja</string>
     <string name="settings_fps_metric_speed">Prędkość</string>
     <string name="settings_fps_metric_renderer">Silnik renderujący</string>
     <string name="settings_fps_metric_audio">Dźwięk</string>
@@ -560,6 +561,10 @@
     <string name="controls_editor_save_failed">Nie można zapisać układu dotykowego. Spróbuj ponownie.</string>
     <string name="controls_editor_done">Gotowe</string>
     <string name="controls_editor_opacity_value">Nieprzezroczystość %1$d%%</string>
+    <string name="controls_editor_reset_selected">Przywróć wybrany element</string>
+    <string name="controls_editor_show_grid">Pokaż siatkę</string>
+    <string name="controls_editor_snap_grid">Przyciągaj do siatki</string>
+    <string name="controls_editor_group_scale_value">Skala grupy %1$d%%</string>
     <string name="home_search_clear">Wyczyść wyszukiwanie</string>
     <string name="settings_backup_section_title">Kopia zapasowa</string>
     <string name="settings_backup_export_title">Utwórz kopię zapasową ustawień</string>

@@ -328,8 +328,9 @@
     <string name="settings_fps_overlay_scale_value">%1$d%%</string>
     <string name="settings_help_fps_overlay_scale">Změní velikost textu jednoduchého počítadla FPS i podrobných statistik. Větší hodnoty rovněž rozšíří detailní překrytí (overlay), aby se zamezilo zalamování řádků.</string>
     <string name="settings_fps_overlay_metrics">Viditelné statistiky</string>
-    <string name="settings_help_fps_overlay_metrics">Vyberte jednotlivé hodnoty, jež budou zahrnuty do detailního překrytí statistik. Verze aplikace, sestavení (build) a verze jádra jsou vždy na prvním místě. Model a zatížení CPU a GPU se načítají ze zařízení, pokud jsou k dispozici.</string>
+    <string name="settings_help_fps_overlay_metrics">Vyberte jednotlivé hodnoty, jež budou zahrnuty do detailního překrytí statistik. Model a zatížení CPU a GPU se načítají ze zařízení, pokud jsou k dispozici.</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">Verze</string>
     <string name="settings_fps_metric_speed">Rychlost</string>
     <string name="settings_fps_metric_renderer">Renderer</string>
     <string name="settings_fps_metric_audio">Zvuk</string>
@@ -563,6 +564,10 @@
     <string name="controls_editor_save_failed">Dotykové rozložení nebylo možné uložit. Zkuste to prosím znovu.</string>
     <string name="controls_editor_done">Hotovo</string>
     <string name="controls_editor_opacity_value">Neprůhlednost %1$d%%</string>
+    <string name="controls_editor_reset_selected">Obnovit vybraný prvek</string>
+    <string name="controls_editor_show_grid">Zobrazit mřížku</string>
+    <string name="controls_editor_snap_grid">Přichytit k mřížce</string>
+    <string name="controls_editor_group_scale_value">Měřítko skupiny %1$d%%</string>
     <string name="home_search_clear">Vymazat hledání</string>
     <string name="settings_backup_section_title">Záloha</string>
     <string name="settings_backup_export_title">Zálohovat všechna nastavení</string>

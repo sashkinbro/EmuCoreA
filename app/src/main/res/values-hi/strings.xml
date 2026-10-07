@@ -370,6 +370,10 @@
     <string name="controls_editor_title">लेआउट संपादित करें</string>
     <string name="controls_editor_done">हो गया</string>
     <string name="controls_editor_opacity_value">पारदर्शिता %1$d%%</string>
+    <string name="controls_editor_reset_selected">चयनित तत्व रीसेट करें</string>
+    <string name="controls_editor_show_grid">ग्रिड दिखाएँ</string>
+    <string name="controls_editor_snap_grid">ग्रिड पर स्नैप करें</string>
+    <string name="controls_editor_group_scale_value">समूह स्केल %1$d%%</string>
     <string name="home_search_clear">सर्च साफ़ करें</string>
     <string name="settings_backup_section_title">बैकअप</string>
     <string name="settings_backup_export_title">सभी सेटिंग्स का बैकअप लें</string>
@@ -771,6 +775,7 @@
     <string name="settings_fps_overlay_metrics">दिखाई देने वाले आँकड़े</string>
     <string name="settings_help_fps_overlay_metrics">विस्तृत आँकड़े ओवरले में शामिल व्यक्तिगत मानों को चुनें। यह मीट्रिक संग्रह या एमुलेशन प्रदर्शन को प्रभावित नहीं करता है। उपलब्ध होने पर CPU और GPU का मॉडल और लोड डिवाइस से पढ़ा जाता है।</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">संस्करण</string>
     <string name="settings_fps_metric_speed">गति</string>
     <string name="settings_fps_metric_renderer">रेंडरर</string>
     <string name="settings_fps_metric_audio">ऑडियो</string>

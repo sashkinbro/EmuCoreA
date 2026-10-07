@@ -71,6 +71,7 @@ fun ControlsLayoutEditorHostScreen(
         preferences.migrateOverlayLayoutIfNeeded()
         val globalLayout = preferences.overlayLayoutSnapshot.first()
         val settings = preferences.settingsSnapshot.first()
+        val stickToggleTarget = preferences.stickToggleTarget.first()
         val perGame = normalizedGamePath?.let { path ->
             withContext(Dispatchers.IO) { repository.get(path) }
         }
@@ -81,6 +82,7 @@ fun ControlsLayoutEditorHostScreen(
             visualStyle = perGame?.touchControlVisualStyle ?: settings.touchControlVisualStyle,
             pressEffect = perGame?.touchControlPressEffect ?: settings.touchControlPressEffect,
             overlayScale = globalLayout.overlayScale,
+            stickToggleTarget = stickToggleTarget,
             customControls = customControls
         ) to (perGame?.touchControlsLayout != null || perGame?.customTouchControls != null)
     }

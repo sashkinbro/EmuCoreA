@@ -259,6 +259,10 @@
     <string name="settings_edit_controls_action">编辑</string>
     <string name="controls_editor_title">編輯版面</string>
     <string name="controls_editor_opacity_value">不透明度 %1$d%%</string>
+    <string name="controls_editor_reset_selected">重置所选元素</string>
+    <string name="controls_editor_show_grid">显示网格</string>
+    <string name="controls_editor_snap_grid">对齐网格</string>
+    <string name="controls_editor_group_scale_value">组缩放 %1$d%%</string>
     <string name="home_search_clear">清除搜尋</string>
     <string name="settings_backup_section_title">備份</string>
     <string name="settings_backup_export_title">備份所有設定</string>
@@ -772,6 +776,7 @@
     <string name="settings_fps_overlay_metrics">可见统计数据</string>
     <string name="settings_help_fps_overlay_metrics">选择详细统计数据覆盖层中包含的各项数值。这不会影响指标收集或模拟器性能。在设备支持时，会读取 CPU 和 GPU 的型号与负载。</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">版本</string>
     <string name="settings_fps_metric_speed">速度</string>
     <string name="settings_fps_metric_renderer">渲染器</string>
     <string name="settings_fps_metric_audio">音频</string>

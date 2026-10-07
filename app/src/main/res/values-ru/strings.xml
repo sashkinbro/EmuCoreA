@@ -259,6 +259,10 @@
     <string name="settings_edit_controls_action">Изменить</string>
     <string name="controls_editor_title">Редактор управления</string>
     <string name="controls_editor_opacity_value">Прозрачность %1$d%%</string>
+    <string name="controls_editor_reset_selected">Сбросить выбранный элемент</string>
+    <string name="controls_editor_show_grid">Показать сетку</string>
+    <string name="controls_editor_snap_grid">Привязать к сетке</string>
+    <string name="controls_editor_group_scale_value">Масштаб группы %1$d%%</string>
     <string name="home_search_clear">Очистить поиск</string>
     <string name="settings_backup_section_title">Резервная копия</string>
     <string name="settings_backup_export_title">Сохранить все настройки</string>
@@ -775,6 +779,7 @@
     <string name="settings_fps_overlay_metrics">Видимая статистика</string>
     <string name="settings_help_fps_overlay_metrics">Выберите отдельные значения, которые будут включены в подробный оверлей статистики. Это не влияет на сбор метрик или производительность эмуляции. Модель и загрузка CPU и GPU считываются с устройства, когда это возможно.</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">Версия</string>
     <string name="settings_fps_metric_speed">Скорость</string>
     <string name="settings_fps_metric_renderer">Рендерер</string>
     <string name="settings_fps_metric_audio">Аудио</string>

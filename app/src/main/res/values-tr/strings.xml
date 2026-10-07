@@ -401,6 +401,10 @@
     <string name="controls_editor_title">Düzeni Düzenle</string>
     <string name="controls_editor_done">Bitti</string>
     <string name="controls_editor_opacity_value">Opaklık %1$d%%</string>
+    <string name="controls_editor_reset_selected">Seçili öğeyi sıfırla</string>
+    <string name="controls_editor_show_grid">Kılavuzu göster</string>
+    <string name="controls_editor_snap_grid">Kılavuza yapıştır</string>
+    <string name="controls_editor_group_scale_value">Grup ölçeği %1$d%%</string>
     <string name="home_search_clear">Aramayı temizle</string>
     <string name="settings_backup_section_title">Yedekleme</string>
     <string name="settings_backup_export_title">Tüm ayarları yedekle</string>
@@ -771,6 +775,7 @@
     <string name="settings_fps_overlay_metrics">Görünür istatistikler</string>
     <string name="settings_help_fps_overlay_metrics">Ayrıntılı istatistik katmanında gösterilecek değerleri seçin. Bu, metrik toplamayı veya emülasyon performansını etkilemez. CPU ve GPU modeli ve yükü destekleniyorsa cihazdan okunur.</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">Sürüm</string>
     <string name="settings_fps_metric_speed">Hız</string>
     <string name="settings_fps_metric_renderer">Oluşturucu</string>
     <string name="settings_fps_metric_audio">Ses</string>

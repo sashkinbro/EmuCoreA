@@ -401,6 +401,10 @@
     <string name="controls_editor_title">レイアウトを編集</string>
     <string name="controls_editor_done">完了</string>
     <string name="controls_editor_opacity_value">不透明度 %1$d%%</string>
+    <string name="controls_editor_reset_selected">選択した要素をリセット</string>
+    <string name="controls_editor_show_grid">グリッドを表示</string>
+    <string name="controls_editor_snap_grid">グリッドに吸着</string>
+    <string name="controls_editor_group_scale_value">グループ倍率 %1$d%%</string>
     <string name="home_search_clear">検索をクリア</string>
     <string name="settings_backup_section_title">バックアップ</string>
     <string name="settings_backup_export_title">すべての設定をバックアップ</string>
@@ -770,6 +774,7 @@
     <string name="settings_fps_overlay_metrics">表示される統計</string>
     <string name="settings_help_fps_overlay_metrics">詳細な統計オーバーレイに含まれる個別の値を選択します。これは、指標の収集やエミュレーションのパフォーマンスには影響しません。CPUとGPUのモデルと負荷は、利用可能な場合にデバイスから読み取られます。</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">バージョン</string>
     <string name="settings_fps_metric_speed">速度</string>
     <string name="settings_fps_metric_renderer">レンダラー</string>
     <string name="settings_fps_metric_audio">オーディオ</string>

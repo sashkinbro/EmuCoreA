@@ -5254,6 +5254,7 @@ private fun fpsOverlayCornerOptions(): List<Pair<Int, String>> = listOf(
 
 @Composable
 private fun fpsOverlayMetricOptions(): List<Pair<Int, String>> = listOf(
+    PerformanceOverlayMetrics.VERSION to stringResource(R.string.settings_fps_metric_version),
     PerformanceOverlayMetrics.FPS to stringResource(R.string.settings_fps_metric_fps),
     PerformanceOverlayMetrics.SPEED to stringResource(R.string.settings_fps_metric_speed),
     PerformanceOverlayMetrics.RENDERER to stringResource(R.string.settings_fps_metric_renderer),

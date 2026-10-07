@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,7 +71,8 @@ fun GameCoverArt(
     showTitleWhileLoading: Boolean = true,
     shimmerWhileLoading: Boolean = true,
     decodeWidth: Int = DEFAULT_COVER_DECODE_WIDTH,
-    decodeHeight: Int = DEFAULT_COVER_DECODE_HEIGHT
+    decodeHeight: Int = DEFAULT_COVER_DECODE_HEIGHT,
+    onAspectRatioResolved: ((Float) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val candidates = remember(coverPath) {
@@ -137,6 +139,14 @@ fun GameCoverArt(
             bitmap = loadedBitmap
         }
         isLoading = false
+    }
+
+    val currentAspectRatioCallback by rememberUpdatedState(onAspectRatioResolved)
+    LaunchedEffect(bitmap) {
+        val loaded = bitmap ?: return@LaunchedEffect
+        if (loaded.height > 0) {
+            currentAspectRatioCallback?.invoke(loaded.width.toFloat() / loaded.height.toFloat())
+        }
     }
 
     val currentBitmap = bitmap

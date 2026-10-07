@@ -401,6 +401,10 @@
     <string name="controls_editor_title">تعديل التخطيط</string>
     <string name="controls_editor_done">تم</string>
     <string name="controls_editor_opacity_value">الشفافية %1$d%%</string>
+    <string name="controls_editor_reset_selected">إعادة تعيين العنصر المحدد</string>
+    <string name="controls_editor_show_grid">إظهار الشبكة</string>
+    <string name="controls_editor_snap_grid">الالتقاط إلى الشبكة</string>
+    <string name="controls_editor_group_scale_value">مقياس المجموعة %1$d%%</string>
     <string name="home_search_clear">مسح البحث</string>
     <string name="settings_backup_section_title">نسخ احتياطي</string>
     <string name="settings_backup_export_title">نسخ احتياطي لجميع الإعدادات</string>
@@ -775,6 +779,7 @@
     <string name="settings_fps_overlay_metrics">الإحصائيات المرئية</string>
     <string name="settings_help_fps_overlay_metrics">اختر القيم التي تظهر في طبقة الإحصائيات التفصيلية. لا يؤثر هذا على جمع المقاييس أو أداء المحاكاة. يتم قراءة طراز وحمل CPU وGPU من الجهاز عند توفرهما.</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">الإصدار</string>
     <string name="settings_fps_metric_speed">السرعة</string>
     <string name="settings_fps_metric_renderer">العارض</string>
     <string name="settings_fps_metric_audio">الصوت</string>

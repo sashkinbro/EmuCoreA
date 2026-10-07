@@ -259,6 +259,10 @@
     <string name="settings_edit_controls_action">Bearbeiten</string>
     <string name="controls_editor_title">Layout bearbeiten</string>
     <string name="controls_editor_opacity_value">Deckkraft %1$d%%</string>
+    <string name="controls_editor_reset_selected">Ausgewähltes Element zurücksetzen</string>
+    <string name="controls_editor_show_grid">Raster anzeigen</string>
+    <string name="controls_editor_snap_grid">Am Raster ausrichten</string>
+    <string name="controls_editor_group_scale_value">Gruppengröße %1$d%%</string>
     <string name="home_search_clear">Suche löschen</string>
     <string name="settings_backup_section_title">Backup</string>
     <string name="settings_backup_export_title">Alle Einstellungen sichern</string>
@@ -773,6 +777,7 @@
     <string name="settings_fps_overlay_metrics">Sichtbare Statistiken</string>
     <string name="settings_help_fps_overlay_metrics">Wähle die einzelnen Werte aus, die im detaillierten Statistik-Overlay angezeigt werden sollen. Dies wirkt sich weder auf die Erfassung der Messwerte noch auf die Emulationsleistung aus. CPU- und GPU-Modell und Auslastung werden vom Gerät gelesen, sofern verfügbar.</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">Version</string>
     <string name="settings_fps_metric_speed">Geschwindigkeit</string>
     <string name="settings_fps_metric_renderer">Renderer</string>
     <string name="settings_fps_metric_audio">Audio</string>

@@ -370,6 +370,10 @@
     <string name="controls_editor_title">Modifica layout</string>
     <string name="controls_editor_done">Fatto</string>
     <string name="controls_editor_opacity_value">Opacità %1$d%%</string>
+    <string name="controls_editor_reset_selected">Reimposta l\'elemento selezionato</string>
+    <string name="controls_editor_show_grid">Mostra griglia</string>
+    <string name="controls_editor_snap_grid">Aggancia alla griglia</string>
+    <string name="controls_editor_group_scale_value">Scala gruppo %1$d%%</string>
     <string name="home_search_clear">Cancella ricerca</string>
     <string name="settings_backup_section_title">Backup</string>
     <string name="settings_backup_export_title">Esegui backup di tutte le impostazioni</string>
@@ -771,6 +775,7 @@
     <string name="settings_fps_overlay_metrics">Statistiche visibili</string>
     <string name="settings_help_fps_overlay_metrics">Scegli i singoli valori inclusi nell\'overlay delle statistiche dettagliate. Questo non influisce sulla raccolta delle metriche o sulle prestazioni dell\'emulazione. Il modello e il carico di CPU e GPU vengono letti dal dispositivo quando disponibili.</string>
     <string name="settings_fps_metric_fps">FPS</string>
+    <string name="settings_fps_metric_version">Versione</string>
     <string name="settings_fps_metric_speed">Velocità</string>
     <string name="settings_fps_metric_renderer">Renderer</string>
     <string name="settings_fps_metric_audio">Audio</string>
