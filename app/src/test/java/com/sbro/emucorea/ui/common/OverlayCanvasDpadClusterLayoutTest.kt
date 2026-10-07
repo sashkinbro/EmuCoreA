@@ -29,6 +29,39 @@ class OverlayCanvasDpadClusterLayoutTest {
     }
 
     @Test
+    fun `asymmetric insets keep the same edge padding on both sides`() {
+        val screen = ScreenCase(
+            name = "asymmetric cutout",
+            width = 800.dp,
+            height = 450.dp,
+            leftInset = 54.dp,
+            rightInset = 18.dp
+        )
+        val layout = buildLayout(screen)
+        val dpad = requireNotNull(layout.dpadCluster)
+        val rightActionEdge = layout.actionButtons.maxOf { it.x + it.width }
+        val leftMargin = dpad.x.value
+        val rightMargin = (screen.width - rightActionEdge).value
+
+        assertEquals(
+            "both sides must keep the same edge padding",
+            leftMargin - screen.leftInset.value,
+            rightMargin - screen.rightInset.value,
+            EPSILON
+        )
+        assertTrue("the cutout side must keep the larger margin", leftMargin > rightMargin)
+
+        val leftTopEdge = layout.leftShoulders.minOf { it.x }
+        val rightShoulderEdge = layout.rightShoulders.maxOf { it.x + it.width }
+        assertEquals(
+            "both shoulder rows must keep the same edge padding",
+            leftTopEdge.value - screen.leftInset.value,
+            (screen.width - rightShoulderEdge).value - screen.rightInset.value,
+            EPSILON
+        )
+    }
+
+    @Test
     fun `dpad cluster arrows follow per-control offsets`() {
         val screen = ScreenCase("dpad arrow offsets", 800.dp, 450.dp)
         val customControls = AppPreferences.defaultOverlayControlLayouts().toMutableMap().apply {

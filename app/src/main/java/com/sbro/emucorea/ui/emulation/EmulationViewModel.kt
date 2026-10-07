@@ -52,7 +52,6 @@ import com.sbro.emucorea.data.saveTouchControlsLayout
 import com.sbro.emucorea.data.toggleStick
 import com.sbro.emucorea.data.withCustomTouchControls
 import com.sbro.emucorea.data.withTouchControlsLayout
-import com.sbro.emucorea.data.withoutTouchControlsLayout
 import com.sbro.emucorea.data.TouchControlVisualStyle
 import com.sbro.emucorea.data.TouchControlPressEffect
 import com.sbro.emucorea.data.CustomTouchControlLibrary
@@ -915,19 +914,31 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         currentGamePath = path?.takeIf { it.isNotBlank() }
-        currentTouchControlsLayoutProfile = null
-        currentCustomTouchControlsProfile = null
+        // Read the per-game touch profile synchronously so the very first rendered frame
+        // already uses it; otherwise the global layout flashes while the game is starting.
+        val launchProfile = if (!bootSmokeProbe && !autotestMode) {
+            currentGamePath?.let(perGameSettingsRepository::get)
+        } else {
+            null
+        }
+        currentTouchControlsLayoutProfile = launchProfile?.touchControlsLayout
+        currentCustomTouchControlsProfile = launchProfile?.customTouchControls
         currentGameCoverArtPath = null
         lastAutoSavePlayTimeMs = 0L
         pendingPlayTimeSyncMs = 0L
         shouldCountCurrentProfileSession = false
         shouldTrackCurrentProfilePlayTime = false
-        _uiState.value = _uiState.value.copy(
-            activePlayTimeMs = 0L,
-            currentSlotLastModified = 0L,
-            autoSaveLastModified = 0L,
-            isAutoSaveInProgress = false
-        )
+        _uiState.value = _uiState.value
+            .copy(
+                activePlayTimeMs = 0L,
+                currentSlotLastModified = 0L,
+                autoSaveLastModified = 0L,
+                isAutoSaveInProgress = false
+            )
+            .withTouchControlsProfile(
+                layout = currentTouchControlsLayoutProfile,
+                customControls = currentCustomTouchControlsProfile
+            )
 
         viewModelScope.launch(Dispatchers.IO) {
             _uiState.value = _uiState.value.copy(
@@ -2017,20 +2028,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         )
     }
 
-    private fun EmulationUiState.withTouchControlsLayout(profile: TouchControlsLayoutProfile): EmulationUiState {
-        return copy(
-            dpadOffset = profile.dpadOffset,
-            lstickOffset = profile.lstickOffset,
-            rstickOffset = profile.rstickOffset,
-            actionOffset = profile.actionOffset,
-            lbtnOffset = profile.lbtnOffset,
-            rbtnOffset = profile.rbtnOffset,
-            centerOffset = profile.centerOffset,
-            stickScale = profile.stickScale,
-            controlLayouts = profile.controlLayouts
-        )
-    }
-
     private fun EmulationUiState.toTouchControlsLayoutProfile(): TouchControlsLayoutProfile {
         return TouchControlsLayoutProfile(
             dpadOffset = dpadOffset,
@@ -2139,23 +2136,27 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         val existing = perGameSettingsRepository.get(gameKey)
-        if (existing != null) {
-            val updated = existing.withoutTouchControlsLayout()
-            if (updated == null) {
-                perGameSettingsRepository.delete(gameKey)
-            } else {
-                perGameSettingsRepository.save(updated)
-            }
-        }
+        // Reset to the built-in defaults for this game; dropping the override would
+        // silently inherit the customized global layout.
+        val resetLayout = TouchControlsLayoutProfile()
+        perGameSettingsRepository.save(
+            existing.withTouchControlsLayout(
+                gameKey = gameKey,
+                gameTitle = resolvePerGameTitle(_uiState.value),
+                gameSerial = currentGameSerial.takeIf { it.isNotBlank() },
+                layout = resetLayout
+            )
+        )
 
-        currentTouchControlsLayoutProfile = null
-        currentCustomTouchControlsProfile = null
-        val profileStillActive = perGameSettingsRepository.get(gameKey) != null
+        currentTouchControlsLayoutProfile = resetLayout
+        currentCustomTouchControlsProfile = existing?.customTouchControls
         _uiState.value = _uiState.value
             .withOverlayLayoutSnapshot(preferences.overlayLayoutSnapshot.first())
+            .withTouchControlsLayout(resetLayout)
             .copy(
-                customTouchControls = preferences.customTouchControls.first(),
-                gameSettingsProfileActive = profileStillActive
+                customTouchControls = currentCustomTouchControlsProfile
+                    ?: preferences.customTouchControls.first(),
+                gameSettingsProfileActive = true
             )
     }
 
@@ -3054,6 +3055,32 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
+}
+
+internal fun EmulationUiState.withTouchControlsLayout(
+    profile: TouchControlsLayoutProfile
+): EmulationUiState {
+    return copy(
+        dpadOffset = profile.dpadOffset,
+        lstickOffset = profile.lstickOffset,
+        rstickOffset = profile.rstickOffset,
+        actionOffset = profile.actionOffset,
+        lbtnOffset = profile.lbtnOffset,
+        rbtnOffset = profile.rbtnOffset,
+        centerOffset = profile.centerOffset,
+        stickScale = profile.stickScale,
+        controlLayouts = profile.controlLayouts
+    )
+}
+
+// Applies a per-game touch profile before the first frame so the global layout is
+// never shown while the game is still starting.
+internal fun EmulationUiState.withTouchControlsProfile(
+    layout: TouchControlsLayoutProfile?,
+    customControls: CustomTouchControlLibrary?
+): EmulationUiState {
+    val withLayout = layout?.let { withTouchControlsLayout(it) } ?: this
+    return customControls?.let { withLayout.copy(customTouchControls = it) } ?: withLayout
 }
 
 private fun String?.extractCrc(): String? {
