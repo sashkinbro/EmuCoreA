@@ -255,6 +255,7 @@ bool VulkanGraphicsContext::InitSurface(WindowSystem winsys, void *data1, void *
 
 		if (!vulkan_->InitSwapchain(presentMode)) {
 			*errorMessage = vulkan_->InitError();
+			// Callers don't call ShutdownSurface after a failed init, so clean up draw_ and the surface here.
 			ShutdownSurface();
 			return false;
 		}
@@ -284,7 +285,7 @@ void VulkanGraphicsContext::ShutdownSurface() {
 
 	delete draw_;
 	draw_ = nullptr;
-	renderManager_ = nullptr;
+	renderManager_ = nullptr;  // owned by draw_.
 
 	vulkan_->WaitUntilQueueIdle();
 	if (VulkanPresentation *presentation = vulkan_->GetPresentation()) {

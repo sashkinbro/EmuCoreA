@@ -120,7 +120,7 @@ void SamplerJitCache::Clear() {
 	const10Low_ = nullptr;
 	const10All8_ = nullptr;
 
-	constWidthHeight256f_ = nullptr;
+	constWidthHeight16f_ = nullptr;
 	constWidthMinus1i_ = nullptr;
 	constHeightMinus1i_ = nullptr;
 
@@ -163,6 +163,19 @@ void SamplerJitCache::Flush() {
 	compileQueue_.clear();
 }
 
+// Without a backend nothing ever compiles, and a lookup would flush the binner for nothing.
+#if PPSSPP_ARCH(AMD64) && !PPSSPP_PLATFORM(UWP)
+static constexpr bool HAS_SAMPLER_JIT = true;
+#else
+static constexpr bool HAS_SAMPLER_JIT = false;
+#endif
+
+// A texture level whose address isn't valid has no pointer, and the generic samplers read its texels as zero
+// (then apply the texture function). The JIT leaves those to them.
+static bool CanJit(const SamplerID &id) {
+	return HAS_SAMPLER_JIT && g_Config.bSoftwareRenderingJit && !id.hasInvalidPtr;
+}
+
 NearestFunc SamplerJitCache::GetByID(const SamplerID &id, size_t key, BinManager *binner) {
 	std::unique_lock<std::mutex> guard(jitCacheLock);
 	
@@ -201,7 +214,7 @@ NearestFunc SamplerJitCache::GetByID(const SamplerID &id, size_t key, BinManager
 }
 
 NearestFunc SamplerJitCache::GetNearest(const SamplerID &id, BinManager *binner) {
-	if (!g_Config.bSoftwareRenderingJit)
+	if (!CanJit(id))
 		return nullptr;
 
 	const size_t key = std::hash<SamplerID>()(id);
@@ -214,7 +227,7 @@ NearestFunc SamplerJitCache::GetNearest(const SamplerID &id, BinManager *binner)
 }
 
 LinearFunc SamplerJitCache::GetLinear(const SamplerID &id, BinManager *binner) {
-	if (!g_Config.bSoftwareRenderingJit)
+	if (!CanJit(id))
 		return nullptr;
 
 	const size_t key = std::hash<SamplerID>()(id);
@@ -227,7 +240,7 @@ LinearFunc SamplerJitCache::GetLinear(const SamplerID &id, BinManager *binner) {
 }
 
 FetchFunc SamplerJitCache::GetFetch(const SamplerID &id, BinManager *binner) {
-	if (!g_Config.bSoftwareRenderingJit)
+	if (!CanJit(id))
 		return nullptr;
 
 	const size_t key = std::hash<SamplerID>()(id);
@@ -289,7 +302,9 @@ static inline int GetPixelDataOffset(uint32_t row_pitch_pixels, uint32_t u, uint
 }
 
 static inline u32 LookupColor(unsigned int index, unsigned int level, const SamplerID &samplerID) {
-	const int clutSharingOffset = samplerID.useSharedClut ? 0 : level * 16;
+	int clutSharingOffset = 0;
+	if (!samplerID.useSharedClut)
+		clutSharingOffset = samplerID.TexFmt() == GE_TFMT_CLUT4 ? level * 16 : (level & 1) * 256;
 
 	switch (samplerID.ClutFmt()) {
 	case GE_CMODE_16BIT_BGR5650:
@@ -390,7 +405,7 @@ inline static Nearest4 SOFTRAST_CALL SampleNearest(const int u[N], const int v[N
 		for (int i = 0; i < N; ++i) {
 			const u8 *src = srcptr + GetPixelDataOffset<8>(texbufw, u[i], v[i], samplerID.swizzle);
 			u8 val = *src;
-			res.v[i] = LookupColor(TransformClutIndex(val, samplerID), 0, samplerID);
+			res.v[i] = LookupColor(TransformClutIndex(val, samplerID), level, samplerID);
 		}
 		return res;
 
@@ -398,7 +413,6 @@ inline static Nearest4 SOFTRAST_CALL SampleNearest(const int u[N], const int v[N
 		for (int i = 0; i < N; ++i) {
 			const u8 *src = srcptr + GetPixelDataOffset<4>(texbufw, u[i], v[i], samplerID.swizzle);
 			u8 val = (u[i] & 1) ? (src[0] >> 4) : (src[0] & 0xF);
-			// Only CLUT4 uses separate mipmap palettes.
 			res.v[i] = LookupColor(TransformClutIndex(val, samplerID), level, samplerID);
 		}
 		return res;
@@ -467,15 +481,22 @@ static inline void ApplyTexelClamp(int out_u[N], int out_v[N], const int u[N], c
 	}
 }
 
+// A texel coordinate in 1/16 texel, truncated. Out of int range it's INT_MIN, as the x86 sampler JIT's
+// conversion gives (gpu/probe exp5: s >= 2^18 on a 512 wide repeating texture reads texel 0 on a PSP).
+static inline int TexelFixed(float f) {
+	return f >= -2147483648.0f && f < 2147483648.0f ? (int)f : INT_MIN;
+}
+
 static inline void GetTexelCoordinates(int level, float s, float t, int &out_u, int &out_v, const SamplerID &samplerID) {
 	int width = samplerID.cached.sizes[level].w;
 	int height = samplerID.cached.sizes[level].h;
 
-	int base_u = (int)(s * width * 256.0f);
-	int base_v = (int)(t * height * 256.0f);
+	// The GE truncates to 1/16 texel, toward zero (gpu/probe exp57).
+	int base_u = TexelFixed(s * width * 16.0f);
+	int base_v = TexelFixed(t * height * 16.0f);
 
-	base_u >>= 8;
-	base_v >>= 8;
+	base_u >>= 4;
+	base_v >>= 4;
 
 	ApplyTexelClamp<1>(&out_u, &out_v, &base_u, &base_v, width, height, samplerID);
 }
@@ -693,9 +714,10 @@ static inline Vec4IntResult SOFTRAST_CALL ApplyTexelClampQuadT(bool clamp, int v
 static inline Vec4IntResult SOFTRAST_CALL GetTexelCoordinatesQuadS(int level, float in_s, int &frac_u, const SamplerID &samplerID) {
 	int width = samplerID.cached.sizes[level].w;
 
-	int base_u = (int)(in_s * width * 256) - 128;
-	frac_u = (int)(base_u >> 4) & 0x0F;
-	base_u >>= 8;
+	// The GE truncates to 1/16 texel, toward zero (gpu/probe exp57).
+	int base_u = TexelFixed(in_s * width * 16) - 8;
+	frac_u = base_u & 0x0F;
+	base_u >>= 4;
 
 	// Need to generate and individually wrap/clamp the four sample coordinates. Ugh.
 	return ApplyTexelClampQuadS(samplerID.clampS, base_u, width);
@@ -704,9 +726,9 @@ static inline Vec4IntResult SOFTRAST_CALL GetTexelCoordinatesQuadS(int level, fl
 static inline Vec4IntResult SOFTRAST_CALL GetTexelCoordinatesQuadT(int level, float in_t, int &frac_v, const SamplerID &samplerID) {
 	int height = samplerID.cached.sizes[level].h;
 
-	int base_v = (int)(in_t * height * 256) - 128;
-	frac_v = (int)(base_v >> 4) & 0x0F;
-	base_v >>= 8;
+	int base_v = TexelFixed(in_t * height * 16) - 8;
+	frac_v = base_v & 0x0F;
+	base_v >>= 4;
 
 	// Need to generate and individually wrap/clamp the four sample coordinates. Ugh.
 	return ApplyTexelClampQuadT(samplerID.clampT, base_v, height);
@@ -730,12 +752,14 @@ static Vec4IntResult SOFTRAST_CALL SampleLinearLevel(float s, float t, const u8 
 	__m128i mul_u =	_mm_set1_epi16(frac_u);
 	mul_u = _mm_xor_si128(mul_u, _mm_setr_epi16(0xF, 0xF, 0xF, 0xF, 0x0, 0x0, 0x0, 0x0));
 	mul_u = _mm_add_epi16(mul_u, _mm_setr_epi16(0x1, 0x1, 0x1, 0x1, 0x0, 0x0, 0x0, 0x0));
+	// Like the GE: horizontal lerps truncated to 8 bits, then the vertical one (gpu/probe exp52).
+	top = _mm_mullo_epi16(top, mul_u);
+	bot = _mm_mullo_epi16(bot, mul_u);
+	top = _mm_srli_epi16(_mm_add_epi16(top, _mm_shuffle_epi32(top, _MM_SHUFFLE(3, 2, 3, 2))), 4);
+	bot = _mm_srli_epi16(_mm_add_epi16(bot, _mm_shuffle_epi32(bot, _MM_SHUFFLE(3, 2, 3, 2))), 4);
 	top = _mm_mullo_epi16(top, _mm_set1_epi16(0x10 - frac_v));
 	bot = _mm_mullo_epi16(bot, _mm_set1_epi16(frac_v));
-	__m128i sum = _mm_add_epi16(top, bot);
-	sum = _mm_mullo_epi16(sum, mul_u);
-	sum = _mm_add_epi16(sum, _mm_shuffle_epi32(sum, _MM_SHUFFLE(3, 2, 3, 2)));
-	sum = _mm_srli_epi16(sum, 8);
+	__m128i sum = _mm_srli_epi16(_mm_add_epi16(top, bot), 4);
 	sum = _mm_unpacklo_epi16(sum, zero);
 	return sum;
 #else
@@ -743,9 +767,10 @@ static Vec4IntResult SOFTRAST_CALL SampleLinearLevel(float s, float t, const u8 
 	Vec4<int> texcolor_tr = Vec4<int>::FromRGBA(c.v[1]);
 	Vec4<int> texcolor_bl = Vec4<int>::FromRGBA(c.v[2]);
 	Vec4<int> texcolor_br = Vec4<int>::FromRGBA(c.v[3]);
-	Vec4<int> top = texcolor_tl * (0x10 - frac_u) + texcolor_tr * frac_u;
-	Vec4<int> bot = texcolor_bl * (0x10 - frac_u) + texcolor_br * frac_u;
-	return ToVec4IntResult((top * (0x10 - frac_v) + bot * frac_v) >> (4 + 4));
+	// Like the GE: horizontal lerps truncated to 8 bits, then the vertical one (gpu/probe exp52).
+	Vec4<int> top = (texcolor_tl * (0x10 - frac_u) + texcolor_tr * frac_u) >> 4;
+	Vec4<int> bot = (texcolor_bl * (0x10 - frac_u) + texcolor_br * frac_u) >> 4;
+	return ToVec4IntResult((top * (0x10 - frac_v) + bot * frac_v) >> 4);
 #endif
 }
 

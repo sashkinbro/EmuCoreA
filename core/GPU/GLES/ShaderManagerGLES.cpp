@@ -186,12 +186,15 @@ LinkedShader::LinkedShader(GLRenderManager *render, VShaderID VSID, Shader *vs, 
 
 	GLRProgramFlags flags{};
 	flags.supportDualSource = gstate_c.Use(GPU_USE_DUALSOURCE_BLEND);
-	if (!VSID.Bit(VS_BIT_IS_THROUGH) && gstate_c.Use(GPU_USE_DEPTH_CLAMP)) {
-		flags.useClipDistance0 = true;
-		if (VSID.Bit(VS_BIT_VERTEX_RANGE_CULLING) && gstate_c.Use(GPU_USE_CLIP_DISTANCE))
+	// Must match the planes GenerateVertexShader writes: min/max Z in 0 and 1, the near plane in 2.
+	if (gstate_c.Use(GPU_USE_CLIP_DISTANCE)) {
+		if (!VSID.Bit(VS_BIT_IS_THROUGH)) {
+			flags.useClipDistance0 = true;
 			flags.useClipDistance1 = true;
-	} else if (VSID.Bit(VS_BIT_VERTEX_RANGE_CULLING) && gstate_c.Use(GPU_USE_CLIP_DISTANCE)) {
-		flags.useClipDistance0 = true;
+		}
+		if (VSID.Bit(VS_BIT_USE_HW_TRANSFORM)) {
+			flags.useClipDistance2 = true;
+		}
 	}
 
 	program = render->CreateProgram(shaders, semantics, queries, initialize, nullptr, flags);
@@ -550,7 +553,7 @@ void LinkedShader::UpdateUniforms(const ShaderID &vsid, const ShaderLanguageDesc
 		SetColorUniform3(render_, &u_matemissive, gstate.materialemissive);
 	}
 	if (dirty & DIRTY_MATSPECULAR) {
-		SetColorUniform3ExtraFloat(render_, &u_matspecular, gstate.materialspecular, PSPSpecularCoef(getFloat24(gstate.materialspecularcoef)));
+		SetColorUniform3ExtraFloat(render_, &u_matspecular, gstate.materialspecular, PSPLightExponent(getFloat24(gstate.materialspecularcoef)));
 	}
 
 	for (int i = 0; i < 4; i++) {
@@ -564,7 +567,7 @@ void LinkedShader::UpdateUniforms(const ShaderID &vsid, const ShaderLanguageDesc
 			if (u_lightdir[i] != -1) SetFloat24Uniform3Normalized(render_, &u_lightdir[i], &gstate.ldir[i * 3]);
 			if (u_lightatt[i] != -1) SetFloat24Uniform3(render_, &u_lightatt[i], &gstate.latt[i * 3]);
 			if (u_lightangle_spotCoef[i] != -1) {
-				float lightangle_spotCoef[2] = { getFloat24(gstate.lcutoff[i]), getFloat24(gstate.lconv[i]) };
+				float lightangle_spotCoef[2] = { getFloat24(gstate.lcutoff[i]), PSPLightExponent(getFloat24(gstate.lconv[i])) };
 				SetFloatUniform2(render_, &u_lightangle_spotCoef[i], lightangle_spotCoef);
 			}
 			if (u_lightambient[i] != -1) SetColorUniform3(render_, &u_lightambient[i], gstate.lcolor[i * 3]);
@@ -856,7 +859,7 @@ enum class CacheDetectFlags {
 };
 
 #define CACHE_HEADER_MAGIC 0x83277592
-#define CACHE_VERSION 44
+#define CACHE_VERSION 45
 
 struct CacheHeader {
 	uint32_t magic;

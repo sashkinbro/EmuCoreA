@@ -67,6 +67,8 @@ EmuCoreA version `0.0.5` currently targets Android with:
 
 ## Core Integration
 
+The vendored core includes PPSSPP `master` through [`bd04d064a4`](https://github.com/hrydgard/ppsspp/commit/bd04d064a4), synchronized on 2026-10-08. EmuCoreA retains its frontend lifecycle, audio queue, surface recovery and release diagnostics patches. Module-start callbacks are also cleared at kernel shutdown so a translation-patch loader cannot leave a guest address active in the next game.
+
 `CoreRuntime` owns the process-wide session and frame worker. `NativePpsspp` calls the native frontend through JNI; the frontend uses PPSSPP's asynchronous loader, JIT/IR interpreter, GPU backends, frame timing, save states and stereo resampler directly. The build excludes the libretro wrapper and PPSSPP's application UI.
 
 | Renderer | PSP rendering | Android presentation |
@@ -137,12 +139,15 @@ Visible output is checked from the composited display: PSP framebuffer alpha sto
 
 Additional native checks:
 
+- `core-native/src/test/cpp/run-device-tests.ps1 -DeviceSerial <adb-serial> -Configuration Release`: after `:app:assembleRelease`, compiles ARM64 probes against the packaged core and runs the module callback, stereo resampler, upstream GE arithmetic and spline tessellation suites on the selected device. Temporary device files are cleaned afterward; the installed app and its data are untouched.
 - [Vulkan presentation contracts](app/src/test/cpp/vulkan-presentation/README.md): execute the production presenter against controlled Vulkan dispatch, including synchronization and resource lifetime.
 - [GPU color probes](app/src/test/cpp/shader-colors/README.md): device EGL/Vulkan checks against the production shader runtime.
 - [Stereo resampler regression](core-native/src/test/cpp/stereo_resampler_test.cpp): links the actual native core and checks stereo order through underruns, queue resets and conversion to 44.1/48/96 kHz output.
 - [Release diagnostic evaluation](core-native/src/test/cpp/release_diagnostics_test.cpp): compile with C++17, `-DNDEBUG` and `-I core`, both with and without `-DEMUCOREA_RELEASE=1`; verifies that production logs/debug assertions do not evaluate their arguments while the enabled control build still does.
 
 These checks cover integration behavior. Game compatibility, sustained performance and audible output still depend on the title, device, driver and selected settings.
+
+The 2026-10-08 upstream sync passed 163 JVM tests, 21 Android tests on a OnePlus CPH2747, native Vulkan contracts, release artifact checks and the device native suites above. A separate Tekken 6 Arcade fight was visually confirmed on all three renderers with shaders off, identity and off again. These short gameplay checks verify rendering and state restoration rather than sustained performance.
 
 ## Project Structure
 

@@ -81,8 +81,15 @@ inline float PSPLightPow(float x, float e) {
 	return y;
 }
 
-// The GE only uses the top 4 bits of the specular coefficient's mantissa.
-inline float PSPSpecularCoef(float e) {
+// The exponent of the GE's lighting pow (specular and spot): the top 4 bits of the mantissa, truncated, and
+// saturated below 512, so 512 and up, infinity and NaN all act as 496 (gpu/probe exp221-223).
+inline float PSPLightExponent(float e) {
+	if (std::isnan(e)) {
+		return std::signbit(e) ? 0.0f : 496.0f;
+	}
+	if (e >= 512.0f) {
+		return 496.0f;
+	}
 	u32 bits;
 	memcpy(&bits, &e, sizeof(bits));
 	bits &= 0xFFF80000;
@@ -160,3 +167,19 @@ struct SimpleVertex {
 	Vec3Packedf nrm;
 	Vec3Packedf pos;
 };
+
+// The GE converts the fog factor to 8 bits per vertex, min(floor(256 * f), 255), and interpolates that
+// linearly in screen space. NaN and inf go by sign, like other values (measured with gpu/probe).
+inline int GEFogFactor(float f) {
+	uint32_t bits;
+	memcpy(&bits, &f, sizeof(bits));
+	const uint32_t exp = bits >> 23;
+	if ((bits & 0x80000000) != 0 || exp <= 126 - 8) {
+		return 0;
+	}
+	if (exp > 126) {
+		return 255;
+	}
+	const uint32_t mantissa = (bits & 0x007FFFFF) | 0x00800000;
+	return mantissa >> (16 + 126 - exp);
+}

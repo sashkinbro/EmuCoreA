@@ -43,6 +43,7 @@
 #include "Common/File/VFS/ZipFileReader.h"
 #include "Common/File/VFS/DirectoryReader.h"
 #include "Common/File/FileUtil.h"
+#include "GPU/Debugger/Playback.h"
 #include "Common/GPU/GraphicsContext.h"
 #include "Common/Net/Resolve.h"
 #include "Common/TimeUtil.h"
@@ -79,6 +80,8 @@
 
 static Path g_comparisonScreenshot;
 static Path g_screenshotSavePath;
+static Path g_depthSavePath;
+static bool g_screenshotRenderTarget = false;
 static Path g_screenshotDiffPath;
 static bool g_screenshotSaveKeepAlpha = false;
 static bool g_screenshotSaved = false;
@@ -211,6 +214,50 @@ void SendAndCollectOutput(std::string_view output) {
 	}
 }
 
+// Writes u32 width, u32 height, then a depth per PSP pixel: u16, or float with a .f32 extension.
+// The hardware backends store depth as z / 65536 (z / 65535 for clears) in a 24-bit or float buffer
+// without the PSP's rounding, so z is floor(d * 65536), as in ReadbackDepthbuffer. The .f32 version
+// keeps the fraction, to see how close two draws came.
+static void SaveDepthBuffer(const GPUDebugBuffer &depth, const Path &path) {
+	const bool isFloat = depth.GetFormat() == GPU_DBG_FORMAT_FLOAT;
+	const bool saveFloat = path.GetFileExtension() == ".f32";
+	const int scale = std::max(1, depth.GetScaleFactor());
+	const u32 w = depth.GetStride() / scale;
+	const u32 h = depth.GetHeight() / scale;
+
+	std::vector<float> values(w * h);
+	for (u32 y = 0; y < h; y++) {
+		const u32 srcY = depth.GetFlipped() ? depth.GetHeight() - 1 - y * scale : y * scale;
+		for (u32 x = 0; x < w; x++) {
+			const u32 offset = srcY * depth.GetStride() + x * scale;
+			float z;
+			if (isFloat) {
+				z = ((const float *)depth.GetData())[offset] * 65536.0f;
+			} else {
+				z = ((const u16 *)depth.GetData())[offset];
+			}
+			values[y * w + x] = z;
+		}
+	}
+
+	FILE *f = File::OpenCFile(path, "wb");
+	if (!f) {
+		return;
+	}
+	const u32 header[2] = { w, h };
+	fwrite(header, sizeof(header), 1, f);
+	if (saveFloat) {
+		fwrite(values.data(), sizeof(float), values.size(), f);
+	} else {
+		std::vector<u16> z16(values.size());
+		for (size_t i = 0; i < values.size(); i++) {
+			z16[i] = (u16)std::clamp(floorf(values[i]), 0.0f, 65535.0f);
+		}
+		fwrite(z16.data(), sizeof(u16), z16.size(), f);
+	}
+	fclose(f);
+}
+
 void SendDebugScreenshot(const DebugScreenshotDesc &desc) {
 	const u8 *pixbuf = (const u8 *)desc.data;
 	u32 w = desc.stride;
@@ -223,7 +270,7 @@ void SendDebugScreenshot(const DebugScreenshotDesc &desc) {
 	const static u32 FRAME_HEIGHT = 272;
 
 	GPUDebugBuffer buffer;
-	gpu->GetCurrentFramebuffer(buffer, GPU_DBG_FRAMEBUF_DISPLAY);
+	gpu->GetCurrentFramebuffer(buffer, g_screenshotRenderTarget ? GPU_DBG_FRAMEBUF_RENDER : GPU_DBG_FRAMEBUF_DISPLAY);
 	const std::vector<u32> pixels = TranslateDebugBufferToCompare(&buffer, FRAME_STRIDE, FRAME_HEIGHT);
 
 	// If a screenshot save path is set, save unconditionally.
@@ -233,6 +280,15 @@ void SendDebugScreenshot(const DebugScreenshotDesc &desc) {
 		g_screenshotSaved = g_screenshotSaved || saved;
 		if (saved)
 			SendAndCollectOutput("Screenshot saved to: " + g_screenshotSavePath.ToVisualString() + "\n");
+	}
+
+	if (!g_depthSavePath.empty()) {
+		GPUDebugBuffer depth;
+		if (gpu->GetCurrentDepthbuffer(depth) && (depth.GetFormat() == GPU_DBG_FORMAT_16BIT || depth.GetFormat() == GPU_DBG_FORMAT_FLOAT)) {
+			SaveDepthBuffer(depth, g_depthSavePath);
+		} else {
+			SendAndCollectOutput("Depth buffer not saved: couldn't read it back\n");
+		}
 	}
 
 	// Only compare if we have a reference.
@@ -1114,6 +1170,13 @@ int main(int argc, const char* argv[]) {
 	}
 	if (cmdLineOptions.screenshotFilenameSave.has_value()) {
 		SetScreenshotSavePath(Path(std::string(cmdLineOptions.screenshotFilenameSave.value())));
+	}
+	if (cmdLineOptions.replayEnd.has_value()) {
+		GPURecord::SetReplayDrawLimit(cmdLineOptions.replayEnd.value());
+	}
+	g_screenshotRenderTarget = cmdLineOptions.screenshotRenderTarget.value_or(false);
+	if (cmdLineOptions.depthFilenameSave.has_value()) {
+		g_depthSavePath = Path(std::string(cmdLineOptions.depthFilenameSave.value()));
 	}
 	if (cmdLineOptions.screenshotFilenameDiff.has_value()) {
 		g_screenshotDiffPath = Path(std::string(cmdLineOptions.screenshotFilenameDiff.value()));

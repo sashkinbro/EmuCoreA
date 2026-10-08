@@ -88,7 +88,7 @@ struct JNIEnv {};
 #include "Common/GPU/Vulkan/VulkanLoader.h"
 #include "Common/GPU/GraphicsContext.h"
 #include "Common/GPU/Vulkan/VulkanGraphicsContext.h"
-#include "Common/GPU/OpenGL/OpenGLGraphicsContext.h"
+#include "android/jni/AndroidEGLGraphicsContext.h"
 #include "Common/StringUtils.h"
 #include "Common/TimeUtil.h"
 
@@ -105,17 +105,6 @@ struct JNIEnv {};
 #include "UI/GameInfoCache.h"
 
 #include "app-android.h"
-
-enum class EmuThreadState {
-	DISABLED,
-	START_REQUESTED,
-	RUNNING,
-	QUIT_REQUESTED,
-	STOPPED,
-};
-
-// OpenGL emu thread
-static std::thread g_emuThread;
 
 AndroidAudioState *g_audioState;
 
@@ -571,13 +560,6 @@ static std::string QueryConfig(std::string_view query) {
 		return g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation()).bImmersiveMode ? "1" : "0";
 	} else if (query == "sustainedPerformanceMode") {
 		return g_Config.bSustainedPerformanceMode ? "1" : "0";
-	} else if (query == "androidJavaGL") {
-		// If we're using Vulkan, we say no... need C++ to use Vulkan.
-		if (GetGPUBackend() == GPUBackend::VULKAN) {
-			return "false";
-		}
-		// Otherwise, some devices prefer the Java init so play it safe.
-		return "true";
 	} else if (query == "audioMixWithOthers") {
 		return g_Config.bAudioMixWithOthers ? "1" : "0";
 	} else {
@@ -774,9 +756,9 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_init
 retry:
 	switch (g_Config.iGPUBackend) {
 	case (int)GPUBackend::OPENGL:
-		INFO_LOG(Log::System, "NativeApp.init() -- creating OpenGL context (JavaGL)");
-		graphicsContext = new OpenGLGraphicsContext();
-		INFO_LOG(Log::System, "NativeApp.init() - not yet launching emuthread, waiting to displayInit");
+		INFO_LOG(Log::System, "NativeApp.init() -- creating OpenGL context");
+		graphicsContext = new AndroidEGLGraphicsContext();
+		// Like Vulkan, we wait for a surface before doing anything - see runRenderLoop.
 		break;
 	case (int)GPUBackend::VULKAN:
 	{
@@ -897,16 +879,8 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_pause(JNIEnv *, jclass) {
 extern "C" void Java_org_ppsspp_ppsspp_NativeApp_shutdown(JNIEnv *, jclass) {
 	INFO_LOG(Log::System, "NativeApp.shutdown() -- begin");
 
-	if (renderer_inited && graphicsContext && graphicsContext->NeedsSeparateEmuThread()) {
-		// Only used in Java EGL path.
-		INFO_LOG(Log::System, "Joining emuthread.");
-		EmuThread_Join(graphicsContext, g_emuThread);
-
-		INFO_LOG(Log::System, "EmuThread joined.");
-		graphicsContext->ShutdownSurface();
-		INFO_LOG(Log::System, "Graphics context now shut down from NativeApp_shutdown");
-	}
-
+	// Nothing to join here: the render loop thread owns both itself and the emu thread, and
+	// requestExitRenderLoop has already brought them down along with the surface.
 	{
 		if (graphicsContext) {
 			INFO_LOG(Log::G3D, "Shutting down renderer");
@@ -927,76 +901,6 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_shutdown(JNIEnv *, jclass) {
 		g_frameCommands.clear();
 	}
 	INFO_LOG(Log::System, "NativeApp.shutdown() -- end");
-}
-
-// JavaEGL. This doesn't get called on the Vulkan path.
-// This gets called from onSurfaceCreated.
-extern "C" jboolean Java_org_ppsspp_ppsspp_NativeRenderer_displayInit(JNIEnv * env, jobject obj) {
-	if (!graphicsContext) {
-		ERROR_LOG(Log::G3D, "NativeApp.displayInit() - graphicsContext is null!");
-		return false;
-	}
-
-	_assert_(graphicsContext->NeedsSeparateEmuThread());
-
-	INFO_LOG(Log::G3D, "NativeApp.displayInit()");
-	bool firstStart = !renderer_inited;
-
-	// We should be running on the render thread here.
-	std::string errorMessage;
-	if (!renderer_inited) {
-		INFO_LOG(Log::G3D, "NativeApp.displayInit() first time");
-		if (!graphicsContext->InitSurface(WINDOWSYSTEM_ANDROID, nullptr, nullptr, &errorMessage)) {
-			System_Toast("Graphics initialization failed. Quitting.");
-			return false;
-		}
-
-		graphicsContext->GetDrawContext()->SetErrorCallback([](const char *shortDesc, const char *details, void *userdata) {
-			g_OSD.Show(OSDType::MESSAGE_ERROR, details, 5.0);
-		}, nullptr);
-
-		// This is where we start the emuthread now - after InitFromRenderThread. This eliminates a race condition.
-		g_emuThread = EmuThread_Start(graphicsContext, new NativeApplication(), [](GraphicsContext *graphicsContext) {
-			NativeFrame(graphicsContext);
-			ProcessFrameCommands();
-			return true;
-		});
-		renderer_inited = true;
-	} else {
-		// Would be really nice if we could get something on the GL thread immediately when shutting down,
-		// but the only mechanism for handling lost devices seems to be that onSurfaceCreated is called again,
-		// which ends up calling displayInit.
-		INFO_LOG(Log::G3D, "NativeApp.displayInit(): Second time, joining the emuthread and starting it up again.");
-		EmuThread_Join(graphicsContext, g_emuThread);
-
-		graphicsContext->ShutdownSurface();
-
-		INFO_LOG(Log::G3D, "Shut down both threads. Now let's bring it up again!");
-
-		if (!graphicsContext->InitSurface(WINDOWSYSTEM_ANDROID, nullptr, nullptr, &errorMessage)) {
-			System_Toast(("Graphics initialization failed: Quitting: " + errorMessage).c_str());
-			return false;
-		}
-
-		graphicsContext->GetDrawContext()->SetErrorCallback([](const char *shortDesc, const char *details, void *userdata) {
-			g_OSD.Show(OSDType::MESSAGE_ERROR, details, 5.0);
-		}, nullptr);
-
-		g_emuThread = EmuThread_Start(graphicsContext, new NativeApplication(), [](GraphicsContext *graphicsContext) {
-			NativeFrame(graphicsContext);
-			ProcessFrameCommands();
-			return true;
-		});
-
-		INFO_LOG(Log::G3D, "Restored.");
-	}
-
-	System_PostUIMessage(UIMessage::RECREATE_VIEWS);
-
-	if (IsVREnabled()) {
-		EnterVR(firstStart);
-	}
-	return true;
 }
 
 extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_backbufferResize(JNIEnv *, jclass, jint pixel_xres, jint pixel_yres, jint format) {
@@ -1135,38 +1039,6 @@ extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_sendRequestResult(JNIEn
 		g_requestManager.PostSystemSuccess(jrequestID, value, jintValue);
 	} else {
 		g_requestManager.PostSystemFailure(jrequestID, jintValue);
-	}
-}
-
-// This doesn't get called on the Vulkan path.
-// We don't need a render thread "loop" as this gets called repeatedly by the system, by a system
-// render thread.
-extern "C" void Java_org_ppsspp_ppsspp_NativeRenderer_displayRender(JNIEnv *env, jobject obj) {
-	static bool hasSetThreadName = false;
-	if (!hasSetThreadName) {
-		hasSetThreadName = true;
-		SetCurrentThreadName("AndroidRender");
-	}
-
-	if (IsVREnabled() && !StartVRRender()) {
-		return;
-	}
-
-	// This is the "GPU thread". Call ThreadFrame.
-	if (!graphicsContext) {
-		return;
-	}
-	_assert_(graphicsContext->NeedsSeparateEmuThread());
-
-	if (!graphicsContext->ThreadFrame()) {
-		INFO_LOG(Log::G3D, "ThreadFrame returned false");
-		// TODO: We should stop calling ThreadFrame here.
-		return;
-	}
-
-	if (IsVREnabled()) {
-		UpdateVRInput(g_Config.bHapticFeedback, g_display.dpi_scale_x, g_display.dpi_scale_y);
-		FinishVRRender();
 	}
 }
 
@@ -1628,21 +1500,25 @@ static void ProcessFrameCommands() {
 
 std::thread g_renderLoopThread;
 
-static void VulkanEmuThread(ANativeWindow *wnd, GraphicsContext *graphicsContext);
+static void RenderLoopThread(ANativeWindow *wnd, GraphicsContext *graphicsContext);
 
-// This runs in Vulkan mode only.
-// This handles the entire lifecycle of the Vulkan context, init and exit.
-extern "C" jboolean JNICALL Java_org_ppsspp_ppsspp_PpssppActivity_runVulkanRenderLoop(JNIEnv * env, jobject obj, jobject _surf) {
+// Runs on both the Vulkan and the OpenGL path.
+// This handles the entire lifecycle of the graphics context's surface, init and exit.
+extern "C" jboolean JNICALL Java_org_ppsspp_ppsspp_PpssppActivity_runRenderLoop(JNIEnv * env, jobject obj, jobject _surf) {
 	if (!graphicsContext) {
-		ERROR_LOG(Log::G3D, "runVulkanRenderLoop: Tried to enter without a created graphics context.");
+		ERROR_LOG(Log::G3D, "runRenderLoop: Tried to enter without a created graphics context.");
 		return false;
 	}
 
-	_assert_(!graphicsContext->NeedsSeparateEmuThread());
-
 	if (g_renderLoopThread.joinable()) {
-		ERROR_LOG(Log::G3D, "runVulkanRenderLoop: Already running");
-		return false;
+		if (renderLoopRunning) {
+			ERROR_LOG(Log::G3D, "runRenderLoop: Already running");
+			return false;
+		}
+		// The previous thread gave up by itself (failed surface init). Reap it so we can try again.
+		WARN_LOG(Log::G3D, "runRenderLoop: Joining a render thread that had already exited");
+		g_renderLoopThread.join();
+		g_renderLoopThread = std::thread();
 	}
 
 	_assert_(!exitRenderLoop);
@@ -1652,46 +1528,45 @@ extern "C" jboolean JNICALL Java_org_ppsspp_ppsspp_PpssppActivity_runVulkanRende
 	if (!wnd) {
 		// This shouldn't ever happen.
 		ERROR_LOG(Log::G3D, "Error: Surface is null.");
-		renderLoopRunning = false;
 		return false;
 	}
 
-	g_renderLoopThread = std::thread(VulkanEmuThread, wnd, graphicsContext);
+	// Set before the thread exists, so an exit request can't slip in ahead of it.
+	renderLoopRunning = true;
+	g_renderLoopThread = std::thread(RenderLoopThread, wnd, graphicsContext);
 	return true;
 }
 
-extern "C" void JNICALL Java_org_ppsspp_ppsspp_PpssppActivity_requestExitVulkanRenderLoop(JNIEnv * env, jobject obj) {
-	if (!renderLoopRunning) {
-		ERROR_LOG(Log::System, "Render loop already exited");
+extern "C" void JNICALL Java_org_ppsspp_ppsspp_PpssppActivity_requestExitRenderLoop(JNIEnv * env, jobject obj) {
+	// Like runRenderLoop, this is only called from the UI thread, so the thread object is ours.
+	// Don't go by renderLoopRunning - the thread might have bailed by itself, and still needs joining.
+	if (!g_renderLoopThread.joinable()) {
+		INFO_LOG(Log::System, "Render loop not running, nothing to join");
 		return;
 	}
-	_assert_(g_renderLoopThread.joinable());
 	exitRenderLoop = true;
 	g_renderLoopThread.join();
 	g_renderLoopThread = std::thread();
+	exitRenderLoop = false;
 }
 
-// TODO: Merge with the Win32 EmuThread and so on, and the Java EmuThread?
 // This function must release the wnd reference.
-static void VulkanEmuThread(ANativeWindow *wnd, GraphicsContext *graphicsContext) {
-	SetCurrentThreadName("EmuThread");
+static void RenderLoopThread(ANativeWindow *wnd, GraphicsContext *graphicsContext) {
+	// Only a provisional name, so the surface init below has something to log under. RunGraphicsLoop
+	// renames this thread once it knows which of the two roles it's going to take.
+	SetCurrentThreadName("RenderLoop");
 
 	AndroidJNIThreadContext ctx;
-	JNIEnv *env = getEnv();
 	_assert_(graphicsContext);
 
 	if (exitRenderLoop) {
-		WARN_LOG(Log::G3D, "runVulkanRenderLoop: ExitRenderLoop requested at start, skipping the whole thing.");
+		WARN_LOG(Log::G3D, "RenderLoopThread: ExitRenderLoop requested at start, skipping the whole thing.");
 		renderLoopRunning = false;
-		exitRenderLoop = false;
 		ANativeWindow_release(wnd);
 		return;
 	}
 
-	// This is up here to prevent race conditions, in case we pause during init.
-	renderLoopRunning = true;
-
-	WARN_LOG(Log::G3D, "runVulkanRenderLoop. display_xres=%d display_yres=%d desiredBackbufferSizeX=%d desiredBackbufferSizeY=%d",
+	WARN_LOG(Log::G3D, "RenderLoopThread. display_xres=%d display_yres=%d desiredBackbufferSizeX=%d desiredBackbufferSizeY=%d",
 		display_xres, display_yres, desiredBackbufferSizeX, desiredBackbufferSizeY);
 
 	std::string errorMessage;
@@ -1707,11 +1582,18 @@ static void VulkanEmuThread(ANativeWindow *wnd, GraphicsContext *graphicsContext
 	}
 
 	renderer_inited = true;
-	RunMainLoop(graphicsContext, new NativeApplication(), [](GraphicsContext *graphicsContext) {
+	const auto frame = [](GraphicsContext *graphicsContext) {
 		NativeFrame(graphicsContext);
 		ProcessFrameCommands();
 		return !exitRenderLoop;
-	});
+	};
+	// Both backends share one lifecycle now, which is the point of all this: RunGraphicsLoop picks
+	// the thread arrangement the context needs and doesn't return until emulation is done. Windows
+	// and headless go through the same function, via MainThreadFunc.
+	// We have to hand it exitRenderLoop as well as the frame callback - in VR the loop can be
+	// parked waiting for the session to come back, where the callback is never reached.
+	RunGraphicsLoop(graphicsContext, new NativeApplication(), frame, []() { return exitRenderLoop.load(); });
+
 	renderer_inited = false;
 
 	// Shut the graphics context down to the same state it was in when we entered the render thread.
@@ -1720,8 +1602,8 @@ static void VulkanEmuThread(ANativeWindow *wnd, GraphicsContext *graphicsContext
 
 	// But we don't shut down the API. On some platforms like Android, we keep that around for later.
 
+	// exitRenderLoop is reset by whoever set it, after joining us.
 	renderLoopRunning = false;
-	exitRenderLoop = false;
 	ANativeWindow_release(wnd);
 
 	WARN_LOG(Log::G3D, "Render loop function exited.");

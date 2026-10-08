@@ -131,6 +131,7 @@ public:
 	u32 CheckGPUFeatures() const override { return 0; }
 	void ExecuteOp(u32 op, u32 diff) override;
 	void FinishDeferred() override;
+	void FlushPendingDrawing() override;
 	int ListSync(int listid, int mode) override;
 	u32 DrawSync(int mode) override;
 	void UpdateCmdInfo() override {}
@@ -183,6 +184,7 @@ public:
 	void Execute_FramebufPtr(u32 op, u32 diff);
 	void Execute_FramebufFormat(u32 op, u32 diff);
 	void Execute_ZbufPtr(u32 op, u32 diff);
+	void Execute_TexFlush(u32 op, u32 diff);
 	void Execute_VertexType(u32 op, u32 diff);
 
 	// Overridden to change flushing behavior.
