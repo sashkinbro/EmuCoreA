@@ -99,6 +99,12 @@ object NativePpsspp {
     /** True once the asynchronous core boot (PSP_InitUpdate) has completed. */
     external fun nativeIsBooted(): Boolean
 
+    /** Empty while healthy; the native boot/render failure otherwise. */
+    external fun nativeGetRuntimeError(): String
+
+    /** Suspends device audio along with the frontend frame loop. */
+    external fun nativeSetPaused(paused: Boolean)
+
     /** Repoints the core at a new data root while idle. */
     external fun nativeUpdateDataDirectories(dataDir: String, externalDir: String)
 
@@ -116,8 +122,6 @@ object NativePpsspp {
      * [1] = displayed flips/s, [2] = actual displayed fps.
      */
     external fun nativeGetDisplayStats(): FloatArray?
-
-    external fun nativeSetShaderEffect(effect: Int)
 
     external fun nativeSetShaderPreset(preset: String)
 

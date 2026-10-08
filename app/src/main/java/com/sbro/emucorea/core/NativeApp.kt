@@ -222,9 +222,9 @@ object NativeApp {
     @JvmStatic fun hasAttachedSurface(surface: Surface, width: Int, height: Int): Boolean =
         CoreRuntime.hasAttachedSurface(surface, width, height)
     @JvmStatic fun onNativeSurfaceDestroyed() = CoreRuntime.detachSurface()
-    @JvmStatic fun runVMThread(path: String): Boolean {
+    @JvmStatic @JvmOverloads fun runVMThread(path: String, coreOptions: Map<String, String> = emptyMap()): Boolean {
         currentGamePath = path
-        return CoreRuntime.start(path)
+        return CoreRuntime.start(path, coreOptions)
     }
     @JvmStatic fun restartRenderer(renderer: Int): Boolean = CoreRuntime.restartWithRenderer(renderer)
     @JvmStatic fun changeDisc(path: String): Boolean = CoreRuntime.changeDisc(path)

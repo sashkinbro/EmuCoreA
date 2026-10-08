@@ -149,6 +149,18 @@ void StereoResampler::Clear() {
 	memset(buffer_, 0, maxBufsize_ * 2 * sizeof(int16_t));
 }
 
+void StereoResampler::ResetForOutput() {
+	UpdateBufferSize();
+	fixedBufferSize_ = true;
+	memset(buffer_, 0, MAX_BUFSIZE_EXTRA * 2 * sizeof(int16_t));
+	indexW_.store(0);
+	indexR_.store(0);
+	frac_ = 0;
+	numLeftI_ = 0.0f;
+	droppedSamples_ = 0;
+	ResetStatCounters();
+}
+
 inline int16_t MixSingleSample(int16_t s1, int16_t s2, uint16_t frac) {
 	int32_t value = s1 + (((s2 - s1) * frac) >> 16);
 	if (value < -32767)
@@ -237,8 +249,8 @@ void StereoResampler::Mix(s16 *samples, unsigned int numSamples, bool consider_f
 
 	// Padding with the last value to reduce clicking
 	short s[2];
-	s[0] = clamp_s16(buffer_[(indexR - 1) & INDEX_MASK]);
-	s[1] = clamp_s16(buffer_[(indexR - 2) & INDEX_MASK]);
+	s[0] = clamp_s16(buffer_[(indexR - 2) & INDEX_MASK]);
+	s[1] = clamp_s16(buffer_[(indexR - 1) & INDEX_MASK]);
 	for (; currentSample < numSamples * 2; currentSample += 2) {
 		samples[currentSample] = s[0];
 		samples[currentSample + 1] = s[1];
@@ -252,7 +264,7 @@ void StereoResampler::Mix(s16 *samples, unsigned int numSamples, bool consider_f
 void StereoResampler::PushSamples(const s32 *samples, unsigned int numSamples, float multiplier) {
 	inputSampleCount_ += numSamples;
 
-	UpdateBufferSize();
+	if (!fixedBufferSize_) UpdateBufferSize();
 	const int INDEX_MASK = (maxBufsize_ * 2 - 1);
 	// Cache access in non-volatile variable
 	// indexR isn't allowed to cache in the audio throttling loop as it

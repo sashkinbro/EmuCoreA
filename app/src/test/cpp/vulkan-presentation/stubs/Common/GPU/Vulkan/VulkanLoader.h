@@ -1,0 +1,33 @@
+#pragma once
+#define VK_NO_PROTOTYPES
+#include "ext/vulkan/vulkan.h"
+namespace PPSSPP_VK {
+#define TEST_VK_FUNCTION(name) extern PFN_##name name;
+TEST_VK_FUNCTION(vkCreateCommandPool)
+TEST_VK_FUNCTION(vkDestroyCommandPool)
+TEST_VK_FUNCTION(vkDestroySemaphore)
+TEST_VK_FUNCTION(vkAcquireNextImageKHR)
+TEST_VK_FUNCTION(vkQueuePresentKHR)
+TEST_VK_FUNCTION(vkQueueSubmit)
+TEST_VK_FUNCTION(vkQueueWaitIdle)
+TEST_VK_FUNCTION(vkGetSwapchainImagesKHR)
+TEST_VK_FUNCTION(vkCreateSemaphore)
+TEST_VK_FUNCTION(vkAllocateCommandBuffers)
+TEST_VK_FUNCTION(vkCreateImage)
+TEST_VK_FUNCTION(vkGetImageMemoryRequirements)
+TEST_VK_FUNCTION(vkAllocateMemory)
+TEST_VK_FUNCTION(vkBindImageMemory)
+TEST_VK_FUNCTION(vkDestroyImage)
+TEST_VK_FUNCTION(vkFreeMemory)
+TEST_VK_FUNCTION(vkResetCommandBuffer)
+TEST_VK_FUNCTION(vkBeginCommandBuffer)
+TEST_VK_FUNCTION(vkCmdPipelineBarrier)
+TEST_VK_FUNCTION(vkCmdCopyImage)
+TEST_VK_FUNCTION(vkEndCommandBuffer)
+TEST_VK_FUNCTION(vkGetInstanceProcAddr)
+TEST_VK_FUNCTION(vkCreateFence)
+TEST_VK_FUNCTION(vkDestroyFence)
+TEST_VK_FUNCTION(vkWaitForFences)
+TEST_VK_FUNCTION(vkResetFences)
+#undef TEST_VK_FUNCTION
+}

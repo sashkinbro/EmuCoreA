@@ -70,11 +70,15 @@ private:
     VkCommandPool commandPool_ = VK_NULL_HANDLE;
     std::vector<VkCommandBuffer> commandBuffers_;
     std::vector<VkSemaphore> presentSemaphores_;
+    // The core's frame fence precedes our extra submit. Track its completion
+    // separately before resetting a command buffer for the same swapchain image.
+    std::vector<VkFence> presentFences_;
 
 #if defined(EMUCOREA_HAVE_LIBRASHADER)
     void *chain_ = nullptr;
     std::string chainPreset_;
     uint64_t chainGeneration_ = 0;
+    uint32_t chainImageCount_ = 0;
     bool chainFailed_ = false;
     uint64_t chainFrameCount_ = 0;
 

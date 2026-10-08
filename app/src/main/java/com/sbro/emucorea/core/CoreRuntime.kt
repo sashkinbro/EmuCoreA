@@ -3,7 +3,6 @@
 package com.sbro.emucorea.core
 
 import android.content.Context
-import android.graphics.Rect
 import android.net.Uri
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -29,7 +28,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import com.sbro.emucorea.data.RetroArchShaderEffects
 
 /**
  * Process-wide owner of the native PPSSPP session.
@@ -54,6 +52,7 @@ internal object CoreRuntime {
     private const val FRAME_SIZE_POLL_INTERVAL_NANOS = 500_000_000L
 
     val settings = ConcurrentHashMap<String, String>()
+    private val sessionCoreOptions = ConcurrentHashMap<String, String>()
     private val _failure = MutableStateFlow<RuntimeFailure?>(null)
     val failure = _failure.asStateFlow()
 
@@ -70,6 +69,9 @@ internal object CoreRuntime {
     // Snapshot restored once the re-booted core reports ready (renderer switch).
     @Volatile private var pendingStateRestorePath: String? = null
     @Volatile private var pendingStateRestoreAttempts = 0
+    // Keep output paused while a restarted session boots and restores its state.
+    // The worker itself must continue until those operations finish.
+    @Volatile private var pendingPauseAfterRestart = false
     // SAF descriptor for a content:// game. Kept open for the whole session;
     // the native core duplicates the fd and owns only its own duplicate.
     private var pendingGameDescriptor: ParcelFileDescriptor? = null
@@ -281,8 +283,8 @@ internal object CoreRuntime {
         NativePpsspp.nativeSetConfig("volume", percent.toString())
     }
 
-    fun start(gamePath: String): Boolean = lifecycleLock.withLock {
-        startSession(gamePath)
+    fun start(gamePath: String, coreOptions: Map<String, String> = emptyMap()): Boolean = lifecycleLock.withLock {
+        startSession(gamePath, coreOptions)
     }
 
     /**
@@ -305,33 +307,50 @@ internal object CoreRuntime {
             return@withLock true
         }
 
-        val appContext = context
-        val snapshot: File? = if (appContext != null) {
-            File(appContext.cacheDir, ".renderer-switch.sav").also { it.delete() }
-        } else {
-            null
+        val appContext = context ?: return@withLock false
+        var wasPaused = false
+        var preservedPendingSnapshot = false
+        val snapshot = try {
+            sessionLock.withLock {
+                wasPaused = paused || pendingPauseAfterRestart
+                val pendingSnapshot = pendingStateRestorePath?.let(::File)
+                preservedPendingSnapshot = pendingSnapshot != null
+                // The previous restart may still be booting. Carry its game
+                // position forward before shutdown deletes its owned files.
+                runtimeRendererSnapshot(appContext.cacheDir, pendingSnapshot)
+            }
+        } catch (error: Exception) {
+            Log.e(TAG, "Renderer restart aborted: its snapshot could not be preserved", error)
+            return@withLock false
         }
-        val savedState = snapshot != null && saveState(snapshot.absolutePath)
+        // Saving queues work on the frame thread, so never hold sessionLock here.
+        val savedState = preservedPendingSnapshot || saveState(snapshot.absolutePath)
+        val coreOptions = sessionCoreOptions.toMap()
         shutdownSession()
-        if (!startSession(gamePath)) {
+        if (!startSession(
+                gamePath,
+                coreOptions,
+                restoreStatePath = if (savedState) snapshot.absolutePath else null,
+                pauseAfterBoot = wasPaused
+            )) {
             Log.e(TAG, "Renderer restart failed; the game could not be re-booted")
-            if (snapshot != null) snapshot.delete()
+            snapshot.delete()
             reportFailure("The renderer restart failed")
             return@withLock false
         }
-        if (savedState) {
-            // The core needs its first frame before a state can be loaded, so
-            // the frame loop picks this up and retries until it takes.
-            pendingStateRestoreAttempts = 0
-            pendingStateRestorePath = snapshot?.absolutePath
-        } else if (snapshot != null) {
+        if (!savedState) {
             snapshot.delete()
         }
         Log.i(TAG, "Renderer restarted with ${RendererDefaults.coreRendererName(coreRenderer)}")
         true
     }
 
-    private fun startSession(gamePath: String): Boolean {
+    private fun startSession(
+        gamePath: String,
+        coreOptions: Map<String, String>,
+        restoreStatePath: String? = null,
+        pauseAfterBoot: Boolean = false
+    ): Boolean {
         val startupStartedAtNanos = System.nanoTime()
         if (gamePath.isBlank()) {
             // PPSSPP cannot identify content from an empty path, so an empty
@@ -359,7 +378,13 @@ internal object CoreRuntime {
         }
         currentGamePath = gamePath
         pendingGamePath = prepared
+        pendingStateRestorePath = restoreStatePath
+        pendingStateRestoreAttempts = 0
+        pendingPauseAfterRestart = pauseAfterBoot
+        sessionCoreOptions.clear()
+        sessionCoreOptions.putAll(coreOptions)
         applyStartOptions()
+        NativePpsspp.nativeSetPaused(pendingPauseAfterRestart || !nativeSurfaceReady)
         for (port in 0..1) {
             desiredPadButtons.set(port, 0xFFFF)
             pendingPadPressEdges.set(port, 0)
@@ -406,7 +431,6 @@ internal object CoreRuntime {
             ?: settings["EmuCoreA:UpscaleMultiplier"]?.toFloatOrNull()
         upscale?.let(::pushInternalResolution)
         forwardCoreOption("ppsspp_texture_filtering", pspTextureFilterName())
-        pushShaderEffect()
         pushShaderPreset()
         settings["EmuCoreA/GS:RewindEnabled"]?.toBooleanStrictOrNull()?.let {
             NativePpsspp.nativeSetRewindEnabled(it)
@@ -415,17 +439,13 @@ internal object CoreRuntime {
         // or catalogue default) so the native defaults can never drift from
         // what the UI shows. Options the app manages itself (backend/software
         // rendering/internal resolution) are filtered by translateCoreOption.
-        PpssppCoreOptions.all().forEach { option ->
-            val stored = CoreOptionStore.value(option.key)
-            val value = stored ?: when (option.key) {
-                // The legacy app-level GS filter still derives the default.
-                "ppsspp_texture_filtering" -> pspTextureFilterName()
-                else -> option.defaultValue
-            }
-            forwardCoreOption(option.key, value)
-        }
-        // Full catalogue overrides win over the derived defaults as well.
-        CoreOptionStore.persistedEntries().forEach { (key, value) ->
+        runtimeStartCoreOptions(
+            defaults = PpssppCoreOptions.all().associate { it.key to it.defaultValue },
+            global = CoreOptionStore.persistedEntries(),
+            session = sessionCoreOptions,
+            textureFilter = pspTextureFilterName(),
+            textureReplacement = settings["EmuCoreA/GS:LoadTextureReplacements"]
+        ).forEach { (key, value) ->
             forwardCoreOption(key, value)
         }
         // Internal resolution is owned by the app's per-game upscale setting, so
@@ -447,28 +467,13 @@ internal object CoreRuntime {
 
     /**
      * Pushes the app's "Frame limit / target FPS" settings into the core.
-     * 0 means the normal region rate; a positive target limits the frame rate.
+     * 0 means unlimited; 60 selects the normal PSP rate.
      */
     private fun pushFpsLimit() {
         val enabled = settings["EmuCoreA/GS:FrameLimitEnable"]?.toBooleanStrictOrNull() ?: false
         val target = settings["EmuCoreA/GS:TargetFps"]?.toIntOrNull() ?: 0
-        val limit = if (enabled && target > 0) target.coerceIn(20, 120) else 0
+        val limit = runtimeFpsLimit(enabled, target)
         NativePpsspp.nativeSetConfig("fps_limit", limit.toString())
-    }
-
-    private fun currentShaderEffect(): Int {
-        val enabled = settings["EmuCoreA/GS:ShaderChainEnabled"]?.toBooleanStrictOrNull() == true
-        if (!enabled) return RetroArchShaderEffects.NONE
-        return RetroArchShaderEffects.classify(settings["EmuCoreA/GS:ShaderChainPreset"])
-    }
-
-    /**
-     * Publishes the frontend's shader selection to the native core, which
-     * builds the librashader Vulkan presentation chain from the preset.
-     */
-    private fun pushShaderEffect() {
-        runCatching { NativePpsspp.nativeSetShaderEffect(currentShaderEffect()) }
-            .onFailure { Log.w(TAG, "Unable to apply shader effect", it) }
     }
 
     private fun pushShaderPreset() {
@@ -525,6 +530,7 @@ internal object CoreRuntime {
 
     /** Persists and forwards a PPSSPP core option. */
     fun setCoreOption(key: String, value: String) {
+        sessionCoreOptions.remove(key)
         CoreOptionStore.set(key, value)
         forwardCoreOption(key, value)
     }
@@ -611,6 +617,7 @@ internal object CoreRuntime {
      * that must not pollute the global option store.
      */
     fun applyCoreOption(key: String, value: String) {
+        if (sessionActive) sessionCoreOptions[key] = value
         forwardCoreOption(key, value)
     }
 
@@ -632,11 +639,19 @@ internal object CoreRuntime {
 
     fun pause() = lifecycleLock.withLock {
         paused = true
+        pendingPauseAfterRestart = false
+        sessionLock.withLock {
+            if (nativeInitialized) NativePpsspp.nativeSetPaused(true)
+        }
     }
 
     fun resume() = lifecycleLock.withLock {
         if (!running) return@withLock
-        paused = false
+        sessionLock.withLock {
+            paused = false
+            pendingPauseAfterRestart = false
+            if (nativeInitialized) NativePpsspp.nativeSetPaused(!nativeSurfaceReady)
+        }
     }
 
     fun shutdown() = lifecycleLock.withLock {
@@ -682,6 +697,7 @@ internal object CoreRuntime {
             // duplicate, and nativeShutdown has already released that one.
             closeGameDescriptor()
             pendingGamePath = null
+            sessionCoreOptions.clear()
             paused = false
             renderedFirstFrame = false
             sessionStartedAtNanos = 0L
@@ -691,6 +707,7 @@ internal object CoreRuntime {
                 File("$it.core").delete()
             }
             pendingStateRestorePath = null
+            pendingPauseAfterRestart = false
             _failure.value = null
         } finally {
             if (callerInterrupted) Thread.currentThread().interrupt()
@@ -768,7 +785,14 @@ internal object CoreRuntime {
             }
             loaded
         } finally {
-            paused = wasPaused
+            sessionLock.withLock {
+                paused = wasPaused
+                // A surface callback may have observed the temporary pause
+                // during extraction/loading and paused native output too.
+                if (nativeInitialized) {
+                    NativePpsspp.nativeSetPaused(paused || pendingPauseAfterRestart || !nativeSurfaceReady)
+                }
+            }
         }
     }
 
@@ -915,14 +939,14 @@ internal object CoreRuntime {
         surfaceHeight = height
         sessionLock.withLock {
             if (!(nativeSurfaceReady && previous === value && !sizeChanged)) {
-                if (nativeSurfaceReady) {
-                    NativePpsspp.nativeSetSurface(null, 0, 0)
-                    nativeSurfaceReady = false
-                }
+                // The native layer distinguishes resizing the same window
+                // from replacing it. Keep its draw context alive on resize.
                 if (nativeInitialized) {
                     nativeSurfaceReady = NativePpsspp.nativeSetSurface(value, width, height)
+                    NativePpsspp.nativeSetPaused(paused || pendingPauseAfterRestart || !nativeSurfaceReady)
                     if (!nativeSurfaceReady) {
-                        Log.e(TAG, "Failed to attach the Vulkan presentation surface")
+                        Log.e(TAG, "Failed to attach the presentation surface")
+                        if (sessionActive) reportFailure("The graphics presentation surface could not be created")
                     }
                 }
             }
@@ -994,6 +1018,7 @@ internal object CoreRuntime {
 
     fun detachSurface() {
         sessionLock.withLock {
+            if (nativeInitialized) NativePpsspp.nativeSetPaused(true)
             if (nativeSurfaceReady) {
                 NativePpsspp.nativeSetSurface(null, 0, 0)
                 nativeSurfaceReady = false
@@ -1007,10 +1032,8 @@ internal object CoreRuntime {
 
     fun displayRect(): FloatArray? {
         if (!renderedFirstFrame || surfaceWidth <= 0 || surfaceHeight <= 0) return null
-        // The native core letterboxes using PPSSPP's display layout; the raw
-        // frame pixel size is the best frontend-side approximation of it.
-        val rect = fitRect(surfaceWidth, surfaceHeight, frameWidth, frameHeight)
-        return floatArrayOf(rect.left.toFloat(), rect.top.toFloat(), rect.right.toFloat(), rect.bottom.toFloat())
+        val aspectMode = settings["EmuCoreA/Display:AspectRatio"]?.toIntOrNull() ?: ASPECT_RATIO_AUTO
+        return runtimeDisplayRect(surfaceWidth, surfaceHeight, aspectMode)
     }
 
     fun diagnostics(): String =
@@ -1063,7 +1086,6 @@ internal object CoreRuntime {
         if (section == "EmuCoreA/GS" &&
             (key == "ShaderChainEnabled" || key == "ShaderChainPreset")
         ) {
-            pushShaderEffect()
             pushShaderPreset()
         }
         val bool = value.toBooleanStrictOrNull()
@@ -1127,12 +1149,13 @@ internal object CoreRuntime {
         var lastFrameSizePollNanos = 0L
         var coreExited = false
         // Debug-only diagnostics that do not depend on the performance overlay.
-        var diagStartNanos = System.nanoTime()
+        var diagStartNanos = if (com.sbro.emucorea.BuildConfig.DEBUG) System.nanoTime() else 0L
         var diagFrames = 0
         var diagMaxCoreNanos = 0L
         try {
             while (running) {
                 drainFrameTasks()
+                if (failure.value != null) break
                 if (metricsResetRequested) {
                     // The overlay was toggled: start a clean measurement window
                     // without doing the reset work on every frame.
@@ -1140,6 +1163,11 @@ internal object CoreRuntime {
                     resetMetrics = true
                 }
                 if (paused) {
+                    resetMetrics = true
+                    Thread.sleep(8)
+                    continue
+                }
+                if (!nativeSurfaceReady) {
                     resetMetrics = true
                     Thread.sleep(8)
                     continue
@@ -1153,7 +1181,8 @@ internal object CoreRuntime {
                     if (!running) {
                         frameAborted = true
                     } else {
-                        for (port in 0..1) {
+                        // A PSP has one controller; port 1 JNI calls are no-ops.
+                        for (port in 0..0) {
                             // Preserve a tap that began and ended between two
                             // guest frames, including cores that poll input
                             // less often than the frontend presents frames.
@@ -1218,6 +1247,13 @@ internal object CoreRuntime {
                                 Log.e(TAG, "Renderer-switch snapshot restore gave up")
                             }
                         }
+                        if (pendingPauseAfterRestart && pendingStateRestorePath == null && isCoreBooted()) {
+                            // Native pause permits asynchronous boot and direct
+                            // state restoration, then the worker can stop too.
+                            paused = true
+                            pendingPauseAfterRestart = false
+                            NativePpsspp.nativeSetPaused(true)
+                        }
                         // The render size only changes on boot or an explicit
                         // resolution change, so poll it at 2 Hz instead of
                         // allocating a Java array every frame.
@@ -1243,9 +1279,26 @@ internal object CoreRuntime {
                     }
                 }
                 if (frameAborted) break
+                if (lastEmuUs == 0L) {
+                    val runtimeError = NativePpsspp.nativeGetRuntimeError()
+                    if (runtimeError.isNotBlank()) {
+                        reportFailure(runtimeError)
+                        break
+                    }
+                    // Booting and a missing draw context return immediately.
+                    // Keep processing queued operations without spinning a CPU.
+                    resetMetrics = true
+                    Thread.sleep(8)
+                    continue
+                }
                 if (coreExited) {
                     reportFailure("The game exited to the system menu")
                     break
+                }
+                if (timeControlMode == 2) {
+                    // Rewind leaves the guest in stepping mode between snapshots.
+                    // Those draws are unpaced, so avoid spinning until the next step.
+                    Thread.sleep(16)
                 }
                 val frameStartNanos = t0
                 val frameNanos = System.nanoTime() - t0
@@ -1360,15 +1413,6 @@ internal object CoreRuntime {
             context?.let { DocumentPathResolver.getDisplayName(it, path) } ?: return false
         } else path
         return PspGameFormats.isSupportedName(name)
-    }
-
-    private fun fitRect(containerWidth: Int, containerHeight: Int, contentWidth: Int, contentHeight: Int): Rect {
-        val scale = minOf(containerWidth.toFloat() / contentWidth, containerHeight.toFloat() / contentHeight)
-        val width = (contentWidth * scale).toInt().coerceAtLeast(1)
-        val height = (contentHeight * scale).toInt().coerceAtLeast(1)
-        val left = (containerWidth - width) / 2
-        val top = (containerHeight - height) / 2
-        return Rect(left, top, left + width, top + height)
     }
 
     // App aspect-ratio preference values (mirrors the display settings UI).

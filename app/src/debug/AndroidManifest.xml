@@ -6,6 +6,8 @@
         <activity
             android:name=".RuntimeTestActivity"
             android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
+            android:screenOrientation="landscape"
             android:theme="@style/Theme.EmuCoreA" />
         <activity
             android:name=".DebugJitSelfTestActivity"

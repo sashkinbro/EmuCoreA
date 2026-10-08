@@ -194,6 +194,11 @@ option(HEADLESS_CROSS "Set to ON for a headless-only cross build (no SDL fronten
 # no PPSSPP ImGui UI, no PPSSPP Java app. Builds only the core libraries plus
 # the emucorea_core JNI target below.
 option(EMUCOREA_NATIVE "Build the EmuCoreA native frontend instead of the PPSSPP app/UI" OFF)
+if(EMUCOREA_NATIVE)
+	# Compile log calls out of this frontend's production core, including the
+	# checks and formatting arguments in frequently executed PPSSPP paths.
+	add_compile_definitions("$<$<NOT:$<CONFIG:Debug>>:EMUCOREA_RELEASE=1>")
+endif()
 option(ATLAS_TOOL "Set to OFF to not generate the ATLAS_TOOL target" ${ATLAS_TOOL})
 option(UNITTEST "Set to ON to generate the unittest target" ${UNITTEST})
 option(SIMULATOR "Set to ON when targeting an x86 simulator of an ARM platform" ${SIMULATOR})
@@ -1176,11 +1181,12 @@ if(ANDROID AND EMUCOREA_NATIVE)
 		${EMUCOREA_NATIVE_DIR}/native_core.cpp
 		${EMUCOREA_NATIVE_DIR}/achievements_bridge.cpp
 		${EMUCOREA_NATIVE_DIR}/shader_chain.cpp
+		${EMUCOREA_NATIVE_DIR}/shader_chain_present.cpp
 		${EMUCOREA_NATIVE_DIR}/native_vulkan_presentation.cpp
 		android/jni/AndroidAudio.cpp
 		android/jni/OpenSLContext.cpp
 	)
-	target_link_libraries(emucorea_core Core log EGL OpenSLES aaudio android)
+	target_link_libraries(emucorea_core Core log EGL GLESv3 OpenSLES aaudio android)
 	target_include_directories(emucorea_core PRIVATE
 		${EMUCOREA_NATIVE_DIR}
 		${CMAKE_SOURCE_DIR}/ext/rcheevos/include

@@ -1229,7 +1229,7 @@
     <string name="settings_customization_side_artwork_removed">Custom side artwork removed</string>
     <string name="settings_retroarch_shaders">RetroArch shaders</string>
     <string name="settings_retroarch_shaders_desc">Applies .slangp shader chains to the final game image.</string>
-    <string name="settings_help_retroarch_shaders">Supports RetroArch Slang presets on Vulkan and OpenGL ES. Complex presets can reduce performance.</string>
+    <string name="settings_help_retroarch_shaders">Supports RetroArch Slang presets on Vulkan, OpenGL ES and Software rendering. Complex presets can reduce performance.</string>
     <string name="settings_shader_preset">Shader preset</string>
     <string name="settings_shader_preset_none">None</string>
     <string name="settings_help_shader_preset">Install a shader pack, then choose a .slangp preset. Relative shader files are kept together.</string>

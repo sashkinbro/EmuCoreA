@@ -1202,7 +1202,7 @@
     <string name="settings_customization_side_artwork_removed">تصویر کناری سفارشی حذف شد</string>
     <string name="settings_retroarch_shaders">سایه‌زن‌های RetroArch</string>
     <string name="settings_retroarch_shaders_desc">زنجیره‌های .slangp را روی تصویر نهایی بازی اعمال می‌کند.</string>
-    <string name="settings_help_retroarch_shaders">از پیش‌تنظیم‌های RetroArch Slang در Vulkan و OpenGL ES پشتیبانی می‌کند. پیش‌تنظیم‌های پیچیده ممکن است کارایی را کاهش دهند.</string>
+    <string name="settings_help_retroarch_shaders">از پیش‌تنظیم‌های RetroArch Slang در Vulkan، OpenGL ES و رندر نرم‌افزاری پشتیبانی می‌کند. پیش‌تنظیم‌های پیچیده ممکن است کارایی را کاهش دهند.</string>
     <string name="settings_shader_preset">پیش‌تنظیم سایه‌زن</string>
     <string name="settings_shader_preset_none">هیچ‌کدام</string>
     <string name="settings_help_shader_preset">یک بسته نصب کنید و پیش‌تنظیم .slangp را برگزینید. فایل‌های مرتبط کنار هم می‌مانند.</string>

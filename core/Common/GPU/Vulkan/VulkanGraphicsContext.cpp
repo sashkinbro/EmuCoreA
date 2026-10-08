@@ -214,6 +214,7 @@ bool VulkanGraphicsContext::InitAPI(void *wnd, std::string *deviceName, std::str
 }
 
 bool VulkanGraphicsContext::InitSurface(WindowSystem winsys, void *data1, void *data2, std::string *errorMessage) {
+	surfaceValid_ = false;
 	if (offscreenWidth_ > 0) {
 		auto presentation = std::make_unique<VulkanOffscreenPresentation>(VK_FORMAT_B8G8R8A8_UNORM, VkExtent2D{ (uint32_t)offscreenWidth_, (uint32_t)offscreenHeight_ });
 		if (!presentation->Create(vulkan_)) {
@@ -254,6 +255,7 @@ bool VulkanGraphicsContext::InitSurface(WindowSystem winsys, void *data1, void *
 
 		if (!vulkan_->InitSwapchain(presentMode)) {
 			*errorMessage = vulkan_->InitError();
+			ShutdownSurface();
 			return false;
 		}
 	}
@@ -266,20 +268,23 @@ bool VulkanGraphicsContext::InitSurface(WindowSystem winsys, void *data1, void *
 	renderManager_ = (VulkanRenderManager *)draw_->GetNativeObject(Draw::NativeObject::RENDER_MANAGER);
 	renderManager_->SetInflightFrames(g_Config.iInflightFrames);
 	if (!renderManager_->HasBackbuffers()) {
-		// WTF?
-		_dbg_assert_(false);
+		*errorMessage = "Failed to create Vulkan backbuffers";
+		ShutdownSurface();
 		return false;
 	}
+	surfaceValid_ = true;
 	return true;
 }
 
 void VulkanGraphicsContext::ShutdownSurface() {
+	surfaceValid_ = false;
 	if (draw_) {
 		draw_->HandleEvent(Draw::Event::LOST_BACKBUFFER, vulkan_->GetBackbufferWidth(), vulkan_->GetBackbufferHeight());
 	}
 
 	delete draw_;
 	draw_ = nullptr;
+	renderManager_ = nullptr;
 
 	vulkan_->WaitUntilQueueIdle();
 	if (VulkanPresentation *presentation = vulkan_->GetPresentation()) {
@@ -303,11 +308,18 @@ void VulkanGraphicsContext::ShutdownAPI() {
 }
 
 void VulkanGraphicsContext::Resize() {
+	if (!surfaceValid_ || !draw_) {
+		return;
+	}
 	if (offscreenWidth_ > 0) {
 		// The images have a fixed size.
 		return;
 	}
+	surfaceValid_ = false;
 	draw_->HandleEvent(Draw::Event::LOST_BACKBUFFER, vulkan_->GetBackbufferWidth(), vulkan_->GetBackbufferHeight());
+	// LOST_BACKBUFFER waits for the GPU, but queues the old views for deletion.
+	// Remove those views before InitSwapchain destroys their underlying images.
+	vulkan_->PerformPendingDeletes();
 	VkPresentModeKHR presentMode = ConfigPresentModeToVulkan(draw_);
 
 #ifdef VK_EXT_full_screen_exclusive
@@ -316,11 +328,21 @@ void VulkanGraphicsContext::Resize() {
 		: VK_FULL_SCREEN_EXCLUSIVE_DISALLOWED_EXT);
 #endif
 
-	vulkan_->InitSwapchain(presentMode);
+	if (!vulkan_->InitSwapchain(presentMode)) {
+		// In particular, Android may abandon a window's BufferQueue while a
+		// frame is running. The old swapchain is then retired and its image
+		// handles cannot be used to build new views/framebuffers.
+		ERROR_LOG(Log::G3D, "Vulkan window swapchain recreation failed");
+		return;
+	}
 	draw_->HandleEvent(Draw::Event::GOT_BACKBUFFER, vulkan_->GetBackbufferWidth(), vulkan_->GetBackbufferHeight());
+	surfaceValid_ = renderManager_->HasBackbuffers();
 }
 
 void VulkanGraphicsContext::Poll() {
+	if (!surfaceValid_ || !renderManager_) {
+		return;
+	}
 	// Check for existing swapchain to avoid issues during shutdown.
 	if (vulkan_->IsSwapchainInited() && renderManager_->NeedsSwapchainRecreate()) {
 		Resize();

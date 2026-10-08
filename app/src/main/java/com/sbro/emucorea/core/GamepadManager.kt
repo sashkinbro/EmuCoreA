@@ -75,7 +75,7 @@ object GamepadManager {
         val releaseR2PadKey: Int?
     )
 
-    private const val MAX_PAD_SLOTS = 2
+    private const val MAX_PAD_SLOTS = 1
     const val ACTION_QUICK_SAVE = "quick_save"
     const val ACTION_QUICK_LOAD = "quick_load"
     const val ACTION_FAST_FORWARD = "fast_forward"
@@ -1018,10 +1018,7 @@ object GamepadManager {
         singleGamepadReplacesTouch: Boolean = this.singleGamepadReplacesTouch
     ): List<Int> {
         val visibleGamepadCount = connectedGamepadCount.coerceIn(0, MAX_PAD_SLOTS)
-        return when {
-            visibleGamepadCount <= 0 -> emptyList()
-            visibleGamepadCount == 1 && !singleGamepadReplacesTouch -> listOf(1)
-            else -> List(visibleGamepadCount) { it }
-        }
+        // Touch visibility is independent of the PSP's single controller port.
+        return if (visibleGamepadCount <= 0) emptyList() else listOf(0)
     }
 }

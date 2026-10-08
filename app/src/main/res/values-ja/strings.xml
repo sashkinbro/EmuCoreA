@@ -1186,7 +1186,7 @@
     <string name="settings_customization_side_artwork_removed">カスタムサイドアートを削除しました</string>
     <string name="settings_retroarch_shaders">RetroArchシェーダー</string>
     <string name="settings_retroarch_shaders_desc">最終的なゲーム映像に.slangpシェーダーチェーンを適用します。</string>
-    <string name="settings_help_retroarch_shaders">VulkanとOpenGL ESでRetroArch Slangプリセットを利用できます。複雑なプリセットは性能を低下させる場合があります。</string>
+    <string name="settings_help_retroarch_shaders">Vulkan、OpenGL ESとソフトウェアレンダリングでRetroArch Slangプリセットを利用できます。複雑なプリセットは性能を低下させる場合があります。</string>
     <string name="settings_shader_preset">シェーダープリセット</string>
     <string name="settings_shader_preset_none">なし</string>
     <string name="settings_help_shader_preset">シェーダーパックをインストールして.slangpプリセットを選択します。関連ファイルは一緒に保持されます。</string>

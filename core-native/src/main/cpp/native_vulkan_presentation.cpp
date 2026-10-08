@@ -18,9 +18,15 @@
 using namespace PPSSPP_VK;
 
 #define NVK_LOG_TAG "EmuCoreA-Shader"
+#ifdef NDEBUG
+#define NVK_LOGI(...) ((void)0)
+#define NVK_LOGW(...) ((void)0)
+#define NVK_LOGE(...) ((void)0)
+#else
 #define NVK_LOGI(...) __android_log_print(ANDROID_LOG_INFO, NVK_LOG_TAG, __VA_ARGS__)
 #define NVK_LOGW(...) __android_log_print(ANDROID_LOG_WARN, NVK_LOG_TAG, __VA_ARGS__)
 #define NVK_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, NVK_LOG_TAG, __VA_ARGS__)
+#endif
 
 namespace {
 
@@ -81,6 +87,12 @@ void NativeVulkanPresentation::Destroy(VulkanContext *vulkan) {
         semaphore = VK_NULL_HANDLE;
     }
     presentSemaphores_.clear();
+    for (VkFence fence : presentFences_) {
+        if (fence != VK_NULL_HANDLE) {
+            vkDestroyFence(vulkan->GetDevice(), fence, nullptr);
+        }
+    }
+    presentFences_.clear();
     cachedImages_.clear();
     cachedSwapchain_ = VK_NULL_HANDLE;
 
@@ -147,7 +159,10 @@ VkResult NativeVulkanPresentation::QueuePresent(VulkanContext *vulkan, VkQueue q
             submit.signalSemaphoreCount = 1;
             submit.pSignalSemaphores = &presentSemaphores_[imageIndex];
 
-            const VkResult submitResult = vkQueueSubmit(queue, 1, &submit, VK_NULL_HANDLE);
+            if (vkResetFences(vulkan->GetDevice(), 1, &presentFences_[imageIndex]) != VK_SUCCESS) {
+                return PresentDirect(vulkan, queue, imageIndex, waitSemaphore);
+            }
+            const VkResult submitResult = vkQueueSubmit(queue, 1, &submit, presentFences_[imageIndex]);
             if (submitResult == VK_SUCCESS) {
                 const VkSwapchainKHR swapchain = vulkan->GetSwapchain();
                 VkPresentInfoKHR present{ VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
@@ -162,6 +177,10 @@ VkResult NativeVulkanPresentation::QueuePresent(VulkanContext *vulkan, VkQueue q
                 NVK_LOGE("Device lost while submitting the shader chain");
                 return submitResult;
             }
+            // An unsuccessful submit never signals its fence. Replace it on
+            // the next frame instead of waiting forever on unsubmitted work.
+            vkDestroyFence(vulkan->GetDevice(), presentFences_[imageIndex], nullptr);
+            presentFences_[imageIndex] = VK_NULL_HANDLE;
             NVK_LOGE("vkQueueSubmit (shader chain) failed: %d", (int)submitResult);
         }
     }
@@ -257,6 +276,7 @@ bool NativeVulkanPresentation::EnsurePresentResources(VulkanContext *vulkan, uin
     if (presentSemaphores_.size() < newSize) {
         presentSemaphores_.resize(newSize, VK_NULL_HANDLE);
         commandBuffers_.resize(newSize, VK_NULL_HANDLE);
+        presentFences_.resize(newSize, VK_NULL_HANDLE);
     }
 
     for (size_t i = 0; i < newSize; ++i) {
@@ -280,8 +300,19 @@ bool NativeVulkanPresentation::EnsurePresentResources(VulkanContext *vulkan, uin
                 return false;
             }
         }
+        if (presentFences_[i] == VK_NULL_HANDLE) {
+            VkFenceCreateInfo fenceInfo{ VK_STRUCTURE_TYPE_FENCE_CREATE_INFO };
+            fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+            if (vkCreateFence(vulkan->GetDevice(), &fenceInfo, nullptr, &presentFences_[i]) != VK_SUCCESS) {
+                NVK_LOGE("vkCreateFence (present) failed");
+                presentFences_[i] = VK_NULL_HANDLE;
+                return false;
+            }
+        }
     }
-    return true;
+    // Acquiring an image only schedules a semaphore signal; it is not a host
+    // wait for the command buffer that last filtered this image.
+    return vkWaitForFences(vulkan->GetDevice(), 1, &presentFences_[imageIndex], VK_TRUE, UINT64_MAX) == VK_SUCCESS;
 }
 
 #if defined(EMUCOREA_HAVE_LIBRASHADER)
@@ -289,6 +320,9 @@ bool NativeVulkanPresentation::EnsurePresentResources(VulkanContext *vulkan, uin
 namespace {
 
 void ReportChainError(const char *what, libra_error_t error) {
+#ifdef NDEBUG
+    (void)what;
+#else
     char *message = nullptr;
     if (libra_error_write(error, &message) == 0 && message != nullptr) {
         NVK_LOGE("librashader %s failed: %s", what, message);
@@ -296,6 +330,7 @@ void ReportChainError(const char *what, libra_error_t error) {
     } else {
         NVK_LOGE("librashader %s failed (errno %d)", what, (int)libra_error_errno(error));
     }
+#endif
     libra_error_free(&error);
 }
 
@@ -306,12 +341,18 @@ bool NativeVulkanPresentation::EnsureChain(VulkanContext *vulkan) {
     if (path.empty() || !emucorer::shader_chain::IsEnabled()) return false;
 
     const uint64_t generation = emucorer::shader_chain::Generation();
-    if (chain_ != nullptr && chainPreset_ == path && chainGeneration_ == generation) return true;
-    if (chainFailed_ && chainPreset_ == path && chainGeneration_ == generation) return false;
+    const uint32_t imageCount = GetImageCount();
+    if (imageCount == 0) return false;
+    if (chainFailed_ && chainPreset_ == path && chainGeneration_ == generation && chainImageCount_ == imageCount) return false;
+    if (chain_ != nullptr && chainPreset_ == path && chainGeneration_ == generation && chainImageCount_ == imageCount) return true;
 
+    // Presets can change while older frames are executing. librashader frees
+    // pipelines, images and descriptor sets immediately when its chain drops.
+    if (chain_ != nullptr) vulkan->WaitUntilQueueIdle();
     DestroyChain();
     chainPreset_ = path;
     chainGeneration_ = generation;
+    chainImageCount_ = imageCount;
 
     libra_shader_preset_t preset = nullptr;
     if (libra_error_t error = libra_preset_create(path.c_str(), &preset)) {
@@ -328,7 +369,13 @@ bool NativeVulkanPresentation::EnsureChain(VulkanContext *vulkan) {
     device.entry = vkGetInstanceProcAddr;
 
     libra_vk_filter_chain_t chain = nullptr;
-    if (libra_error_t error = libra_vk_filter_chain_create(&preset, device, nullptr, &chain)) {
+    filter_chain_vk_opt_t options{};
+    options.version = LIBRASHADER_CURRENT_VERSION;
+    // librashader disposes a frame's temporary resources when this ring wraps.
+    // Our fences guarantee completion when a swapchain image is reused, so the
+    // ring must cover the entire image set (which can exceed its default of 3).
+    options.frames_in_flight = imageCount;
+    if (libra_error_t error = libra_vk_filter_chain_create(&preset, device, &options, &chain)) {
         ReportChainError("chain create", error);
         chainFailed_ = true;
         return false;
@@ -347,6 +394,7 @@ void NativeVulkanPresentation::DestroyChain() {
     }
     chainPreset_.clear();
     chainGeneration_ = 0;
+    chainImageCount_ = 0;
     chainFailed_ = false;
     chainFrameCount_ = 0;
 }
@@ -357,6 +405,7 @@ bool NativeVulkanPresentation::EnsureInputImage(VulkanContext *vulkan, VkExtent2
         inputFormat_ == format) {
         return true;
     }
+    if (inputImage_ != VK_NULL_HANDLE) vulkan->WaitUntilQueueIdle();
     DestroyInputImage(vulkan);
 
     VkImageCreateInfo imageInfo{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
@@ -470,6 +519,16 @@ bool NativeVulkanPresentation::RecordChainPass(VulkanContext *vulkan, VkCommandB
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
                          nullptr, 1, &barrier);
+
+    // librashader deliberately leaves the final output transition to its
+    // caller. The copy above left the swapchain image as TRANSFER_SRC.
+    barrier.image = swapchainImage;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         0, 0, nullptr, 0, nullptr, 1, &barrier);
 
     const libra_image_vk_t in{ inputImage_, inputFormat_, inputWidth_, inputHeight_ };
     const libra_image_vk_t out{ swapchainImage, format, extent.width, extent.height };

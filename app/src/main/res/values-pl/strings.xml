@@ -1208,7 +1208,7 @@
     <string name="settings_customization_side_artwork_removed">Usunięto własną grafikę boczną</string>
     <string name="settings_retroarch_shaders">Shadery RetroArch</string>
     <string name="settings_retroarch_shaders_desc">Stosuje łańcuchy .slangp do końcowego obrazu gry.</string>
-    <string name="settings_help_retroarch_shaders">Obsługuje presety RetroArch Slang w Vulkan i OpenGL ES. Złożone presety mogą obniżyć wydajność.</string>
+    <string name="settings_help_retroarch_shaders">Obsługuje presety RetroArch Slang w Vulkan, OpenGL ES i renderowaniu programowym. Złożone presety mogą obniżyć wydajność.</string>
     <string name="settings_shader_preset">Preset shadera</string>
     <string name="settings_shader_preset_none">Brak</string>
     <string name="settings_help_shader_preset">Zainstaluj pakiet i wybierz preset .slangp. Powiązane pliki pozostają razem.</string>

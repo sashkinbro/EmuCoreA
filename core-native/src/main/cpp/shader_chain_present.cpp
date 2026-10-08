@@ -3,6 +3,7 @@
 #include "shader_chain.h"
 
 #include <EGL/egl.h>
+#include <GLES3/gl3.h>
 #include <android/log.h>
 #include <cstdint>
 #include <string>
@@ -40,6 +41,21 @@ struct State {
 
 State state;
 
+struct GLES3Functions {
+    PFNGLBLITFRAMEBUFFERPROC blit = reinterpret_cast<PFNGLBLITFRAMEBUFFERPROC>(eglGetProcAddress("glBlitFramebuffer"));
+    PFNGLBINDVERTEXARRAYPROC bind_vertex_array = reinterpret_cast<PFNGLBINDVERTEXARRAYPROC>(eglGetProcAddress("glBindVertexArray"));
+    PFNGLBINDSAMPLERPROC bind_sampler = reinterpret_cast<PFNGLBINDSAMPLERPROC>(eglGetProcAddress("glBindSampler"));
+};
+
+const GLES3Functions& GL3() {
+    // PPSSPP exports identically named function-pointer DATA symbols. Direct
+    // GLES3 calls would resolve to that data instead of the driver functions.
+    // EGL entry points are driver dispatch functions, independent of context
+    // object lifetime; load them once on the current GLES3 render thread.
+    static const GLES3Functions functions;
+    return functions;
+}
+
 const void* GlLoader(const char* name) {
     return reinterpret_cast<const void*>(eglGetProcAddress(name));
 }
@@ -73,6 +89,9 @@ bool EnsureTexture(GLuint* texture, GLuint* fbo, GLsizei* current_width, GLsizei
     glGenTextures(1, texture);
     glBindTexture(GL_TEXTURE_2D, *texture);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+    // Start complete at level 0. The runtime expands this range and generates
+    // the remaining levels only if a preset requests mipmapped input.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -100,8 +119,8 @@ bool EnsureChain() {
     const std::string path = emucorer::shader_chain::PresetPath();
     if (path.empty() || !emucorer::shader_chain::IsEnabled()) return false;
     const uint64_t generation = emucorer::shader_chain::Generation();
-    if (state.chain != nullptr && state.preset == path && state.generation == generation) return true;
     if (state.failed && state.preset == path && state.generation == generation) return false;
+    if (state.chain != nullptr && state.preset == path && state.generation == generation) return true;
 
     Destroy();
     state.preset = path;
@@ -125,23 +144,48 @@ bool EnsureChain() {
     return true;
 }
 
-void RestoreState() {
-    // librashader uses samplers and multiple texture units. PPSSPP's next
-    // frame starts with its own GL state, so clear bindings that would leak.
-    for (GLuint unit = 0; unit < 16; ++unit) {
+void ResetFrameState() {
+    // OpenGLContext::EndFrame invalidates its texture/pipeline caches, and
+    // GLQueueRunner starts each render pass with fresh state. Only its eight
+    // texture slots need sampler bindings cleared: the core sets texture
+    // parameters directly and does not use sampler objects. Avoid querying or
+    // walking GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS (often hundreds of slots).
+    for (GLuint unit = 0; unit < 8; ++unit) {
         glActiveTexture(GL_TEXTURE0 + unit);
         glBindTexture(GL_TEXTURE_2D, 0);
-        glBindSampler(unit, 0);
+        GL3().bind_sampler(unit, 0);
     }
     glActiveTexture(GL_TEXTURE0);
     glUseProgram(0);
-    glBindVertexArray(0);
+    GL3().bind_vertex_array(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_BLEND);
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_STENCIL_TEST);
+    glDisable(GL_CULL_FACE);
     glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
+
+struct FrameStateGuard {
+    GLint read_fbo = 0;
+    GLint draw_fbo = 0;
+
+    FrameStateGuard() {
+        // FBO bindings are the exception: GLQueueRunner keeps them cached
+        // across render passes. Restore both even when preset creation fails.
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &read_fbo);
+        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &draw_fbo);
+        glActiveTexture(GL_TEXTURE0);
+    }
+
+    ~FrameStateGuard() {
+        ResetFrameState();
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(read_fbo));
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(draw_fbo));
+    }
+};
 
 }  // namespace
 #endif
@@ -150,7 +194,14 @@ bool Present(GLuint source_fbo, int source_x, int source_y, int source_width, in
              int window_width, int window_height,
              int destination_x, int destination_y, int destination_width, int destination_height) {
 #if defined(EMUCOREA_HAVE_LIBRASHADER)
-    if (!emucorer::shader_chain::IsEnabled() || !EnsureChain()) return false;
+    if (!emucorer::shader_chain::IsEnabled() || source_width <= 0 || source_height <= 0 ||
+        window_width <= 0 || window_height <= 0 || destination_width <= 0 || destination_height <= 0)
+        return false;
+    // A failed generation stays on direct presentation without any GL work.
+    if (state.failed && state.generation == emucorer::shader_chain::Generation()) return false;
+    if (!GL3().blit || !GL3().bind_vertex_array || !GL3().bind_sampler) return false;
+    const FrameStateGuard restore;
+    if (!EnsureChain()) return false;
     if (!EnsureTexture(&state.input_texture, &state.input_fbo, &state.input_width,
                        &state.input_height, source_width, source_height) ||
         !EnsureTexture(&state.target_texture, &state.target_fbo, &state.target_width,
@@ -159,7 +210,7 @@ bool Present(GLuint source_fbo, int source_x, int source_y, int source_width, in
     glBindFramebuffer(GL_READ_FRAMEBUFFER, source_fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, state.input_fbo);
     glDisable(GL_SCISSOR_TEST);
-    glBlitFramebuffer(source_x, source_y, source_x + source_width, source_y + source_height,
+    GL3().blit(source_x, source_y, source_x + source_width, source_y + source_height,
                       0, 0, source_width, source_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
@@ -174,20 +225,23 @@ bool Present(GLuint source_fbo, int source_x, int source_y, int source_width, in
                                        static_cast<uint32_t>(destination_height)};
     libra_error_t error = libra_gl_filter_chain_frame(&state.chain, state.frame_count,
                                                        input, output, &viewport, nullptr, nullptr);
-    RestoreState();
     if (error) {
         ReportError("Frame", error);
         state.failed = true;
         return false;
     }
     ++state.frame_count;
+    // The caller may leave a partial color mask or scissor behind; the final
+    // default-framebuffer clear must cover all channels and the whole surface.
+    glDisable(GL_SCISSOR_TEST);
+    glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, state.target_fbo);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     glViewport(0, 0, window_width, window_height);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
     const int bottom = window_height - destination_y - destination_height;
-    glBlitFramebuffer(0, 0, destination_width, destination_height,
+    GL3().blit(0, 0, destination_width, destination_height,
                       destination_x, bottom, destination_x + destination_width,
                       bottom + destination_height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);

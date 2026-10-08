@@ -122,6 +122,10 @@ android {
     }
     discordSdkDirectory?.let { sdkDir -> sourceSets["main"].jniLibs.srcDir(sdkDir) }
     sourceSets["main"].assets.srcDir(rootProject.file("core/assets"))
+    androidResources {
+        // This frontend does not ship PPSSPP's web debugger.
+        ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:debugger"
+    }
     bundle {
         language {
             enableSplit = false

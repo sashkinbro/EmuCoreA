@@ -91,7 +91,8 @@
             <!-- Launcher frontends (Beacon, Daijisho, DIG, ES-DE, LaunchBox
                  custom emulators, ...) open disc images with a plain VIEW
                  intent, by file path or by content URI. -->
-            <intent-filter>
+            <!-- File URIs legitimately have no authority (file:///...). -->
+            <intent-filter tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />

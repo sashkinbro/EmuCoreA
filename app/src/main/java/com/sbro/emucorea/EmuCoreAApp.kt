@@ -1,8 +1,9 @@
 package com.sbro.emucorea
 
 import android.app.Application
+import android.app.ActivityManager
 import android.os.Build
-import androidx.annotation.RequiresApi
+import android.os.Process
 import com.sbro.emucorea.core.AppAnalytics
 import com.sbro.emucorea.core.AppIconManager
 import com.sbro.emucorea.core.BackupSessionGate
@@ -23,11 +24,17 @@ import kotlinx.coroutines.launch
 class EmuCoreAApp : Application() {
     internal val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    @RequiresApi(Build.VERSION_CODES.P)
     override fun onCreate() {
         super.onCreate()
         // The Discord SDK helper must not initialize the emulator-side application graph.
-        if (getProcessName().endsWith(":discord")) return
+        val processName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            getProcessName()
+        } else {
+            (getSystemService(ACTIVITY_SERVICE) as? ActivityManager)
+                ?.runningAppProcesses?.firstOrNull { it.pid == Process.myPid() }?.processName
+                ?: applicationInfo.processName
+        }
+        if (processName.endsWith(":discord")) return
         // CrashLogger must be the very first thing — it catches crashes in all subsequent init steps
         CrashLogger.init(this)
         if (DriveBackupArchive.hasPendingRecovery(this)) applicationScope.launch {

@@ -99,7 +99,8 @@ private fun buildPerformanceOverlayHeader(application: Application): String {
         application.packageManager.getPackageInfo(application.packageName, 0)
     }.getOrNull()
     val appVersion = packageInfo?.versionName?.takeIf(String::isNotBlank) ?: "?"
-    val buildNumber = packageInfo?.longVersionCode?.toString() ?: "?"
+    val buildNumber = packageInfo?.let(androidx.core.content.pm.PackageInfoCompat::getLongVersionCode)
+        ?.toString() ?: "?"
     val coreName = runCatching { NativeApp.getCoreName().orEmpty() }
         .getOrDefault("")
         .ifBlank { "?" }
@@ -1254,7 +1255,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 EmulatorBridge.startEmulation(
                     pathToLaunch,
                     saveStateIdentityPath = currentGamePath,
-                    bootSmokeProbe = bootSmokeProbe
+                    bootSmokeProbe = bootSmokeProbe,
+                    coreOptions = pendingPerGameCoreOptions
                 )
             } catch (error: Exception) {
                 Log.e(TAG, "EmulatorBridge.startEmulation failed", error)
@@ -1264,10 +1266,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             if (started) {
                 RetroAchievementsRepository.get(getApplication()).onGameStarted(pathToLaunch)
                 syncCheatsForCurrentGame()
-                // Per-game core options win over the global store.
-                pendingPerGameCoreOptions.forEach { (coreKey, coreValue) ->
-                    NativeApp.applyCoreOption(coreKey, coreValue)
-                }
                 syncPadAnalogModeForLaunch()
             }
             updateCrashContext(
@@ -1793,9 +1791,6 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     fun setRenderer(renderer: Int) {
         viewModelScope.launch {
             if (!EmulatorBridge.setRenderer(renderer)) return@launch
-            // A renderer switch recreates the core session, which drops the
-            // per-game core-option overrides applied after the last launch.
-            pendingPerGameCoreOptions.forEach { (key, value) -> NativeApp.applyCoreOption(key, value) }
             val newState = markPerformancePresetCustom(_uiState.value).copy(renderer = renderer)
             persistRuntimeState(newState) {
                 preferences.setPerformancePreset(PerformancePresets.CUSTOM)
@@ -1832,10 +1827,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun setLocalMultiplayerMode(value: Int) {
         viewModelScope.launch {
-            val normalized = value.coerceIn(
-                AppPreferences.LOCAL_MULTIPLAYER_OFF,
-                AppPreferences.LOCAL_MULTIPLAYER_HORIZONTAL_CROP_SWAPPED
-            )
+            val normalized = AppPreferences.LOCAL_MULTIPLAYER_OFF
             persistRuntimeState(_uiState.value.copy(localMultiplayerMode = normalized)) {
                 preferences.setLocalMultiplayerMode(normalized)
             }
@@ -2411,7 +2403,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             mediatekAngleOpenGl = pick("mediatekAngleOpenGl", mediatekAngleOpenGl) { mediatekAngleOpenGl },
             upscaleMultiplier = pick("upscaleMultiplier", upscaleMultiplier) { upscaleMultiplier },
             aspectRatio = pick("aspectRatio", aspectRatio) { aspectRatio },
-            localMultiplayerMode = pick("localMultiplayerMode", localMultiplayerMode) { localMultiplayerMode },
+            localMultiplayerMode = AppPreferences.LOCAL_MULTIPLAYER_OFF,
             enableCheats = pick("enableCheats", enableCheats) { enableCheats },
             frameLimitEnabled = pick("frameLimitEnabled", frameLimitEnabled) { frameLimitEnabled },
             targetFps = pick("targetFps", targetFps) { targetFps },
@@ -2464,7 +2456,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             renderer = pick("renderer", renderer) { renderer },
             upscale = pick("upscaleMultiplier", upscale) { upscaleMultiplier },
             aspectRatio = pick("aspectRatio", aspectRatio) { aspectRatio },
-            localMultiplayerMode = pick("localMultiplayerMode", localMultiplayerMode) { localMultiplayerMode },
+            localMultiplayerMode = AppPreferences.LOCAL_MULTIPLAYER_OFF,
             enableCheats = pick("enableCheats", enableCheats) { enableCheats },
             frameLimitEnabled = pick("frameLimitEnabled", frameLimitEnabled) { frameLimitEnabled },
             targetFps = pick("targetFps", targetFps) { targetFps },

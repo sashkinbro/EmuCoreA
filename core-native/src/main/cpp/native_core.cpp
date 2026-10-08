@@ -66,6 +66,7 @@
 #include "Core/HW/StereoResampler.h"
 #include "Core/Loaders.h"
 #include "Core/MemMap.h"
+#include "Core/MIPS/MIPS.h"
 #include "Core/SaveState.h"
 #include "Core/System.h"
 #include "GPU/GPUCommon.h"
@@ -77,17 +78,20 @@
 #include "android/jni/AndroidAudio.h"
 #include "fd_file_loader.h"
 #include "native_vulkan_presentation.h"
+#include "shader_chain_present.h"
 #include "shader_chain.h"
 
 #define LOG_TAG "EmuCoreA-Native"
 #ifdef NDEBUG
-// Release builds keep warnings and errors only: no info-level output at all.
+// Compile frontend diagnostics and their argument evaluation out of release.
 #define NLOGI(...) ((void)0)
+#define NLOGW(...) ((void)0)
+#define NLOGE(...) ((void)0)
 #else
 #define NLOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#endif
 #define NLOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #define NLOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#endif
 
 // Implemented by achievements_bridge.cpp (compiled into the same library).
 extern "C" void EmuCoreAAchievementsSetJavaVm(JavaVM *vm);
@@ -105,6 +109,12 @@ GraphicsContext *g_graphicsContext = nullptr;
 StereoResampler g_resampler;
 AndroidAudioState *g_audioState = nullptr;
 bool g_audioStarted = false;
+bool g_audioPaused = false;
+bool g_rewinding = false;
+bool g_rewindPending = false;
+bool g_surfaceFailed = false;
+FPSLimit g_requestedFpsLimit = FPSLimit::NORMAL;
+bool g_fastForward = false;
 // Android output properties (AudioManager's optimal sample rate and frames
 // per buffer), published by the frontend before the core initializes.
 // Zero means "unknown".
@@ -159,13 +169,12 @@ bool g_clearRewindRequested = false;
 // Set when the emulated game exits itself; reported to the frontend once.
 bool g_corePoweredDown = false;
 // Debug-only speed diagnostics independent of the frontend overlay.
+#ifndef NDEBUG
 int64_t g_diagLastWallUs = 0;
 int64_t g_diagLastEmuUs = 0;
 int g_diagFrames = 0;
-// Frontend shader selection, stored for a future presentation hook.
-int g_shaderEffect = 0;
-std::string g_shaderPreset;
-// Renderer requested by the frontend. 0 = software (unsupported), 1 = Vulkan,
+#endif
+// Renderer requested by the frontend. 0 = software, 1 = Vulkan,
 // 2 = OpenGL ES. Stored before nativeInit so the graphics context is created
 // for the right API; g_activeRenderer records what was actually created.
 constexpr int kRendererSoftware = 0;
@@ -208,6 +217,9 @@ std::mutex g_glStateMutex;
 std::condition_variable g_glStateCv;
 bool g_glInitDone = false;
 bool g_glInitOk = false;
+// Only the EGL owner reads the thread-local EGL error. Hand the first failed
+// presentation to the frame thread, which owns frontend errors and audio.
+std::atomic<EGLint> g_glPresentationError{EGL_SUCCESS};
 
 // Digits of the frontend-configurable MAC address / adhoc server IP. The
 // frontend (libretro option layout) sends one hex digit per setting; these
@@ -260,11 +272,15 @@ bool ParseBool(const std::string &value, bool *out) {
 // logcat and spike frame times. The frontend's "log_level" config key and the
 // debug.emucorea.log_level system property raise or disable it explicitly.
 void ApplyDebugLogLevel(const std::string &value) {
+    g_logManager.SetAllLogEnable(true);
     if (EqualsIgnoreCase(value, "verbose")) g_logManager.SetAllLogLevels(LogLevel::LVERBOSE);
     else if (EqualsIgnoreCase(value, "debug")) g_logManager.SetAllLogLevels(LogLevel::LDEBUG);
     else if (EqualsIgnoreCase(value, "info")) g_logManager.SetAllLogLevels(LogLevel::LINFO);
     else if (EqualsIgnoreCase(value, "notice")) g_logManager.SetAllLogLevels(LogLevel::LNOTICE);
-    else if (EqualsIgnoreCase(value, "off")) g_logManager.SetOutputsEnabled((LogOutput)0);
+    else if (EqualsIgnoreCase(value, "off")) {
+        g_logManager.SetAllLogEnable(false);
+        g_logManager.SetOutputsEnabled((LogOutput)0);
+    }
 }
 #endif
 
@@ -475,6 +491,11 @@ bool StartAAudio() {
             AAudioStream_setBufferSizeInFrames(g_aaudioStream, g_audioFramesPerBuffer);
         if (applied > 0) g_aaudioFramesPerBuffer = applied;
     }
+    // Cache the effective callback capacity and reset before any callback can
+    // consume the ring; changing its mask while Mix runs corrupts the queue.
+    const int32_t bufferFrames = AAudioStream_getBufferSizeInFrames(g_aaudioStream);
+    if (bufferFrames > 0) g_aaudioFramesPerBuffer = bufferFrames;
+    g_resampler.ResetForOutput();
     result = AAudioStream_requestStart(g_aaudioStream);
     if (result != AAUDIO_OK) {
         NLOGE("AAudio requestStart failed: %s", AAudio_convertResultToText(result));
@@ -515,10 +536,6 @@ int AudioOutputFramesPerBuffer() {
     if (g_useAaudioBackend) {
         // The resampler ring must cover one whole callback; AAudio's callback
         // can ask for the entire stream buffer, not just one burst.
-        if (g_aaudioStream != nullptr) {
-            const int32_t bufferFrames = AAudioStream_getBufferSizeInFrames(g_aaudioStream);
-            if (bufferFrames > 0) return bufferFrames;
-        }
         return g_aaudioFramesPerBuffer > 0
             ? g_aaudioFramesPerBuffer
             : (g_audioDeviceFramesPerBuffer > 0 ? g_audioDeviceFramesPerBuffer : 512);
@@ -528,7 +545,8 @@ int AudioOutputFramesPerBuffer() {
 }
 
 void StartAudio() {
-    if (g_audioStarted) return;
+    if (g_audioStarted || g_audioPaused || g_rewinding || g_rewindPending ||
+        g_surfaceFailed || !g_renderReady || !g_bootError.empty() || !g_booted || g_corePoweredDown) return;
     if (g_useAaudioBackend) {
         if (StartAAudio()) {
             g_audioStarted = true;
@@ -545,6 +563,7 @@ void StartAudio() {
         NLOGI("Audio output: %d Hz, %d frames/buffer", sampleRate, frames);
     }
     if (!g_audioStarted && g_audioState != nullptr) {
+        g_resampler.ResetForOutput();
         g_audioStarted = AndroidAudio_Resume(g_audioState);
         NLOGI("Audio started: %d", g_audioStarted ? 1 : 0);
     }
@@ -973,6 +992,7 @@ bool CreateGraphicsContext() {
 
     const int requested = g_requestedRenderer.load();
     if (requested == kRendererOpenGL) {
+        g_Config.bSoftwareRendering = false;
         g_activeRenderer = kRendererOpenGL;
         // PPSSPP's GL backend renders through its render manager queue; the
         // EGL context is created on the frame thread in InitGLOnFrameThread()
@@ -1118,6 +1138,9 @@ void GLRenderThreadMain() {
             ? reinterpret_cast<GLRenderManager *>(draw->GetNativeObject(Draw::NativeObject::RENDER_MANAGER))
             : nullptr;
     if (renderManager != nullptr) {
+        EGLint contextVersion = 0;
+        eglQueryContext(g_eglDisplay, g_eglContext, EGL_CONTEXT_CLIENT_VERSION, &contextVersion);
+        const bool supportsShaderPresentation = contextVersion >= 3;
         // A self-owned EGL surface swaps here (the Java app lets GLSurfaceView
         // do it). The swap is deliberately not vsynced: the core already paces
         // frames in FrameTiming::PostSubmit, and double throttling halves the
@@ -1125,9 +1148,25 @@ void GLRenderThreadMain() {
         renderManager->SetSwapIntervalFunction([](int) {
             if (g_eglDisplay != EGL_NO_DISPLAY) eglSwapInterval(g_eglDisplay, 0);
         });
-        renderManager->SetSwapFunction([]() {
+        renderManager->SetSwapFunction([supportsShaderPresentation]() {
+            if (g_glPresentationError.load(std::memory_order_acquire) != EGL_SUCCESS) return;
             if (g_eglDisplay != EGL_NO_DISPLAY && g_eglSurface != EGL_NO_SURFACE) {
-                eglSwapBuffers(g_eglDisplay, g_eglSurface);
+                if (supportsShaderPresentation && emucorer::shader_chain::IsEnabled()) {
+                    EGLint width = 0, height = 0;
+                    if (eglQuerySurface(g_eglDisplay, g_eglSurface, EGL_WIDTH, &width) &&
+                        eglQuerySurface(g_eglDisplay, g_eglSurface, EGL_HEIGHT, &height)) {
+                        // Commands for this frame have completed on the GL
+                        // thread. Filter its actual backbuffer immediately
+                        // before swap, including the core's aspect-ratio bars.
+                        emucorea::shader_chain_present::Present(
+                            0, 0, 0, width, height, width, height, 0, 0, width, height);
+                    }
+                }
+                if (!eglSwapBuffers(g_eglDisplay, g_eglSurface)) {
+                    const EGLint error = eglGetError();
+                    g_glPresentationError.store(error != EGL_SUCCESS ? error : EGL_BAD_SURFACE,
+                                                std::memory_order_release);
+                }
             }
         });
     }
@@ -1145,6 +1184,8 @@ void GLRenderThreadMain() {
     // NotifyEmuThreadExit queues the exit task.
     while (g_graphicsContext->ThreadFrame()) {
     }
+    // librashader and its GL objects belong to this still-current EGL context.
+    emucorea::shader_chain_present::Destroy();
     g_graphicsContext->ThreadEnd();
     eglMakeCurrent(g_eglDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
     NLOGI("OpenGL render thread finished");
@@ -1170,6 +1211,7 @@ bool InitGLOnFrameThread() {
         g_glInitDone = false;
         g_glInitOk = false;
     }
+    g_glPresentationError.store(EGL_SUCCESS, std::memory_order_release);
     g_glRenderThread = std::thread(GLRenderThreadMain);
     {
         std::unique_lock<std::mutex> lock(g_glStateMutex);
@@ -1181,6 +1223,12 @@ bool InitGLOnFrameThread() {
     }
 
     g_glInitialized = true;
+    auto *draw = g_graphicsContext->GetDrawContext();
+    draw->SetTargetSize(g_display.pixel_xres, g_display.pixel_yres);
+    if (gpu != nullptr && g_booted) {
+        gpu->DeviceRestore(draw);
+        gpu->NotifyDisplayResized();
+    }
     NLOGI("OpenGL ES surface ready");
     return true;
 }
@@ -1238,6 +1286,8 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
     }
     coreParam.startBreak = false;
     coreParam.headLess = false;
+    coreParam.loadGameConfigs = false;
+    coreParam.updateRecent = false;
     coreParam.graphicsContext = g_graphicsContext;
     coreParam.gpuCore = g_activeRenderer == kRendererOpenGL ? GPUCORE_GLES
                         : g_activeRenderer == kRendererSoftware ? GPUCORE_SOFTWARE
@@ -1246,8 +1296,10 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
         coreParam.renderWidth = 480;
         coreParam.renderHeight = 272;
     }
-    coreParam.cpuCore = CPUCore::JIT;
+    coreParam.cpuCore = static_cast<CPUCore>(g_Config.iCpuCore);
     coreParam.bUseVertexDecoderJit = true;
+    coreParam.fpsLimit = g_requestedFpsLimit;
+    coreParam.fastForward = g_fastForward;
 
     // Output/display size drives the presentation viewport. Without it
     // (zero-initialized CoreParameter) every frame is drawn into a 0x0
@@ -1256,7 +1308,11 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
     const int displayHeight = g_display.pixel_yres > 0 ? g_display.pixel_yres : g_displayHeight;
     coreParam.pixelWidth = displayWidth;
     coreParam.pixelHeight = displayHeight;
-    if (g_Config.iInternalResolution == 0) {
+    if (g_activeRenderer == kRendererSoftware) {
+        g_Config.iInternalResolution = 1;
+        coreParam.renderWidth = 480;
+        coreParam.renderHeight = 272;
+    } else if (g_Config.iInternalResolution == 0) {
         coreParam.renderWidth = displayWidth;
         coreParam.renderHeight = displayHeight;
     } else {
@@ -1270,7 +1326,8 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
     // runs in the background and PSP_InitUpdate is polled from the frame loop
     // once the surface (and with it the draw context) is ready.
     if (!PSP_InitStart(coreParam)) {
-        NLOGE("PSP_InitStart failed: %s", coreParam.errorString.c_str());
+        g_bootError = coreParam.errorString.empty() ? "Unable to start the PSP loader" : coreParam.errorString;
+        NLOGE("PSP_InitStart failed: %s", g_bootError.c_str());
         // PSP_InitStart only fails before it adopts the parameter, so the
         // loader is still ours to release.
         delete preOpenedLoader;
@@ -1282,10 +1339,82 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
     return true;
 }
 
-bool AttachSurface(ANativeWindow *window, int width, int height) {
+// The loader initializes GPU resources on its own thread. Keep its draw
+// context alive until it has finished before replacing an Android surface.
+void FinishBootBeforeSurfaceChange() {
+    if (!g_pendingBoot) return;
+    while (PollBootState() == BootState::Booting) sleep_ms(5, "surface-wait-loader");
+    const BootState state = PSP_InitUpdate(&g_bootError);
+    g_pendingBoot = false;
+    if (state == BootState::Complete) {
+        g_booted = true;
+        coreState = PSP_CoreParameter().startBreak ? CORE_STEPPING_CPU : CORE_RUNNING_CPU;
+        UpdateUIState(UISTATE_INGAME);
+        System_Notify(SystemNotification::BOOT_DONE);
+    } else if (g_bootError.empty()) {
+        g_bootError = "The PSP loader failed";
+    }
+}
+
+void InstallShaderPresentationIfNeeded() {
+#if defined(EMUCOREA_HAVE_LIBRASHADER)
+    if (g_activeRenderer == kRendererOpenGL || !emucorer::shader_chain::IsEnabled()) return;
+    auto *vulkan = static_cast<VulkanContext *>(g_graphicsContext->GetAPIContext());
+    if (vulkan == nullptr || vulkan->GetPresentation() != nullptr) return;
+    auto *draw = g_graphicsContext->GetDrawContext();
+    // LOST_BACKBUFFER stops the render thread and waits for queued GPU work.
+    // Rebuild its views once when enabling a preset during a live session.
+    draw->HandleEvent(Draw::Event::LOST_BACKBUFFER, vulkan->GetBackbufferWidth(), vulkan->GetBackbufferHeight());
+    auto presentation = std::make_unique<NativeVulkanPresentation>(vulkan);
+    if (presentation->Create(vulkan)) {
+        vulkan->SetPresentation(std::move(presentation));
+        NLOGI("Shader chain presentation installed");
+    } else {
+        NLOGW("Shader chain presentation unavailable; using the direct swapchain path");
+    }
+    draw->HandleEvent(Draw::Event::GOT_BACKBUFFER, vulkan->GetBackbufferWidth(), vulkan->GetBackbufferHeight());
+#endif
+}
+
+bool CheckPresentationSurface() {
+    if (g_activeRenderer == kRendererOpenGL) {
+        if (!g_glInitialized) return true;
+        const EGLint error = g_glPresentationError.load(std::memory_order_acquire);
+        if (error == EGL_SUCCESS) return true;
+        char detail[96];
+        snprintf(detail, sizeof(detail), "The OpenGL ES presentation surface was lost (EGL error 0x%x)", error);
+        g_bootError = detail;
+    } else {
+        if (static_cast<VulkanGraphicsContext *>(g_graphicsContext)->IsSurfaceValid()) return true;
+        g_bootError = "The Vulkan presentation surface was lost";
+    }
+    // Keep ownership of the context until normal detach/shutdown releases it.
+    // Rendering or recreating views on a retired swapchain can crash drivers.
+    g_surfaceFailed = true;
+    StopAudio();
+    return false;
+}
+
+bool AttachSurface(ANativeWindow *window, int width, int height, bool sameWindow = false) {
     if (g_graphicsContext == nullptr) return false;
 
-    if (g_activeRenderer == kRendererOpenGL) {
+    // Size callbacks often repeat the same window. Keep the existing draw
+    // context and render threads; recreating InitSurface over them leaks live
+    // swapchains and starts a second render manager.
+    const bool resizeOnly = g_renderReady && sameWindow && !g_surfaceFailed;
+    if (g_renderReady) FinishBootBeforeSurfaceChange();
+    if (g_renderReady && !resizeOnly) {
+        if (gpu != nullptr) gpu->DeviceLost();
+        if (g_activeRenderer == kRendererOpenGL) {
+            ShutdownGLOnFrameThread();
+            DestroyEGL();
+        } else {
+            g_graphicsContext->ShutdownSurface();
+        }
+        g_renderReady = false;
+    }
+
+    if (!resizeOnly && g_activeRenderer == kRendererOpenGL) {
         // The GL surface is created on the frame thread (the thread that owns
         // the EGL context). Take a reference to the window so it stays valid
         // until the frame loop tears the EGL surface down.
@@ -1298,9 +1427,10 @@ bool AttachSurface(ANativeWindow *window, int width, int height) {
             ShutdownGLOnFrameThread();
             DestroyEGLSurface();
         }
-    } else {
+    } else if (!resizeOnly) {
         std::string error;
         if (!g_graphicsContext->InitSurface(WINDOWSYSTEM_ANDROID, window, nullptr, &error)) {
+            g_bootError = error.empty() ? "Unable to initialize the rendering surface" : error;
             NLOGE("InitSurface failed: %s", error.c_str());
             return false;
         }
@@ -1321,33 +1451,37 @@ bool AttachSurface(ANativeWindow *window, int width, int height) {
         PSP_CoreParameter().pixelHeight = height;
     }
 
+    if (resizeOnly && g_activeRenderer != kRendererOpenGL) {
+        g_graphicsContext->Resize();
+        if (!CheckPresentationSurface()) return false;
+    }
+    auto *draw = g_graphicsContext->GetDrawContext();
+    if (draw != nullptr) draw->SetTargetSize(g_display.pixel_xres, g_display.pixel_yres);
+
     // A live game that just got its surface back needs its GPU objects
     // restored against the new draw context (framebuffers, pipelines, and the
     // presentation all cache it).
-    if (gpu != nullptr && g_booted) {
-        gpu->DeviceRestore(g_graphicsContext->GetDrawContext());
+    if (gpu != nullptr && g_booted && draw != nullptr) {
+        if (!resizeOnly) gpu->DeviceRestore(draw);
+        gpu->NotifyDisplayResized();
+        if (g_Config.iInternalResolution == 0) {
+            PSP_CoreParameter().renderWidth = width;
+            PSP_CoreParameter().renderHeight = height;
+            gpu->NotifyRenderResized(g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation()));
+        }
     }
 
-#if defined(EMUCOREA_HAVE_LIBRASHADER)
     // The shader-chain presentation is strictly opt-in: with no preset enabled
     // the core must use PPSSPP's untouched real-swapchain path. Installing it
     // unconditionally changed behavior even in pass-through mode. It only
     // exists for Vulkan; the GL backend ignores it.
-    if (g_activeRenderer == kRendererVulkan) {
-        auto *vulkan = static_cast<VulkanContext *>(g_graphicsContext->GetAPIContext());
-        if (vulkan != nullptr && vulkan->GetPresentation() == nullptr && emucorer::shader_chain::IsEnabled()) {
-            auto presentation = std::make_unique<NativeVulkanPresentation>(vulkan);
-            if (presentation->Create(vulkan)) {
-                vulkan->SetPresentation(std::move(presentation));
-                NLOGI("Shader chain presentation installed");
-            } else {
-                NLOGW("Shader chain presentation unavailable; using the direct swapchain path");
-            }
-        }
-    }
-#endif
+    InstallShaderPresentationIfNeeded();
 
     g_renderReady = true;
+    if (g_surfaceFailed) {
+        g_surfaceFailed = false;
+        g_bootError.clear();
+    }
     NLOGI("Surface attached %dx%d (%s)", width, height, RendererName(g_activeRenderer));
     return true;
 }
@@ -1401,7 +1535,10 @@ void ApplyPendingCheatsLocked() {
 
 void RunFrame() {
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
-    if (g_graphicsContext == nullptr || !g_renderReady) return;
+    if (g_graphicsContext == nullptr || !g_renderReady || !g_bootError.empty()) return;
+    // A queued GL swap may fail after the preceding frame returned. Consume
+    // the error before submitting further emulation work to the dead window.
+    if (!CheckPresentationSurface()) return;
 
     // An AAudio stream that was disconnected (device change, audio server
     // restart) cannot be reused; rebuild the output on this thread.
@@ -1413,7 +1550,10 @@ void RunFrame() {
     // The OpenGL context lives on this thread, so it is created on the first
     // frame after the surface arrives.
     if (g_activeRenderer == kRendererOpenGL && !g_glInitialized) {
-        if (!InitGLOnFrameThread()) return;
+        if (!InitGLOnFrameThread()) {
+            g_bootError = "Unable to initialize the OpenGL ES rendering surface";
+            return;
+        }
     }
 
     if (g_bootRequested) {
@@ -1432,6 +1572,8 @@ void RunFrame() {
         case BootState::Failed:
             NLOGE("PSP_InitUpdate failed: %s", g_bootError.c_str());
             g_pendingBoot = false;
+            if (g_bootError.empty()) g_bootError = "The PSP loader failed";
+            StopAudio();
             return;
         case BootState::Booting:
             return;
@@ -1447,6 +1589,7 @@ void RunFrame() {
             // savedata, screenshots and the websocket subscribers all check it.
             UpdateUIState(UISTATE_INGAME);
             System_Notify(SystemNotification::BOOT_DONE);
+            StartAudio();
             break;
         case BootState::Off:
         default:
@@ -1454,12 +1597,20 @@ void RunFrame() {
         }
     }
 
-    if (!g_booted || gpu == nullptr) return;
+    if (!g_booted || gpu == nullptr || g_audioPaused) return;
+
+    // Apply CPU changes on the emulation thread, as EmuScreen does. Updating
+    // only Config leaves the running interpreter/JIT unchanged.
+    if (currentMIPS != nullptr) currentMIPS->UpdateCore((CPUCore)g_Config.iCpuCore);
+    StartAudio();
+
+    InstallShaderPresentationIfNeeded();
 
     ApplyPendingCheatsLocked();
 
     Draw::DrawContext *draw = g_graphicsContext->GetDrawContext();
     if (draw == nullptr) return;
+    draw->SetTargetSize(g_display.pixel_xres, g_display.pixel_yres);
 
     Core_StateProcessed();
     draw->BeginFrame(Draw::DebugFlags::NONE);
@@ -1477,7 +1628,22 @@ void RunFrame() {
     PSP_UpdateDebugStats(g_Config.bLogFrameDrops);
 
     SaveState::Process();
+    if (g_rewindPending) {
+        g_rewindPending = false;
+        if (!g_rewinding) {
+            if (coreState == CORE_STEPPING_CPU) Core_Resume();
+            StartAudio();
+        }
+    }
 
+    // With buffer effects skipped, the hardware GPU draws directly into the
+    // window backbuffer. Bind and clear it before emulation, as EmuScreen does.
+    // Software rendering always uploads/copies its display image afterward.
+    const bool directToBackbuffer = g_Config.bSkipBufferEffects && g_activeRenderer != kRendererSoftware;
+    if (directToBackbuffer) {
+        draw->BindFramebufferAsRenderTarget(nullptr,
+            {Draw::RPAction::CLEAR, Draw::RPAction::CLEAR, Draw::RPAction::CLEAR}, "BackBuffer");
+    }
     gpu->BeginHostFrame(layout);
     PSP_RunLoopWhileState();
     switch (coreState) {
@@ -1490,7 +1656,26 @@ void RunFrame() {
         // this by switching back to the menu; do the equivalent at the end of
         // this frame so the loop stops running unpaced over a dead core.
         g_corePoweredDown = true;
+        StopAudio();
         break;
+    case CORE_RUNTIME_ERROR:
+    case CORE_STEPPING_CPU:
+    case CORE_STEPPING_GE: {
+        const MIPSExceptionInfo &exception = Core_GetExceptionInfo();
+        if (coreState == CORE_RUNTIME_ERROR || exception.type != MIPSExceptionType::NONE) {
+            // This frontend has no debugger screen to explain a stopped guest.
+            // Forward the failure and stop audio instead of presenting forever
+            // from an unpaced stepping loop with a frozen emulated clock.
+            char detail[256];
+            snprintf(detail, sizeof(detail), "PSP runtime error: %s at PC %08x (address %08x)",
+                     ExceptionTypeAsString(exception.type), exception.pc, exception.address);
+            g_bootError = detail;
+            if (!exception.info.empty()) g_bootError += ": " + exception.info;
+            NLOGE("%s", g_bootError.c_str());
+            StopAudio();
+        }
+        break;
+    }
     default:
         break;
     }
@@ -1501,7 +1686,9 @@ void RunFrame() {
     gpu->EndHostFrame();
 
     using namespace Draw;
-    draw->BindFramebufferAsRenderTarget(nullptr, {RPAction::CLEAR, RPAction::CLEAR, RPAction::CLEAR}, "BackBuffer");
+    if (!directToBackbuffer) {
+        draw->BindFramebufferAsRenderTarget(nullptr, {RPAction::CLEAR, RPAction::CLEAR, RPAction::CLEAR}, "BackBuffer");
+    }
     gpu->CopyDisplayToOutput(layout);
     // CopyDisplayToOutput can leave a custom viewport behind; restore it for
     // the next frame and for the swapchain pass.
@@ -1515,6 +1702,7 @@ void RunFrame() {
     // The dedicated GL render thread executes the queued commands and swaps.
 
     g_graphicsContext->Poll();
+    if (!CheckPresentationSurface()) return;
     if (g_clearRewindRequested) {
         g_clearRewindRequested = false;
         SaveState::ClearRewind();
@@ -1614,7 +1802,12 @@ bool LoadStateFromFile(const std::string &path, std::string *errorOut = nullptr)
     fclose(file);
     NLOGI("Loading state: %s (%zu bytes)", path.c_str(), data.size());
     std::string error;
+    // Loading/rewinding clears the PCM ring. Stop its consumer first instead
+    // of adding a mutex to every real-time callback.
+    const bool resumeAudio = g_audioStarted;
+    StopAudio();
     const bool ok = SaveState::LoadFromRam(data, &error) == CChunkFileReader::ERROR_NONE;
+    if (resumeAudio) StartAudio();
     if (!ok) {
         NLOGE("LoadFromRam failed: %s (path=%s)", error.c_str(), path.c_str());
         if (errorOut != nullptr) *errorOut = error;
@@ -1642,7 +1835,7 @@ void ShutdownCore() {
     }
     g_bootRequested = false;
     g_bootRequestPath.clear();
-    if (g_booted) {
+    if (g_booted || (PSP_IsInited() && !g_pendingBoot)) {
         PSP_Shutdown(true);
         g_booted = false;
         UpdateUIState(UISTATE_MENU);
@@ -1690,6 +1883,15 @@ void ShutdownCore() {
     if (g_threadManager.IsInitialized()) {
         g_threadManager.Teardown();
     }
+    g_VFS.Clear();
+    g_audioPaused = false;
+    g_rewinding = false;
+    g_rewindPending = false;
+    g_surfaceFailed = false;
+    g_fastForward = false;
+    g_corePoweredDown = false;
+    g_surfaceWidth = 0;
+    g_surfaceHeight = 0;
 }
 
 // Recomputes the CoreParameter render size from iInternalResolution. The
@@ -1744,6 +1946,14 @@ bool ParseIntInRange(const std::string &value, int low, int high, int *out) {
 // ppsspp keys follow exactly the semantics of the libretro core's
 // check_variables() so the UI catalogue and the core cannot diverge.
 void ApplyNativeConfig(const std::string &key, const std::string &value) {
+#ifndef NDEBUG
+    if (key == "log_level") {
+        // Re-enable output after a previous explicit "off" selection.
+        g_logManager.SetOutputsEnabled(LogOutput::Stdio);
+        ApplyDebugLogLevel(value);
+        return;
+    }
+#endif
     bool on = false;
     int number = 0;
     const bool hasBool = ParseBool(value, &on);
@@ -1807,15 +2017,21 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
     if (key == "fast_forward") {
         // Used by the frontend's hold-to-fast-forward control; PPSSPP's frame
         // timing returns an unlimited rate while this is set.
-        if (hasBool) PSP_CoreParameter().fastForward = on;
+        if (hasBool) {
+            g_fastForward = on;
+            PSP_CoreParameter().fastForward = on;
+        }
         return;
     }
     if (key == "fps_limit") {
-        // 0 = the normal region rate; any other value clamps the frame rate
+        // 0 = unlimited; a positive value clamps the frame rate
         // (the app's "Frame limit / target FPS" setting).
         if (ParseIntInRange(value, 0, 1000, &number)) {
             g_Config.iFpsLimit1 = number;
-            PSP_CoreParameter().fpsLimit = number > 0 ? FPSLimit::CUSTOM1 : FPSLimit::NORMAL;
+            // PPSSPP interprets a custom limit of zero as unlimited. NORMAL
+            // would re-enable the limiter when the frontend disables it.
+            g_requestedFpsLimit = FPSLimit::CUSTOM1;
+            PSP_CoreParameter().fpsLimit = g_requestedFpsLimit;
             NLOGI("FPS limit: %d", number);
         }
         return;
@@ -2282,23 +2498,27 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeInit(JNIEnv *env, jclass, jstring
     g_displayWidth = displayWidth > 0 ? displayWidth : 1080;
     g_displayHeight = displayHeight > 0 ? displayHeight : 1920;
     g_displayRefreshRate = refreshRate > 0.0f ? refreshRate : 60.0f;
+    g_bootError.clear();
+    g_audioPaused = false;
 
-    // PPSSPP's own frontend always initializes the log manager. Without it the
-    // channels keep their LDEBUG defaults and every DEBUG_LOG in a hot path
-    // still pays a GenericLog/LogLine call in release before the (disabled)
-    // output check. Init() lowers them to LINFO and lets the macros filter
-    // DEBUG_LOG out entirely.
+    // Filter hot-path INFO/DEBUG calls before argument evaluation and the
+    // GenericLog/LogLine dispatch, including release builds with no outputs.
+    // Keep warnings/errors available when debug output is enabled.
     g_logManager.Init(&g_Config.bEnableLogging, false);
 #ifndef NDEBUG
+    g_logManager.SetAllLogEnable(true);
+    g_logManager.SetAllLogLevels(LogLevel::LWARNING);
     // Debug builds write to logcat, but only important messages by default:
     // per-framebuffer INFO logs can flood logcat and spike frame times.
     // "log_level" raises or disables it explicitly when diagnosing.
     g_logManager.SetOutputsEnabled(LogOutput::Stdio);
-    g_logManager.SetAllLogLevels(LogLevel::LNOTICE);
     char logLevelProp[PROP_VALUE_MAX] = {0};
     if (__system_property_get("debug.emucorea.log_level", logLevelProp) > 0) {
         ApplyDebugLogLevel(logLevelProp);
     }
+#else
+    g_logManager.SetAllLogEnable(false);
+    g_logManager.SetOutputsEnabled((LogOutput)0);
 #endif
 
     // Must happen before anything reads g_Config (including CreateGraphicsContext
@@ -2362,7 +2582,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeBoot(JNIEnv *env, jclass, jstring
     g_bootRequestPath = game;
     g_bootRequestLoader = nullptr;
     g_bootRequested = true;
-    StartAudio();
+    g_bootError.clear();
     return JNI_TRUE;
 }
 
@@ -2399,7 +2619,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeBootFd(JNIEnv *env, jclass, jint 
     g_bootRequestPath = hint;
     g_bootRequestLoader = loader;
     g_bootRequested = true;
-    StartAudio();
+    g_bootError.clear();
     return JNI_TRUE;
 }
 
@@ -2408,11 +2628,13 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetSurface(JNIEnv *env, jclass, j
                                                           jint width, jint height) {
     if (surface == nullptr) {
         std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+        FinishBootBeforeSurfaceChange();
+        StopAudio();
         if (g_renderReady) {
             if (gpu != nullptr) gpu->DeviceLost();
             if (g_activeRenderer == kRendererOpenGL) {
                 ShutdownGLOnFrameThread();
-                DestroyEGLSurface();
+                DestroyEGL();
             } else {
                 g_graphicsContext->ShutdownSurface();
             }
@@ -2433,12 +2655,13 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetSurface(JNIEnv *env, jclass, j
     ANativeWindow *window = ANativeWindow_fromSurface(env, surface);
     if (window == nullptr) return JNI_FALSE;
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    const bool sameWindow = g_surfaceWindow == window;
     ANativeWindow_acquire(window);
     if (g_surfaceWindow != nullptr) ANativeWindow_release(g_surfaceWindow);
     g_surfaceWindow = window;
     g_surfaceWidth = width;
     g_surfaceHeight = height;
-    const bool ok = AttachSurface(window, width, height);
+    const bool ok = AttachSurface(window, width, height, sameWindow);
     ANativeWindow_release(window);
     return ok ? JNI_TRUE : JNI_FALSE;
 }
@@ -2446,6 +2669,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetSurface(JNIEnv *env, jclass, j
 JNIEXPORT jlong JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeRunFrame(JNIEnv *, jclass) {
     RunFrame();
+    if (!g_bootError.empty()) return 0;
     if (g_corePoweredDown) {
         g_corePoweredDown = false;
         // Sentinel: the game exited itself; -1 is never a valid emulated time.
@@ -2527,6 +2751,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetRenderer(JNIEnv *, jclass, jin
     if (g_graphicsContext == nullptr) {
         return;
     }
+    if (normalized == g_activeRenderer) return;
     if (g_booted || g_pendingBoot || g_bootRequested) {
         NLOGI("Renderer change stored; it applies when the next session starts");
         return;
@@ -2572,6 +2797,39 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeIsBooted(JNIEnv *, jclass) {
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     return g_booted ? JNI_TRUE : JNI_FALSE;
 }
+
+JNIEXPORT jstring JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeGetRuntimeError(JNIEnv *env, jclass) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    return env->NewStringUTF(g_bootError.c_str());
+}
+
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetPaused(JNIEnv *, jclass, jboolean paused) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    g_audioPaused = paused == JNI_TRUE;
+    if (g_audioPaused) {
+        StopAudio();
+    } else if (g_booted && g_renderReady) {
+        StartAudio();
+    }
+}
+
+#ifndef NDEBUG
+JNIEXPORT jintArray JNICALL
+Java_com_sbro_emucorea_core_NativeCoreDiagnostics_nativeGetRuntimeState(JNIEnv *env, jclass) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    const jint values[] = {
+        g_booted, g_audioStarted, static_cast<jint>(PSP_CoreParameter().cpuCore),
+        static_cast<jint>(PSP_CoreParameter().fpsLimit), g_Config.iFpsLimit1,
+        g_Config.bSoftwareRendering, g_Config.bReplaceTextures,
+        g_display.pixel_xres, g_display.pixel_yres,
+    };
+    jintArray result = env->NewIntArray(9);
+    if (result != nullptr) env->SetIntArrayRegion(result, 0, 9, values);
+    return result;
+}
+#endif
 
 // Repoints the core at a different data root (the app's "Emulator data
 // location"). All PSP directories (SAVEDATA, TEXTURES, CHEATS, NAND, ...) are
@@ -2621,23 +2879,13 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCheats(JNIEnv *env, jclass, js
 }
 
 JNIEXPORT void JNICALL
-Java_com_sbro_emucorea_core_NativePpsspp_nativeSetShaderEffect(JNIEnv *, jclass, jint effect) {
-    g_shaderEffect = effect;
-    // The actual chain is driven by the preset; the effect id only classifies
-    // the selected pack for logging and the built-in fallback.
-    emucorer::shader_chain::SetPreset(g_shaderPreset, !g_shaderPreset.empty());
-    NLOGI("Shader effect stored: %d (chain %s)", g_shaderEffect,
-          emucorer::shader_chain::IsEnabled() ? "enabled" : "disabled");
-}
-
-JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeSetShaderPreset(JNIEnv *env, jclass, jstring preset) {
-    g_shaderPreset = ToString(env, preset);
+    const std::string presetPath = ToString(env, preset);
     // Publishing a new generation makes the presentation rebuild its
     // librashader chain on the render thread; an empty path disables it and
     // turns the next present into a plain pass-through.
-    emucorer::shader_chain::SetPreset(g_shaderPreset, !g_shaderPreset.empty());
-    NLOGI("Shader preset stored: %s (chain %s)", g_shaderPreset.c_str(),
+    emucorer::shader_chain::SetPreset(presetPath, !presetPath.empty());
+    NLOGI("Shader preset stored: %s (chain %s)", presetPath.c_str(),
           emucorer::shader_chain::IsEnabled() ? "enabled" : "disabled");
 }
 
@@ -2651,6 +2899,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetRewindEnabled(JNIEnv *, jclass
 
 JNIEXPORT jboolean JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindStep(JNIEnv *, jclass) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     if (!PSP_IsInited() || g_Config.iRewindSnapshotInterval <= 0 || !SaveState::CanRewind()) {
         return JNI_FALSE;
     }
@@ -2658,6 +2907,9 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindStep(JNIEnv *, jclass) {
     // the frame thread; each queued step is executed by SaveState::Process()
     // while the core stays stepped.
     SaveState::Rewind();
+    g_rewinding = true;
+    g_rewindPending = true;
+    StopAudio();
     return JNI_TRUE;
 }
 
@@ -2666,10 +2918,13 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindStep(JNIEnv *, jclass) {
 // must be explicitly resumed or the game stays frozen forever.
 JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindRelease(JNIEnv *, jclass) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     if (PSP_IsInited() && coreState == CORE_STEPPING_CPU) {
         Core_Resume();
         NLOGI("Rewind released; core resumed");
     }
+    g_rewinding = false;
+    StartAudio();
 }
 
 // PPSSPP's own frame statistics: vps = emulated vblanks per wall second,

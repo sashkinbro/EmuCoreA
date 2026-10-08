@@ -41,6 +41,10 @@ public:
 
 	void Clear();
 
+	// Call only with producer and device output stopped. Frontends that own
+	// output reconfiguration can fix the ring size until the next reset.
+	void ResetForOutput();
+
 	void GetAudioDebugStats(char *buf, size_t bufSize);
 	void ResetStatCounters();
 
@@ -49,13 +53,14 @@ private:
 
 	int maxBufsize_;
 	int targetBufsize_;
+	bool fixedBufferSize_ = false;
 
 	// This can be adjusted, for the case of non-60hz output (a few hz off).
 	int inputSampleRateHz_ = 44100;
 
 	int16_t *buffer_ = nullptr;
-	std::atomic<u32> indexW_;
-	std::atomic<u32> indexR_;
+	std::atomic<u32> indexW_{0};
+	std::atomic<u32> indexR_{0};
 	float numLeftI_ = 0.0f;
 
 	u32 frac_ = 0;

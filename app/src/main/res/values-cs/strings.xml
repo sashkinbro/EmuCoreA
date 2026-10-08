@@ -1208,7 +1208,7 @@
     <string name="settings_customization_side_artwork_removed">Vlastní postranní grafika byla odebrána</string>
     <string name="settings_retroarch_shaders">Shadery RetroArch</string>
     <string name="settings_retroarch_shaders_desc">Použije řetězce .slangp na výsledný obraz hry.</string>
-    <string name="settings_help_retroarch_shaders">Podporuje předvolby RetroArch Slang ve Vulkan a OpenGL ES. Složité předvolby mohou snížit výkon.</string>
+    <string name="settings_help_retroarch_shaders">Podporuje předvolby RetroArch Slang ve Vulkan, OpenGL ES a softwarovém vykreslování. Složité předvolby mohou snížit výkon.</string>
     <string name="settings_shader_preset">Předvolba shaderu</string>
     <string name="settings_shader_preset_none">Žádná</string>
     <string name="settings_help_shader_preset">Nainstalujte balíček a vyberte předvolbu .slangp. Související soubory zůstanou spolu.</string>

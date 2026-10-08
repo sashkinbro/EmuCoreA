@@ -48,11 +48,15 @@ public:
 	void *GetAPIContext() override;
 
 	Draw::DrawContext *GetDrawContext() override { return draw_; }
+	// A failed window swapchain recreation leaves the old swapchain retired.
+	// The frontend must stop submitting until it replaces the surface.
+	bool IsSurfaceValid() const { return surfaceValid_; }
 private:
 	Draw::DrawContext *draw_;
 	VulkanContext *vulkan_ = nullptr;
 	VulkanRenderManager *renderManager_ = nullptr;
 	bool windowRestored_ = false;
+	bool surfaceValid_ = false;
 	int offscreenWidth_ = 0;
 	int offscreenHeight_ = 0;
 };

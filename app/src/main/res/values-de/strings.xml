@@ -1189,7 +1189,7 @@
     <string name="settings_customization_side_artwork_removed">Eigenes Seitenmotiv entfernt</string>
     <string name="settings_retroarch_shaders">RetroArch-Shader</string>
     <string name="settings_retroarch_shaders_desc">Wendet .slangp-Shaderketten auf das fertige Spielbild an.</string>
-    <string name="settings_help_retroarch_shaders">Unterstützt RetroArch-Slang-Presets mit Vulkan und OpenGL ES. Aufwendige Presets können die Leistung senken.</string>
+    <string name="settings_help_retroarch_shaders">Unterstützt RetroArch-Slang-Presets mit Vulkan, OpenGL ES und Software-Rendering. Aufwendige Presets können die Leistung senken.</string>
     <string name="settings_shader_preset">Shader-Preset</string>
     <string name="settings_shader_preset_none">Keines</string>
     <string name="settings_help_shader_preset">Installiere ein Shader-Paket und wähle dann ein .slangp-Preset. Zugehörige Dateien bleiben zusammen.</string>

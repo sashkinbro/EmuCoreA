@@ -1643,7 +1643,7 @@ private fun SettingsContent(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             contentPadding = PaddingValues(end = 4.dp)
                         ) {
-                            items(listOf(0, 1)) { padIndex ->
+                            items(listOf(0)) { padIndex ->
                                 val interactionSource = remember { MutableInteractionSource() }
                                 FilterChip(
                                     modifier = Modifier.tvGamepadFocusableCard(
@@ -4318,7 +4318,8 @@ internal fun ShaderPresetSelector(
     onSelect: (String) -> Unit,
     helpText: String,
     leadingOptions: List<Pair<String, String>> = emptyList(),
-    cardHorizontalPadding: Dp = 16.dp
+    cardHorizontalPadding: Dp = 16.dp,
+    enabled: Boolean = true
 ) {
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
@@ -4344,10 +4345,11 @@ internal fun ShaderPresetSelector(
             showDialog = true
         },
         helpText = helpText,
-        horizontalPadding = cardHorizontalPadding
+        horizontalPadding = cardHorizontalPadding,
+        enabled = enabled
     )
 
-    if (showDialog) {
+    if (showDialog && enabled) {
         val generalLabel = stringResource(R.string.settings_general_tab)
         val groups = remember(presets, noneLabel, generalLabel, leadingOptions, query) {
             buildShaderPresetDialogGroups(
@@ -5434,7 +5436,7 @@ private fun GamepadAssignmentRow(
                         }
                     )
                 }
-                items(listOf(0, 1)) { padIndex ->
+                items(listOf(0)) { padIndex ->
                     GamepadAssignmentChip(
                         label = gamepadPlayerLabel(padIndex),
                         selected = assignedPadIndex == padIndex && !ignored,

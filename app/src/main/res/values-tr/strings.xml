@@ -1187,7 +1187,7 @@
     <string name="settings_customization_side_artwork_removed">Özel yan görsel kaldırıldı</string>
     <string name="settings_retroarch_shaders">RetroArch gölgelendiricileri</string>
     <string name="settings_retroarch_shaders_desc">Son oyun görüntüsüne .slangp zincirleri uygular.</string>
-    <string name="settings_help_retroarch_shaders">Vulkan ve OpenGL ES üzerinde RetroArch Slang ön ayarlarını destekler. Karmaşık ön ayarlar performansı düşürebilir.</string>
+    <string name="settings_help_retroarch_shaders">Vulkan, OpenGL ES ve yazılım işleme üzerinde RetroArch Slang ön ayarlarını destekler. Karmaşık ön ayarlar performansı düşürebilir.</string>
     <string name="settings_shader_preset">Gölgelendirici ön ayarı</string>
     <string name="settings_shader_preset_none">Yok</string>
     <string name="settings_help_shader_preset">Bir paket kurun ve .slangp ön ayarı seçin. İlgili dosyalar birlikte tutulur.</string>

@@ -109,14 +109,24 @@ extern bool *g_bLogEnabledSetting;
 extern LogChannel g_log[(size_t)Log::NUMBER_OF_LOGS];
 
 inline bool GenericLogEnabled(Log type, LogLevel level) {
+#if defined(EMUCOREA_RELEASE)
+	(void)type;
+	(void)level;
+	return false;
+#else
 	return g_log[(int)type].IsEnabled(level) && (*g_bLogEnabledSetting);
+#endif
 }
 
 ATTR_FORMAT_PRINTF(5, 6) void GenericLog(Log type, LogLevel level, const char *file, int line, MSVC_FORMAT_PRINTF const char *fmt, ...);
 
 // If you want to see verbose logs, change this to VERBOSE_LEVEL.
 
+#if defined(EMUCOREA_RELEASE)
+#define MAX_LOGLEVEL 0
+#else
 #define MAX_LOGLEVEL DEBUG_LEVEL
+#endif
 
 // Let the compiler optimize this out.
 // TODO: Compute a dynamic max level as well that can be checked here.
@@ -190,15 +200,20 @@ void SetAssertDialogParent(void *handle);  // HWND on windows. Ignored on other 
 
 #ifndef _dbg_assert_
 #define _dbg_assert_(_a_) {}
+#define _dbg_assert_msg_(_a_, _desc_, ...) {}
+#if defined(EMUCOREA_RELEASE)
+#define _dbg_assert_or_log_(_a_) {}
+#define _dbg_assert_msg_or_log_(_a_, log, ...) {}
+#else
 #define _dbg_assert_or_log_(_a_) \
 	if (!(_a_)) { \
-		ERROR_LOG(Log::System, "Assert! " ## #_a_); \
+		ERROR_LOG(Log::System, "Assert! " #_a_); \
 	}
-#define _dbg_assert_msg_(_a_, _desc_, ...) {}
 #define _dbg_assert_msg_or_log_(_a_, log, ...) \
 	if (!(_a_)) { \
 		ERROR_LOG(log, __VA_ARGS__); \
 	}
+#endif
 
 #endif // dbg_assert
 

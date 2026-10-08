@@ -1201,7 +1201,7 @@
     <string name="settings_customization_side_artwork_removed">Ilustrasi sisi kustom dihapus</string>
     <string name="settings_retroarch_shaders">Shader RetroArch</string>
     <string name="settings_retroarch_shaders_desc">Menerapkan rangkaian .slangp ke gambar akhir game.</string>
-    <string name="settings_help_retroarch_shaders">Mendukung preset RetroArch Slang pada Vulkan dan OpenGL ES. Preset kompleks dapat menurunkan performa.</string>
+    <string name="settings_help_retroarch_shaders">Mendukung preset RetroArch Slang pada Vulkan, OpenGL ES dan rendering perangkat lunak. Preset kompleks dapat menurunkan performa.</string>
     <string name="settings_shader_preset">Preset shader</string>
     <string name="settings_shader_preset_none">Tidak ada</string>
     <string name="settings_help_shader_preset">Instal paket shader lalu pilih preset .slangp. File terkait tetap disimpan bersama.</string>

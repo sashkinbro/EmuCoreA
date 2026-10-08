@@ -110,16 +110,18 @@ FetchContent_MakeAvailable(librashader_src)
 # the two GL runtime files with the patched copies in ./patched that bind a
 # non-mipmapped sampler for level-less textures. Keep them in sync with the pin.
 set(_lrs_gl_src "${librashader_src_SOURCE_DIR}/librashader-runtime-gl/src")
-execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${CMAKE_CURRENT_SOURCE_DIR}/patched/samplers.rs" "${_lrs_gl_src}/samplers.rs")
-execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different
-    "${CMAKE_CURRENT_SOURCE_DIR}/patched/gl3_texture_bind.rs"
-    "${_lrs_gl_src}/gl/gl3/texture_bind.rs")
 set(_lrs_out_dir "${CMAKE_CURRENT_BINARY_DIR}/cargo")
 set(_lrs_lib "${_lrs_out_dir}/${_lrs_rust_target}/release/liblibrashader_capi.so")
 
 add_custom_command(
     OUTPUT "${_lrs_lib}"
+    # Copy when the dependency changes, including incremental builds that do
+    # not reconfigure CMake before Cargo checks its sources.
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/patched/samplers.rs" "${_lrs_gl_src}/samplers.rs"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/patched/gl3_texture_bind.rs"
+        "${_lrs_gl_src}/gl/gl3/texture_bind.rs"
     COMMAND ${CMAKE_COMMAND} -E env ${_lrs_path_modify}
         ${_lrs_host_env}
         "CARGO_TARGET_${_lrs_target_upper}_LINKER=${_lrs_cc}"

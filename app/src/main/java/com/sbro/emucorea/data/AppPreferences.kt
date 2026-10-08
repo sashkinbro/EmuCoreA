@@ -749,13 +749,8 @@ class AppPreferences(private val context: Context) {
         context.dataStore.edit { it[LOCAL_MULTIPLAYER_MODE] = normalizeLocalMultiplayerMode(mode) }
     }
 
-    private fun normalizeLocalMultiplayerMode(mode: Int?): Int = when (mode) {
-        LOCAL_MULTIPLAYER_SIDE_BY_SIDE,
-        LOCAL_MULTIPLAYER_STACKED,
-        LOCAL_MULTIPLAYER_HORIZONTAL_CROP,
-        LOCAL_MULTIPLAYER_HORIZONTAL_CROP_SWAPPED -> mode
-        else -> LOCAL_MULTIPLAYER_OFF
-    }
+    // A PSP has one controller. Ignore legacy split-controller settings.
+    private fun normalizeLocalMultiplayerMode(mode: Int?): Int = LOCAL_MULTIPLAYER_OFF
 
     suspend fun notifyCoverCacheCleared() {
         context.dataStore.edit { prefs ->

@@ -1191,7 +1191,7 @@
     <string name="settings_customization_side_artwork_removed">Пользовательское боковое оформление удалено</string>
     <string name="settings_retroarch_shaders">Шейдеры RetroArch</string>
     <string name="settings_retroarch_shaders_desc">Применяет цепочки .slangp к итоговому изображению игры.</string>
-    <string name="settings_help_retroarch_shaders">Поддерживает пресеты RetroArch Slang в Vulkan и OpenGL ES. Сложные пресеты могут снизить производительность.</string>
+    <string name="settings_help_retroarch_shaders">Поддерживает пресеты RetroArch Slang в Vulkan, OpenGL ES и программном рендеринге. Сложные пресеты могут снизить производительность.</string>
     <string name="settings_shader_preset">Пресет шейдера</string>
     <string name="settings_shader_preset_none">Нет</string>
     <string name="settings_help_shader_preset">Установите пакет шейдеров, затем выберите пресет .slangp. Связанные файлы сохраняются вместе.</string>

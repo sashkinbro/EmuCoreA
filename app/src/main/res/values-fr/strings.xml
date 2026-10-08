@@ -1189,7 +1189,7 @@
     <string name="settings_customization_side_artwork_removed">Illustration latérale personnalisée supprimée</string>
     <string name="settings_retroarch_shaders">Shaders RetroArch</string>
     <string name="settings_retroarch_shaders_desc">Applique des chaînes .slangp à l’image finale du jeu.</string>
-    <string name="settings_help_retroarch_shaders">Prend en charge les préréglages RetroArch Slang avec Vulkan et OpenGL ES. Les préréglages complexes peuvent réduire les performances.</string>
+    <string name="settings_help_retroarch_shaders">Prend en charge les préréglages RetroArch Slang avec Vulkan, OpenGL ES et le rendu logiciel. Les préréglages complexes peuvent réduire les performances.</string>
     <string name="settings_shader_preset">Préréglage de shader</string>
     <string name="settings_shader_preset_none">Aucun</string>
     <string name="settings_help_shader_preset">Installez un pack puis choisissez un préréglage .slangp. Les fichiers associés restent regroupés.</string>

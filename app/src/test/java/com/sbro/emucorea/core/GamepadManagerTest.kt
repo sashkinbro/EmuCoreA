@@ -14,7 +14,7 @@ class GamepadManagerTest {
             padDeviceKeys = mapOf(0 to "mangmi")
         )
 
-        assertEquals(linkedMapOf(72 to 0, 41 to 1), assignments)
+        assertEquals(linkedMapOf(72 to 0), assignments)
     }
 
     @Test
@@ -29,11 +29,11 @@ class GamepadManagerTest {
             padDeviceKeys = mapOf(0 to "built-in")
         )
 
-        assertEquals(linkedMapOf(41 to 0, 72 to 1), assignments)
+        assertEquals(linkedMapOf(41 to 0), assignments)
     }
 
     @Test
-    fun explicitPlayerTwoAssignmentKeepsOtherControllerOnPlayerOne() {
+    fun unsupportedPlayerTwoAssignmentIsIgnoredForPsp() {
         val assignments = GamepadManager.assignConnectedGamepadSlots(
             previousAssignments = emptyMap(),
             connectedDeviceIds = listOf(41, 72),
@@ -42,7 +42,7 @@ class GamepadManagerTest {
             padDeviceKeys = mapOf(1 to "a")
         )
 
-        assertEquals(linkedMapOf(72 to 0, 41 to 1), assignments)
+        assertEquals(linkedMapOf(41 to 0), assignments)
     }
 
     @Test
@@ -68,7 +68,7 @@ class GamepadManagerTest {
             padDeviceKeys = mapOf(0 to "disconnected")
         )
 
-        assertEquals(linkedMapOf(41 to 0, 72 to 1), assignments)
+        assertEquals(linkedMapOf(41 to 0), assignments)
     }
 
     @Test
@@ -96,6 +96,15 @@ class GamepadManagerTest {
         )
 
         assertEquals(linkedMapOf(41 to 0), assignments)
+    }
+
+    @Test
+    fun keepingTouchControlsVisibleDoesNotMovePhysicalControllerOffPspPort() {
+        assertEquals(linkedMapOf(41 to 0), GamepadManager.assignConnectedGamepadSlots(
+            previousAssignments = emptyMap(),
+            connectedDeviceIds = listOf(41),
+            singleGamepadReplacesTouch = false
+        ))
     }
     @Test
     fun timeControlsCanBeRemappedWithoutLosingStartAndSelect() {

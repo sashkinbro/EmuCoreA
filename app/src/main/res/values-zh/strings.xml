@@ -1188,7 +1188,7 @@
     <string name="settings_customization_side_artwork_removed">已移除自定义侧边图</string>
     <string name="settings_retroarch_shaders">RetroArch 着色器</string>
     <string name="settings_retroarch_shaders_desc">将 .slangp 着色器链应用到最终游戏画面。</string>
-    <string name="settings_help_retroarch_shaders">支持 Vulkan 和 OpenGL ES 的 RetroArch Slang 预设。复杂预设可能会降低性能。</string>
+    <string name="settings_help_retroarch_shaders">支持 Vulkan、OpenGL ES 和软件渲染的 RetroArch Slang 预设。复杂预设可能会降低性能。</string>
     <string name="settings_shader_preset">着色器预设</string>
     <string name="settings_shader_preset_none">无</string>
     <string name="settings_help_shader_preset">安装着色器包后选择 .slangp 预设。相关文件会保持在一起。</string>

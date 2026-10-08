@@ -432,7 +432,8 @@ object EmulatorBridge {
     suspend fun startEmulation(
         path: String,
         saveStateIdentityPath: String? = null,
-        bootSmokeProbe: Boolean = false
+        bootSmokeProbe: Boolean = false,
+        coreOptions: Map<String, String> = emptyMap()
     ): Boolean {
         if (!isNativeLoaded) {
             Log.e(TAG, "startEmulation skipped: native library is not loaded")
@@ -463,7 +464,7 @@ object EmulatorBridge {
                     NativeApp.logCrashBreadcrumb("startEmulation entering native runVMThread")
                     // The core identifies ELF/PRX/PLF homebrew itself through
                     // Identify_File, so every supported format boots the same way.
-                    NativeApp.runVMThread(path)
+                    NativeApp.runVMThread(path, coreOptions)
                 } catch (error: Exception) {
                     NativeApp.logCrashBreadcrumb("startEmulation exception before native start returned")
                     Log.e(TAG, "startEmulation native call failed", error)
@@ -1053,8 +1054,8 @@ object EmulatorBridge {
         Log.i(TAG, "onSurfaceDestroyed: called, version $oldVersion -> $surfaceEventVersion")
         NativeApp.setCrashContextString("emu_surface_state", "destroyed")
         NativeApp.logCrashBreadcrumb("surfaceDestroyed")
-        runCatching { NativeApp.pause() }
-        Log.i(TAG, "onSurfaceDestroyed: pause done, calling native destroy")
+        // Surface loss pauses presentation/audio without changing the explicit
+        // menu/background pause state. Attaching a replacement restores output.
         // Android invalidates the BufferQueue as soon as this callback returns.
         // Detach GS synchronously so it cannot keep presenting to an abandoned Surface.
         try {

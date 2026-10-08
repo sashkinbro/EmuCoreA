@@ -1186,7 +1186,7 @@
     <string name="settings_customization_side_artwork_removed">사용자 지정 측면 아트를 제거했습니다</string>
     <string name="settings_retroarch_shaders">RetroArch 셰이더</string>
     <string name="settings_retroarch_shaders_desc">최종 게임 화면에 .slangp 셰이더 체인을 적용합니다.</string>
-    <string name="settings_help_retroarch_shaders">Vulkan 및 OpenGL ES에서 RetroArch Slang 프리셋을 지원합니다. 복잡한 프리셋은 성능을 낮출 수 있습니다.</string>
+    <string name="settings_help_retroarch_shaders">Vulkan, OpenGL ES 및 소프트웨어 렌더링에서 RetroArch Slang 프리셋을 지원합니다. 복잡한 프리셋은 성능을 낮출 수 있습니다.</string>
     <string name="settings_shader_preset">셰이더 프리셋</string>
     <string name="settings_shader_preset_none">없음</string>
     <string name="settings_help_shader_preset">셰이더 팩을 설치한 다음 .slangp 프리셋을 선택하세요. 관련 파일은 함께 유지됩니다.</string>

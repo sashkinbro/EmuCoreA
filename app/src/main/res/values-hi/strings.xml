@@ -1187,7 +1187,7 @@
     <string name="settings_customization_side_artwork_removed">कस्टम साइड आर्टवर्क हटा दिया गया</string>
     <string name="settings_retroarch_shaders">RetroArch शेडर</string>
     <string name="settings_retroarch_shaders_desc">अंतिम गेम चित्र पर .slangp शेडर शृंखलाएँ लागू करता है।</string>
-    <string name="settings_help_retroarch_shaders">Vulkan और OpenGL ES पर RetroArch Slang प्रीसेट समर्थित हैं। जटिल प्रीसेट प्रदर्शन घटा सकते हैं।</string>
+    <string name="settings_help_retroarch_shaders">Vulkan, OpenGL ES और सॉफ़्टवेयर रेंडरिंग पर RetroArch Slang प्रीसेट समर्थित हैं। जटिल प्रीसेट प्रदर्शन घटा सकते हैं।</string>
     <string name="settings_shader_preset">शेडर प्रीसेट</string>
     <string name="settings_shader_preset_none">कोई नहीं</string>
     <string name="settings_help_shader_preset">शेडर पैक इंस्टॉल करें और .slangp प्रीसेट चुनें। संबंधित फ़ाइलें साथ रखी जाती हैं।</string>
