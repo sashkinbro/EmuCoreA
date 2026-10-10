@@ -3,10 +3,13 @@
 [![Support EmuCoreA on Patreon](https://img.shields.io/badge/Patreon-Support%20EmuCoreA-ff424d?logo=patreon&logoColor=white)](https://www.patreon.com/c/emucore/membership)
 [![Join the EmuCoreA Discord](https://img.shields.io/badge/Discord-Join%20the%20server-5865F2?logo=discord&logoColor=white)](https://discord.com/invite/c5EBeNRpz2)
 [![Website](https://img.shields.io/badge/Website-emucorea.web.app-1f6feb?logo=googlechrome&logoColor=white)](https://emucorea.web.app/)
+[![Get it on Google Play](https://img.shields.io/badge/Google_Play-EmuCoreA-414141?logo=googleplay&logoColor=white)](https://play.google.com/store/apps/details?id=com.sbro.emucorea)
 
 EmuCoreA is a PSP library, launcher, and emulator frontend for Android. It pairs a purpose-built Compose interface with a vendored [PPSSPP](https://github.com/hrydgard/ppsspp) core that is built together with the app, so no separate core download is needed.
 
 Official website: [https://emucorea.web.app/](https://emucorea.web.app/)
+
+Download it on Google Play: [EmuCoreA on the Play Store](https://play.google.com/store/apps/details?id=com.sbro.emucorea)
 
 ![Status](https://img.shields.io/badge/Status-Active%20Development-blue)
 
