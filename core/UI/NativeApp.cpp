@@ -947,7 +947,6 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 #if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
 	if (IsWin7OrHigher()) {
 		winCamera = new WindowsCaptureDevice(CAPTUREDEVICE_TYPE::VIDEO);
-		winMic = new WindowsCaptureDevice(CAPTUREDEVICE_TYPE::AUDIO);
 	}
 #endif
 
@@ -1077,11 +1076,6 @@ void NativeShutdownGraphics(GraphicsContext *graphicsContext) {
 		winCamera->waitShutDown();
 		delete winCamera;
 		winCamera = nullptr;
-	}
-	if (winMic) {
-		winMic->waitShutDown();
-		delete winMic;
-		winMic = nullptr;
 	}
 #endif
 
@@ -1345,7 +1339,9 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		g_screenManager->resized();
 
 		// TODO: Move this to the GraphicsContext objects for each backend.
-#if !PPSSPP_PLATFORM(WINDOWS) && !defined(ANDROID)
+		// (Android used to be left out here, since every size change there was a full graphics restart,
+		// and DeviceRestore covers it. Rotation and window resizing are in-place now.)
+#if !PPSSPP_PLATFORM(WINDOWS)
 		PSP_CoreParameter().pixelWidth = g_display.pixel_xres;
 		PSP_CoreParameter().pixelHeight = g_display.pixel_yres;
 		System_PostUIMessage(UIMessage::GPU_DISPLAY_RESIZED);

@@ -140,8 +140,8 @@ public:
 	BufMapping(const std::vector<u8> &pushbuf) : pushbuf_(pushbuf) {
 	}
 
-	// Returns a pointer to contiguous memory for this access, or else 0 (failure).
-	u32 Map(u32 bufpos, u32 sz, const std::function<void()> &flush);
+	// Returns a pointer to contiguous memory for this access, aligned to align bytes, or else 0 (failure).
+	u32 Map(u32 bufpos, u32 sz, const std::function<void()> &flush, u32 align = 1);
 
 	// Clear and reset allocations made.
 	void Reset() {
@@ -229,9 +229,14 @@ protected:
 	const std::vector<u8> &pushbuf_;
 };
 
-u32 BufMapping::Map(u32 bufpos, u32 sz, const std::function<void()> &flush) {
+u32 BufMapping::Map(u32 bufpos, u32 sz, const std::function<void()> &flush, u32 align) {
 	int slab1 = bufpos / SLAB_SIZE;
 	int slab2 = (bufpos + sz - 1) / SLAB_SIZE;
+
+	// Older recorders could reuse data at any offset (a CLUT found one byte into another), but the GE
+	// ignores the low bits of a CLUT or texture address. The extra mappings are separate, aligned copies.
+	if ((bufpos & (align - 1)) != 0)
+		return MapExtra(bufpos, sz, flush);
 
 	if (slab1 == slab2) {
 		// Shortcut in case it's simply the most recent slab.
@@ -364,6 +369,7 @@ class DumpExecute {
 public:
 	DumpExecute(const std::vector<u8> &pushbuf, const std::vector<Command> &commands, uint32_t version)
 		: pushbuf_(pushbuf), commands_(commands), mapping_(pushbuf), version_(version) {
+		MarkNeededTargets();
 	}
 	~DumpExecute();
 
@@ -384,7 +390,7 @@ private:
 	void MemcpyDest(u32 ptr, u32 sz);
 	void Memcpy(u32 ptr, u32 sz);
 	void Texture(int level, u32 ptr, u32 sz);
-	void Framebuf(int level, u32 ptr, u32 sz);
+	void Framebuf(int level, u32 ptr, u32 sz, bool needed);
 	void Display(u32 ptr, u32 sz, bool allowFlip);
 	void EdramTrans(u32 ptr, u32 sz);
 
@@ -425,12 +431,19 @@ private:
 	bool zTest_ = false;
 	bool zWriteDisable_ = false;
 	u32 clearMode_ = 0;
+	// Right after INIT, where a CLUT command is the CLUT the GE had loaded.
+	bool initialClut_ = false;
+	// Whether the last DISPLAY showed something (address 0 turns the display off).
+	bool haveDisplay_ = false;
 	// The vertices recorded for the next draw.
 	u32 lastVertsPtr_ = 0;
 	u32 lastVertsSize_ = 0;
 
 	void MarkDrawn(u32 prim);
-	void CopyAroundDrawn(u32 addr, const u8 *data, u32 size);
+	void CopyAroundDrawn(u32 addr, const u8 *data, u32 size, bool linear);
+	void MarkNeededTargets();
+	// By command: the render target snapshots holding data that a later snapshot leaves out as unchanged.
+	std::vector<bool> neededTargets_;
 
 	const std::vector<u8> &pushbuf_;
 	const std::vector<Command> &commands_;
@@ -463,6 +476,7 @@ void DumpExecute::SyncStall() {
 }
 
 void DumpExecute::Registers(u32 ptr, u32 sz) {
+	initialClut_ = false;
 	if (execListBuf == 0) {
 		u32 allocSize = LIST_BUF_SIZE;
 		execListBuf = userMemory.Alloc(allocSize, true, "List buf");
@@ -488,22 +502,21 @@ void DumpExecute::Registers(u32 ptr, u32 sz) {
 	// Validate space for jump.
 	u32 allocSize = pendingSize + sz + 8;
 	if (execListPos + allocSize >= execListBuf + LIST_BUF_SIZE) {
-		Memory::WriteUnchecked_U32((GE_CMD_BASE << 24) | ((execListBuf >> 8) & 0x00FF0000), execListPos);
-		Memory::WriteUnchecked_U32((GE_CMD_JUMP << 24) | (execListBuf & 0x00FFFFFF), execListPos + 4);
+		// Finish this list, wait for the GE to run it, and start a new one at the buffer's start. Jumping
+		// back instead let the next lap overwrite commands the GE hadn't reached yet: Warriors (14660) lost
+		// half its draws. The PSP replayer does the same. GE state, BASE included, carries over.
+		Memory::WriteUnchecked_U32(GE_CMD_FINISH << 24, execListPos);
+		Memory::WriteUnchecked_U32(GE_CMD_END << 24, execListPos + 4);
+		execListPos += 8;
+		SyncStall();
+		ExecuteOnMain(Operation{ OpType::ListSync, execListID });
 
 		execListPos = execListBuf;
-		// The queued vertex, index and texture addresses were made for the previous base, which the jump
-		// just replaced (Tiger Woods ULUS10420 then read draw 21026's indices from 16 MB away).
-		if (lastBase_ != 0xFFFFFFFF && lastBase_ != (execListBuf & 0xFF000000)) {
-			Memory::WriteUnchecked_U32((GE_CMD_BASE << 24) | ((lastBase_ >> 8) & 0x00FF0000), execListPos);
-			execListPos += 4;
-		} else {
-			lastBase_ = execListBuf & 0xFF000000;
-		}
-
-		// Don't continue until we've stalled.
-		// TODO: Is this really needed? It seems fine without it.
-		SyncStall();
+		Memory::WriteUnchecked_U32(GE_CMD_NOP << 24, execListPos);
+		execListPos += 4;
+		gpu->EnableInterrupts(false);
+		execListID = ExecuteOnMain(Operation{ OpType::EnqueueList, execListBuf, execListPos });
+		gpu->EnableInterrupts(true);
 	}
 
 	Memory::MemcpyUnchecked(execListPos, execListQueue.data(), pendingSize);
@@ -600,7 +613,18 @@ void DumpExecute::SubmitListEnd() {
 }
 
 void DumpExecute::Init(u32 ptr, u32 sz) {
-	gstate.Restore((u32_le *)(pushbuf_.data() + ptr));
+	// Dumps from before savedContextVersion 1 hold PPSSPP's old context layout, with the matrices as raw
+	// floats; the new one ends its commands with an END. Restoring an old one as new turned its matrices
+	// into garbage and the scene disappeared (4140). The PSP replayer tells them apart the same way.
+	const u32_le *context = (const u32_le *)(pushbuf_.data() + ptr);
+	bool oldLayout = true;
+	for (int i = 17; i < 512; ++i) {
+		if (context[i] == GE_CMD_END << 24) {
+			oldLayout = false;
+			break;
+		}
+	}
+	gstate.Restore(context, oldLayout);
 	ExecuteOnMain(Operation{ OpType::ReapplyGfxState });
 	fbPtr_ = gstate.fbptr & 0x00FFFFFF;
 	fbWidth_ = gstate.fbwidth & 0x00FFFFFF;
@@ -620,6 +644,7 @@ void DumpExecute::Init(u32 ptr, u32 sz) {
 		lastTex_[i] = 0;
 	}
 	lastBase_ = 0xFFFFFFFF;
+	initialClut_ = true;
 }
 
 // The drawing-space bounds of a through mode draw's vertices, or false if they aren't simple to read
@@ -774,7 +799,7 @@ void DumpExecute::Clut(u32 ptr, u32 sz) {
 
 		execClutAddr = 0;
 	} else {
-		u32 psp = mapping_.Map(ptr, sz, std::bind(&DumpExecute::SyncStall, this));
+		u32 psp = mapping_.Map(ptr, sz, std::bind(&DumpExecute::SyncStall, this), 16);
 		if (psp == 0) {
 			ERROR_LOG(Log::GeDebugger, "Unable to allocate for clut");
 			return;
@@ -782,11 +807,21 @@ void DumpExecute::Clut(u32 ptr, u32 sz) {
 
 		execListQueue.push_back((GE_CMD_CLUTADDRUPPER << 24) | ((psp >> 8) & 0x00FF0000));
 		execListQueue.push_back((GE_CMD_CLUTADDR << 24) | (psp & 0x00FFFFFF));
+		if (initialClut_) {
+			// The CLUT the GE had loaded when the recording started (the recorder saves it right after
+			// INIT), with no LOADCLUT to follow, unlike the CLUTs recorded at a LOADCLUT: load it here,
+			// then put the game's CLUT address back. Without this, draws used whatever CLUT was loaded
+			// before (HotBrain 16131, ULUS10268, drew its save screen background black).
+			execListQueue.push_back((GE_CMD_LOADCLUT << 24) | ((sz / 32) & 0x3F));
+			execListQueue.push_back(gstate.clutaddrupper);
+			execListQueue.push_back(gstate.clutaddr);
+			initialClut_ = false;
+		}
 	}
 }
 
 void DumpExecute::TransferSrc(u32 ptr, u32 sz) {
-	u32 psp = mapping_.Map(ptr, sz, std::bind(&DumpExecute::SyncStall, this));
+	u32 psp = mapping_.Map(ptr, sz, std::bind(&DumpExecute::SyncStall, this), 16);
 	if (psp == 0) {
 		ERROR_LOG(Log::GeDebugger, "Unable to allocate for transfer");
 		return;
@@ -797,6 +832,36 @@ void DumpExecute::TransferSrc(u32 ptr, u32 sz) {
 
 	execListQueue.push_back((gstate.transfersrcw & 0xFF00FFFF) | ((psp >> 8) & 0x00FF0000));
 	execListQueue.push_back(((GE_CMD_TRANSFERSRC) << 24) | (psp & 0x00FFFFFF));
+}
+
+// The PSP replayer writes recorded memory with the CPU, and the PSP sends every CPU access to VRAM's 0x04200000 and
+// 0x04600000 mirrors through the depth layout. With the software renderer PPSSPP's mirrors do that for 16-bit
+// accesses only, so a write into one goes a run of 32 aligned bytes at a time, which the layout keeps together.
+// IL-2's depth texture at 0x04710000 is recorded as the game sampled it, and only comes back so.
+static void CopyToMemory(u32 addr, const u8 *data, u32 size) {
+	if (!Memory::DepthMirrorsActive() || !Memory::IsDepthTexVRAMAddress(addr)) {
+		Memory::MemcpyUnchecked(addr, data, size);
+		return;
+	}
+	for (u32 pos = 0; pos < size; ) {
+		const u32 a = addr + pos;
+		const u32 n = std::min(32 - (a & 31), size - pos);
+		Memory::MemcpyUnchecked(Memory::DepthMirrored16(a), data + pos, n);
+		pos += n;
+	}
+}
+
+static void SetMemory(u32 addr, u8 value, u32 size) {
+	if (!Memory::DepthMirrorsActive() || !Memory::IsDepthTexVRAMAddress(addr)) {
+		Memory::Memset(addr, value, size);
+		return;
+	}
+	for (u32 pos = 0; pos < size; ) {
+		const u32 a = addr + pos;
+		const u32 n = std::min(32 - (a & 31), size - pos);
+		Memory::Memset(Memory::DepthMirrored16(a), value, n);
+		pos += n;
+	}
 }
 
 void DumpExecute::Memset(u32 ptr, u32 sz) {
@@ -816,7 +881,7 @@ void DumpExecute::Memset(u32 ptr, u32 sz) {
 		// TODO: should probably do this as an operation.
 		// The software renderer leaves the memset to the caller, like sceKernelMemset does.
 		if (!gpu->PerformMemorySet(data->dest, (u8)data->value, data->sz))
-			Memory::Memset(data->dest, (u8)data->value, data->sz);
+			SetMemory(data->dest, (u8)data->value, data->sz);
 	}
 }
 
@@ -829,14 +894,14 @@ void DumpExecute::Memcpy(u32 ptr, u32 sz) {
 	if (Memory::IsVRAMAddress(execMemcpyDest)) {
 		SyncStall();
 		gpu->Flush();
-		Memory::MemcpyUnchecked(execMemcpyDest, pushbuf_.data() + ptr, sz);
+		CopyToMemory(execMemcpyDest, pushbuf_.data() + ptr, sz);
 		NotifyMemInfo(MemBlockFlags::WRITE, execMemcpyDest, sz, "ReplayMemcpy");
 		gpu->PerformWriteColorFromMemory(execMemcpyDest, sz);
 	}
 }
 
 void DumpExecute::Texture(int level, u32 ptr, u32 sz) {
-	u32 psp = mapping_.Map(ptr, sz, std::bind(&DumpExecute::SyncStall, this));
+	u32 psp = mapping_.Map(ptr, sz, std::bind(&DumpExecute::SyncStall, this), 16);
 	if (psp == 0) {
 		ERROR_LOG(Log::GeDebugger, "Unable to allocate for texture");
 		return;
@@ -851,7 +916,7 @@ void DumpExecute::Texture(int level, u32 ptr, u32 sz) {
 	}
 }
 
-void DumpExecute::Framebuf(int level, u32 ptr, u32 sz) {
+void DumpExecute::Framebuf(int level, u32 ptr, u32 sz, bool needed) {
 	PROFILE_THIS_SCOPE("ReplayFramebuf");
 	struct FramebufData {
 		u32 addr;
@@ -878,12 +943,52 @@ void DumpExecute::Framebuf(int level, u32 ptr, u32 sz) {
 	const bool unchangedVRAM = version_ >= 6 && (framebuf->flags & 2) != 0;
 	// TODO: Could use drawnVRAM flag, but it can be wrong.
 	// Could potentially always skip if !isTarget, but playing it safe for offset texture behavior.
-	if (Memory::IsValidRange(framebuf->addr, pspSize) && !unchangedVRAM && (!isTarget || !g_Config.bSoftwareRendering)) {
+	// The software renderer skips a render target's unless something later relies on it: one drawn before the
+	// dump started holds data no other snapshot brings in (Madden's field logo, Need for Speed ProStreet).
+	if (Memory::IsValidRange(framebuf->addr, pspSize) && !unchangedVRAM && (!isTarget || !g_Config.bSoftwareRendering || needed)) {
 		// After the draws before it, which the software renderer may still have queued.
 		SyncStall();
 		gpu->Flush();
 		// Intentionally don't trigger an upload here.
-		CopyAroundDrawn(framebuf->addr, pushbuf_.data() + ptr + headerSize, pspSize);
+		CopyAroundDrawn(framebuf->addr, pushbuf_.data() + ptr + headerSize, pspSize, needed);
+	}
+}
+
+// The recorder leaves VRAM out of a snapshot as unchanged when an earlier snapshot had it. Marks the render
+// target snapshots that were that earlier one, by 256-byte block as the recorder tracks it.
+void DumpExecute::MarkNeededTargets() {
+	neededTargets_.assign(commands_.size(), false);
+	if (version_ < 6) {
+		return;
+	}
+	const u32 BLOCK_SHIFT = 8;
+	const u32 VRAM_SIZE = 0x00200000;
+	// For each block, the command whose snapshot last brought data there, and whether it was a render target's.
+	std::vector<int> lastSource(VRAM_SIZE >> BLOCK_SHIFT, -1);
+	std::vector<bool> lastIsTarget(lastSource.size(), false);
+	for (size_t i = 0; i < commands_.size(); i++) {
+		const Command &cmd = commands_[i];
+		if (cmd.type < CommandType::FRAMEBUF0 || cmd.type > CommandType::FRAMEBUF7 || cmd.sz < 16) {
+			continue;
+		}
+		const u32 *header = (const u32 *)(pushbuf_.data() + cmd.ptr);
+		if (!Memory::IsVRAMAddress(header[0])) {
+			continue;
+		}
+		const bool isTarget = (header[2] & 1) != 0;
+		const bool unchangedVRAM = (header[2] & 2) != 0;
+		const u32 start = header[0] & (VRAM_SIZE - 1);
+		const u32 end = std::min(start + (cmd.sz - 16), VRAM_SIZE);
+		for (u32 b = start >> BLOCK_SHIFT; b < (end + (1 << BLOCK_SHIFT) - 1) >> BLOCK_SHIFT; b++) {
+			if (unchangedVRAM) {
+				if (lastSource[b] >= 0 && lastIsTarget[b]) {
+					neededTargets_[lastSource[b]] = true;
+				}
+			} else {
+				lastSource[b] = (int)i;
+				lastIsTarget[b] = isTarget;
+			}
+		}
 	}
 }
 
@@ -893,13 +998,17 @@ void DumpExecute::Framebuf(int level, u32 ptr, u32 sz) {
 // framebuffer), or one whose recorded size runs over a buffer drawn next to it (Rainbow Six copies its
 // 512x512 frame texture before each strip it draws into the display buffer inside that range). A texture
 // beside the drawn area still comes through (Burnout keeps one in columns 480-511).
-void DumpExecute::CopyAroundDrawn(u32 addr, const u8 *data, u32 size) {
+void DumpExecute::CopyAroundDrawn(u32 addr, const u8 *data, u32 size, bool linear) {
 	// A texture recorded at its full size can run past the end of VRAM, into the depth swizzle mirror
 	// (Princess Maker 5's 1024x1024 one at 0x04000400). That isn't the game's data.
 	if (Memory::IsVRAMAddress(addr))
 		size = std::min(size, 0x00200000 - (addr & 0x001FFFFF));
 	std::vector<std::pair<int64_t, int64_t>> skip;
 	const int64_t start = addr & 0x001FFFFF, end = start + size;
+	// A snapshot at a depth mirror holds what the game saw through it (PPSSPP stored depth that way), so it goes
+	// back through the mirror. Except a render target's that later snapshots rely on: those read its data at
+	// linear addresses (Me & My Katamari textures a 512x512 one through 0x04288000, past its depth buffer).
+	linear = linear && Memory::IsVRAMAddress(addr);
 	if (g_Config.bSoftwareRendering) {
 		for (const auto &it : drawnTargets_) {
 			const DrawnTarget &t = it.second;
@@ -921,7 +1030,11 @@ void DumpExecute::CopyAroundDrawn(u32 addr, const u8 *data, u32 size) {
 	int64_t pos = start;
 	auto copyTo = [&](int64_t until) {
 		if (until > pos) {
-			Memory::MemcpyUnchecked(addr + (u32)(pos - start), data + (pos - start), (u32)(until - pos));
+			if (linear) {
+				Memory::MemcpyUnchecked(0x04000000 + (u32)pos, data + (pos - start), (u32)(until - pos));
+			} else {
+				CopyToMemory(addr + (u32)(pos - start), data + (pos - start), (u32)(until - pos));
+			}
 			NotifyMemInfo(MemBlockFlags::WRITE, addr + (u32)(pos - start), (u32)(until - pos), "ReplayTex");
 		}
 	};
@@ -943,6 +1056,11 @@ void DumpExecute::Display(u32 ptr, u32 sz, bool allowFlip) {
 	// Sync up drawing.
 	SyncStall();
 
+	// A display turned off shows nothing to compare, so the result falls back to the last framebuffer
+	// drawn to, as for a dump without a DISPLAY (Auditorium 9213). The PSP replayer does the same.
+	haveDisplay_ = disp->topaddr.ptr != 0;
+	if (!haveDisplay_)
+		return;
 	__DisplaySetFramebuf(disp->topaddr.ptr, disp->linesize, disp->pixelFormat, 1);
 	if (allowFlip) {
 		__DisplaySetFramebuf(disp->topaddr.ptr, disp->linesize, disp->pixelFormat, 0);
@@ -986,6 +1104,15 @@ ReplayResult DumpExecute::Run() {
 		}
 
 		const Command &cmd = commands_[i];
+		// Only the first INIT is real. Before 71210f3fa2 a second dump request during a recording started
+		// it again, writing another INIT (and initial CLUT) into the dump: the GE state of that moment,
+		// which already includes register writes the dump only has after it. Applied, it ran the last
+		// draws with the wrong state (GOD EATER BURST 13950 came out black, Street Riders 14746 garbled).
+		if (cmd.type == CommandType::INIT && i != 0) {
+			if (i + 1 < commands_.size() && commands_[i + 1].type == CommandType::CLUT)
+				++i;
+			continue;
+		}
 		switch (cmd.type) {
 		case CommandType::INIT:
 			Init(cmd.ptr, cmd.sz);
@@ -1050,7 +1177,7 @@ ReplayResult DumpExecute::Run() {
 		case CommandType::FRAMEBUF5:
 		case CommandType::FRAMEBUF6:
 		case CommandType::FRAMEBUF7:
-			Framebuf((int)cmd.type - (int)CommandType::FRAMEBUF0, cmd.ptr, cmd.sz);
+			Framebuf((int)cmd.type - (int)CommandType::FRAMEBUF0, cmd.ptr, cmd.sz, neededTargets_[i]);
 			break;
 
 		case CommandType::DISPLAY:
@@ -1064,6 +1191,12 @@ ReplayResult DumpExecute::Run() {
 	}
 
 	SubmitListEnd();
+	if (!haveDisplay_ && fbWidth_ != 0) {
+		SyncStall();
+		const u32 addr = 0x04000000 | (fbPtr_ & 0x001FFFF0);
+		__DisplaySetFramebuf(addr, fbWidth_ & 0x07FC, fbFormat_, 1);
+		__DisplaySetFramebuf(addr, fbWidth_ & 0x07FC, fbFormat_, 0);
+	}
 	return ReplayResult::Done;
 }
 

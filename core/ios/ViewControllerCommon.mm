@@ -14,21 +14,53 @@
 #include "Core/System.h"
 #include "Core/Config.h"
 
+// The target of the soft keyboard. It's a view of its own so the keyboard only comes up when we ask
+// for it: UIKit hands first responder back to the view controller whenever something it presented
+// (a share sheet, a picker, an alert) goes away, and if that were the text input, up it would come.
+@interface KeyboardInputView : UIView <UIKeyInput>
+@end
+
+@implementation KeyboardInputView
+
+- (BOOL)canBecomeFirstResponder {
+	return YES;
+}
+
+- (BOOL)hasText {
+	// Otherwise the keyboard wouldn't send backspaces.
+	return YES;
+}
+
+- (void)insertText:(NSString *)text {
+	SendKeyboardChars([text UTF8String]);
+}
+
+- (void)deleteBackward {
+	KeyInput input{};
+	input.deviceId = DEVICE_ID_KEYBOARD;
+	input.flags = KeyInputFlags::DOWN | KeyInputFlags::UP;
+	input.keyCode = NKCODE_DEL;
+	NativeKey(input);
+}
+
+@end
+
 @interface PPSSPPBaseViewController () {
 	CameraHelper *cameraHelper;
 	LocationHelper *locationHelper;
-	ICadeTracker g_iCadeTracker;
 	TouchTracker g_touchTracker;
 }
 
 @property (strong, nonatomic) NSOperationQueue *accelerometerQueue;
-@property (nonatomic) GCController *gameController __attribute__((weak_import));
+@property (nonatomic) GCController *gameController;
 @property (strong, nonatomic) CMMotionManager *motionManager;
 
 @end
 
 @implementation PPSSPPBaseViewController {
 	UIScreenEdgePanGestureRecognizer *mBackGestureRecognizer;
+	CGSize lastLayoutSize_;
+	KeyboardInputView *keyboardInputView_;
 }
 
 // Strange idiom for generating unique IDs (within the process, at least).
@@ -64,8 +96,6 @@ static int GetPickerRequestId(id picker) {
 	self = [super init];
 	if (self) {
 		sharedViewController = self;
-
-		g_iCadeTracker.InitKeyMap();
 
 		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(appWillTerminate:) name:UIApplicationWillTerminateNotification object:nil];
 		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(controllerDidConnect:) name:GCControllerDidConnectNotification object:nil];
@@ -136,7 +166,8 @@ static int GetPickerRequestId(id picker) {
 - (void)viewDidAppear:(BOOL)animated {
 	[super viewDidAppear:animated];
 	INFO_LOG(Log::G3D, "viewDidAppear");
-	[self hideKeyboard];
+	// For hardware keyboard presses.
+	[self becomeFirstResponder];
 	[self updateGesture];
 
 	// This needs to be called really late during startup, unfortunately.
@@ -145,7 +176,6 @@ static int GetPickerRequestId(id picker) {
 	NSLog(@"viewDidAppear. updating icon");
 	dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
 		[[IAPManager sharedIAPManager] updateIcon:false];
-		[self hideKeyboard];
 	});
 #endif  // IOS_APP_STORE
 }
@@ -247,7 +277,6 @@ static int GetPickerRequestId(id picker) {
 	if (results.count == 0) {
 		NSLog(@"User cancelled photo picker");
 		g_requestManager.PostSystemFailure(requestId);
-		[self hideKeyboard];
 		return;
 	}
 
@@ -255,7 +284,6 @@ static int GetPickerRequestId(id picker) {
 	if (![itemProvider canLoadObjectOfClass:[UIImage class]]) {
 		NSLog(@"Photo picker result does not provide UIImage");
 		g_requestManager.PostSystemFailure(requestId);
-		[self hideKeyboard];
 		return;
 	}
 
@@ -267,7 +295,6 @@ static int GetPickerRequestId(id picker) {
 			} else {
 				[self savePickedImage:image toFilename:targetFilename requestId:requestId];
 			}
-			[self hideKeyboard];
 		});
 	}];
 }
@@ -281,8 +308,6 @@ static int GetPickerRequestId(id picker) {
 	[self savePickedImage:image toFilename:targetFilename requestId:requestId];
 
 	[picker dismissViewControllerAnimated:YES completion:nil];
-
-	[self hideKeyboard];
 }
 
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
@@ -291,9 +316,7 @@ static int GetPickerRequestId(id picker) {
 
 	[picker dismissViewControllerAnimated:YES completion:nil];
 
-	// You can also call your custom callback or use the requestId here
 	g_requestManager.PostSystemFailure(requestId);
-	[self hideKeyboard];
 }
 
 - (void)handleSwipeFrom:(UIScreenEdgePanGestureRecognizer *)recognizer {
@@ -369,6 +392,9 @@ static int GetPickerRequestId(id picker) {
 	[locationHelper setDelegate:self];
 
 	self.motionManager = [[CMMotionManager alloc] init];
+
+	keyboardInputView_ = [[KeyboardInputView alloc] initWithFrame:CGRectZero];
+	[self.view addSubview:keyboardInputView_];
 }
 
 extern float g_safeInsetLeft;
@@ -379,8 +405,8 @@ extern float g_safeInsetBottom;
 - (void)viewSafeAreaInsetsDidChange {
 	[super viewSafeAreaInsetsDidChange];
 
-	// Converts points to pixels.
-	CGFloat scale = UIScreen.mainScreen.scale;
+	// Converts points to pixels, the same way updateResolutionWithView does.
+	CGFloat scale = [self displayScaleForView:self.view];
 
 	float xInsetSum = self.view.safeAreaInsets.left + self.view.safeAreaInsets.right;
 	float yInsetSum = self.view.safeAreaInsets.top + self.view.safeAreaInsets.bottom;
@@ -405,69 +431,45 @@ extern float g_safeInsetBottom;
 }
 
 - (void)shareText:(NSString *)text {
-	NSArray *items = @[text];
-	UIActivityViewController * viewController = [[UIActivityViewController alloc] initWithActivityItems:items applicationActivities:nil];
-	dispatch_async(dispatch_get_main_queue(), ^{
-		[self presentViewController:viewController animated:YES completion:nil];
-	});
+	[self shareItems:@[text]];
+}
+
+- (void)shareFile:(NSURL *)url {
+	// The share sheet works out the type from the extension.
+	[self shareItems:@[url]];
+}
+
+- (void)shareItems:(NSArray *)items {
+	UIActivityViewController *viewController = [[UIActivityViewController alloc] initWithActivityItems:items applicationActivities:nil];
+	// On iPad, the share sheet is a popover and needs an anchor.
+	viewController.popoverPresentationController.sourceView = self.view;
+	viewController.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
+	viewController.popoverPresentationController.permittedArrowDirections = 0;
+	[self presentViewController:viewController animated:YES completion:nil];
 }
 
 - (void)appSwitchModeChanged {
 	[self setNeedsUpdateOfHomeIndicatorAutoHidden];
 }
 
-// The below is inspired by https://stackoverflow.com/questions/7253477/how-to-display-the-iphone-ipad-keyboard-over-a-full-screen-opengl-es-app
-// It's a bit limited but good enough.
-
-- (void)deleteBackward {
-	KeyInput input{};
-	input.deviceId = DEVICE_ID_KEYBOARD;
-	input.flags = KeyInputFlags::DOWN | KeyInputFlags::UP;
-	input.keyCode = NKCODE_DEL;
-	NativeKey(input);
-	INFO_LOG(Log::System, "Backspace");
-}
-
-- (void)insertText:(NSString *)text {
-	std::string str([text UTF8String]);
-	INFO_LOG(Log::System, "Chars: %s", str.c_str());
-	SendKeyboardChars(str);
-}
-
-- (BOOL)hasText {
-	return true;
-}
-
+// Main thread, like the rest of these.
 - (void)showKeyboard {
-	dispatch_async(dispatch_get_main_queue(), ^{
-		INFO_LOG(Log::System, "becomeFirstResponder");
-		[self becomeFirstResponder];
-	});
+	INFO_LOG(Log::System, "showKeyboard");
+	[keyboardInputView_ becomeFirstResponder];
 }
 
 - (void)hideKeyboard {
-	dispatch_async(dispatch_get_main_queue(), ^{
-		INFO_LOG(Log::System, "resignFirstResponder");
-		[self resignFirstResponder];
-	});
+	if (keyboardInputView_.isFirstResponder) {
+		INFO_LOG(Log::System, "hideKeyboard");
+		[keyboardInputView_ resignFirstResponder];
+		// Back to us, for hardware keyboard presses. We don't take text, so no keyboard comes with it.
+		[self becomeFirstResponder];
+	}
 }
 
 - (BOOL)canBecomeFirstResponder {
 	return YES;
 }
-
-- (void)buttonDown:(iCadeState)button
-{
-	g_iCadeTracker.ButtonDown(button);
-}
-
-- (void)buttonUp:(iCadeState)button
-{
-	g_iCadeTracker.ButtonUp(button);
-}
-
-// See PPSSPPUIApplication.mm for the other method
-#if PPSSPP_PLATFORM(IOS_APP_STORE)
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
 	KeyboardPressesBegan(presses, event);
@@ -481,18 +483,15 @@ extern float g_safeInsetBottom;
 	KeyboardPressesEnded(presses, event);
 }
 
-#endif
 #pragma mark - Status Bar Control
 
 // The immersive mode setting is per-orientation, so we need to know which way we're facing.
 // Can't just use g_display for this, since it lags behind during rotation.
 // Note: Using viewIfLoaded, since this can get called before the view exists, and we don't want to force it into existence.
 - (DeviceOrientation)currentDeviceOrientation {
-	if (@available(iOS 13.0, *)) {
-		UIWindowScene *scene = self.viewIfLoaded.window.windowScene;
-		if (scene != nil) {
-			return UIInterfaceOrientationIsPortrait(scene.interfaceOrientation) ? DeviceOrientation::Portrait : DeviceOrientation::Landscape;
-		}
+	UIWindowScene *scene = self.viewIfLoaded.window.windowScene;
+	if (scene != nil) {
+		return UIInterfaceOrientationIsPortrait(scene.interfaceOrientation) ? DeviceOrientation::Portrait : DeviceOrientation::Landscape;
 	}
 	CGSize size = self.viewIfLoaded.bounds.size;
 	return size.height > size.width ? DeviceOrientation::Portrait : DeviceOrientation::Landscape;
@@ -525,19 +524,39 @@ extern float g_safeInsetBottom;
 	[self setNeedsStatusBarAppearanceUpdate];
 }
 
-- (void)updateResolutionWithView:(UIView *)view {
-	// 1. Get the scale from the window scene
-	CGFloat scale = 1.0;
-	if (view.window && view.window.windowScene) {
-		scale = view.window.windowScene.screen.nativeScale;
-	} else {
-		scale = [UITraitCollection currentTraitCollection].displayScale;
+// Rotations and window resizes land here. UIKit lays out at the final size at the start of a
+// rotation animation, so resizing here (rather than when the rotation completes) keeps the
+// backbuffer matching the view while it animates.
+- (void)viewDidLayoutSubviews {
+	[super viewDidLayoutSubviews];
+	CGSize size = self.view.bounds.size;
+	if (size.width <= 0.0 || size.height <= 0.0 || CGSizeEqualToSize(size, lastLayoutSize_)) {
+		return;
 	}
+	lastLayoutSize_ = size;
+	if (self.view.window.windowScene) {
+		[cameraHelper setInterfaceOrientation:self.view.window.windowScene.interfaceOrientation];
+	}
+	INFO_LOG(Log::G3D, "Laid out at %dx%d", (int)size.width, (int)size.height);
+	// Resized in place: NativeFrame picks up the new size and lets the graphics context resize.
+	[self updateResolutionWithView:self.view];
+}
 
-	// 2. Get the ACTUAL bounds of the view (already corrected for orientation)
+// Pixels per point. nativeScale, not scale, since that's what the drawable is - they differ on
+// some phones, like the Plus models and the minis.
+- (CGFloat)displayScaleForView:(UIView *)view {
+	if (view.window.windowScene) {
+		return view.window.windowScene.screen.nativeScale;
+	}
+	return [UITraitCollection currentTraitCollection].displayScale;
+}
+
+- (void)updateResolutionWithView:(UIView *)view {
+	CGFloat scale = [self displayScaleForView:view];
+
+	// The bounds are already corrected for orientation.
 	CGSize size = view.bounds.size;
 
-	// Your existing logic
 	float dpi = (IS_IPAD() ? 200.0f : 150.0f) * scale;
 	const float dpi_scale_x = 240.0f / dpi;
 	const float dpi_scale_y = 240.0f / dpi;
@@ -548,10 +567,7 @@ extern float g_safeInsetBottom;
 
 	[view setContentScaleFactor:scale];
 
-	// PSP native resize
-	PSP_CoreParameter().pixelWidth = g_display.pixel_xres;
-	PSP_CoreParameter().pixelHeight = g_display.pixel_yres;
-
+	// NativeFrame updates the PSP_CoreParameter() size along with the rest.
 	NativeResized();
 
 	NSLog(@"Updated display resolution: (%d, %d) @%.1fx",

@@ -569,7 +569,7 @@ void StartAudio() {
     if (g_audioState == nullptr) {
         const int sampleRate = AudioOutputSampleRate();
         const int frames = AudioOutputFramesPerBuffer();
-        g_audioState = AndroidAudio_Init(AudioRenderCallback, frames, sampleRate);
+        g_audioState = AndroidAudio_Init(AudioRenderCallback, frames, sampleRate, true);
         NLOGI("Audio output: %d Hz, %d frames/buffer", sampleRate, frames);
     }
     if (!g_audioStarted && g_audioState != nullptr) {
@@ -759,6 +759,13 @@ jobject g_classLoader = nullptr;
 jmethodID g_loadClassMethod = nullptr;
 // Application context handed to PPSSPP's TextRenderer / TextDrawerAndroid.
 jobject g_appContext = nullptr;
+std::mutex g_appContextMutex;
+
+// PPSSPP expects a caller-owned local reference, including on native threads.
+jobject Android_GetActivity(JNIEnv *env) {
+    std::lock_guard<std::mutex> lock(g_appContextMutex);
+    return g_appContext != nullptr ? env->NewLocalRef(g_appContext) : nullptr;
+}
 
 void CacheClassLoader(JNIEnv *env) {
     if (env == nullptr || g_classLoader != nullptr) return;
@@ -1566,6 +1573,16 @@ void ApplyPendingCheatsLocked() {
     g_pendingCheatFile.clear();
 }
 
+// Raw restoration can fail after changing guest memory and kernel objects.
+// Keep the session stopped until shutdown; a second load cannot repair it safely.
+void FailStateRestoration(std::string_view detail) {
+    g_bootError = "Unable to restore PSP state. Restart the game";
+    if (!detail.empty()) g_bootError += ": " + std::string(detail);
+    g_rewindPending = false;
+    StopAudio();
+    NLOGE("%s", g_bootError.c_str());
+}
+
 void RunFrame() {
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     if (g_graphicsContext == nullptr || !g_renderReady || !g_bootError.empty()) return;
@@ -1641,11 +1658,24 @@ void RunFrame() {
 
     ApplyPendingCheatsLocked();
 
+    Core_StateProcessed();
+    SaveState::Process();
+    if (SaveState::PollRestartNeeded()) {
+        FailStateRestoration("The core rejected a queued state restoration");
+    }
+    if (!g_bootError.empty()) return;
+    if (g_rewindPending) {
+        g_rewindPending = false;
+        if (!g_rewinding) {
+            if (coreState == CORE_STEPPING_CPU) Core_Resume();
+            StartAudio();
+        }
+    }
+
     Draw::DrawContext *draw = g_graphicsContext->GetDrawContext();
     if (draw == nullptr) return;
     draw->SetTargetSize(g_display.pixel_xres, g_display.pixel_yres);
 
-    Core_StateProcessed();
     draw->BeginFrame(Draw::DebugFlags::NONE);
 
     const DeviceOrientation orientation = g_display.GetDeviceOrientation();
@@ -1659,15 +1689,6 @@ void RunFrame() {
     g_frameTiming.ComputePresentMode(draw, false);
 
     PSP_UpdateDebugStats(g_Config.bLogFrameDrops);
-
-    SaveState::Process();
-    if (g_rewindPending) {
-        g_rewindPending = false;
-        if (!g_rewinding) {
-            if (coreState == CORE_STEPPING_CPU) Core_Resume();
-            StartAudio();
-        }
-    }
 
     // With buffer effects skipped, the hardware GPU draws directly into the
     // window backbuffer. Bind and clear it before emulation, as EmuScreen does.
@@ -1819,6 +1840,10 @@ bool SaveStateToFile(const std::string &path, std::string *errorOut = nullptr) {
 
 bool LoadStateFromFile(const std::string &path, std::string *errorOut = nullptr) {
     if (errorOut != nullptr) errorOut->clear();
+    if (!g_bootError.empty()) {
+        if (errorOut != nullptr) *errorOut = g_bootError;
+        return false;
+    }
     FILE *file = File::OpenCFile(Path(path), "rb");
     if (file == nullptr) {
         NLOGE("Unable to open state file for read: %s", path.c_str());
@@ -1832,7 +1857,12 @@ bool LoadStateFromFile(const std::string &path, std::string *errorOut = nullptr)
         data.insert(data.end(), buffer.begin(), buffer.begin() + n);
         if (n < buffer.size()) break;
     }
+    const bool readFailed = ferror(file) != 0;
     fclose(file);
+    if (readFailed || data.empty()) {
+        if (errorOut != nullptr) *errorOut = readFailed ? "Unable to read state file" : "The state file is empty";
+        return false;
+    }
     NLOGI("Loading state: %s (%zu bytes)", path.c_str(), data.size());
     std::string error;
     // Loading/rewinding clears the PCM ring. Stop its consumer first instead
@@ -1840,10 +1870,11 @@ bool LoadStateFromFile(const std::string &path, std::string *errorOut = nullptr)
     const bool resumeAudio = g_audioStarted;
     StopAudio();
     const bool ok = SaveState::LoadFromRam(data, &error) == CChunkFileReader::ERROR_NONE;
-    if (resumeAudio) StartAudio();
     if (!ok) {
-        NLOGE("LoadFromRam failed: %s (path=%s)", error.c_str(), path.c_str());
-        if (errorOut != nullptr) *errorOut = error;
+        FailStateRestoration(error);
+        if (errorOut != nullptr) *errorOut = g_bootError;
+    } else if (resumeAudio) {
+        StartAudio();
     }
     return ok;
 }
@@ -2519,6 +2550,7 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
 // assets). Must be called before the first boot.
 JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeSetAppContext(JNIEnv *env, jclass, jobject context) {
+    std::lock_guard<std::mutex> lock(g_appContextMutex);
     if (g_appContext != nullptr) {
         env->DeleteGlobalRef(g_appContext);
         g_appContext = nullptr;
@@ -2526,7 +2558,6 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetAppContext(JNIEnv *env, jclass
     if (context == nullptr) return;
     g_appContext = env->NewGlobalRef(context);
     CacheClassLoaderFromContext(env, g_appContext);
-    TextDrawerAndroid::SetActivity(g_appContext);
 
     jclass textRendererClass = findClass("org/ppsspp/ppsspp/TextRenderer");
     if (textRendererClass != nullptr) {
@@ -2985,13 +3016,17 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetRewindEnabled(JNIEnv *, jclass
 JNIEXPORT jboolean JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindStep(JNIEnv *, jclass) {
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
-    if (!PSP_IsInited() || g_Config.iRewindSnapshotInterval <= 0 || !SaveState::CanRewind()) {
+    if (!PSP_IsInited() || !g_bootError.empty() || g_Config.iRewindSnapshotInterval <= 0 || !SaveState::CanRewind()) {
         return JNI_FALSE;
     }
     // Rewind() breaks the CPU into stepping mode so the operation can run on
     // the frame thread; each queued step is executed by SaveState::Process()
     // while the core stays stepped.
-    SaveState::Rewind();
+    SaveState::Rewind([](SaveState::Status status, std::string_view message, std::string_view) {
+        if (status == SaveState::Status::FAILURE && SaveState::PollRestartNeeded()) {
+            FailStateRestoration(message);
+        }
+    });
     g_rewinding = true;
     g_rewindPending = true;
     StopAudio();
@@ -3004,7 +3039,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindStep(JNIEnv *, jclass) {
 JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeRewindRelease(JNIEnv *, jclass) {
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
-    if (PSP_IsInited() && coreState == CORE_STEPPING_CPU) {
+    if (PSP_IsInited() && g_bootError.empty() && coreState == CORE_STEPPING_CPU) {
         Core_Resume();
         NLOGI("Rewind released; core resumed");
     }

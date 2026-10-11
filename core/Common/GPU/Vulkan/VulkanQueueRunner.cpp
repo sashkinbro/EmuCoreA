@@ -933,7 +933,7 @@ void VulkanQueueRunner::LogRenderPass(const VKRStep &pass, bool verbose) {
 				INFO_LOG(Log::G3D, "  BindGraphicsPipeline(%x)", (int)(intptr_t)cmd.graphics_pipeline.pipeline);
 				break;
 			case VKRRenderCommand::BLEND:
-				INFO_LOG(Log::G3D, "  BlendColor(%08x)", cmd.blendColor.color);
+				INFO_LOG(Log::G3D, "  BlendColor(%f, %f, %f, %f)", cmd.blendColor.color[0], cmd.blendColor.color[1], cmd.blendColor.color[2], cmd.blendColor.color[3]);
 				break;
 			case VKRRenderCommand::CLEAR:
 				INFO_LOG(Log::G3D, "  Clear");
@@ -989,7 +989,11 @@ void VulkanQueueRunner::LogReadbackImage(const VKRStep &step) {
 void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer cmd, const int curFrame, QueueProfileContext &profile) {
 	for (size_t i = 0; i < step.preTransitions.size(); i++) {
 		const TransitionRequest &iter = step.preTransitions[i];
-		if (iter.aspect == VK_IMAGE_ASPECT_COLOR_BIT && iter.fb->color.layout != iter.targetLayout) {
+		if (iter.samples) {
+			if (iter.fb->msaaColor.image != VK_NULL_HANDLE && iter.fb->msaaColor.layout != iter.targetLayout) {
+				recordBarrier_.TransitionColorImageAuto(&iter.fb->msaaColor, iter.targetLayout);
+			}
+		} else if (iter.aspect == VK_IMAGE_ASPECT_COLOR_BIT && iter.fb->color.layout != iter.targetLayout) {
 			recordBarrier_.TransitionColorImageAuto(
 				&iter.fb->color,
 				iter.targetLayout
@@ -1179,12 +1183,8 @@ void VulkanQueueRunner::PerformRenderPass(const VKRStep &step, VkCommandBuffer c
 		}
 
 		case VKRRenderCommand::BLEND:
-		{
-			float bc[4];
-			Uint8x4ToFloat4(bc, c.blendColor.color);
-			vkCmdSetBlendConstants(cmd, bc);
+			vkCmdSetBlendConstants(cmd, c.blendColor.color);
 			break;
-		}
 
 		case VKRRenderCommand::PUSH_CONSTANTS:
 			if (pipelineOK) {
@@ -1345,6 +1345,10 @@ VKRRenderPass *VulkanQueueRunner::PerformBindFramebufferAsRenderTarget(const VKR
 		}
 
 		recordBarrier_.TransitionColorImageAuto(&fb->color, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		if (fb->msaaColor.image != VK_NULL_HANDLE) {
+			// Texturing from the samples (BindFramebufferAsTexture) moves this one out of the attachment layout.
+			recordBarrier_.TransitionColorImageAuto(&fb->msaaColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		}
 
 		// If the render pass doesn't touch depth, we can avoid a layout transition of the depth buffer.
 		if (fb->depth.image && RenderPassTypeHasDepth(step.render.renderPassType)) {

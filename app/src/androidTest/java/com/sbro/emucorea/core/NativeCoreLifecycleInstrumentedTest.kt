@@ -21,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.sbro.emucorea.RuntimeTestActivity
 import java.io.File
 import java.io.ByteArrayOutputStream
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.Callable
@@ -230,6 +231,61 @@ class NativeCoreLifecycleInstrumentedTest {
             NativePpsspp.nativeSetPaused(false)
             assertEquals(1, state()[AUDIO])
             assertFrameProgress()
+        }
+    }
+
+    @Test(timeout = 60_000)
+    fun truncatedStateStopsSessionAndFreshBootRecovers() {
+        initialize(1)
+        onFrame { assertTrue(NativePpsspp.nativeBoot(guest.path)) }
+        awaitBoot()
+        val complete = File(root, "complete.state")
+        onFrame {
+            assertFrameProgress()
+            assertEquals(1, state()[AUDIO])
+            assertTrue(NativePpsspp.nativeSaveState(complete.path))
+        }
+        assertTrue("The saved payload must retain its framing after truncation", complete.length() > 128)
+        val truncated = File(root, "truncated.state")
+        complete.copyTo(truncated)
+        RandomAccessFile(truncated, "rw").use { it.setLength(complete.length() - 64) }
+        onFrame {
+            assertFalse("A truncated valid state must be rejected", NativePpsspp.nativeLoadState(truncated.path))
+            assertTrue("Partial deserialization must publish a fatal runtime error",
+                NativePpsspp.nativeGetRuntimeError().isNotBlank())
+            assertEquals("Partial deserialization must stop output", 0, state()[AUDIO])
+            NativePpsspp.nativeSetPaused(false)
+            repeat(3) {
+                assertEquals("The partially restored guest must not execute", 0L, NativePpsspp.nativeRunFrame())
+            }
+            assertEquals("Resuming a failed session must not restart output", 0, state()[AUDIO])
+            NativePpsspp.nativeShutdown()
+        }
+        initialize(1)
+        onFrame { assertTrue(NativePpsspp.nativeBoot(guest.path)) }
+        awaitBoot()
+        onFrame {
+            assertTrue("A fresh session clears the state-load failure", NativePpsspp.nativeGetRuntimeError().isEmpty())
+            assertFrameProgress()
+            assertEquals(1, state()[AUDIO])
+        }
+    }
+
+    @Test(timeout = 45_000)
+    fun missingAndEmptyStatesLeaveRunningSessionIntact() {
+        initialize(1)
+        onFrame { assertTrue(NativePpsspp.nativeBoot(guest.path)) }
+        awaitBoot()
+        val missing = File(root, "missing.state")
+        val empty = File(root, "empty.state").apply { writeBytes(byteArrayOf()) }
+        onFrame {
+            assertFrameProgress()
+            for (candidate in listOf(missing, empty)) {
+                assertFalse("Reject ${candidate.name} before deserialization", NativePpsspp.nativeLoadState(candidate.path))
+                assertTrue("${candidate.name} must leave the guest intact", NativePpsspp.nativeGetRuntimeError().isEmpty())
+                assertEquals("${candidate.name} must retain active output", 1, state()[AUDIO])
+                assertFrameProgress()
+            }
         }
     }
 

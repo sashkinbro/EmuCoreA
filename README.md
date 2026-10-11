@@ -68,36 +68,6 @@ EmuCoreA version `0.0.5` currently targets Android with:
 - version code `18`
 - ARM64 devices only
 
-## Core Integration
-
-The vendored core includes PPSSPP `master` through [`bd04d064a4`](https://github.com/hrydgard/ppsspp/commit/bd04d064a4), synchronized on 2026-10-08. EmuCoreA retains its frontend lifecycle, audio queue, surface recovery and release diagnostics patches. Module-start callbacks are also cleared at kernel shutdown so a translation-patch loader cannot leave a guest address active in the next game.
-
-`CoreRuntime` owns the process-wide session and frame worker. `NativePpsspp` calls the native frontend through JNI; the frontend uses PPSSPP's asynchronous loader, JIT/IR interpreter, GPU backends, frame timing, save states and stereo resampler directly. The build excludes the libretro wrapper and PPSSPP's application UI.
-
-| Renderer | PSP rendering | Android presentation |
-| --- | --- | --- |
-| Vulkan | PPSSPP Vulkan GPU backend | Vulkan swapchain |
-| OpenGL ES | PPSSPP GLES GPU backend | Dedicated EGL render thread |
-| Software | PPSSPP CPU rasterizer, fixed at PSP resolution | Vulkan swapchain |
-
-Software rendering still needs a working Vulkan driver for presentation and is generally slower than hardware rendering. PSP exposes one local controller; multiplayer uses PSP WLAN/ad hoc rather than a second local controller port.
-
-Global defaults and per-game options are resolved before the loader starts. Per-game overrides survive renderer changes without overwriting global settings. A live renderer change uses a temporary save state, recreates the session and restores its pause state.
-
-### Multiplayer
-
-Enable WLAN in the Network settings before launching a multiplayer game. Network changes take effect after restarting the game because PPSSPP initializes the identity, sockets and ad hoc server at boot.
-
-For LAN play, connect both devices to the same network, enable the built-in PRO ad hoc server on the host only, and set every player's server address to the host's LAN IPv4 address. Each player needs a distinct MAC address. EmuCoreA generates a stable unicast address per installation using PPSSPP's game compatibility bits, stores it outside Android backup, and retains valid manual overrides. Do not copy a manual MAC address between players.
-
-All players must use the same port offset. The Android default is `10000`, matching PPSSPP; an explicitly saved offset is retained. Offset `0` is intended for unmodified PSP compatibility and can fail when an Android game requests a privileged port.
-
-Internet play additionally requires a suitable PRO ad hoc server and reachable peer traffic. A relay-capable server can route traffic through NAT; direct peer connections may need a VPN or router port mappings. UPnP depends on router support and cannot solve every NAT configuration. See PPSSPP's [multiplayer guide](https://www.ppsspp.org/docs/multiplayer/how-to-play/) and [network settings](https://www.ppsspp.org/docs/settings/network/). Android HTTPS clients and UPnP registration are initialized and released with the native frontend; UPnP discovery does not run when WLAN or UPnP is disabled.
-
-Audio uses PPSSPP's stereo resampler with AAudio by default and OpenSL ES as a fallback or explicit choice. Device audio starts after successful boot, stops while paused or without a surface, and is suspended while state restoration resets the sample queue. Output reconfiguration resets the queue before callbacks resume. The device sample rate is independent of the PSP mixer rate.
-
-RetroArch `.slangp` presets run through librashader on Vulkan, OpenGL ES 3 and Software's Vulkan presentation. Presets can be changed during a session. Invalid or unsupported presets fall back to an unfiltered image. GLES 2 devices use direct presentation. Individual presets can require shader features unavailable on a device or backend.
-
 ## Building Locally
 
 ### Requirements
@@ -124,50 +94,13 @@ Configure `sdk.dir` in your untracked `local.properties`. The app also needs its
 
 Install `app/build/outputs/apk/debug/app-debug.apk` on an ARM64 Android device.
 
-Release builds exclude the device-test host, native inspection JNI, audio captures, frame diagnostic counters and PPSSPP web-debugger assets. Frontend logs and PPSSPP log calls/debug assertions are compiled out for the EmuCoreA production core; runtime error handling remains active. `python app/src/test/python/verify_release_apk.py <release-apk> --aapt2 <SDK-aapt2-path>` checks the packaged DEX/native library, assets and manifest for frontend debug artifacts and the `debuggable`/`testOnly` flags.
-
 ### Optional Discord SDK
 
 Discord support is built when a compatible Discord Social SDK directory is supplied through `emucorex.discord.sdkDir` in `local.properties`, a Gradle property with the same name, or `DISCORD_SDK_DIR`. The directory must contain `include/discordpp.h`, `arm64-v8a/libdiscord_partner_sdk.so`, and `discord_partner_sdk.aar`. The SDK is not included in this repository.
 
-## Verification
-
-```powershell
-.\gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-```
-
-With one ARM64 device selected through `ANDROID_SERIAL`:
-
-```powershell
-.\gradlew :app:connectedDebugAndroidTest
-```
-
-`NativeCoreLifecycleInstrumentedTest` generates PSP ELF programs locally and exercises all three renderers with JIT and IR, live CPU changes, surface resize/replacement, abandoned-window recovery, audio pause and backend changes, save-state restoration, rewind release, guest exit, invalid guest execution and failed-boot recovery. Separate guests present a CPU-written framebuffer and draw through real GE display lists, including hardware rendering with buffer effects skipped. Tests use temporary storage and do not require game downloads.
-
-The optional real-game test accepts an instrumentation `game` argument containing an already accessible path or SAF document URI; it checks presentation with shaders disabled and enabled using a generated identity preset. By default this checks startup only. Gameplay measurements require navigating to an actual playable scene and visually confirming it; logos, movies and menus are not gameplay benchmarks.
-
-For scripted navigation, `gameActions` accepts comma-separated button/wait durations such as `cross:3,start:3,wait:10`. `reuseNavigationState=true` saves the navigated scene and restores it for the other renderers within the same test. `stageSeconds` sets the measurement duration, `gameplayInput=true` sends combat/movement inputs, and `expectMovingScene=true` checks that captured frames change. Navigation depends on the game's menus and save data. Screenshot collection pauses emulation and audio outside the measured interval; those pauses are diagnostic overhead, not gameplay performance. Optional `captureAudio=true` exports PCM from a debug build with `debug.emucorea.audio_capture=1`; restore that property after testing.
-
-Visible output is checked from the composited display: PSP framebuffer alpha stores stencil, so interpreting a raw surface capture as premultiplied Android pixels can incorrectly turn valid RGB into transparent black.
-
-Additional native checks:
-
-- `core-native/src/test/cpp/run-device-tests.ps1 -DeviceSerial <adb-serial> -Configuration Release`: after `:app:assembleRelease`, compiles ARM64 probes against the packaged core and runs the module callback, stereo resampler, upstream GE arithmetic and spline tessellation suites on the selected device. Temporary device files are cleaned afterward; the installed app and its data are untouched.
-- `core-native/src/test/cpp/run-network-tests.ps1 -DeviceSerial <adb-serial> -Configuration Release`: runs two independent copies of the packaged core with generated PSP guests. Checks PRO group discovery, UDP and TCP payload round trips, peer identities and ports, then shuts down and repeats with fresh sessions. This checks transport on device loopback; it does not establish compatibility with a particular game, public relay or remote NAT configuration.
-- [Vulkan presentation contracts](app/src/test/cpp/vulkan-presentation/README.md): execute the production presenter against controlled Vulkan dispatch, including synchronization and resource lifetime.
-- [GPU color probes](app/src/test/cpp/shader-colors/README.md): device EGL/Vulkan checks against the production shader runtime.
-- [Stereo resampler regression](core-native/src/test/cpp/stereo_resampler_test.cpp): links the actual native core and checks stereo order through underruns, queue resets and conversion to 44.1/48/96 kHz output.
-- [Release diagnostic evaluation](core-native/src/test/cpp/release_diagnostics_test.cpp): compile with C++17, `-DNDEBUG` and `-I core`, both with and without `-DEMUCOREA_RELEASE=1`; verifies that production logs/debug assertions do not evaluate their arguments while the enabled control build still does.
-
-These checks cover integration behavior. Game compatibility, sustained performance and audible output still depend on the title, device, driver and selected settings.
-
-The 2026-10-08 upstream sync passed 163 JVM tests, 21 Android tests on a OnePlus CPH2747, native Vulkan contracts, release artifact checks and the device native suites above. A separate Tekken 6 Arcade fight was visually confirmed on all three renderers with shaders off, identity and off again. These short gameplay checks verify rendering and state restoration rather than sustained performance.
-
-The 2026-10-11 multiplayer integration audit passed 171 JVM tests and 22 Android tests on an Anbernic RG556; the optional real-game test was skipped. Two independent release cores passed PRO discovery and UDP/TCP round trips through two boot sessions at each port offset (`10000` and `0`). Device tests also checked persistent identity reload and UPnP worker creation, suppression and shutdown. Native audio/math/session probes, Vulkan contracts, lint and release artifact checks passed. One initial rapid renderer-switch run reported a surface-attachment failure; the full rerun and five focused repeats passed, leaving that transient unexplained. These results do not verify a particular multiplayer game, physical LAN, public relay or router/NAT configuration.
-
 ## Project Structure
 
-- `app/` Android application, Kotlin UI, unit tests and device tests
+- `app/` Android application and Kotlin UI
 - `core-native/src/main/cpp/` JNI frontend, graphics/audio integration and shader presentation
 - `app/src/main/res` Android resources and translations
 - `core/` Vendored PPSSPP sources

@@ -20,6 +20,7 @@
 #include "ppsspp_config.h"
 
 #include <cstddef>
+#include <type_traits>
 #include <vector>
 
 #include "Common/CommonTypes.h"
@@ -289,11 +290,17 @@ public:
 
 	void ProcessPendingInvalidates();
 
-private:
+	// Don't make private, see the static_assert below.
 	// Doesn't need save stating.
 	std::vector<PendingCacheOperation> pendingInvalidates_;
 	bool invalidateAll_ = false;
 };
+
+// Access control ('private') break standard layout. Let's not allow it, to avoid excessive
+// compiler warnings. Hm, this seems to go wrong on MSVC in debug builds...
+#ifndef _MSC_VER
+static_assert(std::is_standard_layout_v<MIPSState>, "the JITs use offsetof on MIPSState");
+#endif
 
 class MIPSDebugInterface;
 

@@ -91,6 +91,8 @@ static std::string g_debugOutputBuffer;
 // Set when a run was asked for a configuration that couldn't be honoured. That isn't a test result,
 // so it fails the process whether or not this run was comparing anything.
 static bool g_configRefused = false;
+// Set when a test or game failed to boot. Like g_configRefused, this fails the process even when not comparing.
+static bool g_bootFailed = false;
 static bool g_writeFailureScreenshot = true;
 static bool g_writeDebugOutput = true;
 // Whether the emulated program's stdout/stderr are forwarded to ours. On by default - just running
@@ -112,8 +114,12 @@ jclass findClass(const char *name) {
 	return nullptr;
 }
 
+// Defined in app-android.cpp for the app itself, which this doesn't link.
+jobject Android_GetActivity(JNIEnv *env) {
+	return nullptr;
+}
+
 bool System_AudioRecordingIsAvailable() { return false; }
-bool System_AudioRecordingState() { return false; }
 #endif
 
 // Temporary hacks around annoying linking errors.
@@ -269,13 +275,20 @@ void SendDebugScreenshot(const DebugScreenshotDesc &desc) {
 	const static u32 FRAME_WIDTH = 480;
 	const static u32 FRAME_HEIGHT = 272;
 
+	const GPUDebugFramebufferType type = g_screenshotRenderTarget ? GPU_DBG_FRAMEBUF_RENDER : GPU_DBG_FRAMEBUF_DISPLAY;
+	// Comparisons are against PSP-sized references, so read back at 1x whatever the render scale.
 	GPUDebugBuffer buffer;
-	gpu->GetCurrentFramebuffer(buffer, g_screenshotRenderTarget ? GPU_DBG_FRAMEBUF_RENDER : GPU_DBG_FRAMEBUF_DISPLAY);
+	gpu->GetCurrentFramebuffer(buffer, type, 1);
 	const std::vector<u32> pixels = TranslateDebugBufferToCompare(&buffer, FRAME_STRIDE, FRAME_HEIGHT);
 
-	// If a screenshot save path is set, save unconditionally.
+	// If a screenshot save path is set, save unconditionally, at the render scale.
 	if (!g_screenshotSavePath.empty()) {
-		ScreenshotComparer saver(pixels, FRAME_STRIDE, FRAME_WIDTH, FRAME_HEIGHT);
+		GPUDebugBuffer full;
+		const int scale = gpu->GetCurrentFramebuffer(full, type, -1) ? std::max(full.GetScaleFactor(), 1) : 1;
+		const u32 w = FRAME_WIDTH * scale;
+		const u32 h = FRAME_HEIGHT * scale;
+		const std::vector<u32> fullPixels = scale > 1 ? TranslateDebugBufferToCompare(&full, w, h) : pixels;
+		ScreenshotComparer saver(fullPixels, scale > 1 ? w : FRAME_STRIDE, w, h);
 		bool saved = g_screenshotSavePath.GetFileExtension() == ".png" ? saver.SaveActualPNG(g_screenshotSavePath, g_screenshotSaveKeepAlpha) : saver.SaveActualBitmap(g_screenshotSavePath);
 		g_screenshotSaved = g_screenshotSaved || saved;
 		if (saved)
@@ -433,7 +446,10 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 	}
 
 	if (!PSP_IsInited()) {
+		// Without this, a failed boot outside --compare printed nothing and exited 0.
+		fprintf(stderr, "Failed to boot '%s': %s\n", coreParameter.fileToStart.c_str(), error_string.c_str());
 		GitHubActionsPrint("error", "Test init failed for %s", currentTestName.c_str());
+		g_bootFailed = true;
 		return false;
 	}
 
@@ -717,7 +733,7 @@ int RunTests(GraphicsContext *graphicsContext, CoreParameter &coreParameter, con
 		}
 	}
 
-	if (g_configRefused) {
+	if (g_configRefused || g_bootFailed) {
 		return 1;
 	}
 
@@ -954,7 +970,6 @@ int main(int argc, const char* argv[]) {
 	// Defaulting this to false silently ran everything on OpenGL, which hangs games early in boot
 	// under Mesa llvmpipe on Linux/WSL.
 	g_Config.bSoftwareRendering = cmdLineOptions.softwareRendering.value_or(true);
-	g_Config.bSoftwareRenderingJit = true;
 	g_Config.iSplineBezierQuality = 2;
 	g_Config.bHighQualityDepth = true;
 	g_Config.bMemStickInserted = true;
@@ -1065,6 +1080,7 @@ int main(int argc, const char* argv[]) {
 	coreParameter.mountRoot = mountRoot.empty() ? Path() : Path(mountRoot);
 	coreParameter.startBreak = false;
 	coreParameter.headLess = true;
+	coreParameter.dumpCompat = cmdLineOptions.dumpCompat.value_or(false);
 	coreParameter.loadGameConfigs = false;
 	coreParameter.renderScaleFactor = cmdLineOptions.resolutionScale.value_or(1);
 	coreParameter.renderWidth = 480 * coreParameter.renderScaleFactor;
@@ -1088,7 +1104,12 @@ int main(int argc, const char* argv[]) {
 		g_Config.memStickDirectory = Path(std::string(getenv("HOME"))) / ".ppsspp";
 #endif
 	}
-	g_Config.nandRootDirectory = GetSysDirectory(DIRECTORY_NAND);
+	// The memstick's NAND, unless --nand says otherwise.
+	if (cmdLineOptions.nand.has_value()) {
+		g_Config.nandRootDirectory = Path(cmdLineOptions.nand.value());
+	} else {
+		g_Config.nandRootDirectory = GetSysDirectory(DIRECTORY_NAND);
+	}
 	coreParameter.nandRoot = g_Config.nandRootDirectory;
 
 	// Most discs carry the firmware they shipped with - this option installs it, if one

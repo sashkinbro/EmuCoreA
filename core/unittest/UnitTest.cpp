@@ -113,8 +113,10 @@
 #include "Core/KeyMap.h"
 #include "Core/ControlMapper.h"
 #include "Core/HLE/sceCtrl.h"
+#include "Core/HLE/sceUsbMic.h"
 #include "Core/Util/PathUtil.h"
 #include "Core/MIPS/MIPSVFPUUtils.h"
+#include "GPU/Common/DepthSwizzle.h"
 #include "GPU/Common/TextureDecoder.h"
 #include "GPU/Common/GPUStateUtils.h"
 #include "GPU/Math3D.h"
@@ -177,8 +179,12 @@ jclass findClass(const char *name) {
 	return nullptr;
 }
 
+// Defined in app-android.cpp for the app itself, which this doesn't link.
+jobject Android_GetActivity(JNIEnv *env) {
+	return nullptr;
+}
+
 bool System_AudioRecordingIsAvailable() { return false; }
-bool System_AudioRecordingState() { return false; }
 #endif
 
 #ifndef M_PI_2
@@ -2437,6 +2443,71 @@ static bool TestWrapText() {
 	return true;
 }
 
+// Against ppsspp-re geprobe's swz.py, the layout that fits exp8-exp10.
+static bool TestDepthSwizzle() {
+	static const struct {
+		uint32_t translation;
+		bool color32;
+		uint32_t linear;
+		uint32_t stored;
+	} cases[] = {
+		{ 0x0, false, 0x088000, 0x088600 },
+		{ 0x0, false, 0x08a0e2, 0x08a6e2 },
+		{ 0x0, false, 0x1ffffe, 0x1ff9fe },
+		{ 0x0, false, 0x14b9ac, 0x14bfac },
+		{ 0x0, false, 0x09a782, 0x09a182 },
+		{ 0x0, true, 0x088000, 0x088600 },
+		{ 0x0, true, 0x08a0e2, 0x08a6e2 },
+		{ 0x0, true, 0x1ffffe, 0x1ff9fe },
+		{ 0x0, true, 0x1944c8, 0x1944c8 },
+		{ 0x0, true, 0x03171e, 0x03111e },
+		{ 0x200, false, 0x088000, 0x089040 },
+		{ 0x200, false, 0x08a0e2, 0x08b0a2 },
+		{ 0x200, false, 0x1ffffe, 0x1fefbe },
+		{ 0x200, false, 0x04a2ca, 0x04b28a },
+		{ 0x200, false, 0x06063a, 0x06167a },
+		{ 0x200, true, 0x088000, 0x089040 },
+		{ 0x200, true, 0x08a0e2, 0x08b182 },
+		{ 0x200, true, 0x1ffffe, 0x1fefbe },
+		{ 0x200, true, 0x176772, 0x1776b2 },
+		{ 0x200, true, 0x03b640, 0x03a6c0 },
+		{ 0x400, false, 0x088000, 0x08a040 },
+		{ 0x400, false, 0x08a0e2, 0x0880a2 },
+		{ 0x400, false, 0x1ffffe, 0x1fdfbe },
+		{ 0x400, false, 0x0dbd9c, 0x0d9ddc },
+		{ 0x400, false, 0x026654, 0x024614 },
+		{ 0x400, true, 0x088000, 0x08a040 },
+		{ 0x400, true, 0x08a0e2, 0x088182 },
+		{ 0x400, true, 0x1ffffe, 0x1fdfbe },
+		{ 0x400, true, 0x058028, 0x05a008 },
+		{ 0x400, true, 0x1bc0d8, 0x1be1d8 },
+		{ 0x800, false, 0x088000, 0x08c040 },
+		{ 0x800, false, 0x08a0e2, 0x08e0a2 },
+		{ 0x800, false, 0x1ffffe, 0x1fbfbe },
+		{ 0x800, false, 0x1ac354, 0x1a8314 },
+		{ 0x800, false, 0x047882, 0x0438c2 },
+		{ 0x800, true, 0x088000, 0x08c040 },
+		{ 0x800, true, 0x08a0e2, 0x08e182 },
+		{ 0x800, true, 0x1ffffe, 0x1fbfbe },
+		{ 0x800, true, 0x0f6704, 0x0f2664 },
+		{ 0x800, true, 0x05ce3c, 0x058c3c },
+		{ 0x1000, false, 0x088000, 0x080040 },
+		{ 0x1000, false, 0x08a0e2, 0x0820a2 },
+		{ 0x1000, false, 0x1ffffe, 0x1f7fbe },
+		{ 0x1000, false, 0x1b2b52, 0x1bab12 },
+		{ 0x1000, false, 0x03c876, 0x034836 },
+		{ 0x1000, true, 0x088000, 0x080040 },
+		{ 0x1000, true, 0x08a0e2, 0x082182 },
+		{ 0x1000, true, 0x1ffffe, 0x1f7fbe },
+		{ 0x1000, true, 0x07ec5e, 0x0768fe },
+		{ 0x1000, true, 0x0e498c, 0x0ec36c },
+	};
+	for (const auto &c : cases) {
+		EXPECT_EQ_HEX(GetDepthLayout(c.translation, c.color32).Stored(c.linear), c.stored);
+	}
+	return true;
+}
+
 static bool TestSmallDataConvert() {
 	float f[4] = { 1.0f / 255.0f, 2.0f / 255.0f, 3.0f / 255.0f, 4.0f / 255.f };
 	uint32_t result = Float4ToUint8x4_NoClamp(f);
@@ -2959,7 +3030,6 @@ bool TestX64Emitter();
 bool TestRiscVEmitter();
 bool TestLoongArch64Emitter();
 bool TestShaderGenerators();
-bool TestSoftwareGPUJit();
 bool TestIRPassSimplify();
 bool TestThreadManager();
 bool TestVFS();
@@ -3122,6 +3192,30 @@ bool TestUITabOrder() {
 
 bool TestTextureReplacer();
 
+static bool TestQueueBuf() {
+	const u8 data[8] = { 1, 2, 3, 4, 5, 6, 7, 8 };
+	u8 out[16]{};
+
+	QueueBuf q(8);
+	q.push(data, 6);
+	EXPECT_EQ_INT(q.pop(out, 4), 4);
+	// Wraps around the end, holding 5 6 1 2 3 4 5.
+	q.push(data, 5);
+	// Growing has to keep what's buffered, in order.
+	q.resize(16);
+	EXPECT_EQ_INT(q.getCapacity(), 16);
+	EXPECT_EQ_INT(q.pop(out, 16), 7);
+	const u8 expected[7] = { 5, 6, 1, 2, 3, 4, 5 };
+	EXPECT_EQ_MEM(out, expected, sizeof(expected));
+
+	// Pushing more than the capacity grows it.
+	QueueBuf small(4);
+	small.push(data, 8);
+	EXPECT_EQ_INT(small.pop(out, 16), 8);
+	EXPECT_EQ_MEM(out, data, sizeof(data));
+	return true;
+}
+
 TestItem availableTests[] = {
 #if PPSSPP_ARCH(ARM64) || PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86)
 	TEST_ITEM(Arm64Emitter),
@@ -3161,7 +3255,6 @@ TestItem availableTests[] = {
 	TEST_ITEM(CLZ),
 	TEST_ITEM(MemMap),
 	TEST_ITEM(ShaderGenerators),
-	TEST_ITEM(SoftwareGPUJit),
 	TEST_ITEM(Path),
 	TEST_ITEM(AndroidContentURI),
 	TEST_ITEM(ThreadManager),
@@ -3191,11 +3284,13 @@ TestItem availableTests[] = {
 	TEST_ITEM(MpegCsc),
 	TEST_ITEM(SplineTessellation),
 	TEST_ITEM(GEMath),
+	TEST_ITEM(DepthSwizzle),
 	TEST_ITEM(Demangle),
 	TEST_ITEM(TextureReplacer),
 	TEST_ITEM(UITabOrder),
 	TEST_ITEM(FatShortNames),
 	TEST_ITEM(GEDumpGameID),
+	TEST_ITEM(QueueBuf),
 };
 
 int main(int argc, const char *argv[]) {

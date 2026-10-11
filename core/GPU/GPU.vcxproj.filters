@@ -231,7 +231,7 @@
     <ClInclude Include="Software\DrawPixel.h">
       <Filter>Software</Filter>
     </ClInclude>
-    <ClInclude Include="Software\RasterizerRegCache.h">
+    <ClInclude Include="Software\RasterizerTypes.h">
       <Filter>Software</Filter>
     </ClInclude>
     <ClInclude Include="Software\BinManager.h">
@@ -262,6 +262,9 @@
       <Filter>Debugger</Filter>
     </ClInclude>
     <ClInclude Include="Common\DepthRaster.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\DepthSwizzle.h">
       <Filter>Common</Filter>
     </ClInclude>
     <ClInclude Include="GPUStateSIMDUtil.h">
@@ -443,9 +446,6 @@
     <ClCompile Include="Software\Sampler.cpp">
       <Filter>Software</Filter>
     </ClCompile>
-    <ClCompile Include="Software\SamplerX86.cpp">
-      <Filter>Software</Filter>
-    </ClCompile>
     <ClCompile Include="Debugger\Record.cpp">
       <Filter>Debugger</Filter>
     </ClCompile>
@@ -486,12 +486,6 @@
       <Filter>Software</Filter>
     </ClCompile>
     <ClCompile Include="Software\DrawPixel.cpp">
-      <Filter>Software</Filter>
-    </ClCompile>
-    <ClCompile Include="Software\DrawPixelX86.cpp">
-      <Filter>Software</Filter>
-    </ClCompile>
-    <ClCompile Include="Software\RasterizerRegCache.cpp">
       <Filter>Software</Filter>
     </ClCompile>
     <ClCompile Include="Software\BinManager.cpp">

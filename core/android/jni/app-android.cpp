@@ -164,12 +164,15 @@ static jmethodID postCommand;
 static jmethodID getDebugString;
 static jmethodID getNativeCrashHistory;
 
+// Global ref. Written on the UI thread under g_activityLock. Other threads go through Android_GetActivity.
 static jobject ppssppActivity;
+static std::mutex g_activityLock;
 
 static std::atomic<bool> exitRenderLoop;
 static std::atomic<bool> renderLoopRunning;
 
-static bool renderer_inited = false;  // only used with OpenGL.
+// Set on the render thread (GL) or the emu thread (Vulkan), read by the input functions on the UI thread.
+static std::atomic<bool> renderer_inited{false};
 
 static bool sustainedPerfSupported = false;
 static std::string g_installerName;
@@ -198,8 +201,13 @@ JNIEnv* getEnv() {
 	return env;
 }
 
+// Returns a local reference.
 jclass findClass(const char* name) {
-	return static_cast<jclass>(getEnv()->CallObjectMethod(gClassLoader, gFindClassMethod, getEnv()->NewStringUTF(name)));
+	JNIEnv *env = getEnv();
+	jstring jname = env->NewStringUTF(name);
+	jclass cls = static_cast<jclass>(env->CallObjectMethod(gClassLoader, gFindClassMethod, jname));
+	env->DeleteLocalRef(jname);
+	return cls;
 }
 
 void Android_AttachThreadToJNI() {
@@ -247,6 +255,11 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *pjvm, void *reserved) {
 
 	TimeInit();
 	return JNI_VERSION_1_6;
+}
+
+jobject Android_GetActivity(JNIEnv *env) {
+	std::lock_guard<std::mutex> guard(g_activityLock);
+	return ppssppActivity ? env->NewLocalRef(ppssppActivity) : nullptr;
 }
 
 static void PushCommand(std::string_view cmd, std::string_view param) {
@@ -363,6 +376,8 @@ bool System_GetPropertyBool(SystemProperty prop) {
 			// on a per-folder basis.
 			return !System_GetPropertyBool(SYSPROP_ANDROID_SCOPED_STORAGE);
 		}
+	case SYSPROP_MICROPHONE_NEEDS_POLLING:
+		return true;
 	case SYSPROP_SUPPORTS_SUSTAINED_PERF_MODE:
 		return sustainedPerfSupported;  // 7.0 introduced sustained performance mode as an optional feature.
 	case SYSPROP_HAS_TEXT_INPUT_DIALOG:
@@ -391,6 +406,7 @@ bool System_GetPropertyBool(SystemProperty prop) {
 	case SYSPROP_SUPPORTS_OPEN_FILE_IN_EDITOR:
 		return false;  // Update if we add support in FileUtil.cpp: OpenFileInEditor
 	case SYSPROP_SUPPORTS_SHARE_TEXT:
+	case SYSPROP_SUPPORTS_SHARE_FILE:
 		return true;
 	case SYSPROP_APP_GOLD:
 #ifdef GOLD
@@ -450,33 +466,39 @@ bool System_GetPropertyBool(SystemProperty prop) {
 }
 
 std::string Android_GetInputDeviceDebugString() {
-	if (!ppssppActivity) {
+	auto env = getEnv();
+	JNILocalFrame frame(env);
+	jobject activity = Android_GetActivity(env);
+	if (!activity) {
 		return "(N/A)";
 	}
-	auto env = getEnv();
 
 	jstring jparam = env->NewStringUTF("InputDevice");
-	jstring jstr = (jstring)env->CallObjectMethod(ppssppActivity, getDebugString, jparam);
+	jstring jstr = (jstring)env->CallObjectMethod(activity, getDebugString, jparam);
 	if (!jstr) {
-		env->DeleteLocalRef(jparam);
 		return "(N/A)";
 	}
 
 	const char *charArray = env->GetStringUTFChars(jstr, nullptr);
-	std::string retVal = charArray;
-	env->ReleaseStringUTFChars(jstr, charArray);
-	env->DeleteLocalRef(jstr);
-	env->DeleteLocalRef(jparam);
+	std::string retVal = charArray ? charArray : "(N/A)";
+	if (charArray) {
+		env->ReleaseStringUTFChars(jstr, charArray);
+	}
 	return retVal;
 }
 
 std::vector<std::string> Android_GetNativeCrashHistory(int maxEntries) {
 	std::vector<std::string> crashHistory;
-	if (!ppssppActivity || !getNativeCrashHistory) {
+	if (!getNativeCrashHistory) {
 		return crashHistory;
 	}
 	auto env = getEnv();
-	jobject jlist = env->CallObjectMethod(ppssppActivity, getNativeCrashHistory, maxEntries);
+	JNILocalFrame frame(env);
+	jobject activity = Android_GetActivity(env);
+	if (!activity) {
+		return crashHistory;
+	}
+	jobject jlist = env->CallObjectMethod(activity, getNativeCrashHistory, maxEntries);
 	if (!jlist) {
 		return crashHistory;
 	}
@@ -508,8 +530,13 @@ std::string GetJavaString(JNIEnv *env, jstring jstr) {
 }
 
 extern "C" void Java_org_ppsspp_ppsspp_PpssppActivity_registerCallbacks(JNIEnv *env, jobject obj) {
-	ppssppActivity = env->NewGlobalRef(obj);
-	TextDrawerAndroid::SetActivity(ppssppActivity);
+	jobject newActivity = env->NewGlobalRef(obj);
+	jobject oldActivity;
+	{
+		std::lock_guard<std::mutex> guard(g_activityLock);
+		oldActivity = ppssppActivity;
+		ppssppActivity = newActivity;
+	}
 	postCommand = env->GetMethodID(env->GetObjectClass(obj), "postCommand", "(Ljava/lang/String;Ljava/lang/String;)V");
 	getDebugString = env->GetMethodID(env->GetObjectClass(obj), "getDebugString", "(Ljava/lang/String;)Ljava/lang/String;");
 	getNativeCrashHistory = env->GetMethodID(env->GetObjectClass(obj), "getNativeCrashHistory", "(I)Ljava/util/ArrayList;");
@@ -519,13 +546,26 @@ extern "C" void Java_org_ppsspp_ppsspp_PpssppActivity_registerCallbacks(JNIEnv *
 	// It's OK if getNativeCrashHistory is missing.
 
 	Android_RegisterStorageCallbacks(env, obj);
-	Android_StorageSetActivity(ppssppActivity);
+	Android_StorageSetActivity(newActivity);
+
+	// An activity that gets recreated (rotation, resize) never unregisters, so this is where we let go
+	// of it. Used to leak the whole activity, once per rotation.
+	if (oldActivity) {
+		env->DeleteGlobalRef(oldActivity);
+	}
 }
 
 extern "C" void Java_org_ppsspp_ppsspp_PpssppActivity_unregisterCallbacks(JNIEnv *env, jobject obj) {
 	Android_StorageSetActivity(nullptr);
-	env->DeleteGlobalRef(ppssppActivity);
-	ppssppActivity = nullptr;
+	jobject oldActivity;
+	{
+		std::lock_guard<std::mutex> guard(g_activityLock);
+		oldActivity = ppssppActivity;
+		ppssppActivity = nullptr;
+	}
+	if (oldActivity) {
+		env->DeleteGlobalRef(oldActivity);
+	}
 }
 
 // This is now only used as a trigger for GetAppInfo as a function to all before Init.
@@ -573,64 +613,6 @@ extern "C" jstring Java_org_ppsspp_ppsspp_NativeApp_queryConfig
 	std::string result = QueryConfig(query);
 	jstring jresult = env->NewStringUTF(result.c_str());
 	return jresult;
-}
-
-static void parse_args(std::vector<std::string> &args, const std::string value) {
-	// Simple argument parser so we can take args from extra params.
-	const char *p = value.c_str();
-
-	while (*p != '\0') {
-		while (isspace(*p)) {
-			p++;
-		}
-		if (*p == '\0') {
-			break;
-		}
-
-		bool done = false;
-		bool quote = false;
-		std::string arg;
-
-		while (!done) {
-			size_t sz = strcspn(p, "\"\\ \r\n\t");
-			arg += std::string(p, sz);
-			p += sz;
-
-			switch (*p) {
-			case '"':
-				quote = !quote;
-				p++;
-				break;
-
-			case '\\':
-				p++;
-				arg += std::string(p, 1);
-				p++;
-				break;
-
-			case '\0':
-				done = true;
-				break;
-
-			default:
-				// If it's not the above, it's whitespace.
-				if (!quote) {
-					done = true;
-				} else {
-					sz = strspn(p, " \r\n\t");
-					arg += std::string(p, sz);
-					p += sz;
-				}
-				break;
-			}
-		}
-
-		args.push_back(arg);
-
-		while (isspace(*p)) {
-			p++;
-		}
-	}
 }
 
 // Need to use raw Android logging before NativeInit.
@@ -715,7 +697,7 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_init
 	args.push_back(app_name.c_str());
 	if (!shortcut_param.empty()) {
 		EARLY_LOG("NativeInit shortcut param %s", shortcut_param.c_str());
-		parse_args(temp, shortcut_param);
+		temp = SplitCommandLine(shortcut_param);
 		for (const auto &arg : temp) {
 			args.push_back(arg.c_str());
 		}
@@ -823,7 +805,7 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_audioInit(JNIEnv *, jclass) {
 		sampleRate = 44100;
 	}
 
-	INFO_LOG(Log::Audio, "NativeApp.audioInit() -- Using OpenSL audio! frames/buffer: %i	 optimal sr: %i	 actual sr: %i", optimalFramesPerBuffer, optimalSampleRate, sampleRate);
+	INFO_LOG(Log::Audio, "NativeApp.audioInit() -- Using Oboe audio! frames/buffer: %i	 optimal sr: %i	 actual sr: %i", optimalFramesPerBuffer, optimalSampleRate, sampleRate);
 	if (!g_audioState) {
 		g_audioState = AndroidAudio_Init(&NativeMix, framesPerBuffer, sampleRate);
 	} else {
@@ -854,10 +836,6 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_audioRecording_1Stop(JNIEnv *, 
 
 bool System_AudioRecordingIsAvailable() {
 	return true;
-}
-
-bool System_AudioRecordingState() {
-	return AndroidAudio_Recording_State(g_audioState);
 }
 
 extern "C" void Java_org_ppsspp_ppsspp_NativeApp_resume(JNIEnv *, jclass) {
@@ -903,11 +881,19 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_shutdown(JNIEnv *, jclass) {
 	INFO_LOG(Log::System, "NativeApp.shutdown() -- end");
 }
 
-extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_backbufferResize(JNIEnv *, jclass, jint pixel_xres, jint pixel_yres, jint format) {
-	INFO_LOG(Log::System, "NativeApp.backbufferResize(%d x %d)", pixel_xres, pixel_yres);
+extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_backbufferResize(JNIEnv *, jclass, jint pixel_xres, jint pixel_yres, jint format, jint rotation) {
+	INFO_LOG(Log::System, "NativeApp.backbufferResize(%d x %d, rotation %d)", pixel_xres, pixel_yres, rotation);
+
+	// The display's Surface.ROTATION_*. A 180 degree flip changes this but not the size, and the swapchain
+	// still needs recreating, for the pre-rotation.
+	static int lastRotation = -1;
+	const bool rotated = lastRotation != -1 && rotation != lastRotation;
+	lastRotation = rotation;
 
 	int old_w = g_display.pixel_xres;
 	int old_h = g_display.pixel_yres;
+	int old_dp_w = g_display.dp_xres;
+	int old_dp_h = g_display.dp_yres;
 
 	// pixel_*res is the backbuffer resolution.
 	backbuffer_format = format;
@@ -929,8 +915,10 @@ extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_backbufferResize(JNIEnv
 	INFO_LOG(Log::G3D, "RecalcDPI: g_dpi=%d scaled_dpi_x=%f scaled_dpi_y=%f display_scale_x=%f display_scale_y=%f g_dpi_scale_x=%f g_dpi_scale_y=%f dp_xres=%d dp_yres=%d",
 		display_dpi, dpi_x, dpi_y, display_scale_x, display_scale_y, g_display.dpi_scale_x, g_display.dpi_scale_y, g_display.dp_xres, g_display.dp_yres);
 
-	if (new_size) {
-		INFO_LOG(Log::G3D, "Size change detected (previously %d,%d) - calling NativeResized()", old_w, old_h);
+	if (new_size || rotated) {
+		// Note that a density change moves the dp size while the pixel size stays put.
+		INFO_LOG(Log::G3D, "%s detected (previously %dx%d px, %dx%d dp) - calling NativeResized()",
+			new_size ? "Size change" : "Rotation change", old_w, old_h, old_dp_w, old_dp_h);
 		NativeResized();
 	} else {
 		INFO_LOG(Log::G3D, "NativeApp::backbufferResize: Size didn't change.");
@@ -1016,10 +1004,26 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		PushCommand("infrared_command", param1);
 		return true;
 	case SystemRequestType::MICROPHONE_COMMAND:
+		// From the CPU thread. Starting and stopping go through Java, which asks for permission.
+		if (param1 == "pollRecording") {
+			AndroidAudio_Recording_Poll();
+			return true;
+		} else if (param1 == "deviceChanged") {
+			// There's no device choice on Android.
+			return true;
+		}
+		if (startsWith(param1, "startRecording:")) {
+			// Whatever is left over is from before, maybe at another rate.
+			AndroidAudio_Recording_Clear();
+		}
 		PushCommand("microphone_command", param1);
 		return true;
 	case SystemRequestType::SHARE_TEXT:
 		PushCommand("share_text", param1);
+		return true;
+	case SystemRequestType::SHARE_FILE:
+		// The MIME type first, as a path could contain the separator.
+		PushCommand("share_file", param2 + ":@:" + param1);
 		return true;
 	case SystemRequestType::SET_KEEP_SCREEN_BRIGHT:
 		PushCommand("set_keep_screen_bright", param3 ? "on" : "off");
@@ -1186,7 +1190,7 @@ extern "C" void Java_org_ppsspp_ppsspp_NativeApp_mouse(
 		}
 		input.id = 0;
 	}
-	INFO_LOG(Log::System, "New-style mouse event: %f %f %d %d -> x: %f y: %f buttons: %d flags: %04x", x, y, button, action, input.x, input.y, input.buttons, input.flags);
+	VERBOSE_LOG(Log::System, "New-style mouse event: %f %f %d %d -> x: %f y: %f buttons: %d flags: %04x", x, y, button, action, input.x, input.y, input.buttons, input.flags);
 	NativeTouch(input);
 
 	// Also send mouse button key events, for binding.
@@ -1284,6 +1288,9 @@ extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_sendMessageFromJava(JNI
 		System_PostUIMessage(UIMessage::PERMISSION_GRANTED, prm);
 	} else if (msg == "sustained_perf_supported") {
 		sustainedPerfSupported = true;
+	} else if (msg == "smallestScreenWidthDp") {
+		// Changes on fold/unfold. Decides SYSPROP_CAN_RESTRICT_ORIENTATION.
+		smallestScreenWidthDp = (int)parseLong(prm);
 	} else if (msg == "safe_insets") {
 		// INFO_LOG(Log::System, "Got insets: %s", prm.c_str());
 		// We don't bother with supporting exact rectangular regions. Safe insets are good enough.
@@ -1313,15 +1320,33 @@ extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_sendMessageFromJava(JNI
 			return;
 		}
 		INFO_LOG(Log::System, "shortcutParam received: %s", prm.c_str());
-		
-		prm = StripQuotes(prm);
-		// NOTE: The parameter can be a file:// URL, which we need to take care of here. Similar to in NativeApp.cpp, search for file://
-		if (startsWith(prm, "file:///")) {
-			std::string param = prm;
-			prm = UriDecode(prm.substr(7));
-			INFO_LOG(Log::IO, "Decoding '%s' to '%s'", param.c_str(), prm.c_str());
+
+		// This is a command line, the same kind NativeApp.init gets: a quoted path from a shortcut or a
+		// file association, or raw arguments from the Args extra. We're already up and running, so any
+		// options in it are not applied. They still have to be parsed, to tell them (and their
+		// arguments) from the game to boot.
+		std::vector<std::string> parts = SplitCommandLine(prm);
+		std::vector<const char *> args;
+		args.push_back("ppsspp");
+		for (const auto &part : parts) {
+			args.push_back(part.c_str());
 		}
-		System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, StripQuotes(prm));
+		CommandLineOptions options;
+		if (options.Parse((int)args.size(), args.data()) == CommandLineParseResult::Error) {
+			WARN_LOG(Log::System, "shortcutParam: Failed to parse '%s'", prm.c_str());
+		}
+		if (options.bootFilenames.empty()) {
+			INFO_LOG(Log::System, "shortcutParam: Nothing to boot in there, ignoring (options only apply at startup)");
+			return;
+		}
+		std::string bootFilename = options.bootFilenames[0];
+		// NOTE: The parameter can be a file:// URL, which we need to take care of here. Similar to in NativeApp.cpp, search for file://
+		if (startsWith(bootFilename, "file:///")) {
+			std::string param = bootFilename;
+			bootFilename = UriDecode(bootFilename.substr(7));
+			INFO_LOG(Log::IO, "Decoding '%s' to '%s'", param.c_str(), bootFilename.c_str());
+		}
+		System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, bootFilename);
 	} else {
 		ERROR_LOG(Log::System, "Got unexpected message from Java, ignoring: %s / %s", msg.c_str(), prm.c_str());
 	}
@@ -1421,6 +1446,7 @@ extern "C" jint JNICALL Java_org_ppsspp_ppsspp_NativeApp_getDisplayFramerateMode
 }
 
 std::vector<std::string> System_GetCameraDeviceList() {
+	JNILocalFrame frame(getEnv());
 	jclass cameraClass = findClass("org/ppsspp/ppsspp/CameraHelper");
 	jmethodID deviceListMethod = getEnv()->GetStaticMethodID(cameraClass, "getDeviceList", "()Ljava/util/ArrayList;");
 	jobject deviceListObject = getEnv()->CallStaticObjectMethod(cameraClass, deviceListMethod);
@@ -1470,14 +1496,16 @@ extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_pushCameraImageAndroid(
 	}
 }
 
-// Call this under frameCommandLock.
 static void ProcessFrameCommands() {
 	JNIEnv *env = getEnv();
+	jobject activity = Android_GetActivity(env);
 	std::vector<FrameCommand> frameCommands;
 	{
 		std::lock_guard<std::mutex> guard(frameCommandLock);
-		if (!ppssppActivity) {
-			ERROR_LOG(Log::System, "No activity, clearing commands");
+		if (!activity) {
+			if (!g_frameCommands.empty()) {
+				ERROR_LOG(Log::System, "No activity, clearing commands");
+			}
 		} else {
 			frameCommands = std::move(g_frameCommands);
 		}
@@ -1485,16 +1513,19 @@ static void ProcessFrameCommands() {
 	}
 
 	if (!frameCommands.empty()) {
-		INFO_LOG(Log::System, "Processing %zu frame commands", g_frameCommands.size());
+		INFO_LOG(Log::System, "Processing %zu frame commands", frameCommands.size());
 		for (const FrameCommand &frameCmd : frameCommands) {
 			DEBUG_LOG(Log::System, "frameCommand '%s' '%s'", frameCmd.command.c_str(), frameCmd.params.c_str());
 
 			jstring cmd = env->NewStringUTF(frameCmd.command.c_str());
 			jstring param = env->NewStringUTF(frameCmd.params.c_str());
-			env->CallVoidMethod(ppssppActivity, postCommand, cmd, param);
+			env->CallVoidMethod(activity, postCommand, cmd, param);
 			env->DeleteLocalRef(cmd);
 			env->DeleteLocalRef(param);
 		}
+	}
+	if (activity) {
+		env->DeleteLocalRef(activity);
 	}
 }
 

@@ -317,6 +317,7 @@ public:
 		VkPhysicalDeviceProvokingVertexFeaturesEXT provokingVertex;
 		VkPhysicalDevicePresentModeFifoLatestReadyFeaturesKHR presentModeFifoProps;
 		VkPhysicalDeviceScalarBlockLayoutFeatures scalarBlockLayout;
+		VkPhysicalDevicePortabilitySubsetFeaturesKHR portabilitySubset;
 	};
 
 	const PhysicalDeviceProps &GetPhysicalDeviceProperties(int i = -1) const {
@@ -402,6 +403,10 @@ public:
 	VkSwapchainKHR GetSwapchain() const { return swapchain_; }
 	VkFormat GetSwapchainFormat() const { return presentation_ ? presentation_->GetFormat() : swapchainFormat_; }
 	bool IsSwapchainInited() const { return swapchainInited_; }
+	// True when we chose a pre-transform that doesn't match the surface's current one (we refuse 270
+	// degrees, see InitSwapchain). The driver then reports VK_SUBOPTIMAL_KHR on every present, which
+	// is not a reason to recreate the swapchain - we'd just get the same answer again, forever.
+	bool SwapchainTransformMismatch() const { return swapchainTransformMismatch_; }
 
 	// Opt-in replacement for the real-swapchain path above (see VulkanPresentation.h for why a host
 	// application might want this). Null (the default) means "use the real swapchain".
@@ -586,6 +591,7 @@ private:
 
 	uint32_t queue_count = 0;
 	bool swapchainInited_ = false;
+	bool swapchainTransformMismatch_ = false;
 
 	PhysicalDeviceFeatures deviceFeatures_;
 

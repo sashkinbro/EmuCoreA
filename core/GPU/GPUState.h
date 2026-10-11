@@ -439,6 +439,8 @@ struct GEState {
 	static void Reset();
 	void Save(u32_le *ptr);
 	void Restore(const u32_le *ptr);
+	// oldLayout: PPSSPP's layout before savedContextVersion 1, with the matrices as raw floats.
+	void Restore(const u32_le *ptr, bool oldLayout);
 };
 
 bool vertTypeIsSkinningEnabled(u32 vertType);
@@ -471,7 +473,8 @@ enum : u32 {
 	GPU_USE_VS_RANGE_CULLING = FLAG_BIT(3),
 	GPU_USE_BLEND_MINMAX = FLAG_BIT(4),
 	GPU_USE_LOGIC_OP = FLAG_BIT(5),
-	// Free bits: 6-7
+	GPU_USE_SHADER_LOD_BIAS = FLAG_BIT(6),  // The sampler ignores the LOD bias (MoltenVK), so the shader applies it.
+	// Free bit: 7
 	GPU_USE_ANISOTROPY = FLAG_BIT(8),
 	GPU_USE_CLEAR_RAM_HACK = FLAG_BIT(9),
 	// Free bit: 10-12

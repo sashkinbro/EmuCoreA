@@ -270,7 +270,8 @@ public:
 	// as the other backends, even though there's no actual binding happening here.
 	// For layer, we use the same convention as thin3d, where layer = -1 means all layers together. For texturing, that means that you
 	// get an array texture view.
-	VkImageView BindFramebufferAsTexture(VKRFramebuffer *fb, int binding, VkImageAspectFlags aspectBits, int layer);
+	// With samples, binds the multisampled color image (for texelFetch of single samples) instead of the resolved one.
+	VkImageView BindFramebufferAsTexture(VKRFramebuffer *fb, int binding, VkImageAspectFlags aspectBits, int layer, bool samples = false);
 
 	bool CopyFramebufferToMemory(VKRFramebuffer *src, VkImageAspectFlags aspectBits, int x, int y, int w, int h, Draw::DataFormat destFormat, uint8_t *pixels, int pixelStride, Draw::ReadbackMode mode, const char *tag);
 	void CopyImageToMemorySync(VkImage image, int mipLevel, int x, int y, int w, int h, Draw::DataFormat destFormat, uint8_t *pixels, int pixelStride, const char *tag);
@@ -396,11 +397,11 @@ public:
 		data.stencil.stencilRef = refValue;
 	}
 
-	void SetBlendFactor(uint32_t color) {
+	void SetBlendFactor(const float color[4]) {
 		_dbg_assert_(curRenderStep_ && curRenderStep_->stepType == VKRStepType::RENDER);
 		VkRenderData &data = curRenderStep_->commands.push_uninitialized();
 		data.cmd = VKRRenderCommand::BLEND;
-		data.blendColor.color = color;
+		memcpy(data.blendColor.color, color, sizeof(data.blendColor.color));
 	}
 
 	void PushConstants(VkShaderStageFlags stages, int offset, int size, void *constants) {

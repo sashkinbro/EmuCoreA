@@ -82,6 +82,18 @@ static u8 *m_pUncachedVRAM[4];
 // Required for HD Remasters to work properly.
 // This replaces RAM_NORMAL_SIZE at runtime.
 u32 g_MemorySize;
+int g_depthTranslationIndex = DepthTranslationIndex(0x400);
+
+bool DepthMirrorsActive() {
+	return PSP_CoreParameter().gpuCore == GPUCORE_SOFTWARE;
+}
+
+u32 DepthMirroredSlow(u32 address) {
+	if (!DepthMirrorsActive())
+		return address;
+	const DepthLayout &layout = DEPTH_LAYOUTS[(address >> 22) & 1][g_depthTranslationIndex];
+	return (address & 0x40000000) | 0x04000000 | layout.Stored(address & 0x001FFFFF);
+}
 // Used to store the PSP model on game startup.
 u32 g_PSPModel;
 u32 g_UserPartitionSize;
@@ -393,7 +405,7 @@ static void DoMemoryVoid(PointerWrap &p, uint32_t start, uint32_t size) {
 		ParallelRangeLoop(&g_threadManager, [&](int l, int h) {
 			for (int i = l; i < h; i++)
 				_dbg_assert_msg_(d[i] == storage[i], "Savestate verification failure: %d (0x%X) (at %p) != %d (0x%X) (at %p).\n", d[i], d[i], &d[i], storage[i], storage[i], &storage[i]);
-		}, 0, size, 128);
+		}, 0, size, 128, 8);
 		break;
 	case PointerWrap::MODE_NOOP:
 		break;

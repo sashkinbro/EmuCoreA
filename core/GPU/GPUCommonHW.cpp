@@ -587,6 +587,9 @@ u32 GPUCommonHW::CheckGPUFeatures() const {
 
 	if (draw_->GetDeviceCaps().samplerLodControl) {
 		features |= GPU_USE_SAMPLER_LOD_CONTROL;
+		if (!draw_->GetDeviceCaps().samplerLodBias) {
+			features |= GPU_USE_SHADER_LOD_BIAS;
+		}
 	}
 
 	if (draw_->GetDeviceCaps().framebufferFetchSupported) {
@@ -667,6 +670,9 @@ std::string GPUCommonHW::DebugGetShaderString(std::string id, DebugShaderType ty
 }
 
 bool GPUCommonHW::GetCurrentFramebuffer(GPUDebugBuffer &buffer, GPUDebugFramebufferType type, int maxRes) {
+	if (type == GPU_DBG_FRAMEBUF_DISPLAY) {
+		return framebufferManager_->GetDisplayFramebuffer(buffer, maxRes);
+	}
 	u32 fb_address = type == GPU_DBG_FRAMEBUF_RENDER ? (gstate.getFrameBufRawAddress() | 0x04000000) : framebufferManager_->DisplayFramebufAddr();
 	int fb_stride = type == GPU_DBG_FRAMEBUF_RENDER ? gstate.FrameBufStride() : framebufferManager_->DisplayFramebufStride();
 	GEBufferFormat format = type == GPU_DBG_FRAMEBUF_RENDER ? gstate_c.framebufFormat : framebufferManager_->DisplayFramebufFormat();
@@ -727,11 +733,21 @@ void GPUCommonHW::CheckDepthUsage(VirtualFramebuffer *vfb) {
 		if (isWritingDepth || isReadingDepth) {
 			gstate_c.usingDepth = true;
 			gstate_c.clearingDepth = isClearingDepth;
-			vfb->last_frame_depth_render = gpuStats.totals.numFlips;
-			if (isWritingDepth) {
-				vfb->last_frame_depth_updated = gpuStats.totals.numFlips;
+			auto markDepthUsed = [&]() {
+				vfb->last_frame_depth_render = gpuStats.totals.numFlips;
+				if (isWritingDepth) {
+					vfb->last_frame_depth_updated = gpuStats.totals.numFlips;
+				}
+			};
+			// SetDepthFrameBuffer copies in depth from a framebuffer sharing it, if that's newer than this one's.
+			// A pass that tests against the depth it finds gets that checked before this buffer's depth counts as
+			// used this frame: Brooktown High clears depth through another framebuffer as the last thing in a frame,
+			// and the next frame tests against it (#7223). A pass that only writes depth doesn't need the copy.
+			if (!isReadingDepth) {
+				markDepthUsed();
 			}
 			framebufferManager_->SetDepthFrameBuffer(isClearingDepth);
+			markDepthUsed();
 		}
 	}
 }
@@ -1188,6 +1204,10 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 			if ((data & 3) != GE_TEXLEVEL_MODE_AUTO && (0x00FF0000 & data) != 0) {
 				goto bail;
 			}
+			if ((data ^ gstate.cmdmem[GE_CMD_TEXLEVEL]) & 0x00FF0000) {
+				// Like Execute_TexLevel. The bias is a uniform with GPU_USE_SHADER_LOD_BIAS.
+				gstate_c.Dirty(DIRTY_MIPBIAS);
+			}
 			gstate.cmdmem[GE_CMD_TEXLEVEL] = data;
 			break;
 		case GE_CMD_CALL:
@@ -1228,8 +1248,8 @@ bail:
 	const int cmdCount = src - start;
 	// Skip over the commands we just read out manually.
 	if (cmdCount > 0) {
-		UpdatePC(currentList->pc, currentList->pc + cmdCount * 4);
 		currentList->pc += cmdCount * 4;
+		UpdatePC(currentList->pc, currentList->pc);
 		// flush back cull mode
 		if (cullMode != gstate.getCullMode()) {
 			// We rewrote everything to the old cull mode, so flush first.
@@ -1477,8 +1497,8 @@ void GPUCommonHW::Execute_WorldMtxNum(u32 op, u32 diff) {
 	gstate.worldmtxnum = (GE_CMD_WORLDMATRIXNUMBER << 24) | ((op & 0xF) + count);
 
 	// Skip over the loaded data, it's done now.
-	UpdatePC(currentList->pc, currentList->pc + count * 4);
 	currentList->pc += count * 4;
+	UpdatePC(currentList->pc, currentList->pc);
 }
 
 void GPUCommonHW::Execute_WorldMtxData(u32 op, u32 diff) {
@@ -1530,8 +1550,8 @@ void GPUCommonHW::Execute_ViewMtxNum(u32 op, u32 diff) {
 	gstate.viewmtxnum = (GE_CMD_VIEWMATRIXNUMBER << 24) | ((op & 0xF) + count);
 
 	// Skip over the loaded data, it's done now.
-	UpdatePC(currentList->pc, currentList->pc + count * 4);
 	currentList->pc += count * 4;
+	UpdatePC(currentList->pc, currentList->pc);
 }
 
 void GPUCommonHW::Execute_ViewMtxData(u32 op, u32 diff) {
@@ -1583,8 +1603,8 @@ void GPUCommonHW::Execute_ProjMtxNum(u32 op, u32 diff) {
 	gstate.projmtxnum = (GE_CMD_PROJMATRIXNUMBER << 24) | ((op & 0xF) + count);
 
 	// Skip over the loaded data, it's done now.
-	UpdatePC(currentList->pc, currentList->pc + count * 4);
 	currentList->pc += count * 4;
+	UpdatePC(currentList->pc, currentList->pc);
 }
 
 void GPUCommonHW::Execute_ProjMtxData(u32 op, u32 diff) {
@@ -1638,8 +1658,8 @@ void GPUCommonHW::Execute_TgenMtxNum(u32 op, u32 diff) {
 	gstate.texmtxnum = (GE_CMD_TGENMATRIXNUMBER << 24) | ((op & 0xF) + count);
 
 	// Skip over the loaded data, it's done now.
-	UpdatePC(currentList->pc, currentList->pc + count * 4);
 	currentList->pc += count * 4;
+	UpdatePC(currentList->pc, currentList->pc);
 }
 
 void GPUCommonHW::Execute_TgenMtxData(u32 op, u32 diff) {
@@ -1686,8 +1706,8 @@ void GPUCommonHW::Execute_BoneMtxNum(u32 op, u32 diff) {
 	gstate.boneMatrixNumber = (GE_CMD_BONEMATRIXNUMBER << 24) | ((op & 0x7F) + count);
 
 	// Skip over the loaded data, it's done now.
-	UpdatePC(currentList->pc, currentList->pc + count * 4);
 	currentList->pc += count * 4;
+	UpdatePC(currentList->pc, currentList->pc);
 }
 
 void GPUCommonHW::Execute_BoneMtxData(u32 op, u32 diff) {

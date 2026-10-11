@@ -698,7 +698,6 @@ static const ConfigSetting graphicsSettings[] = {
 	ConfigSetting("DepthRasterMode", SETTING(g_Config, iDepthRasterMode), &DefaultDepthRaster, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("SoftwareRenderer", SETTING(g_Config, bSoftwareRendering), false, CfgFlag::PER_GAME),
 	ConfigSetting("SoftwareDisableDithering", SETTING(g_Config, bSoftwareDisableDithering), false, CfgFlag::PER_GAME),
-	ConfigSetting("SoftwareRendererJit", SETTING(g_Config, bSoftwareRenderingJit), true, CfgFlag::PER_GAME),
 	ConfigSetting("HardwareTransform", SETTING(g_Config, bHardwareTransform), true, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("TextureFiltering", SETTING(g_Config, iTexFiltering), 1, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("Smart2DTexFiltering", SETTING(g_Config, bSmart2DTexFiltering), false, CfgFlag::PER_GAME | CfgFlag::REPORT),
@@ -834,6 +833,7 @@ static const ConfigSetting soundSettings[] = {
 	ConfigSetting("GamePreviewVolume", SETTING(g_Config, iGamePreviewVolume), &DefaultGamePreviewVolume, CfgFlag::DEFAULT),
 
 	ConfigSetting("AudioDevice", SETTING(g_Config, sAudioDevice), "", CfgFlag::DEFAULT),
+	ConfigSetting("MicDevice", SETTING(g_Config, sMicDevice), "", CfgFlag::DEFAULT),
 	ConfigSetting("AutoAudioDevice", SETTING(g_Config, bAutoSwitchAudioDevice), true, CfgFlag::DEFAULT),
 	ConfigSetting("AudioMixWithOthers", SETTING(g_Config, bAudioMixWithOthers), &DefaultAudioMixWithOthers, CfgFlag::DEFAULT),
 	ConfigSetting("AudioRespectSilentMode", SETTING(g_Config, bAudioRespectSilentMode), false, CfgFlag::DEFAULT),

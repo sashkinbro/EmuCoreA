@@ -14,7 +14,6 @@
 #import "IAPManager.h"
 
 #import <AVFoundation/AVFoundation.h>
-#import <objc/runtime.h>
 
 #include <set>
 #include <string>
@@ -42,22 +41,18 @@ __attribute__((used)) static Class _forceLinkSceneDelegate = [SceneDelegate clas
 	switch ([interruptionType unsignedIntegerValue]) {
 		case AVAudioSessionInterruptionTypeBegan:
 			INFO_LOG(Log::System, "ios audio session interruption beginning");
-			if (g_Config.bEnableSound) {
-				iOSCoreAudioShutdown();
-			}
+			iOSCoreAudioShutdown();
 			break;
 
 		case AVAudioSessionInterruptionTypeEnded:
 			INFO_LOG(Log::System, "ios audio session interruption ending");
-			if (g_Config.bEnableSound) {
-				/*
-				 * Only try to reinit audio if in the foreground, otherwise
-				 * it may fail. Instead, trust that applicationDidBecomeActive
-				 * will do it later.
-				 */
-				if ([UIApplication sharedApplication].applicationState == UIApplicationStateActive) {
-					iOSCoreAudioInit();
-				}
+			/*
+			 * Only try to reinit audio if in the foreground, otherwise
+			 * it may fail. Instead, trust that sceneDidBecomeActive
+			 * will do it later.
+			 */
+			if ([UIApplication sharedApplication].applicationState == UIApplicationStateActive) {
+				iOSCoreAudioInit();
 			}
 			break;
 
@@ -83,21 +78,12 @@ __attribute__((used)) static Class _forceLinkSceneDelegate = [SceneDelegate clas
 	 We accomplish this by shutting down and reinitializing audio
 	 */
 
-	if (g_Config.bEnableSound) {
-		iOSCoreAudioShutdown();
-		iOSCoreAudioInit();
-	}
+	iOSCoreAudioShutdown();
+	iOSCoreAudioInit();
 }
 
 -(BOOL) application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
 	self.launchOptions = launchOptions;
-	// Make sure SceneDelegate class is loaded
-	Class cls = objc_getClass("SceneDelegate");
-	if (!cls) {
-		NSLog(@"⚠️ SceneDelegate not found via objc_getClass");
-	} else {
-		NSLog(@"✅ SceneDelegate loaded via objc_getClass");
-	}
 
 #if PPSSPP_PLATFORM(IOS_APP_STORE)
 	[IAPManager sharedIAPManager];  // Kick off the IAPManager early.
@@ -234,7 +220,7 @@ static std::vector<std::string> GatherGameLibrary() {
 		return UIInterfaceOrientationMaskLandscapeRight;
 	case ROTATION_LOCKED_VERTICAL:
 	case ROTATION_LOCKED_VERTICAL180:
-		if (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) {
+		if (IS_IPAD()) {
 			// iPad supports both portrait orientations, so allow them.
 			return UIInterfaceOrientationMaskPortrait | UIInterfaceOrientationMaskPortraitUpsideDown;
 		}

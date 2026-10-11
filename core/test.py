@@ -298,6 +298,7 @@ tests_good = [
   "gpu/transfer/mirrors",
   "gpu/transfer/overlap",
   "gpu/triangle/triangle",
+  "gpu/vertices/carry",
   "gpu/vertices/colors",
   "gpu/vertices/morph",
   # "gpu/vertices/texcoords",  #  See issue #19093
@@ -615,6 +616,7 @@ tests_next = [
   # Doesn't work on a PSP for security reasons, hangs in PPSSPP currently.
   # Commented out to make tests run much faster.
   #"modules/loadexec/loader",
+  "modules/unloadfill/unloadfill",
   "net/http/http",
   "net/primary/ether",
   "sysmem/partition",
@@ -639,6 +641,7 @@ tests_next = [
   "utility/savedata/secureversion",
   "utility/savedata/sizes",
   "video/mpeg/basic",
+  "video/mpeg/deletetiming",
   "video/pmf/pmf",
   "video/pmf_simple/pmf_simple",
   "video/psmfplayer/basic",

@@ -1293,21 +1293,13 @@ static bool MatchFramebuffer(const TextureDefinition &entry,
 			(fb_format == GE_FORMAT_DEPTH16 && entry.format == GE_TFMT_5650) ||
 			(fb_format == GE_FORMAT_8888 && entry.format == GE_TFMT_CLUT32) ||
 			(fb_format != GE_FORMAT_8888 && entry.format == GE_TFMT_CLUT16) ||
-			(fb_format == GE_FORMAT_8888 && entry.format == GE_TFMT_CLUT8) ||
-			(fb_format == GE_FORMAT_5551 && entry.format == GE_TFMT_CLUT8 && PSP_CoreParameter().compat.flags().SOCOMClut8Replacement);
+			(fb_format != GE_FORMAT_DEPTH16 && entry.format == GE_TFMT_CLUT8);
 
 		const int texBitsPerPixel = TextureFormatBitsPerPixel(entry.format);
 		const int byteOffset = texaddr - addr;
 		if (byteOffset > 0) {
-			int texbpp = texBitsPerPixel;
-			if (fb_format == GE_FORMAT_5551 && entry.format == GE_TFMT_CLUT8) {
-				// In this case we treat CLUT8 as if it were CLUT16, see issue #16210. So we need
-				// to compute the x offset appropriately.
-				texbpp = 16;
-			}
-
 			matchInfo->yOffset = byteOffset / fb_stride_in_bytes;
-			matchInfo->xOffset = 8 * (byteOffset % fb_stride_in_bytes) / texbpp;
+			matchInfo->xOffset = 8 * (byteOffset % fb_stride_in_bytes) / texBitsPerPixel;
 		} else if (byteOffset < 0) {
 			int texelOffset = 8 * byteOffset / texBitsPerPixel;
 			// We don't support negative Y offsets, and negative X offsets are only for the Killzone workaround.
@@ -1418,11 +1410,6 @@ VirtualFramebuffer *TextureCacheCommon::SetTextureFramebuffer(const AttachCandid
 		// We need to force it, since we may have set it on a texture before attaching.
 		int texWidth = framebuffer->bufferWidth;
 		int texHeight = framebuffer->bufferHeight;
-		if (candidate.channel == RASTER_COLOR && gstate.getTextureFormat() == GE_TFMT_CLUT8 && framebuffer->fb_format == GE_FORMAT_5551 && PSP_CoreParameter().compat.flags().SOCOMClut8Replacement) {
-			// See #16210. UV must be adjusted as if the texture was twice the width.
-			texWidth *= 2.0f;
-		}
-
 		if (needsDepthXSwizzle) {
 			texWidth = RoundToNextPowerOf2(texWidth);
 		}
@@ -2394,8 +2381,8 @@ static bool CanDepalettizeBufferAs(GETextureFormat texFormat, GEBufferFormat buf
 			if (texFormat == GE_TFMT_CLUT16) {
 				return true;
 			}
-			if (texFormat == GE_TFMT_CLUT8 && bufferFormat == GE_FORMAT_5551 && PSP_CoreParameter().compat.flags().SOCOMClut8Replacement) {
-				// Wacky case from issue #16210 (SOCOM etc).
+			if (texFormat == GE_TFMT_CLUT8 && bufferFormat != GE_FORMAT_DEPTH16) {
+				// Reads one byte of each pixel (SOCOM #16210, Resistance: Retribution).
 				return true;
 			}
 			break;
@@ -2458,12 +2445,11 @@ void TextureCacheCommon::ApplyTextureFramebuffer(VirtualFramebuffer *framebuffer
 	const bool selfRender = framebufferManager_->GetCurrentRenderVFB() == framebuffer;
 
 	// Shader depal is not supported during 3D texturing or depth texturing, and requires 32-bit integer instructions in the shader.
-	// CLUT8 from 8888 takes it even when rendering to self (through a copy): only the shader picks the byte out of each pixel,
+	// CLUT8 takes it even when rendering to self (through a copy): only the shader picks the byte out of each pixel,
 	// the depal pass can't. Star Wars: The Force Unleashed does this for a color grade.
-	bool useShaderDepal = (!selfRender || (texFormat == GE_TFMT_CLUT8 && fbFormat == GE_FORMAT_8888)) && !depth && clutRenderAddress_ == 0xFFFFFFFF &&
+	bool useShaderDepal = (!selfRender || texFormat == GE_TFMT_CLUT8) && !depth && clutRenderAddress_ == 0xFFFFFFFF &&
 		!gstate_c.curTextureIs3D &&
-		draw_->GetShaderLanguageDesc().bitwiseOps &&
-		!(texFormat == GE_TFMT_CLUT8 && fbFormat == GE_FORMAT_5551);  // socom
+		draw_->GetShaderLanguageDesc().bitwiseOps;
 
 	switch (draw_->GetShaderLanguageDesc().shaderLanguage) {
 	case ShaderLanguage::GLSL_1xx:
@@ -2478,6 +2464,9 @@ void TextureCacheCommon::ApplyTextureFramebuffer(VirtualFramebuffer *framebuffer
 	ClutTexture clutTexture{};
 	bool smoothedDepal = false;
 	u32 depthUpperBits = 0;
+	bool depthIntoHalves = false;
+
+	VirtualFramebuffer sample0Vfb;
 
 	if (need_depalettize) {
 		if (clutRenderAddress_ == 0xFFFFFFFF) {
@@ -2493,6 +2482,17 @@ void TextureCacheCommon::ApplyTextureFramebuffer(VirtualFramebuffer *framebuffer
 			float scaleFactorX = 1.0f;
 			Draw2DPipeline *reinterpret = framebufferManager_->GetReinterpretPipeline(clutRenderFormat_, expectedCLUTBufferFormat, &scaleFactorX);
 			framebufferManager_->BlitUsingRaster(dynamicClutTemp_, 0.0f, 0.0f, 512.0f, 1.0f, dynamicClutFbo_, 0.0f, 0.0f, scaleFactorX * 512.0f, 1.0f, false, 1.0f, reinterpret, "reinterpret_clut");
+		}
+
+		// With multisampling, take one sample instead of the average, since the colors are looked up as indices.
+		// Dragon Ball Z: Tenkaichi Tag Team's outlines look up its framebuffer as CLUT32. (A smooth color grade
+		// loses its antialiasing this way, but that's the smaller loss.)
+		if (!depth) {
+			if (Draw::Framebuffer *sample0 = framebufferManager_->CopyColorSample0(framebuffer)) {
+				sample0Vfb = *framebuffer;
+				sample0Vfb.fbo = sample0;
+				framebuffer = &sample0Vfb;
+			}
 		}
 
 		if (useShaderDepal) {
@@ -2512,9 +2512,11 @@ void TextureCacheCommon::ApplyTextureFramebuffer(VirtualFramebuffer *framebuffer
 			ApplySamplerByKey(samplerKey);
 
 			ShaderDepalMode mode = ShaderDepalMode::NORMAL;
-			if (texFormat == GE_TFMT_CLUT8 && fbFormat == GE_FORMAT_8888) {
-				mode = ShaderDepalMode::CLUT8_8888;
+			if (texFormat == GE_TFMT_CLUT8) {
+				mode = ShaderDepalMode::CLUT8;
 				smoothedDepal = false;  // just in case
+				// The shader picks the byte out of each pixel in PSP units, which it gets from u_texclamp.
+				gstate_c.SetNeedShaderTexclamp(true);
 			} else if (smoothedDepal) {
 				mode = ShaderDepalMode::SMOOTHED;
 			}
@@ -2533,7 +2535,8 @@ void TextureCacheCommon::ApplyTextureFramebuffer(VirtualFramebuffer *framebuffer
 
 		depthUpperBits = (depth && framebuffer->fb_format == GE_FORMAT_8888) ? ((gstate.getTextureAddress(0) & 0x600000) >> 20) : 0;
 
-		textureShader = textureShaderCache_.GetDepalettizeShader(clutMode, texFormat, fbFormat, smoothedDepal, depthUpperBits);
+		depthIntoHalves = depth && PSP_CoreParameter().compat.flags().DepthCLUTIntoHalves;
+		textureShader = textureShaderCache_.GetDepalettizeShader(clutMode, texFormat, fbFormat, smoothedDepal, depthUpperBits, depthIntoHalves);
 		gstate_c.SetShaderDepal(ShaderDepalMode::OFF);
 	}
 
@@ -2547,17 +2550,24 @@ void TextureCacheCommon::ApplyTextureFramebuffer(VirtualFramebuffer *framebuffer
 			depalWidth = texWidth * framebuffer->renderScaleFactor;
 			gstate_c.Dirty(DIRTY_UVSCALEOFFSET);
 		}
+		// Twice as wide, so a texture stretched 2x into a 16-bit view samples one output pixel per render pixel.
+		const int halves = depthIntoHalves ? 2 : 1;
+		depalWidth *= halves;
+
+		// CLUT8 from a 16-bit format (SOCOM, #16210): U and the X offset count bytes, two per pixel of the depal output.
+		const bool clut8From16 = texFormat == GE_TFMT_CLUT8 && fbFormat != GE_FORMAT_8888;
+		const float uDiv = clut8From16 ? 2.0f : 1.0f;
 
 		// If min is not < max, then we don't have values (wasn't set during decode.)
 		const KnownVertexBounds &bounds = gstate_c.vertBounds;
 		float u1 = 0.0f;
 		float v1 = 0.0f;
-		float u2 = depalWidth;
+		float u2 = depalWidth / halves;
 		float v2 = framebuffer->renderHeight;
 		if (bounds.minV < bounds.maxV) {
-			u1 = (bounds.minU + gstate_c.curTextureXOffset) * framebuffer->renderScaleFactor;
+			u1 = floorf((bounds.minU + gstate_c.curTextureXOffset) / uDiv) * framebuffer->renderScaleFactor;
 			v1 = (bounds.minV + gstate_c.curTextureYOffset) * framebuffer->renderScaleFactor;
-			u2 = (bounds.maxU + gstate_c.curTextureXOffset) * framebuffer->renderScaleFactor;
+			u2 = ceilf((bounds.maxU + gstate_c.curTextureXOffset) / uDiv) * framebuffer->renderScaleFactor;
 			v2 = (bounds.maxV + gstate_c.curTextureYOffset) * framebuffer->renderScaleFactor;
 			// We need to reapply the texture next time since we cropped UV.
 			gstate_c.Dirty(DIRTY_TEXTURE_PARAMS);
@@ -2568,7 +2578,7 @@ void TextureCacheCommon::ApplyTextureFramebuffer(VirtualFramebuffer *framebuffer
 		draw_->BindTexture(1, nullptr);
 		draw_->BindFramebufferAsRenderTarget(depalFBO, { Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE, Draw::RPAction::DONT_CARE }, "Depal");
 		draw_->InvalidateFramebuffer(Draw::FB_INVALIDATION_STORE, Draw::Aspect::DEPTH_BIT | Draw::Aspect::STENCIL_BIT);
-		draw_->SetScissorRect(u1, v1, u2 - u1, v2 - v1);
+		draw_->SetScissorRect(u1 * halves, v1, (u2 - u1) * halves, v2 - v1);
 		Draw::Viewport viewport{ 0.0f, 0.0f, (float)depalWidth, (float)framebuffer->renderHeight, 0.0f, 1.0f };
 		draw_->SetViewport(viewport);
 
@@ -2583,11 +2593,11 @@ void TextureCacheCommon::ApplyTextureFramebuffer(VirtualFramebuffer *framebuffer
 		draw_->BindSamplerStates(0, 1, &nearest);
 		draw_->BindSamplerStates(1, 1, &clutSampler);
 
-		draw2D_->Blit(textureShader, u1, v1, u2, v2, u1, v1, u2, v2, framebuffer->renderWidth, framebuffer->renderHeight, depalWidth, framebuffer->renderHeight, false, framebuffer->renderScaleFactor);
+		draw2D_->Blit(textureShader, u1, v1, u2, v2, u1 * halves, v1, u2 * halves, v2, framebuffer->renderWidth, framebuffer->renderHeight, depalWidth, framebuffer->renderHeight, false, framebuffer->renderScaleFactor);
 
 		gpuStats.perFrame.numDepal++;
 
-		gstate_c.curTextureWidth = texWidth;
+		gstate_c.curTextureWidth = clut8From16 ? texWidth * 2 : texWidth;
 		gstate_c.Dirty(DIRTY_UVSCALEOFFSET);
 
 		draw_->BindTexture(0, nullptr);

@@ -3,8 +3,6 @@ list(APPEND GPUArch
 	Common/VertexDecoderArm.cpp
 	Common/VertexDecoderArm64.cpp
 	Common/VertexDecoderX86.cpp
-	Software/DrawPixelX86.cpp
-	Software/SamplerX86.cpp
 	Common/VertexDecoderRiscV.cpp
 	Common/VertexDecoderLoongArch64.cpp
 )
@@ -80,6 +78,7 @@ set(GPU_SOURCES
 	Common/DepthBufferCommon.cpp
 	Common/DepthRaster.cpp
 	Common/DepthRaster.h
+	Common/DepthSwizzle.h
 	Common/TextureShaderCommon.cpp
 	Common/TextureShaderCommon.h
 	Common/DepalettizeShaderCommon.cpp
@@ -181,8 +180,7 @@ set(GPU_SOURCES
 	Software/Rasterizer.h
 	Software/RasterizerRectangle.cpp
 	Software/RasterizerRectangle.h
-	Software/RasterizerRegCache.cpp
-	Software/RasterizerRegCache.h
+	Software/RasterizerTypes.h
 	Software/Sampler.cpp
 	Software/Sampler.h
 	Software/SoftGpu.cpp

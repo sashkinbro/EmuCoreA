@@ -1,5 +1,7 @@
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
+#include <cstring>
 
 #include "Core/Config.h"
 #include "Core/CmdLine.h"
@@ -205,6 +207,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(screenshotFilename), CmdParamType::String, "screenshot", '\0', "Compare rendered output against a reference screenshot FILE", CmdLineMode::Headless},
 	{POFF(screenshotFilenameSave), CmdParamType::String, "screenshot-save", '\0', "Save rendered screenshot to specified path (PNG if the path ends in .png, BMP otherwise)", CmdLineMode::Headless},
 	{POFF(replayEnd), CmdParamType::Int, "replay-end", '\0', "When replaying a GE frame dump, only draw primitives up to this one (1-based)", CmdLineMode::Headless},
+	{POFF(dumpCompat), CmdParamType::Bool, "dump-compat", '\0', "Apply the game's compat.ini settings when replaying a GE frame dump (off by default)", CmdLineMode::Headless},
 	{POFF(depthFilenameSave), CmdParamType::String, "depth-save", '\0', "Save the depth buffer to FILE along with the screenshot (u32 width, u32 height, u16 depths; float depths if FILE ends in .f32)", CmdLineMode::Headless},
 	{POFF(screenshotRenderTarget), CmdParamType::Bool, "screenshot-render-target", '\0', "Take screenshots of the current render target instead of the displayed framebuffer", CmdLineMode::Headless},
 	{POFF(screenshotFilenameDiff), CmdParamType::String, "screenshot-diff", '\0', "Save a visual comparison image to FILE when comparing screenshots", CmdLineMode::Headless},
@@ -232,6 +235,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(odsLog), CmdParamType::Bool, "odslog", 'o', "Also log through OutputDebugString (Windows)", CmdLineMode::Headless},
 	{POFF(generateInterpreterDispatch), CmdParamType::Bool, "generate-interpreter-dispatch", '\0', "Generate C++ interpreter dispatch code (ExecInstruction) to stdout and exit", CmdLineMode::Headless},
 	{POFF(resolutionScale), CmdParamType::Int, "resolution-scale", '\0', "Set the resolution scale factor"},
+	{POFF(msaa), CmdParamType::Int, "msaa", '\0', "Set the MSAA level (0 = off, 1 = 2x, 2 = 4x, 3 = 8x)"},
 	{POFF(debuggerPort), CmdParamType::Int, "debugger", '\0', "Enable the WebSocket debugger on this port (0 = pick automatically); see docs/WebSocketDebugger.md"},
 	{POFF(debuggerRunPort), CmdParamType::Int, "debugger-run", '\0', "Like --debugger, but starts running instead of waiting at the entry point", CmdLineMode::Headless},
 	{POFF(autoSaveLoadSymbols), CmdParamType::Bool, "auto-save-load-symbols", '\0', "Auto save/load per-module and per-game symbol files (see bAutoSaveLoadSymbols)", CmdLineMode::Both},
@@ -583,6 +587,7 @@ void CommandLineOptions::ApplyToConfig() const {
 
 	if (logLevel.has_value()) {
 		g_logManager.SetAllLogLevels(logLevel.value());
+		g_logManager.DoNotSaveChannels();
 	}
 
 	if (oldAtrac.has_value()) {
@@ -615,6 +620,11 @@ void CommandLineOptions::ApplyToConfig() const {
 		g_Config.DoNotSaveSetting(&g_Config.iInternalResolution);
 	}
 
+	if (msaa.has_value()) {
+		g_Config.iMultiSampleLevel = msaa.value();
+		g_Config.DoNotSaveSetting(&g_Config.iMultiSampleLevel);
+	}
+
 	if (memReadAction.has_value()) {
 		g_Config.iExceptionActionMemRead = memReadAction.value();
 		g_Config.DoNotSaveSetting(&g_Config.iExceptionActionMemRead);
@@ -639,4 +649,63 @@ void CommandLineOptions::ApplyToConfig() const {
 
 	// Note: dpi is not applied here - it's platform-specific.
 	// Platforms should check cmdLineOptions.dpi.has_value() and handle accordingly.
+}
+
+std::vector<std::string> SplitCommandLine(const std::string &value) {
+	std::vector<std::string> args;
+	const char *p = value.c_str();
+
+	while (*p != '\0') {
+		while (isspace(*p)) {
+			p++;
+		}
+		if (*p == '\0') {
+			break;
+		}
+
+		bool done = false;
+		bool quote = false;
+		std::string arg;
+
+		while (!done) {
+			size_t sz = strcspn(p, "\"\\ \r\n\t");
+			arg += std::string(p, sz);
+			p += sz;
+
+			switch (*p) {
+			case '"':
+				quote = !quote;
+				p++;
+				break;
+
+			case '\\':
+				p++;
+				arg += std::string(p, 1);
+				p++;
+				break;
+
+			case '\0':
+				done = true;
+				break;
+
+			default:
+				// If it's not the above, it's whitespace.
+				if (!quote) {
+					done = true;
+				} else {
+					sz = strspn(p, " \r\n\t");
+					arg += std::string(p, sz);
+					p += sz;
+				}
+				break;
+			}
+		}
+
+		args.push_back(arg);
+
+		while (isspace(*p)) {
+			p++;
+		}
+	}
+	return args;
 }

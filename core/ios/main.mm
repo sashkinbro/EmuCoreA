@@ -2,9 +2,11 @@
 //
 // Overview
 //
-// main.mm: JIT enablement, starting the next step
-// AppDelegate.mm: Runs NativeInit, launches the main ViewController
-// ViewController.mm: The main application window
+// main.mm: JIT enablement, the System_ functions, starting the next step
+// AppDelegate.mm: Audio session interruptions, deep link and library export helpers
+// SceneDelegate.mm: Runs NativeInit, creates the window and the view controller
+// ViewControllerCommon.mm: Input, keyboard, pickers and sizing, shared by the two below
+// ViewController.mm / ViewControllerMetal.mm: The OpenGL and Vulkan view controllers
 
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
@@ -19,10 +21,8 @@
 #import <stdlib.h>
 #import <sys/syscall.h>
 #import <sys/utsname.h>
-#import <AudioToolbox/AudioToolbox.h>
 
 #import "AppDelegate.h"
-#import "PPSSPPUIApplication.h"
 #import "ViewController.h"
 #import "iOSCoreAudio.h"
 #import "IAPManager.h"
@@ -292,9 +292,7 @@ float g_safeInsetRight = 0.0;
 float g_safeInsetTop = 0.0;
 float g_safeInsetBottom = 0.0;
 
-// We no longer need to judge if jit is usable or not by according to the ios version.
 static bool g_jitAvailable = true;
-//static int g_iosVersionMinor;
 
 static int g_iosVersionMajor;
 static std::string version;
@@ -379,6 +377,7 @@ bool System_GetPropertyBool(SystemProperty prop) {
 		case SYSPROP_HAS_KEYBOARD:
 			return true;
 		case SYSPROP_SUPPORTS_SHARE_TEXT:
+		case SYSPROP_SUPPORTS_SHARE_FILE:
 			return true;
 		case SYSPROP_KEYBOARD_IS_SOFT:
 			// If a hardware keyboard is connected, and we add support, we could return false here.
@@ -420,6 +419,9 @@ bool System_GetPropertyBool(SystemProperty prop) {
 		case SYSPROP_CAN_GET_FREE_SPACE_FAST:
 			return false;
 
+		case SYSPROP_MICROPHONE_NEEDS_POLLING:
+			return true;
+
 		default:
 			return false;
 	}
@@ -454,11 +456,14 @@ void System_Notify(SystemNotification notification) {
 		});
 		break;
 	case SystemNotification::ROTATE_UPDATED:
-	    dispatch_async(dispatch_get_main_queue(), ^{
+		dispatch_async(dispatch_get_main_queue(), ^{
 			if (sharedViewController) {
-				// [sharedViewController setNeedsUpdateOfSupportedInterfaceOrientations];
 				INFO_LOG(Log::System, "Requesting device orientation update");
-				[UIViewController attemptRotationToDeviceOrientation];
+				if (@available(iOS 16.0, *)) {
+					[sharedViewController setNeedsUpdateOfSupportedInterfaceOrientations];
+				} else {
+					[UIViewController attemptRotationToDeviceOrientation];
+				}
 			}
 		});
 		break;
@@ -470,6 +475,9 @@ void System_Notify(SystemNotification notification) {
 bool System_MakeRequest(SystemRequestType type, int requestId, const std::string &param1, const std::string &param2, int64_t param3, int64_t param4) {
 	switch (type) {
 	case SystemRequestType::RESTART_APP:
+	{
+		// A copy, since the block outlives param1.
+		std::string args = param1;
 		dispatch_async(dispatch_get_main_queue(), ^{
 			// Get the connected scenes
 			NSSet<UIScene *> *scenes = [UIApplication sharedApplication].connectedScenes;
@@ -479,13 +487,13 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 				if ([scene isKindOfClass:[UIWindowScene class]]) {
 					UIWindowScene *windowScene = (UIWindowScene *)scene;
 					SceneDelegate *sceneDelegate = (SceneDelegate *)windowScene.delegate;
-					[sceneDelegate restart:param1.c_str()];
+					[sceneDelegate restart:args.c_str()];
 					break; // call only on the first active scene
 				}
 			}
 		});
 		return true;
-
+	}
 	case SystemRequestType::EXIT_APP:
 		// NOTE: on iOS, this is considered a crash and not a valid way to exit.
 		exit(0);
@@ -528,43 +536,88 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		return true;
 	}
 	case SystemRequestType::CAMERA_COMMAND:
-		if (!strncmp(param1.c_str(), "startVideo", 10)) {
-			int width = 0, height = 0;
-			sscanf(param1.c_str(), "startVideo_%dx%d", &width, &height);
-			[sharedViewController startVideo:width height:height];
-		} else if (!strcmp(param1.c_str(), "stopVideo")) {
-			[sharedViewController stopVideo];
-		}
+	{
+		// These come from the emu thread. UIKit and Core Location want the main thread, and that's
+		// also the only thread that changes sharedViewController.
+		std::string command = param1;
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if (!strncmp(command.c_str(), "startVideo", 10)) {
+				int width = 0, height = 0;
+				sscanf(command.c_str(), "startVideo_%dx%d", &width, &height);
+				[sharedViewController startVideo:width height:height];
+			} else if (command == "stopVideo") {
+				[sharedViewController stopVideo];
+			}
+		});
 		return true;
+	}
 	case SystemRequestType::GPS_COMMAND:
-		if (param1 == "open") {
-			[sharedViewController startLocation];
-		} else if (param1 == "close") {
-			[sharedViewController stopLocation];
+	{
+		std::string command = param1;
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if (command == "open") {
+				[sharedViewController startLocation];
+			} else if (command == "close") {
+				[sharedViewController stopLocation];
+			}
+		});
+		return true;
+	}
+	case SystemRequestType::MICROPHONE_COMMAND:
+		// From the CPU thread. Polling has to happen right here, the rest moves to the main thread inside.
+		if (startsWith(param1, "startRecording:")) {
+			int sampleRate = 0;
+			if (sscanf(param1.c_str(), "startRecording:%d", &sampleRate) != 1 || sampleRate <= 0) {
+				return false;
+			}
+			iOSCoreAudioStartRecording(sampleRate);
+		} else if (param1 == "stopRecording") {
+			iOSCoreAudioStopRecording();
+		} else if (param1 == "pollRecording") {
+			iOSCoreAudioPollRecording();
+		} else {
+			return false;
 		}
 		return true;
 	case SystemRequestType::SHARE_TEXT:
 	{
 		NSString *text = [NSString stringWithUTF8String:param1.c_str()];
-		[sharedViewController shareText:text];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[sharedViewController shareText:text];
+		});
+		return true;
+	}
+	case SystemRequestType::SHARE_FILE:
+	{
+		// param2, the MIME type, isn't needed. The share sheet goes by the extension.
+		NSString *path = [NSString stringWithUTF8String:param1.c_str()];
+		if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+			ERROR_LOG(Log::System, "SHARE_FILE: '%s' doesn't exist", param1.c_str());
+			return false;
+		}
+		NSURL *url = [NSURL fileURLWithPath:path];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[sharedViewController shareFile:url];
+		});
 		return true;
 	}
 	case SystemRequestType::NOTIFY_UI_EVENT:
 	{
-		switch ((UIEventNotification)param3) {
-		case UIEventNotification::POPUP_CLOSED:
-		case UIEventNotification::DIALOG_CLOSED:
-			[sharedViewController hideKeyboard];
-			break;
-		case UIEventNotification::TEXT_GOTFOCUS:
-			[sharedViewController showKeyboard];
-			break;
-		case UIEventNotification::TEXT_LOSTFOCUS:
-			[sharedViewController hideKeyboard];
-			break;
-		default:
-			break;
-		}
+		const UIEventNotification event = (UIEventNotification)param3;
+		dispatch_async(dispatch_get_main_queue(), ^{
+			switch (event) {
+			case UIEventNotification::POPUP_CLOSED:
+			case UIEventNotification::DIALOG_CLOSED:
+			case UIEventNotification::TEXT_LOSTFOCUS:
+				[sharedViewController hideKeyboard];
+				break;
+			case UIEventNotification::TEXT_GOTFOCUS:
+				[sharedViewController showKeyboard];
+				break;
+			default:
+				break;
+			}
+		});
 		return true;
 	}
 #if PPSSPP_PLATFORM(IOS_APP_STORE)
@@ -579,16 +632,14 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		return true;
 	}
 #endif
-/*
-	// Not 100% sure the threading is right
 	case SystemRequestType::COPY_TO_CLIPBOARD:
 	{
-		@autoreleasepool {
-			[UIPasteboard generalPasteboard].string = @(param1.c_str());
-			return 0;
-		}
+		NSString *text = [NSString stringWithUTF8String:param1.c_str()];
+		dispatch_async(dispatch_get_main_queue(), ^{
+			[UIPasteboard generalPasteboard].string = text;
+		});
+		return true;
 	}
-*/
 	case SystemRequestType::SET_KEEP_SCREEN_BRIGHT:
 		dispatch_async(dispatch_get_main_queue(), ^{
 			INFO_LOG(Log::System, "SET_KEEP_SCREEN_BRIGHT: %d", (int)param3);
@@ -616,49 +667,26 @@ void System_LaunchUrl(LaunchUrlType urlType, std::string_view url) {
 	});
 }
 
+bool System_AudioRecordingIsAvailable() {
+	// Every iPhone and iPad has a microphone. Permission is asked for when recording starts.
+	return true;
+}
+
 PermissionStatus System_GetPermissionStatus(SystemPermission permission) {
 	 return PERMISSION_STATUS_GRANTED;
 }
 
-#if !PPSSPP_PLATFORM(IOS_APP_STORE)
-FOUNDATION_EXTERN void AudioServicesPlaySystemSoundWithVibration(unsigned long, objc_object*, NSDictionary*);
-#endif
-
-BOOL SupportsTaptic() {
-	// we're on an iOS version that cannot instantiate UISelectionFeedbackGenerator, so no.
-	if(!NSClassFromString(@"UISelectionFeedbackGenerator")) {
-		return NO;
-	}
-
-	// http://www.mikitamanko.com/blog/2017/01/29/haptic-feedback-with-uifeedbackgenerator/
-	// use private API against UIDevice to determine the haptic stepping
-	// 2 - iPhone 7 or above, full taptic feedback
-	// 1 - iPhone 6S, limited taptic feedback
-	// 0 - iPhone 6 or below, no taptic feedback
-	NSNumber* val = (NSNumber*)[[UIDevice currentDevice] valueForKey:@"feedbackSupportLevel"];
-	return [val intValue] >= 2;
-}
-
 void System_Vibrate(int mode) {
-	if (SupportsTaptic()) {
-		PPSSPPUIApplication* app = (PPSSPPUIApplication*)[UIApplication sharedApplication];
-		if(app.feedbackGenerator == nil)
-		{
-			app.feedbackGenerator = [[UISelectionFeedbackGenerator alloc] init];
-			[app.feedbackGenerator prepare];
+	// Comes from the UI code on the emu thread, and UIKit wants the main thread.
+	dispatch_async(dispatch_get_main_queue(), ^{
+		// Does nothing on devices without a Taptic Engine.
+		static UISelectionFeedbackGenerator *feedbackGenerator;
+		if (!feedbackGenerator) {
+			feedbackGenerator = [[UISelectionFeedbackGenerator alloc] init];
+			[feedbackGenerator prepare];
 		}
-		[app.feedbackGenerator selectionChanged];
-	} else {
-#if !PPSSPP_PLATFORM(IOS_APP_STORE)
-		NSMutableDictionary *dictionary = [NSMutableDictionary dictionary];
-		NSArray *pattern = @[@YES, @30, @NO, @2];
-
-		dictionary[@"VibePattern"] = pattern;
-		dictionary[@"Intensity"] = @2;
-
-		AudioServicesPlaySystemSoundWithVibration(kSystemSoundID_Vibrate, nil, dictionary);
-#endif
-	}
+		[feedbackGenerator selectionChanged];
+	});
 }
 
 AudioBackend *System_CreateAudioBackend() {
@@ -701,16 +729,6 @@ int main(int argc, char *argv[]) {
 
 	// Tried checking for JIT support here with AllocateExecutableMemory and ProtectMemoryPages,
 	// but it just succeeds, and then fails when you try to execute from it.
-
-	// So, we'll just resort to a version check.
-	// TODO: This seems outdated.
-/*
-	if (g_iosVersionMajor > 14 || (g_iosVersionMajor == 14 && g_iosVersionMinor >= 4)) {
-		g_jitAvailable = false;
-	} else {
-		g_jitAvailable = true;
-	}
-*/
 #endif
 
 	// Ignore sigpipe.
@@ -724,7 +742,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 	@autoreleasepool {
-		return UIApplicationMain(argc, argv, NSStringFromClass([PPSSPPUIApplication class]), NSStringFromClass([AppDelegate class]));
+		return UIApplicationMain(argc, argv, nil, NSStringFromClass([AppDelegate class]));
 	}
 }
 

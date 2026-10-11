@@ -19,6 +19,7 @@ def main():
         b"diag speed=",
         b"diag fps=",
         b"AAudio xruns (underruns)",
+        b"OboeAudio",
         b"nativeGetRuntimeState",
         b"nativeGetNetworkState",
         b"NativeCoreDiagnostics",

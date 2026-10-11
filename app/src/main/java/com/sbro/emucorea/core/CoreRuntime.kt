@@ -779,7 +779,16 @@ internal object CoreRuntime {
             val prepared = extractCorePayload(file, raw)
             val loaded = prepared && runOnFrameThread {
                 sessionLock.withLock {
-                    booted && NativePpsspp.nativeLoadState(raw.absolutePath)
+                    if (!booted) {
+                        false
+                    } else {
+                        val restored = NativePpsspp.nativeLoadState(raw.absolutePath)
+                        if (!restored) {
+                            val runtimeError = NativePpsspp.nativeGetRuntimeError()
+                            if (runtimeError.isNotBlank()) reportFailure(runtimeError)
+                        }
+                        restored
+                    }
                 }
             }
             raw.delete()
@@ -1243,11 +1252,22 @@ internal object CoreRuntime {
                                 rawFile.delete()
                                 renderedFirstFrame = false
                                 Log.i(TAG, "Renderer-switch snapshot restored")
-                            } else if (++pendingStateRestoreAttempts > 300) {
-                                pendingStateRestorePath = null
-                                File(restorePath).delete()
-                                rawFile.delete()
-                                Log.e(TAG, "Renderer-switch snapshot restore gave up")
+                            } else {
+                                val runtimeError = NativePpsspp.nativeGetRuntimeError()
+                                if (runtimeError.isNotBlank()) {
+                                    pendingStateRestorePath = null
+                                    File(restorePath).delete()
+                                    rawFile.delete()
+                                    reportFailure(runtimeError)
+                                    frameAborted = true
+                                    return@withLock
+                                }
+                                if (++pendingStateRestoreAttempts > 300) {
+                                    pendingStateRestorePath = null
+                                    File(restorePath).delete()
+                                    rawFile.delete()
+                                    Log.e(TAG, "Renderer-switch snapshot restore gave up")
+                                }
                             }
                         }
                         if (pendingPauseAfterRestart && pendingStateRestorePath == null && isCoreBooted()) {

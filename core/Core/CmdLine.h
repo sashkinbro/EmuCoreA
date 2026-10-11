@@ -1,6 +1,8 @@
 #pragma once
 
 #include <optional>
+#include <string>
+#include <vector>
 #include "Common/Log.h"
 #include "Core/ConfigValues.h"
 
@@ -160,6 +162,7 @@ struct CommandLineOptions {
 
 	// Headless options that may also be mildly useful in application mode
 	std::optional<int> resolutionScale;
+	std::optional<int> msaa;
 
 
 	// Headless options
@@ -178,6 +181,8 @@ struct CommandLineOptions {
 	std::optional<std::string> screenshotFilenameSave;
 	std::optional<std::string> depthFilenameSave;
 	std::optional<int> replayEnd;
+	// Headless: apply the game's compatibility settings when replaying a GE frame dump.
+	std::optional<bool> dumpCompat;
 	std::optional<bool> screenshotRenderTarget;
 	std::optional<std::string> screenshotFilenameDiff;
 	// Headless: preserve the alpha channel when saving PNG screenshots.
@@ -200,3 +205,6 @@ struct CommandLineOptions {
 	std::optional<double> dpi;
 	std::optional<double> scale;
 };
+
+// Splits a command line string into arguments. Handles double quotes and backslash escapes.
+std::vector<std::string> SplitCommandLine(const std::string &value);

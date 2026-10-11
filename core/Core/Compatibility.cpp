@@ -142,7 +142,6 @@ void Compatibility::CheckSettings(IniFile &iniFile, const std::string &gameID) {
 	CheckSetting(iniFile, gameID, "BlockTransferDepth", &flags_.BlockTransferDepth);
 	CheckSetting(iniFile, gameID, "DaxterRotatedAnalogStick", &flags_.DaxterRotatedAnalogStick);
 	CheckSetting(iniFile, gameID, "ForceMaxDepthResolution", &flags_.ForceMaxDepthResolution);
-	CheckSetting(iniFile, gameID, "SOCOMClut8Replacement", &flags_.SOCOMClut8Replacement);
 	CheckSetting(iniFile, gameID, "LoadCLUTFromCurrentFrameOnly", &flags_.LoadCLUTFromCurrentFrameOnly);
 	CheckSetting(iniFile, gameID, "ForceUMDReadSpeed", &flags_.ForceUMDReadSpeed);
 	CheckSetting(iniFile, gameID, "KernelGetSystemTimeLowEatMoreCycles", &flags_.KernelGetSystemTimeLowEatMoreCycles);
@@ -166,6 +165,8 @@ void Compatibility::CheckSettings(IniFile &iniFile, const std::string &gameID) {
 	CheckSetting(iniFile, gameID, "SpriteBorderFix", &flags_.SpriteBorderFix);
 	CheckSetting(iniFile, gameID, "TextureCLUTInShader", &flags_.TextureCLUTInShader);
 	CheckSetting(iniFile, gameID, "DisableRangeCulling", &flags_.DisableRangeCulling);
+	CheckSetting(iniFile, gameID, "BlockTransferReadbackSmall", &flags_.BlockTransferReadbackSmall);
+	CheckSetting(iniFile, gameID, "DepthCLUTIntoHalves", &flags_.DepthCLUTIntoHalves);
 }
 
 void Compatibility::CheckVRSettings(IniFile &iniFile, const std::string &gameID) {

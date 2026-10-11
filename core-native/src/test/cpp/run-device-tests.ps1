@@ -25,7 +25,8 @@ New-Item -ItemType Directory -Force $auditOutput | Out-Null
 $auditTests = @{
     module_handler_lifecycle_test = @("$PSScriptRoot/module_handler_lifecycle_test.cpp")
     stereo_resampler_test = @("$PSScriptRoot/stereo_resampler_test.cpp")
-    upstream_math_test = @("$PSScriptRoot/upstream_math_test.cpp", "$auditRoot/core/unittest/TestGEMath.cpp", "$auditRoot/core/unittest/TestSplineTessellation.cpp")
+    registry_state_test = @("$PSScriptRoot/registry_state_test.cpp")
+    upstream_math_test = @("$PSScriptRoot/upstream_math_test.cpp", "$auditRoot/core/unittest/TestCrossSIMD.cpp", "$auditRoot/core/unittest/TestGEMath.cpp", "$auditRoot/core/unittest/TestSplineTessellation.cpp")
 }
 foreach ($auditTest in $auditTests.Keys) {
     & $auditClang '--target=aarch64-linux-android26' '-std=c++17' '-O2' "-I$auditRoot/core" "-I$auditRoot/core/ext" @($auditTests[$auditTest]) "-L$auditLibDir" '-lemucorea_core' '-o' "$auditOutput/$auditTest"

@@ -126,6 +126,18 @@ static bool IsReallyAClear(const TransformedVertex *transformed, int numVerts, f
 }
 
 // At the end, this calls ProjectClipAndExpand which will expand rectangles as necessary, or apply culling.
+// Whether a through-mode sprite's u plane falls just short on the GE (GESpriteUPlaneExact), so a pixel center
+// exactly on a texel edge reads the texel before. u in texels.
+static bool SpriteUPlaneShort(const TransformedVertex &a, const TransformedVertex &b, double texW) {
+	// A sprite drawn bottom left to top right (or the reverse) swaps its UV axes.
+	if ((a.x < b.x) != (a.y < b.y))
+		return false;
+	const TransformedVertex &left = a.x <= b.x ? a : b;
+	const TransformedVertex &right = a.x <= b.x ? b : a;
+	const int64_t top = (int64_t)(std::min(a.y, b.y) * 16.0f), bottom = (int64_t)(std::max(a.y, b.y) * 16.0f);
+	return !GESpriteUPlaneExact((int64_t)(left.x * 16.0f), top, (int64_t)(right.x * 16.0f), bottom, left.u / texW, right.u / texW);
+}
+
 SoftwareTransformAction RunSoftwareTransform(SoftwareTransformParams &params, int prim, u32 vertType, const DecVtxFormat &decVtxFormat, int numDecodedVerts, int vertsSize, int vertexCount, u16 *&inds, int indsSize, SoftwareTransformResult *result) {
 	// These primitive are not handled.
 	_dbg_assert_(prim != GE_PRIM_KEEP_PREVIOUS && prim != GE_PRIM_TRIANGLE_FAN && prim != GE_PRIM_TRIANGLE_STRIP && prim != GE_PRIM_LINE_STRIP);
@@ -1015,8 +1027,6 @@ static bool ExpandRectangles(int vertexCount, int &numDecodedVerts, int vertsSiz
 	u16 *newInds = inds + vertexCount;
 	u16 *indsOut = newInds;
 
-	numDecodedVerts = 4 * (vertexCount / 2);
-
 	float uScale = 1.0f;
 	float vScale = 1.0f;
 	if (throughmode) {
@@ -1069,9 +1079,43 @@ static bool ExpandRectangles(int vertexCount, int &numDecodedVerts, int vertsSiz
 	}
 
 
+	// Like the software renderer's ProcessRect: rectangles aren't clipped, one with a vertex behind the camera
+	// or outside the screen range is dropped whole. With depth clamp, a vertex past the near plane is exempt
+	// from the range check (gpu/clipping/guardband).
+	const bool depthClamp = gstate.isDepthClipEnabled();
+	const float zScale = gstate.getViewportZScale();
+	const float zCenter = gstate.getViewportZCenter();
+	auto outsideRange = [&](const TransformedVertex &v) {
+		constexpr float SCREEN_BOUND = 4095.0f + (15.5f / 16.0f);
+		if (!(v.pos_w > 0.0f)) {
+			return true;
+		}
+		if (depthClamp) {
+			// The near plane in projected terms: z/w < -1.
+			if (zScale != 0.0f && (v.z - zCenter) / zScale < -1.0f) {
+				return false;
+			}
+			return !(v.x < SCREEN_BOUND && v.y < SCREEN_BOUND && v.x >= 0.0f && v.y >= 0.0f);
+		}
+		return !(v.x <= SCREEN_BOUND && v.y < SCREEN_BOUND && v.x >= 0.0f && v.y >= 0.0f && v.z >= 0.0f && v.z < 65536.0f);
+	};
+
+	// The CLUT8 depal picks a byte where a pixel center can sit exactly on a byte edge (u = 1 + 2x over a 16-bit
+	// framebuffer). The GE lands on the edge only when the sprite's u gradient is exact; otherwise its plane falls
+	// just short and reads the byte before (gpu/probe exp256). Sprite by sprite, nudge the short ones' u down a
+	// little, 0.03 of the GE's 1/16 texel step, which the shader's truncation then follows.
+	const bool nudgeShortU = throughmode && gstate_c.shaderDepalMode == ShaderDepalMode::CLUT8;
+	const double texW = (double)gstate.getTextureWidth(0);
+
+	int outVerts = 0;
 	for (int i = 0; i < vertexCount; i += 2) {
 		const TransformedVertex &transVtxTL = transformed[indsIn[i + 0]];
 		const TransformedVertex &transVtxBR = transformed[indsIn[i + 1]];
+		const float uNudge = nudgeShortU && SpriteUPlaneShort(transVtxTL, transVtxBR, texW) ? 0.03f / 16.0f : 0.0f;
+
+		if (!throughmode && (outsideRange(transVtxTL) || outsideRange(transVtxBR))) {
+			continue;
+		}
 
 		float z = transVtxBR.z;
 		// Apply Z clamping. It appears clipping/culling does not affect rectangles, see #12058.
@@ -1087,14 +1131,14 @@ static bool ExpandRectangles(int vertexCount, int &numDecodedVerts, int vertsSiz
 
 		// bottom right
 		trans[0] = transVtxBR;
-		trans[0].u = (transVtxBR.u - spriteBorderFixR) * uScale;
+		trans[0].u = (transVtxBR.u - spriteBorderFixR - uNudge) * uScale;
 		trans[0].v = (transVtxBR.v - spriteBorderFixB) * vScale;
 		trans[0].z = z;
 
 		// top right
 		trans[1] = transVtxBR;
 		trans[1].y = transVtxTL.y;
-		trans[1].u = (transVtxBR.u - spriteBorderFixR) * uScale;
+		trans[1].u = (transVtxBR.u - spriteBorderFixR - uNudge) * uScale;
 		trans[1].v = (transVtxTL.v + spriteBorderFixT) * vScale;
 		trans[1].z = z;
 
@@ -1102,14 +1146,14 @@ static bool ExpandRectangles(int vertexCount, int &numDecodedVerts, int vertsSiz
 		trans[2] = transVtxBR;
 		trans[2].x = transVtxTL.x;
 		trans[2].y = transVtxTL.y;
-		trans[2].u = (transVtxTL.u + spriteBorderFixL) * uScale;
+		trans[2].u = (transVtxTL.u + spriteBorderFixL - uNudge) * uScale;
 		trans[2].v = (transVtxTL.v + spriteBorderFixT) * vScale;
 		trans[2].z = z;
 
 		// bottom left
 		trans[3] = transVtxBR;
 		trans[3].x = transVtxTL.x;
-		trans[3].u = (transVtxTL.u + spriteBorderFixL) * uScale;
+		trans[3].u = (transVtxTL.u + spriteBorderFixL - uNudge) * uScale;
 		trans[3].v = (transVtxBR.v - spriteBorderFixB) * vScale;
 		trans[3].z = z;
 
@@ -1118,17 +1162,19 @@ static bool ExpandRectangles(int vertexCount, int &numDecodedVerts, int vertsSiz
 		RotateUV(trans);
 
 		// Triangle: BR-TR-TL
-		indsOut[0] = i * 2 + 0;
-		indsOut[1] = i * 2 + 1;
-		indsOut[2] = i * 2 + 2;
+		indsOut[0] = outVerts + 0;
+		indsOut[1] = outVerts + 1;
+		indsOut[2] = outVerts + 2;
 		// Triangle: BL-BR-TL
-		indsOut[3] = i * 2 + 3;
-		indsOut[4] = i * 2 + 0;
-		indsOut[5] = i * 2 + 2;
+		indsOut[3] = outVerts + 3;
+		indsOut[4] = outVerts + 0;
+		indsOut[5] = outVerts + 2;
 
 		trans += 4;
 		indsOut += 6;
+		outVerts += 4;
 	}
+	numDecodedVerts = outVerts;
 	inds = newInds;
 	*pixelMappedExactly = pixelMapped;
 	*drawIndexCount = indsOut - newInds;
