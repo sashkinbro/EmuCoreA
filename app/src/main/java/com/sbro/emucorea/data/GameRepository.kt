@@ -68,14 +68,24 @@ class GameRepository {
         /**
          * PSP DLC packages carry CATEGORY "AC" (additional content) in PARAM.SFO.
          * Some packages keep the game category, so fall back to the generic
-         * localized "downloadable content" titles those packages ship with.
+         * localized "downloadable content" titles and the ubiquitous standalone
+         * "DLC" filename marker those packages ship with.
          */
-        internal fun isDlcMetadata(category: String?, title: String?): Boolean {
+        private val DLC_TOKEN = Regex("""(^|[^a-z])dlc([^a-z]|$)""")
+
+        internal fun isDlcMetadata(category: String?, title: String?, fileName: String? = null): Boolean {
             if (category?.trim().equals("AC", ignoreCase = true)) return true
-            val normalized = title?.trim()?.lowercase() ?: return false
-            return normalized.contains("downloadable content") ||
-                normalized.contains("загружаемый контент") ||
-                normalized.contains("ダウンロードコンテンツ")
+            val candidates = sequenceOf(title, fileName)
+                .filterNotNull()
+                .map(String::trim)
+                .filter(String::isNotEmpty)
+            return candidates.any { value ->
+                val normalized = value.lowercase()
+                normalized.contains("downloadable content") ||
+                    normalized.contains("загружаемый контент") ||
+                    normalized.contains("追加コンテンツ") ||
+                    DLC_TOKEN.containsMatchIn(normalized)
+            }
         }
     }
 
@@ -214,7 +224,7 @@ class GameRepository {
                             title = pspMetadata?.title ?: sourceMetadata.title,
                             serial = pspMetadata?.serial ?: sourceMetadata.serial
                         )
-                        isDlc = isDlcMetadata(pspMetadata?.category, metadata.title)
+                        isDlc = isDlcMetadata(pspMetadata?.category, metadata.title, file.name)
                     }
                     if (BiosValidator.isLikelyBiosLibraryEntry(file.name, metadata.title, metadata.serial)) {
                         return@forEach
@@ -318,7 +328,7 @@ class GameRepository {
                             title = pspMetadata?.title ?: sourceMetadata.title,
                             serial = pspMetadata?.serial ?: sourceMetadata.serial
                         )
-                        isDlc = isDlcMetadata(pspMetadata?.category, metadata.title)
+                        isDlc = isDlcMetadata(pspMetadata?.category, metadata.title, name)
                     }
 
                     if (BiosValidator.isLikelyBiosLibraryEntry(name, metadata.title, metadata.serial)) {
