@@ -722,7 +722,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     val hasSerial = !game.serial.isNullOrBlank()
                     val resolvedCoverPath = game.serial
                         ?.takeIf { it.isNotBlank() }
-                        ?.let(coverRepository::findCachedCoverPath)
+                        ?.let { coverRepository.findCachedCoverPath(it, title = game.title) }
                     when {
                         coverRepository.isMissingManagedCover(game.coverArtPath) -> {
                             removedStalePaths = true
@@ -741,7 +741,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             val gamesToProcess = allGames.filter {
                 it.coverArtPath == null || it.coverArtPath.startsWith("http") ||
                     (coverRepository.isManagedCoverCachePath(it.coverArtPath) &&
-                        !it.coverArtPath.contains("/igdb-psp-v13/"))
+                        !it.coverArtPath.contains("/${CoverArtRepository.CACHE_DIR_NAME}/"))
             }
             if (gamesToProcess.isEmpty()) {
                 if (removedStalePaths) {
@@ -799,7 +799,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                     return@map game
                 }
                 if (currentPath != null && currentPath.startsWith(cachePrefix, ignoreCase = true)) {
-                    game.copy(coverArtPath = coverRepository.findCachedCoverPath(game.serial))
+                    game.copy(coverArtPath = coverRepository.findCachedCoverPath(game.serial, title = game.title))
                 } else {
                     game
                 }

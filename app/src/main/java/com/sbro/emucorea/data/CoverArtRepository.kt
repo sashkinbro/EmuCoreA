@@ -25,6 +25,9 @@ class CoverArtRepository(context: Context) {
         private const val CONNECT_TIMEOUT_MS = 10000
         private const val READ_TIMEOUT_MS = 15000
         private const val MISS_TTL_MS = 7L * 24L * 60L * 60L * 1000L // 7 days
+
+        /** Versioned cache directory; bump to discard stale downloaded covers and .miss markers. */
+        const val CACHE_DIR_NAME = "igdb-psp-v14"
         private val downloadFlightsLock = Any()
         private val downloadFlights = HashMap<String, PendingCoverDownload>()
     }
@@ -40,7 +43,7 @@ class CoverArtRepository(context: Context) {
     private val remoteImageCacheDirectory = File(this.context.cacheDir, "remote-image-cache")
 
     private val cacheDirectory by lazy {
-        File(coverCacheDirectory, "igdb-psp-v13").apply {
+        File(coverCacheDirectory, CACHE_DIR_NAME).apply {
             if (!exists()) mkdirs()
             Log.d(TAG, "Cover cache directory created: $absolutePath")
         }
@@ -65,35 +68,38 @@ class CoverArtRepository(context: Context) {
     /** Never flash an embedded icon or a previous style before the selected artwork loads. */
     fun displayCoverPath(serial: String?, title: String?, candidate: String?): String? {
         if (candidate != null && !isManagedCoverCachePath(candidate)) return candidate
-        if (hasIndexedCover(serial, title)) return findCachedCoverPath(serial)
+        if (hasIndexedCover(serial, title)) return findCachedCoverPath(serial, title = title)
         return candidate
     }
 
     fun findCachedCoverPath(
         serial: String?,
         styleOverride: Int? = null,
-        ignoreDisabled: Boolean = false
+        ignoreDisabled: Boolean = false,
+        title: String? = null
     ): String? {
         val style = resolveCoverArtStyle(styleOverride)
         if (!ignoreDisabled && style == AppPreferences.COVER_ART_STYLE_DISABLED) {
             return null
         }
-        val normalizedSerial = normalizeSerial(serial)
-        if (normalizedSerial == null) {
-            Log.d(TAG, "No serial provided")
+        val coverKeys = coverKeys(serial, title)
+        if (coverKeys.isEmpty()) {
+            Log.d(TAG, "No serial or title provided")
             return null
         }
-        val preferredFiles = if (style == AppPreferences.COVER_ART_STYLE_3D) {
-            listOf(
-                File(cacheDirectory, "${normalizedSerial}_3d.webp"),
-                File(cacheDirectory, "${normalizedSerial}_3d.png"),
-                File(cacheDirectory, "${normalizedSerial}_3d.jpg")
-            )
-        } else {
-            listOf(
-                File(cacheDirectory, "$normalizedSerial.jpg"),
-                File(cacheDirectory, "$normalizedSerial.png")
-            )
+        val preferredFiles = coverKeys.flatMap { key ->
+            if (style == AppPreferences.COVER_ART_STYLE_3D) {
+                listOf(
+                    File(cacheDirectory, "${key}_3d.webp"),
+                    File(cacheDirectory, "${key}_3d.png"),
+                    File(cacheDirectory, "${key}_3d.jpg")
+                )
+            } else {
+                listOf(
+                    File(cacheDirectory, "$key.jpg"),
+                    File(cacheDirectory, "$key.png")
+                )
+            }
         }
         preferredFiles.filter(File::exists).forEach { file ->
             if (!isUsableCoverFile(file)) {
@@ -102,16 +108,32 @@ class CoverArtRepository(context: Context) {
             }
         }
         val found = preferredFiles.firstOrNull(::isUsableCoverFile)
-        Log.d(TAG, "Cached cover for $normalizedSerial (style=$style): ${if (found != null) "FOUND" else "NOT FOUND"}")
+        Log.d(TAG, "Cached cover for $coverKeys (style=$style): ${if (found != null) "FOUND" else "NOT FOUND"}")
         return found?.absolutePath
     }
 
     fun findCachedCoverUri(
         serial: String?,
         styleOverride: Int? = null,
-        ignoreDisabled: Boolean = false
+        ignoreDisabled: Boolean = false,
+        title: String? = null
     ): String? {
-        return findCachedCoverPath(serial, styleOverride, ignoreDisabled)
+        return findCachedCoverPath(serial, styleOverride, ignoreDisabled, title)
+    }
+
+    /**
+     * Cache keys in lookup order: the normalized serial first, then a slug derived from the
+     * title so games without a readable serial still resolve through the bundled title index.
+     */
+    private fun coverKeys(serial: String?, title: String?): List<String> {
+        val keys = mutableListOf<String>()
+        normalizeSerial(serial)?.let { keys += it }
+        if (!title.isNullOrBlank()) {
+            val titleKey = title.trim().lowercase(Locale.ROOT)
+                .replace(Regex("[^a-z0-9]+"), "_").take(80)
+            if (keys.none { it.equals(titleKey, ignoreCase = true) }) keys += titleKey
+        }
+        return keys
     }
 
     fun downloadCover(
@@ -125,14 +147,27 @@ class CoverArtRepository(context: Context) {
             Log.d(TAG, "Cover download skipped: cover art style is disabled")
             return null
         }
-        val normalizedSerial = normalizeSerial(serial)
-        if (normalizedSerial == null && title.isNullOrBlank()) {
-            Log.w(TAG, "Cannot download cover: no PSP serial or title")
-            return null
-        }
         val coverBaseUrl = resolveCoverBaseUrl(style)
-        val coverKey = normalizedSerial ?: title!!.trim().lowercase(Locale.ROOT)
-            .replace(Regex("[^a-z0-9]+"), "_").take(80)
+        val normalizedSerial = normalizeSerial(serial)
+        if (normalizedSerial == null) {
+            if (title.isNullOrBlank()) {
+                Log.w(TAG, "Cannot download cover: no PSP serial or title")
+                return null
+            }
+            if (coverBaseUrl != null) {
+                // Custom cover servers are serial-addressed; a filename slug would only add 404 noise.
+                Log.d(TAG, "Custom cover server configured but no PSP serial available")
+                return null
+            }
+            // Title-only lookups never guess: the bundled index must map the title explicitly.
+            val indexed = com.sbro.emucorea.data.psp.PspCoverIndexRepository(context)
+                .find(null, title, style == AppPreferences.COVER_ART_STYLE_3D) != null
+            if (!indexed) {
+                Log.d(TAG, "No bundled cover index entry for title")
+                return null
+            }
+        }
+        val coverKey = coverKeys(serial, title).first()
         val flightKey = "$style|$coverBaseUrl|$coverKey"
         lateinit var flight: PendingCoverDownload
         var ownsDownload = false
