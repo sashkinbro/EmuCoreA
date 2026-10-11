@@ -5014,6 +5014,7 @@ internal fun CoreOptionSettingsRows(
 ) {
     version
     val context = LocalContext.current
+    CoreNetworkSettingsNote(options)
     options.forEach { option ->
         val current = NativeApp.getCoreOption(option.key) ?: option.defaultValue
         val localized = PpssppCoreOptionLocalization.resolve(context, option)
@@ -5039,6 +5040,13 @@ internal fun CoreOptionSettingsRows(
                 onResetToDefault = { onValueChange(option.key, option.defaultValue) }
             )
         }
+    }
+}
+
+@Composable
+internal fun CoreNetworkSettingsNote(options: List<PpssppCoreOptions.Option>) {
+    if (options.any { it.category == "network" }) {
+        SettingsInlineNote(stringResource(R.string.settings_network_restart_lan_note))
     }
 }
 

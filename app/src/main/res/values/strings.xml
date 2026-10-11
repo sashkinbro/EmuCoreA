@@ -707,7 +707,7 @@
     <string name="settings_help_core_pro_ad_hoc_server_address">Sets one digit of the custom PRO ad-hoc server IP address. This is only used when Change PRO Ad Hoc Server IP Address is set to IP address. Ask the server host for the exact address before changing it.</string>
     <string name="settings_help_core_enable_upnp">Uses UPnP to open the required ports on your router automatically instead of forwarding them by hand. Enable it if online ad-hoc play cannot connect even though the network works; it takes a few seconds to detect the router. Disable it if your router does not support UPnP.</string>
     <string name="settings_help_core_upnp_use_original_port">Keeps the original PSP port numbers when UPnP opens ports on the router. This matches the PSP and works with most communities; turn it off only when several players behind the same router need separate port ranges.</string>
-    <string name="settings_help_core_port_offset">Adds the selected offset to the port numbers used for ad-hoc traffic. 0 keeps PSP compatibility and is right for nearly every game. Use another value only when two players behind the same router conflict, and keep the same offset on all devices.</string>
+    <string name="settings_help_core_port_offset">10000 matches the PPSSPP default. All players must use the same offset. 0 uses original PSP ports, but Android may block ports below 1024.</string>
     <string name="settings_help_core_minimum_timeout">Overrides the minimum network timeout in milliseconds. 0 uses the default and is best in normal conditions. Increasing it can help unstable or high-latency connections; lowering it may detect dropped players faster but can cause false disconnects.</string>
     <string name="settings_help_core_forced_first_connect">Makes the emulated PSP connect to the ad-hoc network immediately at startup instead of waiting for the first game request. It can shorten waiting in lobbies, but a few games may misbehave if a connection exists before they expect it. Leave it off unless connection setup is slow.</string>
     <string name="settings_help_gyro_invert_x">Flips the horizontal gyro axis. Leave it off if aiming turns in the same direction as the phone; turn it on when left and right feel reversed, which some players prefer for camera control.</string>
@@ -1725,4 +1725,5 @@
     <string name="core_update_reset_action">Reset settings</string>
     <string name="core_update_reset_keep">Keep current settings</string>
     <string name="core_update_reset_done">Settings have been reset</string>
+    <string name="settings_network_restart_lan_note">Network changes apply after restarting the game. For LAN play, every device must use the host’s LAN IP; enable the built-in server only on the host.</string>
 </resources>

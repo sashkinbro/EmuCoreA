@@ -684,7 +684,7 @@
     <string name="settings_help_core_pro_ad_hoc_server_address">Nastavuje jednu číslici vlastní IP adresy PRO ad-hoc serveru. Používá se jen když je volba změny IP adresy PRO Ad Hoc serveru nastavena na IP address. Před změnou si vyžádejte přesnou adresu od provozovatele serveru.</string>
     <string name="settings_help_core_enable_upnp">Používá UPnP k automatickému otevření potřebných portů na routeru místo ručního přesměrování. Zapněte, pokud se online ad-hoc hra nepřipojí, i když síť funguje; detekce routeru trvá několik sekund. Vypněte, pokud router UPnP nepodporuje.</string>
     <string name="settings_help_core_upnp_use_original_port">Zachovává původní čísla portů PSP, když UPnP otevírá porty na routeru. Odpovídá to PSP a funguje s většinou komunit; vypněte jen když několik hráčů za stejným routerem potřebuje samostatné rozsahy portů.</string>
-    <string name="settings_help_core_port_offset">Přičte zvolený posun k číslům portů používaným pro ad-hoc provoz. 0 zachovává kompatibilitu s PSP a hodí se téměř ke všem hrám. Jinou hodnotu použijte jen když dva hráči za stejným routerem kolidují, a na všech zařízeních mějte stejný posun.</string>
+    <string name="settings_help_core_port_offset">10000 odpovídá výchozímu nastavení PPSSPP. Všichni hráči musí používat stejný posun. 0 používá původní porty PSP, ale Android může blokovat porty pod 1024.</string>
     <string name="settings_help_core_minimum_timeout">Přepisuje minimální síťový timeout v milisekundách. 0 používá výchozí hodnotu a je nejlepší za běžných podmínek. Zvýšení může pomoci nestabilním spojením s vysokou latencí; snížení dříve odhalí ztracené hráče, ale může způsobovat falešná odpojení.</string>
     <string name="settings_help_core_forced_first_connect">Přiměje emulovaný PSP připojit se k ad-hoc síti hned při spuštění, místo čekání na první požadavek hry. Může zkrátit čekání v lobby, ale několik her se může chovat špatně, pokud spojení existuje dřív, než očekávají. Ponechte vypnuté, pokud připojení není pomalé.</string>
     <string name="settings_help_gyro_invert_x">Obrátí vodorovnou osu gyroskopu. Ponechte vypnuté, pokud se míření otáčí stejným směrem jako telefon; zapněte, pokud se levé a pravé jeví obráceně – někteří hráči to pro kameru preferují.</string>
@@ -1723,4 +1723,5 @@
     <string name="core_update_reset_action">Obnovit nastavení</string>
     <string name="core_update_reset_keep">Ponechat nastavení</string>
     <string name="core_update_reset_done">Nastavení bylo obnoveno</string>
+    <string name="settings_network_restart_lan_note">Změny sítě se projeví po restartování hry. Při hraní přes LAN musí všechna zařízení používat LAN IP adresu hostitele; vestavěný server zapněte pouze u hostitele.</string>
 </resources>

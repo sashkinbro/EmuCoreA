@@ -6,6 +6,42 @@ import org.junit.Test
 
 class CoreRuntimePolicyTest {
     @Test
+    fun zeroCatalogueMacUsesThePersistentDeviceIdentity() {
+        val keys = (1..12).map { "ppsspp_change_mac_address%02d".format(it) }
+        val options = runtimeStartCoreOptions(
+            defaults = keys.associateWith { "0" },
+            global = mapOf("_network_default_mac" to "020102030405"),
+            session = emptyMap(), textureFilter = "Auto", textureReplacement = null
+        )
+        assertEquals("020102030405", keys.joinToString("") { options.getValue(it) })
+    }
+
+    @Test
+    fun invalidPerGameMacCannotReplaceTheDeviceIdentityWithZeros() {
+        val keys = (1..12).map { "ppsspp_change_mac_address%02d".format(it) }
+        val options = runtimeStartCoreOptions(
+            defaults = keys.associateWith { "0" },
+            global = mapOf("_network_default_mac" to "020102030405"),
+            session = keys.associateWith { "0" }, textureFilter = "Auto", textureReplacement = null
+        )
+        assertEquals("020102030405", keys.joinToString("") { options.getValue(it) })
+    }
+
+    @Test
+    fun validPerGameMacIsPreservedAndPrivateIdentityIsNotForwarded() {
+        val keys = (1..12).map { "ppsspp_change_mac_address%02d".format(it) }
+        val custom = "001122334455"
+        val options = runtimeStartCoreOptions(
+            defaults = keys.associateWith { "0" },
+            global = mapOf("_network_default_mac" to "020102030405"),
+            session = keys.mapIndexed { index, key -> key to custom[index].toString() }.toMap(),
+            textureFilter = "Auto", textureReplacement = null
+        )
+        assertEquals(custom, keys.joinToString("") { options.getValue(it) })
+        assertEquals(false, options.containsKey("_network_default_mac"))
+    }
+
+    @Test
     fun fourByThreeDisplayRectangleMatchesSelectedViewport() {
         assertArrayEquals(floatArrayOf(240f, 0f, 1680f, 1080f), runtimeDisplayRect(1920, 1080, 2), 0f)
     }

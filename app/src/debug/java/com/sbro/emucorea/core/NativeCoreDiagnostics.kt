@@ -6,4 +6,6 @@ package com.sbro.emucorea.core
 object NativeCoreDiagnostics {
     /** Boot/audio/CPU/FPS/software/textures/display state, in that order. */
     external fun nativeGetRuntimeState(): IntArray
+    /** MAC/server/port/WLAN/builtin/UPnP/original-port/JVM/net/UPnP-lifecycle/HTTPS. */
+    external fun nativeGetNetworkState(): Array<String>
 }

@@ -43,7 +43,18 @@ internal fun runtimeStartCoreOptions(
         put(key, runtimeCoreOptionValue(key, global[key], default, textureFilter, textureReplacement))
     }
     putAll(global)
+    if (networkMacKeys.any { containsKey(it) }) {
+        putAll(networkMacOptions(global, global[NETWORK_IDENTITY_KEY].orEmpty()))
+    }
     putAll(session)
+    if (networkMacKeys.any { containsKey(it) }) {
+        val fallback = networkMacOptions(global, global[NETWORK_IDENTITY_KEY].orEmpty())
+        val identity = networkMacKeys.joinToString("") { fallback[it].orEmpty() }
+        val resolved = networkMacOptions(this, identity)
+        networkMacKeys.forEach { remove(it) }
+        putAll(resolved)
+    }
+    remove(NETWORK_IDENTITY_KEY)
 }
 
 internal fun runtimeDisplayRect(width: Int, height: Int, aspectMode: Int): FloatArray {

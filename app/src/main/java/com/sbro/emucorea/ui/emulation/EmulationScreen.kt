@@ -4996,9 +4996,12 @@ private fun CoreOptionRows(
 ) {
     version
     val context = LocalContext.current
+    com.sbro.emucorea.ui.settings.CoreNetworkSettingsNote(options)
+    val networkMacValues = com.sbro.emucorea.core.CoreOptionStore.networkMacValues(perGameOverrides)
     options.forEach { option ->
         val values = option.choices.map { it.value }
-        val current = perGameOverrides[option.key]
+        val current = networkMacValues[option.key]
+            ?: perGameOverrides[option.key]
             ?: NativeApp.getCoreOption(option.key)
             ?: option.defaultValue
         val currentIndex = values.indexOf(current).let { if (it >= 0) it else 0 }

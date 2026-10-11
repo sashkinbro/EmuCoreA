@@ -681,7 +681,7 @@
     <string name="settings_help_core_pro_ad_hoc_server_address">Ustawia jedną cyfrę własnego adresu IP serwera PRO ad-hoc. Jest używany tylko wtedy, gdy opcja zmiany adresu IP serwera PRO Ad Hoc jest ustawiona na IP address. Przed zmianą zapytaj właściciela serwera o dokładny adres.</string>
     <string name="settings_help_core_enable_upnp">Używa UPnP, aby automatycznie otwierać potrzebne porty na routerze zamiast przekierowywać je ręcznie. Włącz, jeśli sieciowa gra ad-hoc nie łączy się, choć sieć działa; wykrycie routera trwa kilka sekund. Wyłącz, jeśli router nie obsługuje UPnP.</string>
     <string name="settings_help_core_upnp_use_original_port">Zachowuje oryginalne numery portów PSP, gdy UPnP otwiera porty na routerze. Jest to zgodne z PSP i działa w większości społeczności; wyłącz tylko wtedy, gdy kilku graczy za tym samym routerem potrzebuje osobnych zakresów portów.</string>
-    <string name="settings_help_core_port_offset">Dodaje wybrane przesunięcie do numerów portów używanych w ruchu ad-hoc. 0 zachowuje zgodność z PSP i pasuje do niemal każdej gry. Innej wartości użyj tylko, gdy dwaj gracze za tym samym routerem kolidują, i utrzymuj to samo przesunięcie na wszystkich urządzeniach.</string>
+    <string name="settings_help_core_port_offset">10000 odpowiada domyślnemu ustawieniu PPSSPP. Wszyscy gracze muszą używać tego samego przesunięcia. 0 używa oryginalnych portów PSP, ale Android może blokować porty poniżej 1024.</string>
     <string name="settings_help_core_minimum_timeout">Zastępuje minimalny limit czasu sieci w milisekundach. 0 używa wartości domyślnej i jest najlepsze w normalnych warunkach. Zwiększenie może pomóc niestabilnym połączeniom o dużych opóźnieniach; zmniejszenie szybciej wykrywa utraconych graczy, ale może powodować fałszywe rozłączenia.</string>
     <string name="settings_help_core_forced_first_connect">Sprawia, że emulowany PSP łączy się z siecią ad-hoc od razu przy starcie, zamiast czekać na pierwsze żądanie gry. Może skrócić oczekiwanie w lobby, ale kilka gier może działać źle, jeśli połączenie istnieje wcześniej, niż oczekują. Pozostaw wyłączone, jeśli łączenie nie jest wolne.</string>
     <string name="settings_help_gyro_invert_x">Odwraca poziomą oś żyroskopu. Zostaw wyłączone, jeśli celowanie obraca się w tę samą stronę co telefon; włącz, gdy lewo i prawo wydają się odwrócone — niektórzy wolą tak sterować kamerą.</string>
@@ -1723,4 +1723,5 @@
     <string name="core_update_reset_action">Zresetuj ustawienia</string>
     <string name="core_update_reset_keep">Zachowaj ustawienia</string>
     <string name="core_update_reset_done">Ustawienia zresetowane</string>
+    <string name="settings_network_restart_lan_note">Zmiany sieciowe są stosowane po ponownym uruchomieniu gry. Aby grać przez LAN, wszystkie urządzenia muszą używać adresu IP hosta w sieci LAN; wbudowany serwer włącz tylko na hoście.</string>
 </resources>

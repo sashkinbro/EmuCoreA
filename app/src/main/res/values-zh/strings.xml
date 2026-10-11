@@ -667,7 +667,7 @@
     <string name="settings_help_core_pro_ad_hoc_server_address">設定自訂 PRO ad-hoc 伺服器 IP 位址的一個數字。僅在「變更 PRO Ad Hoc 伺服器 IP 位址」設為 IP address 時使用。變更前請向伺服器主機確認正確位址。</string>
     <string name="settings_help_core_enable_upnp">使用 UPnP 自動在路由器開啟所需連接埠，而不必手動轉送。若網路正常但線上 ad-hoc 仍無法連線，請開啟；偵測路由器需要幾秒。若路由器不支援 UPnP，請關閉。</string>
     <string name="settings_help_core_upnp_use_original_port">UPnP 在路由器開啟連接埠時保留 PSP 原始連接埠號碼。這與 PSP 一致，且適用於大多數社群；僅在同一路由器後方多名玩家需要各自連接埠範圍時關閉。</string>
-    <string name="settings_help_core_port_offset">將所選位移加到 ad-hoc 流量使用的連接埠號碼。0 可保持 PSP 相容性，幾乎所有遊戲都適用。僅在同一路由器後方兩名玩家衝突時改用其他值，並在所有裝置保持相同位移。</string>
+    <string name="settings_help_core_port_offset">10000 与 PPSSPP 的默认值一致。所有玩家必须使用相同的偏移量。0 使用 PSP 原始端口，但 Android 可能会阻止低于 1024 的端口。</string>
     <string name="settings_help_core_minimum_timeout">覆寫最低網路逾時（毫秒）。0 使用預設值，一般情況下最佳。調高可協助不穩定或高延遲的連線；調低能更快偵測到玩家離線，但可能造成誤斷線。</string>
     <string name="settings_help_core_forced_first_connect">讓模擬的 PSP 在啟動時立即連上 ad-hoc 網路，而不等待遊戲的第一個要求。這能縮短大廳等待，但少數遊戲若連線比預期更早存在，可能出現異常。除非連線很慢，否則請保持關閉。</string>
     <string name="settings_help_gyro_invert_x">反轉陀螺儀的水平軸。若瞄準與手機轉動方向一致，請保持關閉；若左右感覺相反則開啟，有些玩家偏好這樣控制鏡頭。</string>
@@ -1703,4 +1703,5 @@
     <string name="core_update_reset_action">重置设置</string>
     <string name="core_update_reset_keep">保留当前设置</string>
     <string name="core_update_reset_done">设置已重置</string>
+    <string name="settings_network_restart_lan_note">网络更改将在重启游戏后生效。通过局域网联机时，所有设备都必须使用主机的局域网 IP 地址；仅在主机上启用内置服务器。</string>
 </resources>

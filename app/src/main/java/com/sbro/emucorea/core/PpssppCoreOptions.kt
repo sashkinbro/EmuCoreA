@@ -1120,7 +1120,7 @@ object PpssppCoreOptions {
                 Choice("disabled", "disabled"),
                 Choice("enabled", "enabled"),
             ),
-            defaultValue = "enabled",
+            defaultValue = "disabled",
         ),
         Option(
             key = "ppsspp_port_offset",
@@ -1184,7 +1184,7 @@ object PpssppCoreOptions {
                 Choice("64000", "64000"),
                 Choice("65000", "65000"),
             ),
-            defaultValue = "0",
+            defaultValue = "10000",
         ),
         Option(
             key = "ppsspp_minimum_timeout",

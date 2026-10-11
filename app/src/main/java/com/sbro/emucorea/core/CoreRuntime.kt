@@ -504,6 +504,9 @@ internal object CoreRuntime {
      * understands reach the core.
      */
     private fun forwardCoreOption(key: String, value: String) {
+        // PPSSPP latches identity, sockets and server threads at kernel boot.
+        // Mixing live config with those old values breaks an established session.
+        if (sessionActive && PpssppCoreOptions.option(key)?.category == "network") return
         val config = translateCoreOption(key, value) ?: return
         NativePpsspp.nativeSetConfig(config.first, config.second)
     }

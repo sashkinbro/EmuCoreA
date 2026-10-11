@@ -20,6 +20,7 @@ def main():
         b"diag fps=",
         b"AAudio xruns (underruns)",
         b"nativeGetRuntimeState",
+        b"nativeGetNetworkState",
         b"NativeCoreDiagnostics",
         b"RuntimeTestActivity",
         b"DebugJitSelfTestActivity",

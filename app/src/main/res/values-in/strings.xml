@@ -680,7 +680,7 @@
     <string name="settings_help_core_pro_ad_hoc_server_address">Mengatur satu digit alamat IP khusus server PRO ad-hoc. Hanya dipakai saat Ubah alamat IP server PRO Ad Hoc disetel ke IP address. Tanyakan alamat persisnya ke host server sebelum mengubahnya.</string>
     <string name="settings_help_core_enable_upnp">Memakai UPnP untuk membuka port yang diperlukan di router secara otomatis alih-alih meneruskan manual. Aktifkan jika permainan ad-hoc online tidak terhubung padahal jaringan berfungsi; mendeteksi router butuh beberapa detik. Nonaktifkan jika router Anda tidak mendukung UPnP.</string>
     <string name="settings_help_core_upnp_use_original_port">Mempertahankan nomor port asli PSP saat UPnP membuka port di router. Ini sesuai dengan PSP dan bekerja di sebagian besar komunitas; nonaktifkan hanya bila beberapa pemain di belakang router yang sama memerlukan rentang port terpisah.</string>
-    <string name="settings_help_core_port_offset">Menambahkan offset yang dipilih ke nomor port yang dipakai untuk lalu lintas ad-hoc. 0 menjaga kompatibilitas PSP dan tepat untuk hampir semua game. Gunakan nilai lain hanya bila dua pemain di belakang router yang sama bentrok, dan pertahankan offset yang sama di semua perangkat.</string>
+    <string name="settings_help_core_port_offset">10000 sesuai dengan nilai bawaan PPSSPP. Semua pemain harus menggunakan offset yang sama. 0 menggunakan port PSP asli, tetapi Android dapat memblokir port di bawah 1024.</string>
     <string name="settings_help_core_minimum_timeout">Mengganti timeout jaringan minimum dalam milidetik. 0 memakai bawaan dan terbaik dalam kondisi normal. Menaikkannya bisa membantu koneksi tidak stabil atau berlatensi tinggi; menurunkannya lebih cepat mendeteksi pemain yang hilang tetapi bisa menyebabkan pemutusan palsu.</string>
     <string name="settings_help_core_forced_first_connect">Membuat PSP yang diemulasi langsung terhubung ke jaringan ad-hoc saat mulai, alih-alih menunggu permintaan pertama game. Ini bisa mempersingkat tunggu di lobi, tetapi beberapa game bisa bermasalah jika koneksi ada lebih awal dari yang mereka harapkan. Biarkan nonaktif kecuali koneksi lambat.</string>
     <string name="settings_help_gyro_invert_x">Membalik sumbu horizontal giroskop. Biarkan nonaktif jika bidikan berputar searah ponsel; aktifkan jika kiri dan kanan terasa terbalik, yang disukai sebagian pemain untuk kontrol kamera.</string>
@@ -1716,4 +1716,5 @@
     <string name="core_update_reset_action">Atur ulang pengaturan</string>
     <string name="core_update_reset_keep">Pertahankan pengaturan</string>
     <string name="core_update_reset_done">Pengaturan diatur ulang</string>
+    <string name="settings_network_restart_lan_note">Perubahan jaringan berlaku setelah game dimulai ulang. Untuk bermain melalui LAN, setiap perangkat harus menggunakan IP LAN host; aktifkan server bawaan hanya pada host.</string>
 </resources>

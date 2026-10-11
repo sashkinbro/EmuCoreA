@@ -46,6 +46,8 @@
 #include "Common/Render/Text/draw_text_android.h"
 #include "Common/Log.h"
 #include "Common/Log/LogManager.h"
+#include "Common/Net/HTTPRequest.h"
+#include "Common/Net/Resolve.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/System/Display.h"
 #include "Common/System/System.h"
@@ -69,6 +71,7 @@
 #include "Core/MIPS/MIPS.h"
 #include "Core/SaveState.h"
 #include "Core/System.h"
+#include "Core/Util/PortManager.h"
 #include "GPU/GPUCommon.h"
 
 #include "Core/FrameTiming.h"
@@ -98,9 +101,16 @@ extern "C" void EmuCoreAAchievementsSetJavaVm(JavaVM *vm);
 extern "C" void EmuCoreAAchievementsInitializeJava(JNIEnv *env);
 extern "C" void EmuCoreAAchievementsOnFrame();
 
+// PPSSPP's Android networking runtime uses this global from Request.cpp.
+extern JavaVM *gJvm;
+
 namespace {
 
 JavaVM *g_vm = nullptr;
+// Own the platform services across nativeInit/nativeShutdown, independently
+// of PSP guest boots and renderer restarts.
+std::atomic<bool> g_networkInitialized{false};
+bool g_upnpInitialized = false;
 // Serializes RunFrame against surface attach/detach and shutdown, so closing
 // the activity or turning the screen off cannot tear the swapchain down while
 // a frame is being recorded or presented.
@@ -925,6 +935,8 @@ bool System_GetPropertyBool(SystemProperty prop) {
     switch (prop) {
     case SYSPROP_CAN_JIT:
         return true;
+    case SYSPROP_SUPPORTS_HTTPS:
+        return g_networkInitialized && !g_Config.bDisableHTTPS && net::HTTPSAvailable();
     case SYSPROP_IS_HEADLESS:
     case SYSPROP_ANDROID_SCOPED_STORAGE:
     case SYSPROP_SUPPORTS_PERMISSIONS:
@@ -1268,6 +1280,26 @@ void DestroyEGLSurface() {
     g_eglSurface = EGL_NO_SURFACE;
 }
 
+// Called on the frame thread after the frontend has applied startup options.
+// Registration with UPnP disabled is inert. UPnP enabled without WLAN must not
+// start router discovery, including when stale options survive nativeShutdown.
+void ReconcileUPnPService() {
+    if (!g_networkInitialized) return;
+    if (g_Config.bEnableUPnP && !g_Config.bEnableWlan) {
+        if (g_upnpInitialized) {
+            __UPnPShutdown();
+            g_upnpInitialized = false;
+        }
+        return;
+    }
+    if (!g_upnpInitialized) {
+        __UPnPInit(2000);
+        g_upnpInitialized = true;
+    } else {
+        UPnP_Notify();
+    }
+}
+
 // Takes ownership of preOpenedLoader: on success the core deletes it during
 // CPU_Shutdown, on failure it is deleted here so a failed boot cannot leak the
 // (possibly pre-opened) loader.
@@ -1325,6 +1357,7 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
     // Asynchronous boot, exactly like the libretro wrapper: the loader thread
     // runs in the background and PSP_InitUpdate is polled from the frame loop
     // once the surface (and with it the draw context) is ready.
+    ReconcileUPnPService();
     if (!PSP_InitStart(coreParam)) {
         g_bootError = coreParam.errorString.empty() ? "Unable to start the PSP loader" : coreParam.errorString;
         NLOGE("PSP_InitStart failed: %s", g_bootError.c_str());
@@ -1857,6 +1890,18 @@ void ShutdownCore() {
             PSP_Shutdown(true);
         }
     }
+    // Guest networking threads must have finished before platform services
+    // are joined and their downloads are canceled, even after a failed boot.
+    if (g_upnpInitialized) {
+        __UPnPShutdown();
+        g_upnpInitialized = false;
+    }
+    if (g_networkInitialized) {
+        g_DownloadManager.CancelAll();
+        net::Shutdown();
+        g_networkInitialized = false;
+        g_DownloadManager.SetCacheDir(Path());
+    }
     if (g_graphicsContext != nullptr) {
         if (g_renderReady) {
             if (gpu != nullptr) gpu->DeviceLost();
@@ -2374,7 +2419,10 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
 
     // ----- Network -----
     if (key == "ppsspp_enable_wlan") {
-        if (hasBool) g_Config.bEnableWlan = on;
+        if (hasBool && g_Config.bEnableWlan != on) {
+            g_Config.bEnableWlan = on;
+            if (g_upnpInitialized || g_booted) ReconcileUPnPService();
+        }
         return;
     }
     if (key == "ppsspp_wlan_channel") {
@@ -2396,7 +2444,10 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         return;
     }
     if (key == "ppsspp_enable_upnp") {
-        if (hasBool) g_Config.bEnableUPnP = on;
+        if (hasBool && g_Config.bEnableUPnP != on) {
+            g_Config.bEnableUPnP = on;
+            if (g_upnpInitialized || g_booted) ReconcileUPnPService();
+        }
         return;
     }
     if (key == "ppsspp_upnp_use_original_port") {
@@ -2446,6 +2497,7 @@ extern "C" {
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *) {
     g_vm = vm;
+    ::gJvm = vm;
     // Core-spawned loader/IO threads use AndroidJNIThreadContext; without this
     // registration the attach/detach hooks are no-ops and some devices kill
     // the process for JNI calls from unattached threads.
@@ -2525,11 +2577,16 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeInit(JNIEnv *env, jclass, jstring
     // and the loader): otherwise every scalar keeps its zero value and the core
     // boots the interpreter with vsync off.
     InitializeConfigIfNeeded();
+    if (!g_networkInitialized) {
+        net::Init();
+        g_networkInitialized = true;
+    }
 
     const std::string apk = ToString(env, apkPath);
     const std::string data = ToString(env, dataDir);
     const std::string external = ToString(env, externalDir);
     const std::string cache = ToString(env, cacheDir);
+    g_DownloadManager.SetCacheDir(Path(cache));
 #ifndef NDEBUG
     g_audioDumpPath = cache.empty() ? std::string() : cache + "/audio-capture.wav";
     char captureProp[PROP_VALUE_MAX] = {0};
@@ -2816,6 +2873,34 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetPaused(JNIEnv *, jclass, jbool
 }
 
 #ifndef NDEBUG
+JNIEXPORT jobjectArray JNICALL
+Java_com_sbro_emucorea_core_NativeCoreDiagnostics_nativeGetNetworkState(JNIEnv *env, jclass) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    // Configuration, followed by platform lifecycle ownership. PortManager's
+    // discovery state is service-thread-owned and cannot be sampled here.
+    const std::string values[] = {
+        g_Config.sMACAddress, g_Config.sProAdhocServer, std::to_string(g_Config.iPortOffset),
+        g_Config.bEnableWlan ? "1" : "0", g_Config.bEnableAdhocServer ? "1" : "0",
+        g_Config.bEnableUPnP ? "1" : "0", g_Config.bUPnPUseOriginalPort ? "1" : "0",
+        ::gJvm != nullptr ? "1" : "0", g_networkInitialized ? "1" : "0",
+        g_upnpInitialized ? "1" : "0",
+        System_GetPropertyBool(SYSPROP_SUPPORTS_HTTPS) ? "1" : "0",
+    };
+    jclass stringClass = env->FindClass("java/lang/String");
+    if (stringClass == nullptr) return nullptr;
+    jobjectArray result = env->NewObjectArray(11, stringClass, nullptr);
+    env->DeleteLocalRef(stringClass);
+    if (result == nullptr) return nullptr;
+    for (jsize i = 0; i < 11; ++i) {
+        jstring value = env->NewStringUTF(values[i].c_str());
+        if (value == nullptr) return nullptr;
+        env->SetObjectArrayElement(result, i, value);
+        env->DeleteLocalRef(value);
+        if (env->ExceptionCheck()) return nullptr;
+    }
+    return result;
+}
+
 JNIEXPORT jintArray JNICALL
 Java_com_sbro_emucorea_core_NativeCoreDiagnostics_nativeGetRuntimeState(JNIEnv *env, jclass) {
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);

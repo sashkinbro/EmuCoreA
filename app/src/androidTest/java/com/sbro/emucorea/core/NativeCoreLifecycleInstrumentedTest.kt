@@ -84,6 +84,66 @@ class NativeCoreLifecycleInstrumentedTest {
         }
     }
 
+    @Test(timeout = 90_000)
+    fun nativeNetworkServicesReinitializeAndReleaseWithTheCore() {
+        repeat(2) {
+            for ((wlan, upnp) in listOf(true to false, false to true, true to true)) {
+                initialize(1)
+                onFrame {
+                    NativePpsspp.nativeSetConfig("ppsspp_enable_wlan", if (wlan) "enabled" else "disabled")
+                    NativePpsspp.nativeSetConfig("ppsspp_enable_upnp", if (upnp) "enabled" else "disabled")
+                    NativePpsspp.nativeSetConfig("ppsspp_enable_builtin_pro_ad_hoc_server", "disabled")
+                    assertTrue(NativePpsspp.nativeBoot(guest.path))
+                }
+                awaitBoot()
+                val active = onFrame { NativeCoreDiagnostics.nativeGetNetworkState() }
+                assertEquals("PPSSPP must receive the Java VM", "1", active[7])
+                assertEquals("Native network clients must be initialized", "1", active[8])
+                assertEquals("UPnP registration must follow effective boot settings",
+                    if (upnp && !wlan) "0" else "1", active[9])
+                assertEquals("Android HTTPS must be available after network initialization", "1", active[10])
+                val workerDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(2)
+                while (wlan && upnp && !hasUpnpWorker() && System.nanoTime() < workerDeadline) Thread.sleep(10)
+                assertEquals("Discovery must only run with WLAN and UPnP enabled", wlan && upnp, hasUpnpWorker())
+                onFrame { NativePpsspp.nativeShutdown() }
+                val stopped = onFrame { NativeCoreDiagnostics.nativeGetNetworkState() }
+                assertEquals("Network requests must be stopped on shutdown", "0", stopped[8])
+                assertEquals("UPnP must be released on shutdown", "0", stopped[9])
+                assertFalse("Shutdown must join the UPnP worker", hasUpnpWorker())
+            }
+        }
+    }
+
+    private fun hasUpnpWorker(): Boolean = File("/proc/self/task").listFiles().orEmpty().any {
+        runCatching { File(it, "comm").readText().trim() == "UPnPService" }.getOrDefault(false)
+    }
+
+    @Test(timeout = 90_000)
+    fun persistentNetworkIdentityReachesTheNativeCore() {
+        CoreOptionStore.initialize(context)
+        val identity = CoreOptionStore.persistedEntries().getValue(NETWORK_IDENTITY_KEY)
+        assertTrue("Generated identity must be a non-zero unicast MAC", validPspMac(identity))
+        assertEquals("Match PPSSPP's Gran Turismo workaround", 0, identity.take(2).toInt(16) and 3)
+        assertEquals(identity, File(context.noBackupFilesDir, "psp-network-identity").readText())
+        assertFalse("Portable preferences must not clone the generated identity",
+            context.getSharedPreferences("swanstation_core_options", 0).contains(NETWORK_IDENTITY_KEY))
+        CoreOptionStore.initialize(context)
+        assertEquals(identity, CoreOptionStore.persistedEntries()[NETWORK_IDENTITY_KEY])
+        val effective = runtimeStartCoreOptions(
+            defaults = PpssppCoreOptions.all().associate { it.key to it.defaultValue },
+            global = CoreOptionStore.persistedEntries(), session = emptyMap(),
+            textureFilter = "Auto", textureReplacement = null
+        )
+        initialize(1)
+        onFrame {
+            effective.filterKeys { it in networkMacKeys }.forEach { (key, value) ->
+                NativePpsspp.nativeSetConfig(key, value)
+            }
+        }
+        val expected = networkMacKeys.joinToString("") { effective.getValue(it) }.chunked(2).joinToString(":")
+        assertEquals(expected, onFrame { NativeCoreDiagnostics.nativeGetNetworkState()[0] })
+    }
+
     @Test(timeout = 180_000)
     fun everyRendererRetainsBootOptionsAcrossResizeDetachAndReboot() {
         for (renderer in listOf(0, 1, 2)) {
@@ -832,6 +892,9 @@ class NativeCoreLifecycleInstrumentedTest {
         NativePpsspp.nativeSetConfig("audio_backend", "aaudio")
         NativePpsspp.nativeSetConfig("audio_low_latency", "0")
         NativePpsspp.nativeSetConfig("audio_buffer_ms", "0")
+        NativePpsspp.nativeSetConfig("ppsspp_enable_wlan", "disabled")
+        NativePpsspp.nativeSetConfig("ppsspp_enable_upnp", "disabled")
+        NativePpsspp.nativeSetConfig("ppsspp_enable_builtin_pro_ad_hoc_server", "disabled")
         NativePpsspp.nativeSetConfig("ppsspp_skip_buffer_effects", "disabled")
         NativePpsspp.nativeSetConfig("fps_limit", "0")
         NativePpsspp.nativeSetPaused(false)

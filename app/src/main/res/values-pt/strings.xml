@@ -667,7 +667,7 @@
     <string name="settings_help_core_pro_ad_hoc_server_address">Define um dígito do endereço IP personalizado do servidor PRO ad-hoc. Ele só é usado quando Alterar endereço IP do servidor PRO Ad Hoc está em IP address. Pergunte ao host do servidor o endereço exato antes de mudar.</string>
     <string name="settings_help_core_enable_upnp">Usa UPnP para abrir automaticamente as portas necessárias no roteador em vez de encaminhá-las à mão. Ative se o jogo ad-hoc online não conectar mesmo com a rede funcionando; a detecção do roteador leva alguns segundos. Desative se o roteador não suportar UPnP.</string>
     <string name="settings_help_core_upnp_use_original_port">Mantém os números de porta originais do PSP quando o UPnP abre portas no roteador. Isso corresponde ao PSP e funciona com a maioria das comunidades; desative apenas quando vários jogadores atrás do mesmo roteador precisarem de faixas de porta separadas.</string>
-    <string name="settings_help_core_port_offset">Adiciona o deslocamento escolhido aos números de porta usados no tráfego ad-hoc. 0 mantém a compatibilidade com o PSP e serve para quase todos os jogos. Use outro valor apenas quando dois jogadores atrás do mesmo roteador entrarem em conflito, e mantenha o mesmo deslocamento em todos os aparelhos.</string>
+    <string name="settings_help_core_port_offset">10000 corresponde ao valor padrão do PPSSPP. Todos os jogadores devem usar o mesmo deslocamento. 0 usa as portas originais da PSP, mas o Android pode bloquear portas abaixo de 1024.</string>
     <string name="settings_help_core_minimum_timeout">Substitui o tempo limite mínimo de rede em milissegundos. 0 usa o padrão e é o melhor em condições normais. Aumentar pode ajudar conexões instáveis ou com latência alta; reduzir detecta jogadores perdidos mais rápido, mas pode causar desconexões falsas.</string>
     <string name="settings_help_core_forced_first_connect">Faz o PSP emulado conectar à rede ad-hoc imediatamente na inicialização, em vez de esperar o primeiro pedido do jogo. Pode encurtar a espera nos lobbies, mas alguns jogos podem se comportar mal se a conexão existir antes do esperado. Deixe desativado a menos que a conexão seja lenta.</string>
     <string name="settings_help_gyro_invert_x">Inverte o eixo horizontal do giroscópio. Deixe desativado se a mira gira no mesmo sentido do celular; ative se esquerda e direita parecerem trocadas, o que alguns jogadores preferem para a câmera.</string>
@@ -1704,4 +1704,5 @@
     <string name="core_update_reset_action">Redefinir configurações</string>
     <string name="core_update_reset_keep">Manter configurações</string>
     <string name="core_update_reset_done">Configurações redefinidas</string>
+    <string name="settings_network_restart_lan_note">As alterações de rede são aplicadas após reiniciar o jogo. Para jogar em LAN, todos os dispositivos devem usar o IP de LAN do anfitrião; ative o servidor integrado apenas no anfitrião.</string>
 </resources>

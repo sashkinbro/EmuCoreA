@@ -1291,9 +1291,12 @@ private fun CoreOptionManagerRows(
     onDraftChange: (PerGameSettings) -> Unit
 ) {
     val context = LocalContext.current
+    CoreNetworkSettingsNote(options)
+    val networkMacValues = CoreOptionStore.networkMacValues(draft.coreOptions)
     options.forEach { option ->
         val values = option.choices.map { it.value }
-        val current = draft.coreOptions[option.key]
+        val current = networkMacValues[option.key]
+            ?: draft.coreOptions[option.key]
             ?: CoreOptionStore.value(option.key)
             ?: option.defaultValue
         val index = values.indexOf(current).let { if (it >= 0) it else 0 }

@@ -665,7 +665,7 @@
     <string name="settings_help_core_pro_ad_hoc_server_address">独自の PRO ad-hoc サーバー IP アドレスの 1 桁を設定します。PRO Ad Hoc サーバー IP アドレスを変更が IP address のときだけ使われます。変更前にサーバー管理者へ正確なアドレスを確認してください。</string>
     <string name="settings_help_core_enable_upnp">必要なポートを手動で転送する代わりに、UPnP でルーターに自動で開かせます。ネットワークは正常なのにオンライン ad-hoc が接続できないときに有効にしてください。ルーターの検出には数秒かかります。ルーターが UPnP 非対応ならオフにします。</string>
     <string name="settings_help_core_upnp_use_original_port">UPnP がルーターのポートを開くとき、PSP 本来のポート番号を保ちます。PSP と一致し、ほとんどのコミュニティで機能します。同じルーター配下の複数プレイヤーが別々のポート範囲を必要とする場合のみオフにしてください。</string>
-    <string name="settings_help_core_port_offset">ad-hoc 通信に使うポート番号に選んだオフセットを加えます。0 は PSP 互換を保ち、ほぼすべてのゲームで正解です。同じルーター配下の 2 人が競合する場合のみ別の値を使い、全端末で同じオフセットにしてください。</string>
+    <string name="settings_help_core_port_offset">10000はPPSSPPの既定値です。すべてのプレイヤーで同じオフセットを使用してください。0はPSP本来のポートを使用しますが、Androidでは1024未満のポートが制限される場合があります。</string>
     <string name="settings_help_core_minimum_timeout">最小ネットワークタイムアウトをミリ秒で上書きします。0 は既定値を使い、通常は最適です。増やすと不安定・高遅延の接続に役立つことがあり、減らすと切断されたプレイヤーを早く検出できますが、誤切断が起きることがあります。</string>
     <string name="settings_help_core_forced_first_connect">起動時に最初のゲーム要求を待たず、エミュレートする PSP をすぐ ad-hoc ネットワークへ接続します。ロビーの待ち時間を短縮できますが、ゲームが想定するより早く接続があると誤動作する場合があります。接続が遅くなければオフのままにしてください。</string>
     <string name="settings_help_gyro_invert_x">ジャイロの水平軸を反転します。エイムがスマートフォンと同じ向きに回るならオフのままにし、左右が逆に感じるならオンにします。カメラ操作で好む人もいます。</string>
@@ -1701,4 +1701,5 @@
     <string name="core_update_reset_action">設定をリセット</string>
     <string name="core_update_reset_keep">設定を保持</string>
     <string name="core_update_reset_done">設定をリセットしました</string>
+    <string name="settings_network_restart_lan_note">ネットワークの変更はゲームを再起動すると適用されます。LANで遊ぶ場合、すべての端末でホストのLAN IPアドレスを使用し、内蔵サーバーはホストでのみ有効にしてください。</string>
 </resources>

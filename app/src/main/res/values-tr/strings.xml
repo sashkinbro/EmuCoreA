@@ -665,7 +665,7 @@
     <string name="settings_help_core_pro_ad_hoc_server_address">Özel PRO ad-hoc sunucu IP adresinin bir basamağını ayarlar. Yalnızca PRO Ad Hoc sunucu IP adresini değiştir seçeneği IP address olarak ayarlandığında kullanılır. Değiştirmeden önce kesin adresi sunucu sahibinden sorun.</string>
     <string name="settings_help_core_enable_upnp">Gerekli bağlantı noktalarını elle yönlendirmek yerine yönlendiricide otomatik açmak için UPnP kullanır. Ağ çalışsa da çevrimiçi ad-hoc oyun bağlanmıyorsa açın; yönlendiricinin algılanması birkaç saniye sürer. Yönlendiriciniz UPnP desteklemiyorsa kapatın.</string>
     <string name="settings_help_core_upnp_use_original_port">UPnP yönlendiricide bağlantı noktalarını açarken orijinal PSP bağlantı noktası numaralarını korur. Bu PSP ile uyumludur ve çoğu toplulukla çalışır; yalnızca aynı yönlendirici arkasındaki birkaç oyuncunun ayrı bağlantı noktası aralıklarına ihtiyacı olduğunda kapatın.</string>
-    <string name="settings_help_core_port_offset">Seçilen kaydırmayı ad-hoc trafiğinde kullanılan bağlantı noktası numaralarına ekler. 0 PSP uyumluluğunu korur ve neredeyse tüm oyunlar için doğrudur. Başka bir değeri yalnızca aynı yönlendirici arkasındaki iki oyuncu çakıştığında kullanın ve tüm cihazlarda aynı kaydırmayı koruyun.</string>
+    <string name="settings_help_core_port_offset">10000, PPSSPP varsayılanıyla eşleşir. Tüm oyuncular aynı ofseti kullanmalıdır. 0, özgün PSP portlarını kullanır ancak Android, 1024 altındaki portları engelleyebilir.</string>
     <string name="settings_help_core_minimum_timeout">Minimum ağ zaman aşımını milisaniye cinsinden geçersiz kılar. 0 varsayılanı kullanır ve normal koşullarda en iyisidir. Artırmak kararsız veya yüksek gecikmeli bağlantılara yardımcı olabilir; azaltmak kopan oyuncuları daha çabuk bulur ancak yanlış bağlantı kesilmelerine yol açabilir.</string>
     <string name="settings_help_core_forced_first_connect">Emüle edilen PSP\'nin başlangıçta ilk oyun isteğini beklemeden hemen ad-hoc ağına bağlanmasını sağlar. Lobilerde beklemeyi kısaltabilir, ancak birkaç oyun beklediğinden önce bağlantı varsa yanlış davranabilir. Bağlantı yavaş değilse kapalı bırakın.</string>
     <string name="settings_help_gyro_invert_x">Yatay jiroskop eksenini ters çevirir. Nişan alma telefonla aynı yöne dönüyorsa kapalı bırakın; sol ve sağ ters geliyorsa açın — bazı oyuncular kamera kontrolü için bunu tercih eder.</string>
@@ -1702,4 +1702,5 @@
     <string name="core_update_reset_action">Ayarları sıfırla</string>
     <string name="core_update_reset_keep">Ayarları koru</string>
     <string name="core_update_reset_done">Ayarlar sıfırlandı</string>
+    <string name="settings_network_restart_lan_note">Ağ değişiklikleri oyun yeniden başlatıldıktan sonra uygulanır. LAN üzerinden oynamak için tüm cihazlar sunucuyu barındıran cihazın LAN IP adresini kullanmalıdır; yerleşik sunucuyu yalnızca o cihazda etkinleştirin.</string>
 </resources>
