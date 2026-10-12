@@ -59,6 +59,7 @@
 #include "Core/Core.h"
 #include "Core/CoreParameter.h"
 #include "Core/CoreTiming.h"
+#include "Core/ELF/PBPReader.h"
 #include "Core/ELF/ParamSFO.h"
 #include "Core/FileSystems/BlockDevices.h"
 #include "Core/FileSystems/ISOFileSystem.h"
@@ -2890,6 +2891,59 @@ JNIEXPORT jstring JNICALL
 Java_com_sbro_emucorea_core_NativePpsspp_nativeGetRuntimeError(JNIEnv *env, jclass) {
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     return env->NewStringUTF(g_bootError.c_str());
+}
+
+// Reads PARAM.SFO (asset 0) or ICON0.PNG (asset 1) through the same loader
+// stack the emulator boots with, so every container the core understands -
+// ISO, CSO, CHD and ZIP-wrapped images - exposes metadata and embedded
+// icons without a Kotlin-side decoder. [fd] >= 0 reads through a SAF
+// descriptor; the caller keeps ownership of it.
+JNIEXPORT jbyteArray JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeReadGameAsset(
+    JNIEnv *env, jclass, jstring value, jint fd, jint asset) {
+    if (value == nullptr || (asset != 0 && asset != 1)) return nullptr;
+    const std::string path = ToString(env, value);
+    std::unique_ptr<FileLoader> base(fd >= 0 ? static_cast<FileLoader *>(new FdFileLoader(fd, path))
+                                             : ConstructFileLoader(Path(path)));
+    if (!base || !base->Exists()) return nullptr;
+
+    std::string errorString;
+    IdentifiedFileType fileType = IdentifiedFileType::UNKNOWN;
+    std::unique_ptr<FileLoader> loader(ResolveFileLoaderTarget(base.release(), &fileType, &errorString));
+    if (!loader) return nullptr;
+
+    std::vector<u8> data;
+    if (fileType == IdentifiedFileType::PSP_PBP) {
+        PBPReader pbp(loader.get());
+        if (asset == 0) {
+            pbp.GetSubFile(PBP_PARAM_SFO, &data);
+        } else {
+            pbp.GetSubFile(PBP_ICON0_PNG, &data);
+        }
+    } else if (fileType == IdentifiedFileType::PSP_ISO || fileType == IdentifiedFileType::PSP_ISO_NP) {
+        std::shared_ptr<BlockDevice> blockDev(ConstructBlockDevice(loader.get(), &errorString));
+        if (!blockDev) return nullptr;
+        SequentialHandleAllocator handles;
+        ISOFileSystem umd(&handles, blockDev);
+        const std::string name = asset == 0 ? "/PSP_GAME/PARAM.SFO" : "/PSP_GAME/ICON0.PNG";
+        PSPFileInfo info = umd.GetFileInfo(name);
+        if (!info.exists || info.size <= 0 || info.size > 8 * 1024 * 1024) return nullptr;
+        int handle = umd.OpenFile(name, FILEACCESS_READ);
+        if (handle < 0) return nullptr;
+        data.resize(static_cast<size_t>(info.size));
+        const size_t readSize = umd.ReadFile(handle, data.data(), data.size());
+        umd.CloseFile(handle);
+        if (readSize != data.size()) return nullptr;
+    } else {
+        return nullptr;
+    }
+
+    if (data.empty() || data.size() > 8 * 1024 * 1024) return nullptr;
+    jbyteArray result = env->NewByteArray(static_cast<jsize>(data.size()));
+    if (result == nullptr) return nullptr;
+    env->SetByteArrayRegion(result, 0, static_cast<jsize>(data.size()),
+                            reinterpret_cast<const jbyte *>(data.data()));
+    return result;
 }
 
 JNIEXPORT void JNICALL

@@ -17,11 +17,11 @@ data class PspGameMetadata(val title: String?, val serial: String?, val category
 /**
  * Reads bounded PARAM.SFO and ICON0.PNG assets straight from the game image.
  *
- * The retired libretro frontend exposed PPSSPP's VFS asset reader; the native
- * core has no equivalent JNI, so plain ISO9660 images and PBP packages are
- * parsed here in Kotlin. CSO containers are decompressed on demand so their
- * metadata reads exactly like a raw image; CHD/ZIP still fall back to
- * filename-derived metadata plus the cover index title match.
+ * The native core's loader stack is the primary reader: it opens every
+ * container the emulator can boot (ISO, CSO, CHD and ZIP-wrapped images),
+ * exactly like PPSSPP's own game list. When the library is absent (unit
+ * tests), a Kotlin ISO9660/PBP/CSO parser takes over; CHD/ZIP fall back to
+ * filename-derived metadata plus the cover index title match there.
  */
 object PspGameMetadataReader {
 
@@ -64,6 +64,29 @@ object PspGameMetadataReader {
     }.getOrNull()
 
     private fun readAsset(context: Context, path: String, asset: Int): ByteArray? =
+        readAssetThroughCore(context, path, asset) ?: readAssetInProcess(context, path, asset)
+
+    /**
+     * Asks the native core to read the asset. The core's loader stack covers
+     * every container it can boot, including CSO/ZSO/CHD images and ZIP files
+     * wrapping an ISO, so those formats get real PARAM.SFO and ICON0.PNG data
+     * without a Kotlin-side decoder. Returns null when the library is not
+     * loaded (unit tests) or the core cannot open the container.
+     */
+    private fun readAssetThroughCore(context: Context, path: String, asset: Int): ByteArray? {
+        if (!NativePpsspp.ensureLoaded()) return null
+        return runCatching {
+            if (path.startsWith("content://")) {
+                context.contentResolver.openFileDescriptor(Uri.parse(path), "r")?.use { descriptor ->
+                    NativePpsspp.nativeReadGameAsset(path, descriptor.fd, asset)
+                }
+            } else {
+                NativePpsspp.nativeReadGameAsset(path, -1, asset)
+            }
+        }.getOrNull()
+    }
+
+    private fun readAssetInProcess(context: Context, path: String, asset: Int): ByteArray? =
         openSource(context, path)?.use { source ->
             runCatching {
                 if (source.isPbp()) source.readPbpAsset(asset) else source.readIsoAsset(asset)

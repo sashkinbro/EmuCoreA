@@ -63,6 +63,15 @@ object NativePpsspp {
      */
     external fun nativeBootFd(fd: Int, pathHint: String): Boolean
 
+    /**
+     * Reads a game asset through the core's loader stack, which understands
+     * every container the emulator can boot (ISO, CSO, CHD and ZIP-wrapped
+     * images). [asset] 0 = PARAM.SFO, 1 = ICON0.PNG. [fd] >= 0 reads through
+     * a SAF descriptor whose ownership stays with the caller; otherwise the
+     * file at [path] is opened directly.
+     */
+    external fun nativeReadGameAsset(path: String, fd: Int, asset: Int): ByteArray?
+
     external fun nativeSetSurface(surface: Surface?, width: Int, height: Int): Boolean
 
     external fun nativeRunFrame(): Long
