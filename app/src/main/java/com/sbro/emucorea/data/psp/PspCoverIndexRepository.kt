@@ -28,7 +28,7 @@ class PspCoverIndexRepository(private val context: Context) {
     }
 
     companion object {
-        private const val BASE_URL = "https://raw.githubusercontent.com/sashkinbro/EmuCoreA-Covers/5af2519246d19a29da9ab069d512abd30a5a6113"
+        private const val BASE_URL = "https://raw.githubusercontent.com/sashkinbro/EmuCoreA-Covers/4b47bd63359ec9259ce7b5107a88f6db497aa9e0"
         private val lock = Any()
         @Volatile private var cached: JSONObject? = null
 
