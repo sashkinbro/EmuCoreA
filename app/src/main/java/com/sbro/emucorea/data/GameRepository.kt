@@ -68,10 +68,11 @@ class GameRepository {
         /**
          * PSP DLC packages carry CATEGORY "AC" (additional content) in PARAM.SFO.
          * Some packages keep the game category, so fall back to the generic
-         * localized "downloadable content" titles and the ubiquitous standalone
-         * "DLC" filename marker those packages ship with.
+         * localized "downloadable content" titles, the ubiquitous standalone
+         * "DLC" marker and add-on/update packaging titles those files ship with.
          */
         private val DLC_TOKEN = Regex("""(^|[^a-z])dlc([^a-z]|$)""")
+        private val ADDON_TOKEN = Regex("""(^|[^a-z])add[ -]?ons?([^a-z]|$)""")
 
         internal fun isDlcMetadata(category: String?, title: String?, fileName: String? = null): Boolean {
             if (category?.trim().equals("AC", ignoreCase = true)) return true
@@ -84,7 +85,13 @@ class GameRepository {
                 normalized.contains("downloadable content") ||
                     normalized.contains("загружаемый контент") ||
                     normalized.contains("追加コンテンツ") ||
-                    DLC_TOKEN.containsMatchIn(normalized)
+                    normalized.contains("追加データ") ||
+                    normalized.contains("アップデート") ||
+                    normalized.contains("다운로드 콘텐츠") ||
+                    normalized.contains("추가 콘텐츠") ||
+                    normalized.contains("update ver") ||
+                    DLC_TOKEN.containsMatchIn(normalized) ||
+                    ADDON_TOKEN.containsMatchIn(normalized)
             }
         }
     }

@@ -19,6 +19,20 @@ class DlcMetadataTest {
         assertTrue(GameRepository.isDlcMetadata(null, "Some Game downloadable content"))
         assertTrue(GameRepository.isDlcMetadata(null, "Some Game загружаемый контент"))
         assertTrue(GameRepository.isDlcMetadata(null, "Some Game 追加コンテンツ"))
+        assertTrue(GameRepository.isDlcMetadata(null, "Some Game 追加データ"))
+        assertTrue(GameRepository.isDlcMetadata(null, "Some Game アップデート"))
+        assertTrue(GameRepository.isDlcMetadata(null, "Some Game 다운로드 콘텐츠"))
+        assertTrue(GameRepository.isDlcMetadata(null, "Some Game 추가 콘텐츠"))
+        assertTrue(GameRepository.isDlcMetadata(null, "Some Game update ver. 1.01"))
+    }
+
+    @Test
+    fun `detects add-on packaging titles without matching ordinary words`() {
+        assertTrue(GameRepository.isDlcMetadata(null, "Wipeout Pure Add-On Pack"))
+        assertTrue(GameRepository.isDlcMetadata(null, "Wipeout Pure addon content"))
+        assertTrue(GameRepository.isDlcMetadata(null, "Ridge Racer - Add-Ons"))
+        assertFalse(GameRepository.isDlcMetadata(null, "Addone Chronicles"))
+        assertFalse(GameRepository.isDlcMetadata(null, "The Update Show"))
     }
 
     @Test

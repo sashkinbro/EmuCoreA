@@ -17,7 +17,9 @@ data class GameLibraryCacheSnapshot(
 class GameLibraryCacheRepository(context: Context) {
 
     companion object {
-        private const val CACHE_SCHEMA_VERSION = 5
+        // v6: rescan once so DLC detection sees PARAM.SFO categories read through
+        // the native core for CSO/CHD/PBP and the extended title markers.
+        private const val CACHE_SCHEMA_VERSION = 6
 
         fun libraryKey(paths: List<String>): String =
             paths.map(String::trim).filter(String::isNotBlank).distinct().joinToString("\u001F")
