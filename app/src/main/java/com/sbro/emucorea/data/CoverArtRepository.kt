@@ -25,6 +25,7 @@ class CoverArtRepository(context: Context) {
         private const val CONNECT_TIMEOUT_MS = 10000
         private const val READ_TIMEOUT_MS = 15000
         private const val MISS_TTL_MS = 7L * 24L * 60L * 60L * 1000L // 7 days
+        private const val CONFIRMED_MISS_PREFIX = "all-sources-404\n"
 
         /** Versioned cache directory; bump to discard stale downloaded covers and .miss markers. */
         const val CACHE_DIR_NAME = "igdb-psp-v14"
@@ -36,6 +37,8 @@ class CoverArtRepository(context: Context) {
         val completed = CountDownLatch(1)
         @Volatile var result: String? = null
     }
+
+    private data class CoverDownloadAttempt(val path: String? = null, val notFound: Boolean = false)
 
     private val context = context.applicationContext
 
@@ -222,10 +225,23 @@ class CoverArtRepository(context: Context) {
         if (coverFile.exists()) coverFile.delete()
 
         val missFile = File(cacheDirectory, cacheMissFileName(normalizedSerial, style))
-        if (missFile.exists() && System.currentTimeMillis() - missFile.lastModified() < MISS_TTL_MS) {
-            Log.d(TAG, "Recent miss marker found, skipping (age: ${System.currentTimeMillis() - missFile.lastModified()}ms)")
-            Log.d(TAG, "========== COVER DOWNLOAD END (MISS CACHED) ==========")
-            return null
+        if (missFile.exists()) {
+            val confirmed = runCatching { missFile.readText().startsWith(CONFIRMED_MISS_PREFIX) }.getOrDefault(false)
+            val age = System.currentTimeMillis() - missFile.lastModified()
+            if (confirmed && age in 0 until MISS_TTL_MS) {
+                Log.d(TAG, "Recent confirmed miss marker found, skipping (age: ${age}ms)")
+                Log.d(TAG, "========== COVER DOWNLOAD END (MISS CACHED) ==========")
+                return null
+            }
+            // Old markers could have been written before a fallback failed temporarily.
+            missFile.delete()
+        }
+
+        val attempts = mutableListOf<CoverDownloadAttempt>()
+        fun attempt(url: String, target: File, source: String, sha256: String? = null): String? {
+            val downloaded = downloadFromUrl(url, target, source, sha256)
+            attempts += downloaded
+            return downloaded.path
         }
 
         var result: String? = null
@@ -233,17 +249,24 @@ class CoverArtRepository(context: Context) {
             val extensionsToTry = if (style == AppPreferences.COVER_ART_STYLE_3D) listOf("png", "jpg") else listOf("jpg", "png")
             for (extension in extensionsToTry) {
                 val targetFile = File(cacheDirectory, cacheFileName(normalizedSerial, style, extension))
-                result = downloadFromUrl("$coverBaseUrl/$normalizedSerial.$extension", targetFile, missFile, "Custom")
+                result = attempt("$coverBaseUrl/$normalizedSerial.$extension", targetFile, "Custom")
                 if (result != null) break
             }
         } else {
             val cover = com.sbro.emucorea.data.psp.PspCoverIndexRepository(context).find(originalSerial, title, style == AppPreferences.COVER_ART_STYLE_3D)
             if (cover != null) {
-                result = downloadFromUrl(cover.url, coverFile, missFile, "EmuCoreA PSP covers", cover.sha256)
+                result = attempt(cover.url, coverFile, "EmuCoreA PSP covers", cover.sha256)
                 if (result == null && style != AppPreferences.COVER_ART_STYLE_3D) {
-                    result = downloadFromUrl(cover.sourceUrl, coverFile, missFile, "IGDB PSP catalog")
+                    result = attempt(cover.sourceUrl, coverFile, "IGDB PSP catalog")
                 }
             }
+        }
+
+        if (result == null && attempts.isNotEmpty() && attempts.all { it.notFound }) {
+            runCatching { missFile.writeText("$CONFIRMED_MISS_PREFIX${System.currentTimeMillis()}") }
+                .onFailure { Log.w(TAG, "Unable to cache confirmed cover miss", it) }
+        } else {
+            missFile.delete()
         }
 
         Log.d(TAG, "Download result: ${if (result != null) "SUCCESS" else "FAILED"}")
@@ -268,19 +291,18 @@ class CoverArtRepository(context: Context) {
     private fun downloadFromUrl(
         urlString: String,
         coverFile: File,
-        missFile: File,
         sourceName: String,
         expectedSha256: String? = null
-    ): String? {
+    ): CoverDownloadAttempt {
         if (isUsableCoverFile(coverFile)) {
-            return coverFile.absolutePath
+            return CoverDownloadAttempt(path = coverFile.absolutePath)
         }
         if (coverFile.exists()) coverFile.delete()
 
-        val connection = (URL(urlString).openConnection() as? HttpURLConnection)
+        val connection = runCatching { URL(urlString).openConnection() as? HttpURLConnection }.getOrNull()
             ?: run {
                 Log.e(TAG, "$sourceName: Failed to create HTTP connection")
-                return null
+                return CoverDownloadAttempt()
             }
 
         return try {
@@ -296,10 +318,7 @@ class CoverArtRepository(context: Context) {
 
             if (responseCode != HttpURLConnection.HTTP_OK) {
                 Log.w(TAG, "$sourceName: Cover not found (HTTP $responseCode)")
-                if (responseCode == 404) {
-                    missFile.writeText("$responseCode at ${System.currentTimeMillis()}")
-                }
-                return null
+                return CoverDownloadAttempt(notFound = responseCode == HttpURLConnection.HTTP_NOT_FOUND)
             }
 
             val contentLength = connection.contentLength
@@ -308,7 +327,7 @@ class CoverArtRepository(context: Context) {
             // Chunked HTTP responses legitimately report -1. Only an explicitly empty body is invalid.
             if (contentLength == 0 || contentLength > 16 * 1024 * 1024) {
                 Log.w(TAG, "$sourceName: Invalid content length")
-                return null
+                return CoverDownloadAttempt()
             }
 
             val tempFile = File.createTempFile("${coverFile.name}.", ".tmp", cacheDirectory)
@@ -339,11 +358,11 @@ class CoverArtRepository(context: Context) {
                         }
                     }
                     val actual = digest.digest().joinToString("") { "%02x".format(it) }
-                    if (actual != expectedSha256) return null
+                    if (actual != expectedSha256) return CoverDownloadAttempt()
                 }
                 if (!isUsableCoverFile(tempFile)) {
                     Log.w(TAG, "$sourceName: Downloaded file is not a valid image")
-                    return null
+                    return CoverDownloadAttempt()
                 }
 
                 if (coverFile.exists()) coverFile.delete()
@@ -352,18 +371,17 @@ class CoverArtRepository(context: Context) {
                 }
                 if (!isUsableCoverFile(coverFile)) {
                     coverFile.delete()
-                    return null
+                    return CoverDownloadAttempt()
                 }
-                missFile.delete()
 
                 Log.d(TAG, "$sourceName: SUCCESS - ${coverFile.absolutePath}")
-                coverFile.absolutePath
+                CoverDownloadAttempt(path = coverFile.absolutePath)
             } finally {
                 tempFile.delete()
             }
         } catch (e: Exception) {
             Log.e(TAG, "$sourceName: Error: ${e.message}", e)
-            null
+            CoverDownloadAttempt()
         } finally {
             connection.disconnect()
         }

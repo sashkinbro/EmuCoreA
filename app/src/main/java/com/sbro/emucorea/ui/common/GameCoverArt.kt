@@ -280,10 +280,13 @@ private fun getOrCreateRemoteImageCacheFile(context: android.content.Context, ur
     pruneRemoteImageCacheOnce(cacheDir)
     val missFile = File(cacheDir, "${url.sha1()}.miss")
     if (missFile.exists()) {
-        if (System.currentTimeMillis() - missFile.lastModified() < REMOTE_MISS_TTL_MS) return null
+        val confirmed = runCatching { missFile.readText().startsWith(REMOTE_CONFIRMED_MISS_PREFIX) }
+            .getOrDefault(false)
+        val age = System.currentTimeMillis() - missFile.lastModified()
+        if (confirmed && age in 0 until REMOTE_MISS_TTL_MS) return null
         missFile.delete()
     }
-    var receivedNotFound = false
+    var allSourcesNotFound = true
     for (candidateUrl in remoteImageCandidates(url)) {
         val extension = candidateUrl.substringAfterLast('.', "").substringBefore('?').lowercase()
             .takeIf { it in setOf("jpg", "jpeg", "png", "webp") }
@@ -302,9 +305,10 @@ private fun getOrCreateRemoteImageCacheFile(context: android.content.Context, ur
                 connection.readTimeout = 12_000
                 connection.instanceFollowRedirects = true
                 if (connection.responseCode !in 200..299) {
-                    if (connection.responseCode == HttpURLConnection.HTTP_NOT_FOUND) receivedNotFound = true
+                    if (connection.responseCode != HttpURLConnection.HTTP_NOT_FOUND) allSourcesNotFound = false
                     return@runCatching null
                 }
+                allSourcesNotFound = false
                 connection.inputStream.use { input ->
                     tempFile.outputStream().use { output ->
                         input.copyTo(output)
@@ -323,7 +327,7 @@ private fun getOrCreateRemoteImageCacheFile(context: android.content.Context, ur
                 if (!tempFile.renameTo(targetFile)) tempFile.copyTo(targetFile, overwrite = true)
                 targetFile.takeIf(::isDecodableCachedImage)
             }
-        }.getOrNull()
+        }.onFailure { allSourcesNotFound = false }.getOrNull()
 
         if (downloaded != null) {
             missFile.delete()
@@ -331,13 +335,14 @@ private fun getOrCreateRemoteImageCacheFile(context: android.content.Context, ur
         }
         tempFile.delete()
     }
-    if (receivedNotFound) {
-        runCatching { missFile.writeText(System.currentTimeMillis().toString()) }
+    if (allSourcesNotFound) {
+        runCatching { missFile.writeText("$REMOTE_CONFIRMED_MISS_PREFIX${System.currentTimeMillis()}") }
     }
     return null
 }
 
 private const val REMOTE_MISS_TTL_MS = 7L * 24L * 60L * 60L * 1000L
+private const val REMOTE_CONFIRMED_MISS_PREFIX = "all-sources-404\n"
 private const val REMOTE_CACHE_MAX_BYTES = 256L * 1024L * 1024L
 private val remoteCachePruned = AtomicBoolean(false)
 private val remoteCacheWriteLock = Any()
