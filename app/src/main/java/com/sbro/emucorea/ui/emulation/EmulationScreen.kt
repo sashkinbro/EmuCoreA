@@ -2769,6 +2769,7 @@ private fun EmulationSidebarMenu(
     onExit: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val gameHeader = rememberEmulationMenuGameHeader(uiState)
     val sectionTitleColor = MaterialTheme.colorScheme.primary
     16.dp
     val sectionSpacing = 16.dp
@@ -2842,7 +2843,7 @@ private fun EmulationSidebarMenu(
     )
 
     val menuContent: @Composable ColumnScope.() -> Unit = {
-                val menuTitle = uiState.currentGameTitle.ifBlank { stringResource(R.string.emulation_sidebar_title) }
+                val menuTitle = gameHeader.title.ifBlank { stringResource(R.string.emulation_sidebar_title) }
                 Surface(
                     shape = neonShape(22.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.30f),
@@ -2872,7 +2873,7 @@ private fun EmulationSidebarMenu(
                                 .aspectRatio(com.sbro.emucorea.ui.common.GameCoverAspectRatio)
                         ) {
                             GameCoverArt(
-                                coverPath = uiState.currentGameCoverPath,
+                                coverPath = gameHeader.coverPath,
                                 fallbackTitle = menuTitle,
                                 contentScale = ContentScale.Fit,
                                 modifier = Modifier.fillMaxSize()
@@ -2888,7 +2889,7 @@ private fun EmulationSidebarMenu(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = uiState.currentGameSubtitle.ifBlank { stringResource(R.string.emulation_menu_subtitle) },
+                                text = gameHeader.subtitle.ifBlank { stringResource(R.string.emulation_menu_subtitle) },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
