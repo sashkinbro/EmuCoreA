@@ -32,6 +32,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -634,6 +636,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         updateBootstrapState()
     }
 
+    @Synchronized
     private fun publishVisibleGames() {
         val covers = CoverArtRepository(getApplication())
         allGames = allGames.map { game ->
@@ -719,16 +722,13 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             var removedStalePaths = false
             synchronized(this@HomeViewModel) {
                 allGames = allGames.map { game ->
-                    val hasSerial = !game.serial.isNullOrBlank()
-                    val resolvedCoverPath = game.serial
-                        ?.takeIf { it.isNotBlank() }
-                        ?.let { coverRepository.findCachedCoverPath(it, title = game.title) }
+                    val resolvedCoverPath = coverRepository.findCachedCoverPath(game.serial, title = game.title)
                     when {
                         coverRepository.isMissingManagedCover(game.coverArtPath) -> {
                             removedStalePaths = true
                             game.copy(coverArtPath = null)
                         }
-                        hasSerial && resolvedCoverPath != null && resolvedCoverPath != game.coverArtPath &&
+                        resolvedCoverPath != null && resolvedCoverPath != game.coverArtPath &&
                             coverRepository.isManagedCoverCachePath(game.coverArtPath) -> {
                             removedStalePaths = true
                             game.copy(coverArtPath = resolvedCoverPath)
@@ -738,11 +738,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             if (removedStalePaths) publishVisibleGames()
-            val gamesToProcess = allGames.filter {
-                it.coverArtPath == null || it.coverArtPath.startsWith("http") ||
-                    (coverRepository.isManagedCoverCachePath(it.coverArtPath) &&
-                        !it.coverArtPath.contains("/${CoverArtRepository.CACHE_DIR_NAME}/"))
-            }
+            val gamesToProcess = allGames.filter { coverRepository.needsCoverDownload(it) }
             if (gamesToProcess.isEmpty()) {
                 if (removedStalePaths) {
                     currentLibraryRoot?.let { rootPath ->
@@ -758,18 +754,26 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 gamesToProcess.forEach { game ->
                     launch {
                         semaphore.withPermit {
-                            if (EmulatorBridge.isVmActive()) {
-                                shouldReschedule.set(true)
-                                return@withPermit
-                            }
-                            val downloadedCover = repository.downloadCoverForGame(game, context)
-                            if (downloadedCover != null && downloadedCover != game.coverArtPath) {
-                                synchronized(this@HomeViewModel) {
-                                    allGames = allGames.map {
-                                        if (it.path == game.path) it.copy(coverArtPath = downloadedCover) else it
-                                    }
+                            repeat(3) { attempt ->
+                                if (EmulatorBridge.isVmActive()) {
+                                    shouldReschedule.set(true)
+                                    return@withPermit
                                 }
-                                publishVisibleGames()
+                                val downloadedCover = repository.downloadCoverForGame(game, context)
+                                currentCoroutineContext().ensureActive()
+                                if (downloadedCover != null) {
+                                    synchronized(this@HomeViewModel) {
+                                        val customCovers = CustomGameCoverRepository(context)
+                                        allGames = allGames.map {
+                                            if (it.path == game.path && !customCovers.isCustomCoverPath(it.coverArtPath)) {
+                                                it.copy(coverArtPath = downloadedCover)
+                                            } else it
+                                        }
+                                    }
+                                    publishVisibleGames()
+                                    return@withPermit
+                                }
+                                if (attempt < 2) delay(1_000L shl attempt)
                             }
                         }
                     }

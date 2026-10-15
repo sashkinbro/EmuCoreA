@@ -171,7 +171,7 @@ class GameRepository {
         // PARAM.SFO is unreadable, from the bundled title index; a loose homebrew ELF matches neither.
         val covers = CoverArtRepository(context)
         val downloaded = covers.downloadCover(game.serial, title = game.title)
-        if (covers.hasIndexedCover(game.serial, game.title)) return downloaded
+        if (covers.hasCoverSource(game.serial, game.title)) return downloaded
         return downloaded
             ?: game.coverArtPath?.takeIf { File(it).isFile }
             ?: PspGameMetadataReader.extractIcon0(context, game.path)

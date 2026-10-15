@@ -142,6 +142,13 @@ class PspCatalogRepository(private val context: Context) {
             .distinct()
 
         val db = getDatabase() ?: return null
+        PspCoverIndexRepository(context).findGameId(serial, title)?.let { id ->
+            // Newer artwork entries may not yet have a details row in games.db.
+            // Do not replace an exact identity with a similar, unrelated database game.
+            return db.rawQuery("SELECT igdb_id FROM games WHERE igdb_id = ?", arrayOf(id.toString())).use {
+                if (it.moveToFirst()) it.getLong(0) else null
+            }
+        }
         findIdByDatabaseSerial(db, candidateSerials)?.let { id ->
             Log.d(TAG, "Catalog match by database serial: $serial -> $id")
             return id
@@ -170,24 +177,24 @@ class PspCatalogRepository(private val context: Context) {
             val placeholders = serials.joinToString(",") { "?" }
             db.rawQuery(
                 """
-                SELECT igdb_id
+                SELECT DISTINCT igdb_id
                 FROM game_serials
                 WHERE UPPER(REPLACE(REPLACE(REPLACE(REPLACE(serial, '-', ''), '_', ''), '.', ''), ' ', ''))
                     IN ($placeholders)
-                LIMIT 1
+                LIMIT 2
                 """.trimIndent(),
                 serials.toTypedArray()
-            ).use { cursor -> if (cursor.moveToFirst()) cursor.getLong(0) else null }
+            ).use { cursor -> if (cursor.count == 1 && cursor.moveToFirst()) cursor.getLong(0) else null }
         }.getOrNull()
     }
 
     private fun findExactTitleId(db: SQLiteDatabase, titles: List<String>): Long? {
         titles.forEach { title ->
             db.rawQuery(
-                "SELECT igdb_id FROM games WHERE normalized_name = ? LIMIT 1",
+                "SELECT DISTINCT igdb_id FROM games WHERE normalized_name = ? LIMIT 2",
                 arrayOf(title)
             ).use { cursor ->
-                if (cursor.moveToFirst()) return cursor.getLong(0)
+                if (cursor.count == 1 && cursor.moveToFirst()) return cursor.getLong(0)
             }
         }
         return null
@@ -197,19 +204,21 @@ class PspCatalogRepository(private val context: Context) {
         if (titles.isEmpty()) return null
         var bestId: Long? = null
         var bestScore = 0.0
+        var runnerUpScore = 0.0
         db.rawQuery("SELECT igdb_id, normalized_name FROM games", null).use { cursor ->
             while (cursor.moveToNext()) {
                 val catalogTitle = cursor.getString(1)
-                titles.forEach { candidateTitle ->
-                    val score = catalogTitleSimilarity(candidateTitle, catalogTitle)
-                    if (score > bestScore) {
-                        bestScore = score
-                        bestId = cursor.getLong(0)
-                    }
+                val score = titles.maxOf { catalogTitleSimilarity(it, catalogTitle) }
+                if (score > bestScore) {
+                    runnerUpScore = bestScore
+                    bestScore = score
+                    bestId = cursor.getLong(0)
+                } else if (score > runnerUpScore) {
+                    runnerUpScore = score
                 }
             }
         }
-        return bestId?.takeIf { bestScore >= MIN_FUZZY_TITLE_SCORE }
+        return bestId?.takeIf { bestScore >= MIN_FUZZY_TITLE_SCORE && bestScore - runnerUpScore >= 0.12 }
     }
 
     fun topRated(
@@ -526,21 +535,20 @@ class PspCatalogRepository(private val context: Context) {
     }
 }
 
-private const val MIN_FUZZY_TITLE_SCORE = 0.68
+private const val MIN_FUZZY_TITLE_SCORE = 0.90
 
 internal fun normalizeIdentityTitle(value: String): String {
-    return Normalizer.normalize(value.lowercase(Locale.ROOT), Normalizer.Form.NFD)
-        .replace(Regex("\\p{Mn}+"), "")
-        .replace(Regex("""\[[^]]*]|\([^)]*\)"""), " ")
-        .replace(Regex("""[^\p{L}\p{N}]+"""), " ")
-        .replace(Regex("""\s+"""), " ")
-        .trim()
+    return PspCoverIndexRepository.normalizeTitle(value)
 }
 
 internal fun catalogTitleSimilarity(left: String, right: String): Double {
     val leftTokens = catalogMatchTokens(left)
     val rightTokens = catalogMatchTokens(right)
     if (leftTokens.isEmpty() || rightTokens.isEmpty()) return 0.0
+    // A missing/different sequel or season number is an identity conflict.
+    val leftNumbers = leftTokens.filter { it.all(Char::isDigit) }.toSet()
+    val rightNumbers = rightTokens.filter { it.all(Char::isDigit) }.toSet()
+    if (leftNumbers != rightNumbers) return 0.0
     if (leftTokens == rightTokens) return 1.0
     val common = leftTokens.intersect(rightTokens).size
     if (common == 0 || (common == 1 && minOf(leftTokens.size, rightTokens.size) > 1)) return 0.0

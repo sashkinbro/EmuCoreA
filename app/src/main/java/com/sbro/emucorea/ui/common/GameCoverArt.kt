@@ -220,21 +220,16 @@ private fun loadBitmap(
     if (coverPath.isNullOrBlank()) return null
 
     return runCatching {
+        // Resolve remote fallback/cache once, then use the same file for bounds and pixels.
+        val remoteFile = if (coverPath.startsWith("http://") || coverPath.startsWith("https://")) {
+            getOrCreateRemoteImageCacheFile(context, coverPath) ?: return null
+        } else null
         fun openStream() = when {
             coverPath.startsWith("content://") -> {
                 context.contentResolver.openInputStream(coverPath.toUri())
             }
             coverPath.startsWith("http://") || coverPath.startsWith("https://") -> {
-                val cachedFile = getOrCreateRemoteImageCacheFile(context, coverPath)
-                if (cachedFile != null && cachedFile.exists()) {
-                    cachedFile.inputStream()
-                } else {
-                    val connection = URL(coverPath).openConnection() as HttpURLConnection
-                    connection.connectTimeout = 8_000
-                    connection.readTimeout = 12_000
-                    connection.instanceFollowRedirects = true
-                    connection.inputStream
-                }
+                remoteFile?.inputStream()
             }
             else -> {
                 val file = File(coverPath)

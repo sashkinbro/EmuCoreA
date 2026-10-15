@@ -8,6 +8,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
+import com.sbro.emucorea.data.psp.PspCoverIndexRepository
+import java.security.MessageDigest
 
 data class CoverCacheClearResult(
     val deletedFiles: Int,
@@ -28,7 +30,7 @@ class CoverArtRepository(context: Context) {
         private const val CONFIRMED_MISS_PREFIX = "all-sources-404\n"
 
         /** Versioned cache directory; bump to discard stale downloaded covers and .miss markers. */
-        const val CACHE_DIR_NAME = "igdb-psp-v14"
+        const val CACHE_DIR_NAME = "igdb-psp-v15"
         private val downloadFlightsLock = Any()
         private val downloadFlights = HashMap<String, PendingCoverDownload>()
     }
@@ -52,6 +54,13 @@ class CoverArtRepository(context: Context) {
         }
     }
 
+    private fun cacheDirectoryForSource(baseUrl: String?): File {
+        if (baseUrl == null) return cacheDirectory
+        val hash = MessageDigest.getInstance("SHA-256").digest(baseUrl.toByteArray(Charsets.UTF_8))
+            .joinToString("") { "%02x".format(it) }
+        return File(cacheDirectory, "source_$hash").apply { mkdirs() }
+    }
+
     /** Clears only automatically downloaded covers. User-selected covers live in filesDir and are preserved. */
     fun clearCache(): CoverCacheClearResult = clearDirectories(listOf(coverCacheDirectory))
 
@@ -67,6 +76,26 @@ class CoverArtRepository(context: Context) {
 
     fun hasIndexedCover(serial: String?, title: String?): Boolean =
         com.sbro.emucorea.data.psp.PspCoverIndexRepository(context).find(serial, title) != null
+
+    fun hasCoverSource(serial: String?, title: String?, styleOverride: Int? = null): Boolean {
+        val style = resolveCoverArtStyle(styleOverride)
+        if (style == AppPreferences.COVER_ART_STYLE_DISABLED) return false
+        return if (resolveCoverBaseUrl(style) != null) normalizeSerial(serial) != null
+        else hasIndexedCover(serial, title)
+    }
+
+    fun needsCoverDownload(game: GameItem, styleOverride: Int? = null): Boolean {
+        val style = resolveCoverArtStyle(styleOverride)
+        if (style == AppPreferences.COVER_ART_STYLE_DISABLED ||
+            CustomGameCoverRepository(context).isCustomCoverPath(game.coverArtPath)) return false
+        if (hasCoverSource(game.serial, game.title, style)) {
+            val cached = findCachedCoverPath(game.serial, style, title = game.title)
+            return cached == null || cached != game.coverArtPath
+        }
+        return game.coverArtPath == null || game.coverArtPath.startsWith("http") ||
+            isMissingManagedCover(game.coverArtPath) || (isManagedCoverCachePath(game.coverArtPath) &&
+                !game.coverArtPath.replace('\\', '/').contains("/$CACHE_DIR_NAME/"))
+    }
 
     /** Never flash an embedded icon or a previous style before the selected artwork loads. */
     fun displayCoverPath(serial: String?, title: String?, candidate: String?): String? {
@@ -90,17 +119,18 @@ class CoverArtRepository(context: Context) {
             Log.d(TAG, "No serial or title provided")
             return null
         }
+        val directory = cacheDirectoryForSource(resolveCoverBaseUrl(style))
         val preferredFiles = coverKeys.flatMap { key ->
             if (style == AppPreferences.COVER_ART_STYLE_3D) {
                 listOf(
-                    File(cacheDirectory, "${key}_3d.webp"),
-                    File(cacheDirectory, "${key}_3d.png"),
-                    File(cacheDirectory, "${key}_3d.jpg")
+                    File(directory, "${key}_3d.webp"),
+                    File(directory, "${key}_3d.png"),
+                    File(directory, "${key}_3d.jpg")
                 )
             } else {
                 listOf(
-                    File(cacheDirectory, "$key.jpg"),
-                    File(cacheDirectory, "$key.png")
+                    File(directory, "$key.jpg"),
+                    File(directory, "$key.png")
                 )
             }
         }
@@ -132,9 +162,12 @@ class CoverArtRepository(context: Context) {
         val keys = mutableListOf<String>()
         normalizeSerial(serial)?.let { keys += it }
         if (!title.isNullOrBlank()) {
-            val titleKey = title.trim().lowercase(Locale.ROOT)
-                .replace(Regex("[^a-z0-9]+"), "_").take(80)
-            if (keys.none { it.equals(titleKey, ignoreCase = true) }) keys += titleKey
+            val identity = PspCoverIndexRepository.normalizeTitle(title)
+            if (identity.isNotBlank()) {
+                val hash = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray(Charsets.UTF_8))
+                    .joinToString("") { "%02x".format(it) }
+                keys += "title_$hash"
+            }
         }
         return keys
     }
@@ -171,7 +204,7 @@ class CoverArtRepository(context: Context) {
             }
         }
         val coverKey = coverKeys(serial, title).first()
-        val flightKey = "$style|$coverBaseUrl|$coverKey"
+        val flightKey = "${cacheDirectory.absolutePath}|$style|$coverBaseUrl|$coverKey"
         lateinit var flight: PendingCoverDownload
         var ownsDownload = false
         synchronized(downloadFlightsLock) {
@@ -209,6 +242,12 @@ class CoverArtRepository(context: Context) {
         title: String?
     ): String? {
         val targetExtension = if (style == AppPreferences.COVER_ART_STYLE_3D) "webp" else "jpg"
+        val directory = cacheDirectoryForSource(coverBaseUrl)
+
+        // A previous fallback may have succeeded as PNG; do not request the missing JPG again.
+        val extensions = if (style == AppPreferences.COVER_ART_STYLE_3D) listOf("webp", "png", "jpg") else listOf("jpg", "png")
+        extensions.map { File(directory, cacheFileName(normalizedSerial, style, it)) }
+            .firstOrNull(::isUsableCoverFile)?.let { return it.absolutePath }
 
         Log.d(TAG, "========== COVER DOWNLOAD START ==========")
         Log.d(TAG, "Original serial: $originalSerial")
@@ -216,7 +255,7 @@ class CoverArtRepository(context: Context) {
         Log.d(TAG, "Cover base URL: $coverBaseUrl")
         Log.d(TAG, "Cover style: $style")
 
-        val coverFile = File(cacheDirectory, cacheFileName(normalizedSerial, style, targetExtension))
+        val coverFile = File(directory, cacheFileName(normalizedSerial, style, targetExtension))
         if (isUsableCoverFile(coverFile)) {
             Log.d(TAG, "Cover already exists: ${coverFile.absolutePath}")
             Log.d(TAG, "========== COVER DOWNLOAD END (CACHED) ==========")
@@ -224,7 +263,7 @@ class CoverArtRepository(context: Context) {
         }
         if (coverFile.exists()) coverFile.delete()
 
-        val missFile = File(cacheDirectory, cacheMissFileName(normalizedSerial, style))
+        val missFile = File(directory, cacheMissFileName(normalizedSerial, style))
         if (missFile.exists()) {
             val confirmed = runCatching { missFile.readText().startsWith(CONFIRMED_MISS_PREFIX) }.getOrDefault(false)
             val age = System.currentTimeMillis() - missFile.lastModified()
@@ -248,7 +287,7 @@ class CoverArtRepository(context: Context) {
         if (coverBaseUrl != null) {
             val extensionsToTry = if (style == AppPreferences.COVER_ART_STYLE_3D) listOf("png", "jpg") else listOf("jpg", "png")
             for (extension in extensionsToTry) {
-                val targetFile = File(cacheDirectory, cacheFileName(normalizedSerial, style, extension))
+                val targetFile = File(directory, cacheFileName(normalizedSerial, style, extension))
                 result = attempt("$coverBaseUrl/$normalizedSerial.$extension", targetFile, "Custom")
                 if (result != null) break
             }
@@ -388,26 +427,8 @@ class CoverArtRepository(context: Context) {
     }
 
     private fun normalizeSerial(serial: String?): String? {
-        if (serial.isNullOrBlank()) return null
-
-        val regex = Regex("([A-Za-z]{4})[^a-zA-Z0-9]*([0-9]{3})[^a-zA-Z0-9]*([0-9]{2})")
-        val altRegex = Regex("([A-Za-z]{4})[^a-zA-Z0-9]*([0-9]{5})")
-
-        val cleanSerial = serial.trim().uppercase(Locale.ROOT)
-        var formatted: String? = null
-
-        val match = regex.find(cleanSerial)
-        if (match != null) {
-            formatted = "${match.groupValues[1]}-${match.groupValues[2]}${match.groupValues[3]}"
-        } else {
-            val altMatch = altRegex.find(cleanSerial)
-            if (altMatch != null) {
-                formatted = "${altMatch.groupValues[1]}-${altMatch.groupValues[2]}"
-            }
-        }
-
-        return (formatted ?: cleanSerial.replace(Regex("[^A-Z0-9_-]"), ""))
-            .also { Log.d(TAG, "Normalized: '$serial' -> '$it'") }
+        val compact = PspCoverIndexRepository.normalizeSerial(serial) ?: return null
+        return "${compact.take(4)}-${compact.drop(4)}"
     }
 
     private fun resolveCoverBaseUrl(style: Int = resolveCoverArtStyle()): String? {

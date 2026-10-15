@@ -92,6 +92,7 @@ class CoverArtRepositoryInstrumentedTest {
             assertFalse(root.walk().any { it.name.endsWith(".miss") })
             assertEquals(path, download(repository, server.baseUrl))
             assertEquals(1, server.requests.count { it.endsWith(".png") })
+            assertEquals(2, server.requests.size)
         }
     }
 
@@ -141,7 +142,9 @@ class CoverArtRepositoryInstrumentedTest {
 
     @Test fun legacyMissMarkerCannotKeepARecoveredCoverBlocked() = withRepository { repository, root ->
         FixtureServer().use { server ->
-            val cache = File(root, "game-covers/${CoverArtRepository.CACHE_DIR_NAME}").apply { mkdirs() }
+            val directory = CoverArtRepository::class.java.getDeclaredMethod("cacheDirectoryForSource", String::class.java)
+                .apply { isAccessible = true }
+            val cache = directory.invoke(repository, server.baseUrl) as File
             val marker = File(cache, "ULUS-99991.miss").apply { writeText("404 at ${System.currentTimeMillis()}") }
             assertNotNull(download(repository, server.baseUrl))
             assertFalse(marker.exists())
@@ -223,6 +226,59 @@ class CoverArtRepositoryInstrumentedTest {
             assertNotNull(image)
             assertTrue(image!!.isFile)
             assertFalse(root.walk().any { it.name.endsWith(".miss") || it.name.endsWith(".tmp") })
+        }
+    }
+
+    @Test fun confirmedRemoteMissDoesNotBypassCacheThroughRawNetworkLoad() = withRepository { _, root ->
+        FixtureServer().use { server ->
+            server.pngStatus = 404
+            val target = InstrumentationRegistry.getInstrumentation().targetContext
+            val context = object : ContextWrapper(target) {
+                override fun getCacheDir(): File = root
+            }
+            val load = Class.forName("com.sbro.emucorea.ui.common.GameCoverArtKt").getDeclaredMethod(
+                "loadBitmap", Context::class.java, String::class.java, Int::class.javaPrimitiveType, Int::class.javaPrimitiveType
+            ).apply { isAccessible = true }
+            assertNull(load.invoke(null, context, "${server.baseUrl}/image.jpg", 100, 150))
+            assertEquals(2, server.requests.size)
+        }
+    }
+
+    @Test fun invalidSerialsAndNonLatinTitlesCannotShareACacheKey() = withRepository { repository, _ ->
+        val keys = CoverArtRepository::class.java.getDeclaredMethod("coverKeys", String::class.java, String::class.java)
+            .apply { isAccessible = true }
+        assertNotEquals(keys.invoke(repository, "UNKNOWN", "日本語"), keys.invoke(repository, "UNKNOWN", "別のゲーム"))
+        @Suppress("UNCHECKED_CAST")
+        val first = keys.invoke(repository, "UNKNOWN", "日本語") as List<String>
+        assertFalse(first.contains("UNKNOWN"))
+        assertFalse(first.contains("_"))
+    }
+
+    @Test fun missingSerialCanUseAReviewedDiscTitle() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val index = com.sbro.emucorea.data.psp.PspCoverIndexRepository(context)
+        assertNotNull(index.find(null, "Eiyuu Densetsu: Sora no Kiseki SC (Disc 2)"))
+    }
+
+    @Test fun embeddedIconDoesNotBlockRetryingAnIndexedCover() = withRepository { repository, root ->
+        val icon = File(root, "icon.png").apply { writeText("embedded icon") }
+        val game = GameItem(title = "God of War: Chains of Olympus", path = "/games/gow.iso", fileName = "gow.iso", fileSize = 1, lastModified = 0, coverArtPath = icon.absolutePath)
+        assertTrue(repository.needsCoverDownload(game, 0))
+    }
+
+    @Test fun disabledCoversAndCustomArtworkDoNotTriggerDownloads() = withRepository { repository, _ ->
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val custom = File(context.filesDir, "library/custom-game-covers/custom.png")
+        val game = GameItem(title = "Tekken 6", path = "/games/tekken.iso", fileName = "tekken.iso", fileSize = 1, lastModified = 0, coverArtPath = custom.absolutePath)
+        assertFalse(repository.needsCoverDownload(game, 0))
+        assertFalse(repository.needsCoverDownload(game.copy(coverArtPath = null), AppPreferences.COVER_ART_STYLE_DISABLED))
+    }
+
+    @Test fun changingCustomSourceCannotReuseAnotherServersMiss() = withRepository { repository, _ ->
+        FixtureServer().use { missing ->
+            missing.pngStatus = 404
+            assertNull(download(repository, missing.baseUrl))
+            FixtureServer().use { recovered -> assertNotNull(download(repository, recovered.baseUrl)) }
         }
     }
 }

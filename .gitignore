@@ -30,6 +30,8 @@ ehthumbs.db
 
 # Local release tooling
 /tools/
+/reports/
+/scripts/psp_covers/
 
 # Firmware / BIOS dumps - never commit
 /bios/
