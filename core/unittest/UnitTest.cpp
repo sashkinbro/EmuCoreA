@@ -109,6 +109,9 @@
 #include "Core/Debugger/MemBlockInfo.h"
 #include "Core/FileLoaders/CachingFileLoader.h"
 #include "Core/FileSystems/FileSystem.h"
+#include "Core/ELF/PrxDecrypter.h"
+#include "Core/PSPLoaders.h"
+#include "ext/libkirk/amctrl.h"
 #include "Core/FileSystems/ISOFileSystem.h"
 #include "Core/MemMap.h"
 #include "Core/KeyMap.h"
@@ -1832,10 +1835,10 @@ bool TestFastVec() {
 	return true;
 }
 
-// vfpu_dot's SIMD versions against the reference, on inputs chosen to make trouble: close
-// exponents, cancelling products, ties, zeroes and subnormals, the overflow and underflow edges,
-// inf and NaN, and sums whose rounding carries into the next power of two.
-bool TestVFPUDot() {
+// Calls check on inputs chosen to make trouble for a VFPU dot product: close exponents, cancelling
+// products, ties, zeroes and subnormals, the overflow and underflow edges, inf and NaN, and sums whose
+// rounding carries into the next power of two. Stops at the first false.
+bool ForEachVFPUDotTestCase(const std::function<bool(const float a[4], const float b[4])> &check) {
 	uint64_t state = 0x9E3779B97F4A7C15ULL;
 	auto rnd = [&]() {
 		state ^= state << 13;
@@ -1852,16 +1855,6 @@ bool TestVFPUDot() {
 		uint32_t bits;
 		memcpy(&bits, &f, sizeof(bits));
 		return bits;
-	};
-	auto check = [&](const float a[4], const float b[4]) {
-		const uint32_t expected = toBits(vfpu_dot_reference(a, b));
-		const uint32_t actual = toBits(vfpu_dot(a, b));
-		if (expected != actual) {
-			printf("vfpu_dot(%08x %08x %08x %08x, %08x %08x %08x %08x) = %08x, expected %08x\n",
-				toBits(a[0]), toBits(a[1]), toBits(a[2]), toBits(a[3]), toBits(b[0]), toBits(b[1]), toBits(b[2]), toBits(b[3]), actual, expected);
-			return false;
-		}
-		return true;
 	};
 	for (int n = 0; n < 4000000; n++) {
 		float a[4], b[4];
@@ -1900,6 +1893,20 @@ bool TestVFPUDot() {
 			return false;
 	}
 
+	// Cases that went wrong somewhere.
+	static const uint32_t fixed[][8] = {
+		{ 0x8055f97b, 0xcaa86851, 0, 0, 0x44282000, 0x3f800000, 0, 0 },
+	};
+	for (const auto &f : fixed) {
+		float a[4], b[4];
+		for (int i = 0; i < 4; i++) {
+			a[i] = fromBits(f[i]);
+			b[i] = fromBits(f[i + 4]);
+		}
+		if (!check(a, b))
+			return false;
+	}
+
 	// Sums just below and above a power of two, whose rounding carries into the next exponent:
 	// 1.0 from just under it, and inf at the top of the range.
 	for (int e = 1; e <= 254; e++) {
@@ -1922,6 +1929,28 @@ bool TestVFPUDot() {
 		}
 	}
 	return true;
+}
+
+
+// vfpu_dot's fast versions against the reference.
+bool TestVFPUDot() {
+	auto toBits = [](float f) {
+		uint32_t bits;
+		memcpy(&bits, &f, sizeof(bits));
+		return bits;
+	};
+	auto check = [&](const float a[4], const float b[4]) {
+		const uint32_t expected = toBits(vfpu_dot_reference(a, b));
+		const uint32_t actual = toBits(vfpu_dot(a, b));
+		const uint32_t scalar = toBits(vfpu_dot_scalar(a, b));
+		if (expected != actual || expected != scalar) {
+			printf("vfpu_dot(%08x %08x %08x %08x, %08x %08x %08x %08x) = %08x (scalar %08x), expected %08x\n",
+				toBits(a[0]), toBits(a[1]), toBits(a[2]), toBits(a[3]), toBits(b[0]), toBits(b[1]), toBits(b[2]), toBits(b[3]), actual, scalar, expected);
+			return false;
+		}
+		return true;
+	};
+	return ForEachVFPUDotTestCase(check);
 }
 
 bool TestVFPUSinCos() {
@@ -3422,7 +3451,190 @@ static bool TestRequestManager() {
 	return true;
 }
 
+
+// Synthetic DRM BB packages use the public fixed-key cipher and MAC operations. No game data.
+static std::vector<u8> MakeDrmBBTestPackage(const std::vector<std::string> &names, bool terminateNames = true,
+	bool emptyEboot = false, u32 payloadSize = 0x40) {
+	static const u8 headerKey[16] = {0xED, 0xE2, 0x5D, 0x2D, 0xBB, 0xF8, 0x12, 0xE5, 0x3C, 0x5C, 0x59, 0x32, 0xFA, 0xE3, 0xE2, 0x43};
+	u8 secureId[16] = {1, 2, 3, 4};
+	KirkState kirk{};
+	kirk_init(&kirk);
+	std::vector<u8> pbp(0x28 + 0x1000 + 16);
+	auto word = [](u8 *p, u32 value) { *(u32_le *)p = value; };
+	memcpy(pbp.data(), "\0PBP", 4);
+	word(pbp.data() + 0x20, 0x28);
+	word(pbp.data() + 0x24, (u32)pbp.size() - 16);
+	u8 *psp = pbp.data() + 0x28;
+	for (int i = 0; i < 0x30; i++) {
+		psp[i] = (u8)(i + 1);
+	}
+	word(psp + 0x30, 1); word(psp + 0x38, 1);
+	word(psp + 0x40, 0x60); word(psp + 0x44, 1); word(psp + 0x48, 0x80);
+	word(psp + 0x60, 0x01010100); word(psp + 0x64, (u32)names.size());
+	for (size_t i = 0; i < names.size(); i++) {
+		u8 *entry = psp + 0x80 + i * 16;
+		*(u16_le *)entry = (u16)(0x200 + i * 64);
+		*(u16_le *)(entry + 2) = (u16)(names[i].size() + (terminateNames ? 1 : 0));
+		word(entry + 4, 0xC00);
+		word(entry + 8, emptyEboot && names[i] == "EBOOT.PBP" ? 0 : payloadSize);
+		memcpy(psp + 0x80 + 0x200 + i * 64, names[i].data(), names[i].size());
+	}
+	u8 *data = psp + 0x80 + 0xC00;
+	memcpy(data, "\0PBP", 4); word(data + 4, 0x10000);
+	for (int i = 0; i < 8; i++) {
+		word(data + 8 + i * 4, i == 7 ? payloadSize : 0x28);
+	}
+	memcpy(data + 0x28, "\x7f" "ELF", 4);
+	auto cipher = [&](u8 *data, u32 size, const u8 *key, const u8 *versionKey) {
+		CIPHER_KEY ckey;
+		u8 hkey[16]; memcpy(hkey, key, sizeof(hkey));
+		sceDrmBBCipherInit(&kirk, &ckey, 1, 2, hkey, const_cast<u8 *>(versionKey), 0);
+		sceDrmBBCipherUpdate(&kirk, &ckey, data, (int)size);
+		sceDrmBBCipherFinal(&ckey);
+	};
+	cipher(psp + 0x60, 16, psp + 0x10, secureId);
+	cipher(psp + 0x80, 0x1000 - 0x80, psp + 0x20, secureId);
+	cipher(psp + 0x10, 0x40, psp, headerKey);
+	auto mac = [&](u8 *data, size_t size, u8 *out, const u8 *key) {
+		MAC_KEY mkey;
+		sceDrmBBMacInit(&mkey, 1);
+		sceDrmBBMacUpdate(&kirk, &mkey, data, (int)size);
+		sceDrmBBMacFinal(&kirk, &mkey, out, const_cast<u8 *>(key));
+	};
+	mac(psp, 0x50, psp + 0x50, secureId);
+	mac(pbp.data(), pbp.size() - 16, pbp.data() + pbp.size() - 16, headerKey);
+	return pbp;
+}
+
+bool TestDrmBBPackage() {
+	std::vector<DrmBBFile> files;
+	u8 secureId[16] = {1, 2, 3, 4}, recovered[16]{};
+	auto valid = MakeDrmBBTestPackage({"EBOOT.PBP", "KZL.PRX"});
+	EXPECT_TRUE(pspReadDrmBBPackage(valid, secureId, files));
+	EXPECT_EQ_INT(files.size(), 2);
+	EXPECT_TRUE(files[0].name == "EBOOT.PBP" && files[0].data.size() == 0x40);
+	EXPECT_TRUE(pspReadDrmBBPackage(valid, nullptr, files, recovered));
+	EXPECT_TRUE(memcmp(secureId, recovered, sizeof(secureId)) == 0);
+	secureId[0] ^= 1;
+	EXPECT_FALSE(pspReadDrmBBPackage(valid, secureId, files));
+	valid.back() ^= 1;
+	EXPECT_FALSE(pspReadDrmBBPackage(valid, nullptr, files));
+	for (const char *name : {"../KZL.PRX", "sub/KZL.PRX", "sub\\KZL.PRX", "ms0:KZL.PRX", ".", "", "_TEMP.PBP", "_DRMBB_BACKUP.PBP"}) {
+		EXPECT_FALSE(pspReadDrmBBPackage(MakeDrmBBTestPackage({"EBOOT.PBP", name}), nullptr, files));
+	}
+	EXPECT_FALSE(pspReadDrmBBPackage(MakeDrmBBTestPackage({"EBOOT.PBP", "eboot.pbp"}), nullptr, files));
+	EXPECT_FALSE(pspReadDrmBBPackage(MakeDrmBBTestPackage({"EBOOT.PBP"}, false), nullptr, files));
+	EXPECT_FALSE(pspReadDrmBBPackage(MakeDrmBBTestPackage({"EBOOT.PBP"}, true, true), nullptr, files));
+	EXPECT_FALSE(pspReadDrmBBPackage(MakeDrmBBTestPackage({"KZL.PRX"}), nullptr, files));
+	std::vector<std::string> many = {"EBOOT.PBP"};
+	for (int i = 0; i < 20; i++) {
+		many.push_back(StringFromFormat("FILE%d.PRX", i));
+	}
+	EXPECT_FALSE(pspReadDrmBBPackage(MakeDrmBBTestPackage(many, true, false, 0x300), nullptr, files));
+	return true;
+}
+
+
+bool TestDrmBBRead() {
+	// DirectoryFileSystem supports seek/read but has no GetFileInfoByHandle implementation.
+	class ReadFS : public EmptyFileSystem {
+	public:
+		std::vector<u8> bytes{1, 2, 3};
+		size_t length = 3;
+		bool shortRead = false;
+		int closes = 0;
+		int OpenFile(std::string, FileAccess, const char * = nullptr) override { return 1; }
+		size_t SeekFile(u32, s32, FileMove move) override { return move == FILEMOVE_END ? length : 0; }
+		size_t ReadFile(u32, u8 *out, s64 size) override {
+			const size_t count = shortRead ? 0 : (size_t)size;
+			memcpy(out, bytes.data(), count);
+			return count;
+		}
+		void CloseFile(u32) override { ++closes; }
+		PSPFileInfo GetFileInfo(std::string) override { PSPFileInfo info; info.exists = true; return info; }
+	};
+	ReadFS fs;
+	std::vector<u8> out;
+	EXPECT_TRUE(ReadDrmBBFile(fs, "EBOOT.PBP", out));
+	EXPECT_TRUE(out == fs.bytes);
+	EXPECT_EQ_INT(fs.closes, 1);
+	fs.shortRead = true;
+	EXPECT_FALSE(ReadDrmBBFile(fs, "EBOOT.PBP", out));
+	fs.length = DRM_BB_MAX_PACKAGE_SIZE + 1;
+	EXPECT_FALSE(ReadDrmBBFile(fs, "EBOOT.PBP", out));
+	fs.length = 0;
+	EXPECT_FALSE(ReadDrmBBFile(fs, "EBOOT.PBP", out));
+	EXPECT_EQ_INT(fs.closes, 4);
+	return true;
+}
+
+bool TestDrmBBRecovery() {
+	class RecoveryFS : public EmptyFileSystem {
+	public:
+		std::vector<u8> temp{4, 5};
+		bool exists = true;
+		int OpenFile(std::string, FileAccess, const char * = nullptr) override { return 1; }
+		size_t SeekFile(u32, s32, FileMove move) override { return move == FILEMOVE_END ? temp.size() : 0; }
+		size_t ReadFile(u32, u8 *out, s64 size) override { memcpy(out, temp.data(), (size_t)size); return (size_t)size; }
+		PSPFileInfo GetFileInfo(std::string) override { PSPFileInfo info; info.exists = exists; info.size = temp.size(); return info; }
+		bool RemoveFile(const std::string &) override { exists = false; return true; }
+	};
+	RecoveryFS fs;
+	const std::vector<u8> eboot{4, 5, 6};
+	EXPECT_TRUE(PrepareDrmBBInstall(fs, "ms0:/PSP/GAME/TEST/", eboot));
+	EXPECT_FALSE(fs.exists);
+	fs.exists = true; fs.temp = eboot;
+	EXPECT_TRUE(PrepareDrmBBInstall(fs, "ms0:/PSP/GAME/TEST/", eboot));
+	fs.exists = true; fs.temp = {7, 8};
+	EXPECT_FALSE(PrepareDrmBBInstall(fs, "ms0:/PSP/GAME/TEST/", eboot));
+	EXPECT_TRUE(fs.exists);
+	return true;
+}
+
+bool TestDrmBBCommit() {
+	class InstallFS : public EmptyFileSystem {
+	public:
+		std::map<std::string, std::vector<u8>> files;
+		int calls = 0;
+		int failAt = 0;
+		bool failRollback = false;
+		PSPFileInfo GetFileInfo(std::string name) override {
+			PSPFileInfo info;
+			info.exists = files.count(name) != 0;
+			return info;
+		}
+		bool RemoveFile(const std::string &name) override { return files.erase(name) != 0; }
+		int RenameFile(const std::string &from, const std::string &to) override {
+			++calls;
+			if (calls == failAt || (failRollback && calls == 3) || !files.count(from) || files.count(to)) {
+				return -1;
+			}
+			files[to] = files[from]; files.erase(from);
+			return 0;
+		}
+	};
+	const std::string dir = "ms0:/PSP/GAME/TEST/";
+	for (int failAt : {0, 1, 2}) {
+		InstallFS fs;
+		fs.failAt = failAt;
+		fs.files[dir + "EBOOT.PBP"] = {1, 2, 3};
+		fs.files[dir + "_TEMP.PBP"] = {4, 5, 6};
+		EXPECT_TRUE(CommitDrmBBEboot(fs, dir) == (failAt == 0));
+		EXPECT_TRUE(fs.files[dir + "EBOOT.PBP"] == (failAt == 0 ? std::vector<u8>{4, 5, 6} : std::vector<u8>{1, 2, 3}));
+	}
+	InstallFS fs;
+	fs.failAt = 2; fs.failRollback = true;
+	fs.files[dir + "EBOOT.PBP"] = {1, 2, 3}; fs.files[dir + "_TEMP.PBP"] = {4, 5, 6};
+	EXPECT_FALSE(CommitDrmBBEboot(fs, dir));
+	EXPECT_TRUE(fs.files[dir + "_DRMBB_BACKUP.PBP"] == std::vector<u8>({1, 2, 3}));
+	return true;
+}
+
 TestItem availableTests[] = {
+	TEST_ITEM(DrmBBPackage),
+	TEST_ITEM(DrmBBCommit),
+	TEST_ITEM(DrmBBRead),
+	TEST_ITEM(DrmBBRecovery),
 #if PPSSPP_ARCH(ARM64) || PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86)
 	TEST_ITEM(Arm64Emitter),
 	TEST_ITEM(Arm64Disasm),
@@ -3460,11 +3672,13 @@ TestItem availableTests[] = {
 	TEST_ITEM(Jit),
 	TEST_ITEM(JitDotBench),
 	TEST_ITEM(JitMultiDotRounding),
+	TEST_ITEM(JitVsgnPrefixes),
 	TEST_ITEM(JitProfileLifecycle),
 	TEST_ITEM(JitProfileReportFailure),
 	TEST_ITEM(JitReplacementHooks),
 	TEST_ITEM(CPUEquivalence),
 	TEST_ITEM(CPURoundingMode),
+	TEST_ITEM(VFPUDotJit),
 	TEST_ITEM(VFPUMatrixTranspose),
 	TEST_ITEM(ParseLBN),
 	TEST_ITEM(CachingFileLoader),

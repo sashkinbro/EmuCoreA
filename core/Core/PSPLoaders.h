@@ -19,9 +19,17 @@
 
 #include <string>
 #include <memory>
+#include <vector>
+#include "Common/CommonTypes.h"
 
 class FileLoader;
 class BlockDevice;
+class IFileSystem;
+
+// Commits the staged DRM BB boot program in the same directory.
+bool CommitDrmBBEboot(IFileSystem &fileSystem, const std::string &dir);
+bool ReadDrmBBFile(IFileSystem &fileSystem, const std::string &path, std::vector<u8> &data);
+bool PrepareDrmBBInstall(IFileSystem &fileSystem, const std::string &dir, const std::vector<u8> &eboot);
 
 bool Load_PSP_ISO(FileLoader *fileLoader, std::string *error_string);
 bool Load_PSP_ELF_PBP(FileLoader *fileLoader, std::string_view discId, bool loadGameConfigs, std::string *error_string);

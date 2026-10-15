@@ -21,7 +21,11 @@
 #include "UnitTest.h"
 #include "ext/riscv-disas.h"
 
-bool TestRiscVEmitter() {
+static bool TestRiscVEmitterEncodings() {
+	struct RestoreCPUInfo {
+		CPUInfo saved;
+		~RestoreCPUInfo() { cpu_info = saved; }
+	} restore{ cpu_info };
 	using namespace RiscVGen;
 
 	cpu_info.RiscV_A = true;
@@ -70,5 +74,88 @@ bool TestRiscVEmitter() {
 		EXPECT_EQ_HEX(code[i], expected[i]);
 	}
 
+	// Zcb loads and stores, which split the offset bits differently by size.
+	cpu_info.RiscV_Zcb = true;
+	u16 *code16 = (u16 *)code;
+	emitter.SetCodePointer((u8 *)code, (u8 *)code);
+	emitter.C_LBU(X10, X11, 1);
+	emitter.C_LBU(X10, X11, 2);
+	emitter.C_SB(X10, X11, 1);
+	emitter.C_SB(X10, X11, 2);
+	emitter.C_LHU(X10, X11, 2);
+	emitter.C_SH(X10, X11, 2);
+
+	// From GNU as.
+	static constexpr uint16_t expectedZcb[] = {
+		0x81c8,
+		0x81a8,
+		0x89c8,
+		0x89a8,
+		0x85a8,
+		0x8da8,
+	};
+
+	len = (u16 *)emitter.GetWritableCodePtr() - code16;
+	EXPECT_EQ_INT(len, ARRAY_SIZE(expectedZcb));
+
+	for (ptrdiff_t i = 0; i < len; ++i) {
+		EXPECT_EQ_HEX(code16[i], expectedZcb[i]);
+	}
+
+	// Moves between a vector's first element and a scalar register.
+	cpu_info.RiscV_V = true;
+	emitter.SetCodePointer((u8 *)code, (u8 *)code);
+	emitter.VMV_S_X(V7, R_ZERO);
+	emitter.VMV_S_X(V1, X10);
+	emitter.VFMV_S_F(V7, F10);
+	emitter.VMV_X_S(X10, V5);
+	emitter.VFMV_F_S(F10, V5);
+	emitter.VMV_VI(V3, -1);
+
+	// From GNU as.
+	static constexpr uint32_t expectedV[] = {
+		0x420063d7,
+		0x420560d7,
+		0x420553d7,
+		0x42502557,
+		0x42501557,
+		0x5e0fb1d7,
+	};
+
+	len = (u32 *)emitter.GetWritableCodePtr() - code;
+	EXPECT_EQ_INT(len, ARRAY_SIZE(expectedV));
+
+	for (ptrdiff_t i = 0; i < len; ++i) {
+		EXPECT_EQ_HEX(code[i], expectedV[i]);
+	}
+
+	// FLI has only the canonical NaN.
+	cpu_info.RiscV_Zfa = true;
+	EXPECT_TRUE(emitter.CanFLI(32, (uint32_t)0x7FC00000));
+	EXPECT_FALSE(emitter.CanFLI(32, (uint32_t)0xFFC00000));
+	EXPECT_FALSE(emitter.CanFLI(32, (uint32_t)0x7F800001));
+	EXPECT_TRUE(emitter.CanFLI(32, 1.0f));
+
 	return true;
+}
+
+bool TestRiscVEmitter() {
+	const CPUInfo saved = cpu_info;
+	// Emitter tests can enable extensions the host cannot execute.
+	cpu_info.RiscV_Zcb = false;
+	cpu_info.RiscV_V = false;
+	cpu_info.RiscV_Zfa = false;
+	const bool success = TestRiscVEmitterEncodings();
+	const CPUInfo after = cpu_info;
+	cpu_info = saved;
+
+	EXPECT_FALSE(after.RiscV_Zcb);
+	EXPECT_FALSE(after.RiscV_V);
+	EXPECT_FALSE(after.RiscV_Zfa);
+	EXPECT_EQ_INT(after.RiscV_A, saved.RiscV_A);
+	EXPECT_EQ_INT(after.RiscV_C, saved.RiscV_C);
+	EXPECT_EQ_INT(after.RiscV_D, saved.RiscV_D);
+	EXPECT_EQ_INT(after.RiscV_F, saved.RiscV_F);
+	EXPECT_EQ_INT(after.RiscV_M, saved.RiscV_M);
+	return success;
 }

@@ -27,6 +27,7 @@
 
 #include "ppsspp_config.h"
 
+#include "Common/CPUDetect.h"
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
 #include "Common/TimeUtil.h"
@@ -51,6 +52,11 @@
 #include "Core/HLE/ReplaceTables.h"
 #include "Core/MIPS/MIPSAnalyst.h"
 #include "Core/MIPS/JitCommon/JitState.h"
+#if PPSSPP_ARCH(RISCV64)
+#include "Core/MIPS/RiscV/RiscVVfpuDot.h"
+#elif PPSSPP_ARCH(LOONGARCH64)
+#include "Core/MIPS/LoongArch64/LoongArch64VfpuDot.h"
+#endif
 #include "unittest/UnitTest.h"
 
 void UnitTestTerminator() {
@@ -463,7 +469,14 @@ bool TestJitReplacementHooks() {
 //   PPSSPP_CPUFUZZ_CODE_SEED  apply PPSSPP_CPUFUZZ_CODE to this seed only.
 //   PPSSPP_CPUFUZZ_SKIP     cores not to run, by digit: 1 IR interpreter, 2 JIT, 3 JIT IR.
 //   PPSSPP_CPUFUZZ_REPORTS  how many differences to minimize and print (default 20).
+//   PPSSPP_CPUFUZZ_HOSTEXT  + or -: turn the host's optional extensions on or off for the JIT
+//                           (RISC-V Zba/Zbb/Zbs/Zcb/Zfa/Zfh/Zicond, and V with -, LoongArch
+//                           LSX/LASX). VFPUDotJit follows it too.
+//   PPSSPP_CPUFUZZ_UNKNOWNPREFIX  compile as after a block left a prefix uneaten. The first case
+//                           that leaves one does this for the rest of the run, so this reproduces
+//                           a later case on its own.
 //   PPSSPP_CPUFUZZ_STRICT   fail the test on any difference, not only on a crash.
+//   PPSSPP_CPUFUZZ_BLOCKS   print the IR and host code of every block the JITs ran, after each case.
 //   PPSSPP_CPUFUZZ_ACCURATE_VDOT  0 to run without AccurateVdot (the VFPU's own dot products), which is on by default.
 //   PPSSPP_CPUFUZZ_OPS      comma-separated instruction name prefixes to generate only, for fast
 //                           runs on the instructions being worked on. "dot" is the dot products
@@ -810,6 +823,9 @@ static FuzzCase GenerateFuzzCase(u64 seed, const char *classes, const std::vecto
 }
 
 // keepCache reruns blocks compiled by an earlier run of the same code.
+// From PPSSPP_CPUFUZZ_BLOCKS.
+static bool g_fuzzPrintBlocks = false;
+
 static void RunFuzzCase(const std::vector<u32> &code, const FuzzState &init, FuzzState *out, bool keepCache = false) {
 	const u32 codeAddr = PSP_GetUserMemoryBase() + FUZZ_CODE_OFFSET;
 	const u32 memAddr = PSP_GetUserMemoryBase() + FUZZ_MEM_OFFSET;
@@ -853,6 +869,19 @@ static void RunFuzzCase(const std::vector<u32> &code, const FuzzState &init, Fuz
 		mips->RunLoopUntil(CoreTiming::GetTicks(mips) + 1000000);
 	}
 
+	if (g_fuzzPrintBlocks && MIPSComp::jit) {
+		JitBlockCacheDebugInterface *blocks = MIPSComp::jit->GetBlockCacheDebugInterface();
+		for (int i = 0; i < blocks->GetNumBlocks(); i++) {
+			if (!blocks->IsValidBlock(i))
+				continue;
+			JitBlockDebugInfo info = blocks->GetBlockDebugInfo(i);
+			printf("Block %08x:\n", info.originalAddress);
+			for (const std::string &line : info.irDisasm)
+				printf("  %s\n", line.c_str());
+			for (const std::string &line : info.targetDisasm)
+				printf("    %s\n", line.c_str());
+		}
+	}
 	memcpy(out->r, mips->r, sizeof(out->r));
 	memcpy(out->f, mips->fi, sizeof(out->f));
 	memcpy(out->v, mips->vi, sizeof(out->v));
@@ -1028,11 +1057,24 @@ static const char *CoreName(CPUCore core) {
 	}
 }
 
+static bool g_fuzzUnknownPrefix = false;
+
+// With PPSSPP_CPUFUZZ_UNKNOWNPREFIX, a block first leaves a prefix uneaten, after which the IR
+// frontend stops assuming that blocks start with the default prefixes (startDefaultPrefix).
+static void SwitchFuzzCore(CPUCore core) {
+	mipsr4k.UpdateCore(core);
+	if (g_fuzzUnknownPrefix && core != CPUCore::INTERPRETER) {
+		FuzzState init{}, out;
+		// vpfxd with lane 0 saturated, then the terminator.
+		RunFuzzCase({ 0xDE000001 }, init, &out);
+	}
+}
+
 static bool CoreMismatches(CPUCore core, const std::vector<u32> &code, const FuzzState &init) {
 	FuzzState ref, other;
 	mipsr4k.UpdateCore(CPUCore::INTERPRETER);
 	RunFuzzCase(code, init, &ref);
-	mipsr4k.UpdateCore(core);
+	SwitchFuzzCore(core);
 	RunFuzzCase(code, init, &other);
 	return DiffFuzzStates(ref, other, nullptr) != 0;
 }
@@ -1064,6 +1106,34 @@ static std::vector<u32> MinimizeFuzzCase(CPUCore core, std::vector<u32> code, co
 
 }  // namespace
 
+// Host extensions the JIT may use, from PPSSPP_CPUFUZZ_HOSTEXT: + turns on the ones detection can't
+// see (RISC-V only reports them for a few known SoCs), - turns them off to test the fallbacks.
+static void ApplyFuzzHostExtensions() {
+	const char *ext = getenv("PPSSPP_CPUFUZZ_HOSTEXT");
+	if (ext && (ext[0] == '+' || ext[0] == '-')) {
+		const bool on = ext[0] == '+';
+#if PPSSPP_ARCH(RISCV64)
+		cpu_info.RiscV_Zba = on;
+		cpu_info.RiscV_Zbb = on;
+		cpu_info.RiscV_Zbs = on;
+		cpu_info.RiscV_Zcb = on;
+		cpu_info.RiscV_Zfa = on;
+		cpu_info.RiscV_Zfh = on;
+		cpu_info.RiscV_Zfhmin = on;
+		cpu_info.RiscV_Zicond = on;
+		// V is detected everywhere, but can be turned off.
+		if (!on)
+			cpu_info.RiscV_V = false;
+#elif PPSSPP_ARCH(LOONGARCH64)
+		if (!on) {
+			cpu_info.LOONGARCH_LSX = false;
+			cpu_info.LOONGARCH_LASX = false;
+		}
+#endif
+		(void)on;
+	}
+}
+
 bool TestCPUEquivalence() {
 	SetupJitHarness();
 	g_Config.bFastMemory = true;
@@ -1081,6 +1151,8 @@ bool TestCPUEquivalence() {
 	const char *classes = getenv("PPSSPP_CPUFUZZ_CLASSES");
 	const bool verbose = getenv("PPSSPP_CPUFUZZ_VERBOSE") != nullptr;
 	const char *skipCores = getenv("PPSSPP_CPUFUZZ_SKIP");
+	g_fuzzUnknownPrefix = getenv("PPSSPP_CPUFUZZ_UNKNOWNPREFIX") != nullptr;
+	g_fuzzPrintBlocks = getenv("PPSSPP_CPUFUZZ_BLOCKS") != nullptr;
 	const int count = countStr ? atoi(countStr) : 2000;
 	const u64 firstSeed = seedStr ? strtoull(seedStr, nullptr, 10) : 1;
 	g_fuzzOps.clear();
@@ -1121,6 +1193,8 @@ bool TestCPUEquivalence() {
 		}
 	}
 
+	ApplyFuzzHostExtensions();
+
 	static const CPUCore cores[] = {
 		CPUCore::INTERPRETER,
 		CPUCore::IR_INTERPRETER,
@@ -1136,7 +1210,7 @@ bool TestCPUEquivalence() {
 			}
 			continue;
 		}
-		mipsr4k.UpdateCore(cores[c]);
+		SwitchFuzzCore(cores[c]);
 		for (int i = 0; i < count; ++i) {
 			FuzzCase fc = GenerateFuzzCase(firstSeed + i, classes, overrideFor(firstSeed + i));
 			if (verbose) {
@@ -1184,7 +1258,7 @@ bool TestCPUEquivalence() {
 			FuzzState a, b;
 			mipsr4k.UpdateCore(CPUCore::INTERPRETER);
 			RunFuzzCase(code, fc.init, &a);
-			mipsr4k.UpdateCore(cores[c]);
+			SwitchFuzzCore(cores[c]);
 			RunFuzzCase(code, fc.init, &b);
 			std::string diff;
 			DiffFuzzStates(a, b, &diff);
@@ -1229,6 +1303,98 @@ bool TestCPUEquivalence() {
 	DestroyJitHarness();
 	g_Config.bSkipDeadbeefFilling = oldSkipDeadbeef;
 	g_Config.bAccurateVdot = oldAccurateVdot;
+	return success;
+}
+
+bool TestJitVsgnPrefixes() {
+	const bool oldFast = g_Config.bFastMemory;
+	const bool oldSkip = g_Config.bSkipDeadbeefFilling;
+	const bool oldAccurate = g_Config.bAccurateVdot;
+	const u32 oldDisable = g_Config.uJitDisableFlags;
+	const std::vector<std::string> oldOps = g_fuzzOps;
+	SetupJitHarness();
+	g_Config.bFastMemory = true;
+	g_Config.bSkipDeadbeefFilling = true;
+	g_Config.bAccurateVdot = true;
+	g_Config.uJitDisableFlags = 0;
+	g_fuzzOps.clear();
+	bool success = true;
+	const CPUCore cores[] = { CPUCore::INTERPRETER, CPUCore::IR_INTERPRETER, CPUCore::JIT };
+
+	// An inactive source lane is zero before S's abs/neg modifiers. T is the default zero.
+	for (VectorSize size : { V_Single, V_Pair, V_Triple }) {
+		const int n = GetNumVectorElements(size);
+		const u32 sizeBits = ((n - 1) & 1) << 7 | ((n - 1) & 2) << 14;
+		u8 dest[4];
+		GetVectorRegs(dest, size, 0);
+		for (u32 modifiers : { 0u, 0x00000F00u, 0x000F0000u, 0x000F0F00u }) {
+			FuzzState init{};
+			for (u32 &v : init.v) {
+				v = 0xBF800000;
+			}
+			init.vfpuCtrl[VFPU_CTRL_SPREFIX] = 0xE4;
+			init.vfpuCtrl[VFPU_CTRL_TPREFIX] = 0xE4;
+			const std::vector<u32> code{ 0xDC0000FF | modifiers, 0xD04A0400 | sizeBits };
+			FuzzState reference{};
+			for (CPUCore core : cores) {
+				mipsr4k.UpdateCore(core);
+				FuzzState result;
+				RunFuzzCase(code, init, &result);
+				for (int lane = 0; lane < n; lane++) {
+					const u32 actual = result.v[voffset[dest[lane]]];
+					if (actual != 0) {
+						printf("vsgn size %d modifiers %05x core %d lane %d: %08x, expected zero\n", n, modifiers, (int)core, lane, actual);
+						success = false;
+					}
+				}
+				if (core == CPUCore::INTERPRETER) {
+					reference = result;
+				} else {
+					std::string diff;
+					if (DiffFuzzStates(reference, result, &diff)) {
+						printf("vsgn size %d modifiers %05x core %d corrupted guest state:\n%s", n, modifiers, (int)core, diff.c_str());
+						success = false;
+					}
+				}
+			}
+		}
+	}
+
+	// Minimized failures from the prefix/sign fuzzer; GenerateFuzzCase preserves their inputs.
+	struct Fixture { u64 seed; u32 prefix; u32 sign; };
+	const Fixture fixtures[] = {
+		{ 74975, 0xDC0F8C2B, 0xD04A24D1 }, { 75431, 0xDCE249CF, 0xD04A2A8B },
+		{ 76841, 0xDC4DA68F, 0xD04ACB49 }, { 77547, 0xDC4C947A, 0xD04A7985 },
+		{ 77967, 0xDC2DC593, 0xD04A511F }, { 79543, 0xDC198F53, 0xD04A4DCB },
+		{ 79931, 0xDC44D968, 0xD04A3ED7 }, { 79969, 0xDCA01EB3, 0xD04A9870 },
+		{ 80137, 0xDC8607DF, 0xD04A29DD }, { 80440, 0xDCEE22C2, 0xD04A72AE },
+		{ 81314, 0xDC828072, 0xD04A2CEA }, { 82720, 0xDCA1B3B7, 0xD04AD979 },
+	};
+	for (const Fixture &fixture : fixtures) {
+		FuzzCase fc = GenerateFuzzCase(fixture.seed, "v", { fixture.prefix, fixture.sign });
+		FuzzState reference{};
+		for (CPUCore core : cores) {
+			mipsr4k.UpdateCore(core);
+			FuzzState result;
+			RunFuzzCase(fc.code, fc.init, &result);
+			if (core == CPUCore::INTERPRETER) {
+				reference = result;
+			} else {
+				std::string diff;
+				if (DiffFuzzStates(reference, result, &diff)) {
+					printf("vsgn seed %llu core %d corrupted guest state:\n%s", (unsigned long long)fixture.seed, (int)core, diff.c_str());
+					success = false;
+				}
+			}
+		}
+	}
+	mipsr4k.UpdateCore(CPUCore::INTERPRETER);
+	DestroyJitHarness();
+	g_Config.bFastMemory = oldFast;
+	g_Config.bSkipDeadbeefFilling = oldSkip;
+	g_Config.bAccurateVdot = oldAccurate;
+	g_Config.uJitDisableFlags = oldDisable;
+	g_fuzzOps = oldOps;
 	return success;
 }
 
@@ -1513,5 +1679,118 @@ bool TestCPURoundingMode() {
 	g_Config.uJitDisableFlags = oldJitDisable;
 	g_Config.bSkipDeadbeefFilling = oldSkipDeadbeef;
 	DestroyJitHarness();
+	return success;
+}
+
+// The JITs' own VFPU dot product code against the reference, in every variant the host can run,
+// through a C-callable wrapper with the eight operands at the pointer passed. Inf and NaN only go
+// through the branch to the reference.
+bool TestVFPUDotJit() {
+	typedef float (*DotFunc)(const float *operands);
+	auto check = [](const char *name, DotFunc fn) {
+		auto toBits = [](float f) {
+			u32 bits;
+			memcpy(&bits, &f, sizeof(bits));
+			return bits;
+		};
+		printf("%s\n", name);
+		return ForEachVFPUDotTestCase([&](const float a[4], const float b[4]) {
+			float operands[8];
+			memcpy(operands, a, sizeof(float) * 4);
+			memcpy(operands + 4, b, sizeof(float) * 4);
+			const u32 expected = toBits(vfpu_dot_reference(a, b));
+			const u32 actual = toBits(fn(operands));
+			if (expected != actual) {
+				printf("%s(%08x %08x %08x %08x, %08x %08x %08x %08x) = %08x, expected %08x\n", name,
+					toBits(a[0]), toBits(a[1]), toBits(a[2]), toBits(a[3]), toBits(b[0]), toBits(b[1]), toBits(b[2]), toBits(b[3]), actual, expected);
+				return false;
+			}
+			return true;
+		});
+	};
+	(void)check;
+	ApplyFuzzHostExtensions();
+	bool success = true;
+
+#if PPSSPP_ARCH(RISCV64)
+	using namespace RiscVGen;
+	using namespace MIPSComp;
+	const bool hasExt = cpu_info.RiscV_Zbb && cpu_info.RiscV_Zicond;
+	const bool oldZbb = cpu_info.RiscV_Zbb;
+	const bool oldZicond = cpu_info.RiscV_Zicond;
+	struct Variant {
+		const char *name;
+		bool vector;
+		bool ext;
+	};
+	const Variant variants[] = {
+		{ "scalar", false, false },
+		{ "scalar Zbb Zicond", false, true },
+		{ "vector", true, hasExt },
+	};
+	RiscVCodeBlock code;
+	code.AllocCodeSpace(0x10000);
+	// As in the JIT.
+	code.SetAutoCompress(true);
+	for (const Variant &v : variants) {
+		if ((v.ext && !hasExt) || (v.vector && !cpu_info.RiscV_V))
+			continue;
+		cpu_info.RiscV_Zbb = v.ext;
+		cpu_info.RiscV_Zicond = v.ext;
+		code.BeginWrite(0x1000);
+		const u8 *start = code.AlignCode16();
+		code.MV(X12, X10);
+		if (v.vector) {
+			// Whatever the routine reads before writing is garbage.
+			code.VSETIVLI(R_ZERO, 4, VType(VSew::E32, VLMul::M1, VTail::A, VMask::A));
+			for (int i = 0; i < 32; i++)
+				code.VMV_VI((RiscVReg)(V0 + i), -1);
+		}
+		const RiscVVfpuDotRegs regs{ X12, 0, { X10, X11, X5, X6, X7, X28, X29, X30, X31, X16, X17 }, F10 };
+		FixupBranch special = EmitRiscVVfpuDot(&code, regs, v.vector);
+		code.SetJumpTarget(special);
+		code.MV(X10, X12);
+		code.ADDI(X11, X12, 16);
+		code.QuickJ(X5, (const u8 *)&vfpu_dot_reference);
+		code.FlushIcache();
+		code.EndWrite();
+		if (!check(v.name, (DotFunc)start))
+			success = false;
+	}
+	code.FreeCodeSpace();
+	cpu_info.RiscV_Zbb = oldZbb;
+	cpu_info.RiscV_Zicond = oldZicond;
+#elif PPSSPP_ARCH(LOONGARCH64)
+	using namespace LoongArch64Gen;
+	using namespace MIPSComp;
+	LoongArch64CodeBlock code;
+	code.AllocCodeSpace(0x10000);
+	for (int lsx = 0; lsx < 2; lsx++) {
+		if (lsx && !cpu_info.LOONGARCH_LSX)
+			continue;
+		code.BeginWrite(0x1000);
+		const u8 *start = code.AlignCode16();
+		const LoongArch64VfpuDotRegs regs{ R4, 0, V0, V1, { V2, V3, V4, V5, V6, V7 },
+			{ R12, R13, R14, R15, R16, R17, R18, R19, R20 }, F0, F1 };
+		if (lsx) {
+			// Whatever the routine reads before writing is garbage.
+			code.LI(R12, -1);
+			for (int i = 0; i < 24; i++)
+				code.VREPLGR2VR_W((LoongArch64Reg)(V0 + i), R12);
+			code.VLD(regs.x, R4, 0);
+			code.VLD(regs.y, R4, 16);
+		}
+		FixupBranch special = EmitLoongArch64VfpuDot(&code, regs, lsx != 0);
+		code.SetJumpTarget(special);
+		code.ADDI_D(R5, R4, 16);
+		code.QuickJ(R12, (const u8 *)&vfpu_dot_reference);
+		code.FlushIcache();
+		code.EndWrite();
+		if (!check(lsx ? "LSX" : "scalar", (DotFunc)start))
+			success = false;
+	}
+	code.FreeCodeSpace();
+#endif
+
 	return success;
 }

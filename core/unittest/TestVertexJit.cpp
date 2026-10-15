@@ -28,6 +28,7 @@
 #include "Core/ConfigValues.h"
 #include "Core/HDRemaster.h"
 #include "GPU/Common/VertexDecoderCommon.h"
+#include "GPU/Common/VertexDecoderHandwritten.h"
 #include "GPU/ge_constants.h"
 #include "GPU/GPUState.h"
 #include "unittest/TestVertexJit.h"
@@ -819,7 +820,8 @@ struct JitMismatch {
 	int formatsJitted = 0;
 	const bool savedDoubleTexCoords = g_DoubleTextureCoordinates;
 
-	auto testFormat = [&](u32 vtype, int uvGenMode, bool doubleTexCoords, bool expand8BitNormals) {
+	// Without withJit, the decoder is what a host without the JIT gets: a handwritten one, if any.
+	auto testFormat = [&](u32 vtype, int uvGenMode, bool doubleTexCoords, bool expand8BitNormals, bool withJit) {
 		g_DoubleTextureCoordinates = doubleTexCoords;
 		VertexDecoderOptions opts{};
 		opts.expand8BitNormalsToFloat = expand8BitNormals;
@@ -835,12 +837,14 @@ struct JitMismatch {
 			cache->Clear();
 		}
 		VertexDecoder jit{};
-		jit.SetVertexType(vertTypeID, opts, cache);
-		formatsTested++;
+		jit.SetVertexType(vertTypeID, opts, withJit ? cache : nullptr);
+		if (withJit)
+			formatsTested++;
 		if (!jit.jitted_) {
 			return;
 		}
-		formatsJitted++;
+		if (withJit)
+			formatsJitted++;
 
 		// Which step writes each component: weights (if any) first, then tc, col, nrm, pos.
 		int stepIndex = ref.weighttype ? 1 : 0;
@@ -1005,6 +1009,23 @@ struct JitMismatch {
 		if (refFullAlpha != jitFullAlpha) {
 			record("fullAlpha", colStep, 0, StringFromFormat("steps %d vs jit %d", (int)refFullAlpha, (int)jitFullAlpha));
 		}
+		// A vertex with full alpha (all ones is that in every color format), decoded after a draw in the
+		// batch that cleared the flag and after one that didn't. Decoding only ever clears it.
+		if (ref.col) {
+			const int colorSize = ref.col == GE_VTYPE_COL_8888 >> GE_VTYPE_COL_SHIFT ? 4 : 2;
+			for (int m = 0; m < ref.morphcount; m++)
+				memset(src + m * ref.onesize_ + ref.coloff, 0xFF, colorSize);
+			for (bool before : { false, true }) {
+				gstate_c.vertexFullAlpha = before;
+				ref.DecodeVerts(refOut, src, &uvScale, 1);
+				const bool refAfter = gstate_c.vertexFullAlpha;
+				gstate_c.vertexFullAlpha = before;
+				jit.DecodeVerts(jitOut, src, &uvScale, 1);
+				if (gstate_c.vertexFullAlpha != refAfter) {
+					record("fullAlpha", colStep, 0, StringFromFormat("full alpha vertex, %d before: steps %d vs %d", (int)before, (int)refAfter, (int)gstate_c.vertexFullAlpha));
+				}
+			}
+		}
 		// TODO: Only the steps track bounds for float UVs in through mode. Undecided which way to go.
 		if (tcStep != &VertexDecoder::Step_TcFloatThrough && memcmp(&refBounds, &jitBounds, sizeof(refBounds)) != 0) {
 			record("bounds", tcStep, 0, StringFromFormat("steps %d,%d-%d,%d vs jit %d,%d-%d,%d",
@@ -1034,7 +1055,9 @@ struct JitMismatch {
 									for (int uvGen = 0; uvGen < uvGenModes; uvGen++) {
 										for (int dbl = 0; dbl < doubleModes; dbl++) {
 											for (int expand = 0; expand < expandModes; expand++) {
-												testFormat(vtype, uvGen == 0 ? GE_TEXMAP_TEXTURE_COORDS : GE_TEXMAP_TEXTURE_MATRIX, dbl != 0, expand != 0);
+												const int uvGenMode = uvGen == 0 ? GE_TEXMAP_TEXTURE_COORDS : GE_TEXMAP_TEXTURE_MATRIX;
+												testFormat(vtype, uvGenMode, dbl != 0, expand != 0, true);
+												testFormat(vtype, uvGenMode, dbl != 0, expand != 0, false);
 											}
 										}
 									}
@@ -1063,7 +1086,58 @@ struct JitMismatch {
 
 typedef bool (*VertexTestFunc)();
 
+
+static bool TestVertexSkinInputBounds() {
+	const size_t pageSize = GetMemoryProtectPageSize();
+	struct Fixture {
+		u8 *pages;
+		size_t size;
+		float bones[96];
+		bool alpha;
+		~Fixture() {
+			memcpy(gstate.boneMatrix, bones, sizeof(bones));
+			gstate_c.vertexFullAlpha = alpha;
+			if (pages) {
+				FreeMemoryPages(pages, size);
+			}
+		}
+	} fixture{(u8 *)AllocateMemoryPages(pageSize * 2, MEM_PROT_READ | MEM_PROT_WRITE), pageSize * 2, {}, gstate_c.vertexFullAlpha};
+	memcpy(fixture.bones, gstate.boneMatrix, sizeof(fixture.bones));
+	EXPECT_TRUE(fixture.pages != nullptr);
+	EXPECT_TRUE(ProtectMemoryPages(fixture.pages + pageSize, pageSize, 0));
+	// Exactly one 24-byte vertex ends at an unreadable page, including its last three position floats.
+	u8 *src = fixture.pages + pageSize - 24;
+	memset(src, 0, 24);
+	const float weight = 1.0f, position[3] = {1.0f, 2.0f, 3.0f};
+	memcpy(src, &weight, sizeof(weight));
+	src[4] = src[5] = 64; src[6] = src[7] = 255;
+	src[8] = 64; src[10] = (u8)-64;
+	memcpy(src + 12, position, sizeof(position));
+	memset(gstate.boneMatrix, 0, sizeof(gstate.boneMatrix));
+	gstate.boneMatrix[0] = gstate.boneMatrix[4] = gstate.boneMatrix[8] = 1.0f;
+	const UVScale uv{2.0f, 3.0f, 0.25f, -0.25f};
+	for (bool prescale : {false, true}) {
+		alignas(16) u8 dst[64]{};
+		if (prescale) {
+			VtxDec_W1float_Tu8_C4444_Ns8_Pfloat(src, dst, 1, &uv);
+		} else {
+			VtxDec_W1float_Tu8_C4444_Ns8_Pfloat_NoPrescale(src, dst, 1, &uv);
+		}
+		float values[9]; memcpy(values, dst, sizeof(values));
+		EXPECT_EQ_FLOAT(values[0], prescale ? 1.25f : 0.5f);
+		EXPECT_EQ_FLOAT(values[1], prescale ? 1.25f : 0.5f);
+		EXPECT_EQ_FLOAT(values[3], 0.5f);
+		EXPECT_EQ_FLOAT(values[4], 0.0f);
+		EXPECT_EQ_FLOAT(values[5], -0.5f);
+		EXPECT_EQ_FLOAT(values[6], 1.0f);
+		EXPECT_EQ_FLOAT(values[7], 2.0f);
+		EXPECT_EQ_FLOAT(values[8], 3.0f);
+	}
+	return true;
+}
+
 static VertexTestFunc vertdecTestFuncs[] = {
+	&TestVertexSkinInputBounds,
 	&TestVertex8,
 	&TestVertex16,
 	&TestVertexFloat,

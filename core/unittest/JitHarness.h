@@ -20,8 +20,10 @@
 bool TestJit();
 bool TestJitDotBench();
 bool TestJitMultiDotRounding();
+bool TestJitVsgnPrefixes();
 bool TestJitProfileLifecycle();
 bool TestJitProfileReportFailure();
 bool TestJitReplacementHooks();
 bool TestCPUEquivalence();
 bool TestCPURoundingMode();
+bool TestVFPUDotJit();
