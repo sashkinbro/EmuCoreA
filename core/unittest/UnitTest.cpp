@@ -49,6 +49,7 @@
 
 #if PPSSPP_PLATFORM(ANDROID)
 #include <jni.h>
+#include <sys/system_properties.h>
 #endif
 
 #include "Common/Data/Collections/TinySet.h"
@@ -122,6 +123,7 @@
 #include "GPU/Math3D.h"
 
 #include "Common/File/AndroidContentURI.h"
+#include "Common/System/Request.h"
 
 #include "unittest/JitHarness.h"
 #include "unittest/TestVertexJit.h"
@@ -133,6 +135,14 @@ bool g_testLog = false;
 std::string System_GetProperty(SystemProperty prop) { return ""; }
 std::vector<std::string> System_GetPropertyStringVec(SystemProperty prop) { return std::vector<std::string>(); }
 int64_t System_GetPropertyInt(SystemProperty prop) {
+#if PPSSPP_PLATFORM(ANDROID)
+	if (prop == SYSPROP_SYSTEMVERSION) {
+		char sdk[PROP_VALUE_MAX]{};
+		if (__system_property_get("ro.build.version.sdk", sdk) > 0) {
+			return std::atoi(sdk);
+		}
+	}
+#endif
 	return -1;
 }
 float System_GetPropertyFloat(SystemProperty prop) {
@@ -158,7 +168,15 @@ std::vector<std::string> System_GetCameraDeviceList() { return std::vector<std::
 void NativeFrame(GraphicsContext *graphicsContext) {}
 void NativeResized() {}
 
-bool System_MakeRequest(SystemRequestType type, int requestId, const std::string &param1, const std::string &param2, int64_t param3, int64_t param4) { return false; }
+// TestRequestManager answers these itself.
+static int g_lastInputBoxRequestId = -1;
+bool System_MakeRequest(SystemRequestType type, int requestId, const std::string &param1, const std::string &param2, int64_t param3, int64_t param4) {
+	if (type == SystemRequestType::INPUT_TEXT_MODAL) {
+		g_lastInputBoxRequestId = requestId;
+		return true;
+	}
+	return false;
+}
 // Pulled in via Core/WebServer.cpp's OpenWebDebugger(), which CmdLine.cpp now references.
 void System_LaunchUrl(LaunchUrlType urlType, std::string_view url) {}
 void System_InputBoxGetString(const std::string &title, const std::string &defaultValue, std::function<void(bool, const std::string &)> cb) { cb(false, ""); }
@@ -2255,6 +2273,45 @@ static bool TestMemMap() {
 	return true;
 }
 
+static bool CheckBlockShadow() {
+	// Every valid address has an entry, starting out empty. The ends of each view would fault otherwise.
+	static const u32 validAddresses[] = {
+		0x00010000, 0x00013FFC, 0x40010000,  // Scratchpad, and its uncached mirror.
+		0x04000000, 0x047FFFFC,  // VRAM and its mirrors.
+		0x08000000, 0x09F00000, 0x0BE00000, 0x0BFFFFFC,  // RAM, across the views it's mapped in.
+		0x48000000, 0x88000000, 0xC8000000,  // RAM mirrors.
+	};
+	for (u32 addr : validAddresses) {
+		EXPECT_EQ_HEX(Memory::ReadBlockShadow(addr), 0);
+	}
+
+	// The kernel and uncached mirrors share an entry, like they share memory.
+	Memory::WriteBlockShadow(0x08804000, 0x1234);
+	EXPECT_EQ_HEX(Memory::ReadBlockShadow(0x88804000), 0x1234);
+	EXPECT_EQ_HEX(Memory::ReadBlockShadow(0x48804000), 0x1234);
+
+	// Invalid addresses read as empty, and ignore writes.
+	Memory::WriteBlockShadow(0x0C000000, 0x1234);
+	EXPECT_EQ_HEX(Memory::ReadBlockShadow(0x0C000000), 0);
+
+	// Clearing leaves an entry that holds something else alone.
+	EXPECT_FALSE(Memory::ClearBlockShadow(0x08804000, 0x5678));
+	EXPECT_TRUE(Memory::ClearBlockShadow(0x88804000, 0x1234));
+	EXPECT_EQ_HEX(Memory::ReadBlockShadow(0x08804000), 0);
+	return true;
+}
+
+static bool TestBlockShadow() {
+	Memory::g_MemorySize = Memory::RAM_DOUBLE_SIZE;
+	if (!Memory::Init(Memory::MemMapSetupFlags::Default)) {
+		printf("Memory::Init failed\n");
+		return false;
+	}
+	const bool success = CheckBlockShadow();
+	Memory::Shutdown();
+	return success;
+}
+
 static bool TestPath() {
 	// Also test the Path class while we're at it.
 	Path path("/asdf/jkl/");
@@ -2990,6 +3047,21 @@ bool TestCmdLine() {
 		EXPECT_EQ_INT(options.timeoutWall.value_or(0), 4);
 		EXPECT_EQ_INT(options.timeoutEmulated.value_or(0), 5);
 	}
+	// Inverse booleans: --windowed turns fullscreen off, and --no-memstick removes the stick.
+	{
+		const char *argv[] = {
+			"ppsspp",
+			"--windowed",
+			"--no-memstick",
+		};
+		int argc = ARRAY_SIZE(argv);
+		CommandLineOptions options;
+		options.Parse(argc, argv, CmdLineMode::Application);
+		EXPECT_TRUE(options.fullscreen.has_value());
+		EXPECT_FALSE(options.fullscreen.value_or(true));
+		EXPECT_TRUE(options.memStickInserted.has_value());
+		EXPECT_FALSE(options.memStickInserted.value_or(true));
+	}
 	// Test GL version override
 	{
 		const char *argv[] = {
@@ -3024,7 +3096,9 @@ struct TestItem {
 #define TEST_ITEM(name) { #name, &Test ##name, }
 
 bool TestArmEmitter();
+bool TestArmDisasm();
 bool TestArm64Emitter();
+bool TestArm64Disasm();
 bool TestCrossSIMD();
 bool TestX64Emitter();
 bool TestRiscVEmitter();
@@ -3038,6 +3112,8 @@ bool TestLzrc();
 bool TestMpegCsc();
 bool TestSplineTessellation();
 bool TestGEMath();
+bool TestBoundingBoxFast();
+bool TestDepthRaster();
 bool TestDemangle();
 
 // The 8.3 short names games read out of d_private. These aren't verified against hardware yet (no
@@ -3190,6 +3266,94 @@ bool TestUITabOrder() {
 	return true;
 }
 
+// Arrow key focus moves go by geometry, so these place views by hand rather than running layout.
+bool TestUIFocusNavigation() {
+	using namespace UI;
+
+	auto add = [](LinearLayout *parent, float x, float y, float w, float h) {
+		Choice *choice = parent->Add(new Choice(""));
+		choice->SetBounds(Bounds(x, y, w, h));
+		return choice;
+	};
+	auto move = [](ViewGroup *root, View *from, FocusMove dir) {
+		return root->FindNeighbor(from, dir, NeighborResult()).view;
+	};
+
+	{
+		// A wide button between rows of narrow ones. Its center is far from the narrow ones at the
+		// ends, but its edge is right there, so it mustn't be skipped.
+		LinearLayout root(ORIENT_VERTICAL);
+		Choice *topLeft = add(&root, 0, 0, 100, 50);
+		Choice *topRight = add(&root, 500, 0, 100, 50);
+		Choice *wide = add(&root, 0, 60, 600, 50);
+		Choice *bottomLeft = add(&root, 0, 120, 100, 50);
+		Choice *bottomRight = add(&root, 500, 120, 100, 50);
+		EXPECT_TRUE(move(&root, topRight, FocusMove::DOWN) == wide);
+		EXPECT_TRUE(move(&root, topLeft, FocusMove::DOWN) == wide);
+		EXPECT_TRUE(move(&root, bottomRight, FocusMove::UP) == wide);
+		EXPECT_TRUE(move(&root, bottomLeft, FocusMove::UP) == wide);
+		// From the wide one, the one nearest its center across the move.
+		EXPECT_TRUE(move(&root, bottomLeft, FocusMove::RIGHT) == bottomRight);
+		EXPECT_TRUE(move(&root, wide, FocusMove::LEFT) == nullptr);
+	}
+
+	{
+		// A row: left and right go to the neighbors, and nothing is up or down.
+		LinearLayout root(ORIENT_HORIZONTAL);
+		Choice *a = add(&root, 0, 0, 100, 50);
+		Choice *b = add(&root, 110, 0, 100, 50);
+		Choice *c = add(&root, 220, 0, 100, 50);
+		EXPECT_TRUE(move(&root, b, FocusMove::RIGHT) == c);
+		EXPECT_TRUE(move(&root, b, FocusMove::LEFT) == a);
+		EXPECT_TRUE(move(&root, a, FocusMove::LEFT) == nullptr);
+		EXPECT_TRUE(move(&root, b, FocusMove::UP) == nullptr);
+		EXPECT_TRUE(move(&root, b, FocusMove::DOWN) == nullptr);
+	}
+
+	{
+		// Going down, the next row wins even off to the side, over something in line much further on.
+		LinearLayout root(ORIENT_VERTICAL);
+		Choice *origin = add(&root, 0, 0, 100, 50);
+		Choice *nextRowAside = add(&root, 150, 60, 100, 50);
+		add(&root, 0, 500, 100, 50);
+		EXPECT_TRUE(move(&root, origin, FocusMove::DOWN) == nextRowAside);
+	}
+
+	{
+		// Sideways, things in line win however far away they are.
+		LinearLayout root(ORIENT_HORIZONTAL);
+		Choice *origin = add(&root, 0, 0, 50, 100);
+		add(&root, 60, 150, 50, 100);
+		Choice *inLine = add(&root, 500, 0, 50, 100);
+		EXPECT_TRUE(move(&root, origin, FocusMove::RIGHT) == inLine);
+	}
+
+	{
+		// Rows shifted against each other: down goes to the one below the origin's center.
+		LinearLayout root(ORIENT_VERTICAL);
+		Choice *origin = add(&root, 100, 0, 100, 50);
+		add(&root, 20, 60, 100, 50);
+		Choice *underCenter = add(&root, 130, 60, 100, 50);
+		EXPECT_TRUE(move(&root, origin, FocusMove::DOWN) == underCenter);
+	}
+
+	{
+		// Things that can't take focus are passed over, also inside nested groups.
+		LinearLayout root(ORIENT_VERTICAL);
+		Choice *origin = add(&root, 0, 0, 100, 50);
+		Choice *disabled = add(&root, 0, 60, 100, 50);
+		disabled->SetEnabled(false);
+		LinearLayout *inner = root.Add(new LinearLayout(ORIENT_VERTICAL));
+		Choice *hidden = add(inner, 0, 120, 100, 50);
+		hidden->SetVisibility(V_INVISIBLE);
+		Choice *last = add(inner, 0, 180, 100, 50);
+		EXPECT_TRUE(move(&root, origin, FocusMove::DOWN) == last);
+		EXPECT_TRUE(move(&root, last, FocusMove::UP) == origin);
+	}
+
+	return true;
+}
+
 bool TestTextureReplacer();
 
 static bool TestQueueBuf() {
@@ -3216,12 +3380,56 @@ static bool TestQueueBuf() {
 	return true;
 }
 
+static bool TestRequestManager() {
+	RequestManager rm;
+	std::vector<std::string> results;
+	auto ask = [&](RequesterToken token, std::string name) {
+		rm.MakeSystemRequest(SystemRequestType::INPUT_TEXT_MODAL, token, [&results, name](std::string_view value, int) {
+			results.push_back(name + "=" + std::string(value));
+		}, nullptr, "", "", 0);
+		return g_lastInputBoxRequestId;
+	};
+
+	RequesterToken tokenA = rm.GenerateRequesterToken();
+	RequesterToken tokenB = rm.GenerateRequesterToken();
+
+	// Forgotten before the answer arrives.
+	int a1 = ask(tokenA, "a1");
+	rm.ForgetRequestsWithToken(tokenA);
+	rm.PostSystemSuccess(a1, "x");
+	// Forgotten after the answer arrived, but before it was processed.
+	int a2 = ask(tokenA, "a2");
+	int b1 = ask(tokenB, "b1");
+	rm.PostSystemSuccess(a2, "y");
+	rm.PostSystemSuccess(b1, "z");
+	rm.ForgetRequestsWithToken(tokenA);
+	rm.ProcessRequests();
+	EXPECT_EQ_INT((int)results.size(), 1);
+	EXPECT_TRUE(results[0] == "b1=z");
+
+	// A callback that forgets its requester drops the rest of its responses in the same batch.
+	results.clear();
+	int b2 = rm.MakeSystemRequest(SystemRequestType::INPUT_TEXT_MODAL, tokenB, [&](std::string_view, int) {
+		results.push_back("b2");
+		rm.ForgetRequestsWithToken(tokenB);
+	}, nullptr, "", "", 0) ? g_lastInputBoxRequestId : -1;
+	int b3 = ask(tokenB, "b3");
+	rm.PostSystemSuccess(b2, "");
+	rm.PostSystemSuccess(b3, "");
+	rm.ProcessRequests();
+	EXPECT_EQ_INT((int)results.size(), 1);
+	EXPECT_TRUE(results[0] == "b2");
+	return true;
+}
+
 TestItem availableTests[] = {
 #if PPSSPP_ARCH(ARM64) || PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86)
 	TEST_ITEM(Arm64Emitter),
+	TEST_ITEM(Arm64Disasm),
 #endif
 #if PPSSPP_ARCH(ARM) || PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86)
 	TEST_ITEM(ArmEmitter),
+	TEST_ITEM(ArmDisasm),
 #endif
 #if PPSSPP_ARCH(AMD64) || PPSSPP_ARCH(X86)
 	TEST_ITEM(X64Emitter),
@@ -3233,6 +3441,8 @@ TestItem availableTests[] = {
 	TEST_ITEM(LoongArch64Emitter),
 #endif
 	TEST_ITEM(VertexJit),
+	TEST_ITEM(BoundingBoxFast),
+	TEST_ITEM(DepthRaster),
 	TEST_ITEM(VFPUSinCos),
 	TEST_ITEM(VFPUDot),
 	TEST_ITEM(MathUtil),
@@ -3248,12 +3458,16 @@ TestItem availableTests[] = {
 	TEST_ITEM(Utf8),
 	TEST_ITEM(IRPassSimplify),
 	TEST_ITEM(Jit),
+	TEST_ITEM(JitReplacementHooks),
+	TEST_ITEM(CPUEquivalence),
+	TEST_ITEM(CPURoundingMode),
 	TEST_ITEM(VFPUMatrixTranspose),
 	TEST_ITEM(ParseLBN),
 	TEST_ITEM(CachingFileLoader),
 	TEST_ITEM(QuickTexHash),
 	TEST_ITEM(CLZ),
 	TEST_ITEM(MemMap),
+	TEST_ITEM(BlockShadow),
 	TEST_ITEM(ShaderGenerators),
 	TEST_ITEM(Path),
 	TEST_ITEM(AndroidContentURI),
@@ -3288,9 +3502,11 @@ TestItem availableTests[] = {
 	TEST_ITEM(Demangle),
 	TEST_ITEM(TextureReplacer),
 	TEST_ITEM(UITabOrder),
+	TEST_ITEM(UIFocusNavigation),
 	TEST_ITEM(FatShortNames),
 	TEST_ITEM(GEDumpGameID),
 	TEST_ITEM(QueueBuf),
+	TEST_ITEM(RequestManager),
 };
 
 int main(int argc, const char *argv[]) {

@@ -22,6 +22,7 @@
 #include "Common/Log.h"
 #include "Core/CoreTiming.h"
 #include "Core/MemMap.h"
+#include "Core/MIPS/ARM64/Arm64VfpuDot.h"
 #include "Core/MIPS/ARM64/Arm64IRJit.h"
 #include "Core/MIPS/ARM64/Arm64IRRegCache.h"
 #include "Core/MIPS/JitCommon/JitCommon.h"
@@ -156,8 +157,7 @@ void Arm64JitBackend::GenerateFixedCode(MIPSState *mipsState) {
 	// Fixed registers, these are always kept when in Jit context.
 	MOVP2R(MEMBASEREG, Memory::base);
 	MOVP2R(CTXREG, mipsState);
-	// Pre-subtract this to save time later.
-	MOVI2R(JITBASEREG, (intptr_t)GetBasePtr() - MIPS_EMUHACK_OPCODE);
+	MOVP2R(JITBASEREG, GetBasePtr());
 
 	LoadStaticRegisters();
 	WriteDebugProfilerStatus(IRProfilerStatus::IN_JIT);
@@ -204,20 +204,20 @@ void Arm64JitBackend::GenerateFixedCode(MIPSState *mipsState) {
 
 			MovFromPC(SCRATCH1);
 			WriteDebugPC(SCRATCH1);
-#ifdef MASKED_PSP_MEMORY
-			ANDI2R(SCRATCH1, SCRATCH1, Memory::MEMVIEW32_MASK);
-#endif
+			ANDI2R(SCRATCH1, SCRATCH1, Memory::BLOCK_SHADOW_ENTRY_MASK);
+			MOVP2R(SCRATCH2_64, Memory::blockShadow);
 			hooks_.dispatchFetch = GetCodePtr();
-			LDR(SCRATCH1, MEMBASEREG, SCRATCH1_64);
-			LSR(SCRATCH2, SCRATCH1, 24);   // or UBFX(SCRATCH2, SCRATCH1, 24, 8)
-			// We don't mask SCRATCH1 as that's already baked into JITBASEREG.
-			CMP(SCRATCH2, MIPS_EMUHACK_OPCODE >> 24);
-			FixupBranch skipJump = B(CC_NEQ);
+			LDR(SCRATCH1, SCRATCH2_64, SCRATCH1_64);
+			// The entry is the block's offset into the code space, or 0 for none.
+			FixupBranch skipJump = CBZ(SCRATCH1);
 				ADD(SCRATCH1_64, JITBASEREG, SCRATCH1_64);
 				BR(SCRATCH1_64);
 			SetJumpTarget(skipJump);
 
 			// No block found, let's jit.  We don't need to save static regs, they're all callee saved.
+			// A replacement hook's block shadow entry jumps here too (GetBlockShadowHookValue()). JitAt
+			// replaces it with the new block's entry, and destroying that block puts the hook value back.
+			hooks_.blockShadowHook = GetCodePtr();
 			RestoreRoundingMode(true);
 			WriteDebugProfilerStatus(IRProfilerStatus::COMPILING);
 			QuickCallFunctionR(SCRATCH1_64, &MIPSComp::JitAt, CTXREG);
@@ -264,6 +264,9 @@ void Arm64JitBackend::GenerateFixedCode(MIPSState *mipsState) {
 
 		RET();
 	}
+
+	vfpuDotSpecial_ = GenerateArm64VfpuDotSpecial(this, &fp_, CTXREG);
+	vfpuDot_ = GenerateArm64VfpuDotCall(this, &fp_, CTXREG, vfpuDotSpecial_);
 
 	// Leave this at the end, add more stuff above.
 	if (enableDisasm) {

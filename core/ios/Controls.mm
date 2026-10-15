@@ -1,5 +1,9 @@
 #include "Controls.h"
 
+#include <algorithm>
+#include <cmath>
+#include <memory>
+
 #include "Common/Data/Encoding/Utf8.h"
 #include "Common/Log.h"
 #include "Common/TimeUtil.h"
@@ -30,10 +34,8 @@ bool InitController(GCController *controller) {
 		return false;
 	}
 
-	if (@available(iOS 14.0, tvOS 14.0, *)) {
-		for (GCControllerElement* element in controller.physicalInputProfile.allElements) {
-			element.preferredSystemGestureState = GCSystemGestureStateDisabled;
-		}
+	for (GCControllerElement* element in controller.physicalInputProfile.allElements) {
+		element.preferredSystemGestureState = GCSystemGestureStateDisabled;
 	}
 
 	const std::string controllerName = [controller.vendorName ?: @"Gamepad" UTF8String];
@@ -112,12 +114,10 @@ bool InitController(GCController *controller) {
 		};
 	}
 
-	if (@available(iOS 14.0, *)) {
-		if (extendedProfile.buttonHome != nil) {
-			extendedProfile.buttonHome.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
-				controllerButtonPressed(pressed, NKCODE_HOME);
-			};
-		}
+	if (extendedProfile.buttonHome != nil) {
+		extendedProfile.buttonHome.valueChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+			controllerButtonPressed(pressed, NKCODE_HOME);
+		};
 	}
 
 	extendedProfile.leftThumbstick.xAxis.valueChangedHandler = ^(GCControllerAxisInput *axis, float value) {
@@ -158,10 +158,8 @@ bool InitController(GCController *controller) {
 }
 
 void ShutdownController(GCController *controller) {
-	if (@available(iOS 14.0, tvOS 14.0, *)) {
-		for (GCControllerElement* element in controller.physicalInputProfile.allElements) {
-			element.preferredSystemGestureState = GCSystemGestureStateEnabled;
-		}
+	for (GCControllerElement* element in controller.physicalInputProfile.allElements) {
+		element.preferredSystemGestureState = GCSystemGestureStateEnabled;
 	}
 	static const InputKeyCode keycodes[] = {
 		NKCODE_BUTTON_1,
@@ -204,6 +202,101 @@ void ShutdownController(GCController *controller) {
 		NativeAxis(&axisInput, 1);
 	}
 	KeyMap::NotifyPadDisconnected(DEVICE_ID_PAD_0);
+}
+
+static void remoteButtonPressed(BOOL pressed, InputKeyCode keyCode) {
+	// As keyboard keys, which the UI already understands (arrows, enter, escape), and which have
+	// default in-game mappings.
+	KeyInput key;
+	key.deviceId = DEVICE_ID_KEYBOARD;
+	key.flags = pressed ? KeyInputFlags::DOWN : KeyInputFlags::UP;
+	key.keyCode = keyCode;
+	NativeKey(key);
+}
+
+// A click on a remote without a separate ring (the 1st generation Siri Remote): an arrow at the
+// edges of the touch surface, enter in the middle. Handlers run on the main queue, so no locking.
+struct RemoteClickState {
+	bool clicking = false;
+	InputKeyCode key = NKCODE_UNKNOWN;
+};
+
+// A click further out than this from the center is an arrow. The surface is -1..1 on each axis.
+static const float REMOTE_EDGE_CLICK = 0.5f;
+
+static void remoteClicked(RemoteClickState *s, GCControllerDirectionPad *touch, BOOL pressed) {
+	if (pressed) {
+		if (s->clicking) {
+			return;
+		}
+		const float x = touch.xAxis.value;
+		const float y = touch.yAxis.value;
+		if (std::max(fabsf(x), fabsf(y)) < REMOTE_EDGE_CLICK) {
+			s->key = NKCODE_ENTER;
+		} else if (fabsf(x) > fabsf(y)) {
+			s->key = x > 0.0f ? NKCODE_DPAD_RIGHT : NKCODE_DPAD_LEFT;
+		} else {
+			s->key = y > 0.0f ? NKCODE_DPAD_UP : NKCODE_DPAD_DOWN;
+		}
+		s->clicking = true;
+		remoteButtonPressed(YES, s->key);
+	} else if (s->clicking) {
+		s->clicking = false;
+		remoteButtonPressed(NO, s->key);
+	}
+}
+
+bool InitSiriRemote(GCController *controller) {
+	GCMicroGamepad *micro = controller.microGamepad;
+	if (micro == nil || controller.extendedGamepad != nil) {
+		return false;
+	}
+
+	micro.allowsRotation = NO;
+
+	// Swiping on the touch surface isn't used for now. One swipe step per so much travel fought
+	// with the ring presses. Maybe it could scroll.
+	GCPhysicalInputProfile *profile = controller.physicalInputProfile;
+	GCControllerDirectionPad *ring = profile.dpads[GCInputDirectionalCardinalDpad];
+	GCControllerButtonInput *center = profile.buttons[GCInputDirectionalCenterButton];
+	if (ring != nil && center != nil) {
+		// The 2nd generation remote, whose ring has real buttons. This takes
+		// GCSupportsMultipleMicroGamepads in Info.plist. buttonA isn't used, since it's pressed
+		// along with every ring button.
+		ring.up.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+			remoteButtonPressed(pressed, NKCODE_DPAD_UP);
+		};
+		ring.down.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+			remoteButtonPressed(pressed, NKCODE_DPAD_DOWN);
+		};
+		ring.left.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+			remoteButtonPressed(pressed, NKCODE_DPAD_LEFT);
+		};
+		ring.right.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+			remoteButtonPressed(pressed, NKCODE_DPAD_RIGHT);
+		};
+		center.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+			remoteButtonPressed(pressed, NKCODE_ENTER);
+		};
+	} else {
+		// Where the finger is when clicking, rather than how far it moved since it went down.
+		micro.reportsAbsoluteDpadValues = YES;
+		GCControllerDirectionPad *touch = micro.dpad;
+		std::shared_ptr<RemoteClickState> state = std::make_shared<RemoteClickState>();
+		micro.buttonA.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+			remoteClicked(state.get(), touch, pressed);
+		};
+	}
+	// Play/pause. Escape opens the pause menu in-game.
+	micro.buttonX.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+		remoteButtonPressed(pressed, NKCODE_ESCAPE);
+	};
+	// The Menu (or Back) button.
+	micro.buttonMenu.pressedChangedHandler = ^(GCControllerButtonInput *button, float value, BOOL pressed) {
+		remoteButtonPressed(pressed, NKCODE_BACK);
+	};
+	INFO_LOG(Log::System, "Siri Remote set up: %s (ring: %s)", [controller.vendorName ?: @"Remote" UTF8String], ring != nil ? "yes" : "no");
+	return true;
 }
 
 void TouchTracker::SendTouchEvent(CGPoint point, UIView *view, int code, int pointerId) {
@@ -287,6 +380,7 @@ void TouchTracker::Cancelled(NSSet *touches, UIView *view) {
 	}
 }
 
+#if !PPSSPP_PLATFORM(TVOS)
 void ProcessAccelerometerData(CMAccelerometerData *accData) {
 	CMAcceleration acc = accData.acceleration;
 	// INFO_LOG(SYSTEM, "%f %f %f", acc.x, acc.y, acc.z);
@@ -294,6 +388,7 @@ void ProcessAccelerometerData(CMAccelerometerData *accData) {
 	// Might need to change these for portrait or inverse landscape
 	NativeAccelerometer(-acc.x, -acc.y, -acc.z);
 }
+#endif
 
 void SendKeyboardChars(std::string_view str) {
 	UTF8 chars(str);
@@ -308,25 +403,22 @@ void SendKeyboardChars(std::string_view str) {
 }
 
 static void SendPresses(NSSet<UIPress *> *presses, KeyInputFlags flags) {
-	// UIPress.key, and with it hardware keyboard support, needs 13.4.
-	if (@available(iOS 13.4, *)) {
-		for (UIPress *press in presses) {
-			if (!press.key) {
-				// I guess we could support remotes and stuff.
-				continue;
-			}
-			InputKeyCode code = HIDUsageToInputKeyCode(press.key.keyCode);
-			if (code != NKCODE_UNKNOWN) {
-				KeyInput input{};
-				input.deviceId = DEVICE_ID_KEYBOARD;
-				input.keyCode = code;
-				input.flags = flags;
-				NativeKey(input);
-			}
-			if ((flags & KeyInputFlags::DOWN) && press.key.characters) {
-				std::string chars([press.key.characters UTF8String]);
-				SendKeyboardChars(chars);
-			}
+	for (UIPress *press in presses) {
+		if (!press.key) {
+			// I guess we could support remotes and stuff.
+			continue;
+		}
+		InputKeyCode code = HIDUsageToInputKeyCode(press.key.keyCode);
+		if (code != NKCODE_UNKNOWN) {
+			KeyInput input{};
+			input.deviceId = DEVICE_ID_KEYBOARD;
+			input.keyCode = code;
+			input.flags = flags;
+			NativeKey(input);
+		}
+		if ((flags & KeyInputFlags::DOWN) && press.key.characters) {
+			std::string chars([press.key.characters UTF8String]);
+			SendKeyboardChars(chars);
 		}
 	}
 }

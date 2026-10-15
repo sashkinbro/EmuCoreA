@@ -119,6 +119,13 @@ const int *X64IRRegCache::GetAllocationOrder(MIPSLoc type, MIPSMap flags, int &c
 	}
 }
 
+void X64IRRegCache::FlushHostRegs(std::initializer_list<X64Reg> gprs, std::initializer_list<X64Reg> xmms) {
+	for (X64Reg r : gprs)
+		FlushNativeReg(GPRToNativeReg(r));
+	for (X64Reg r : xmms)
+		FlushNativeReg(XMMToNativeReg(r));
+}
+
 void X64IRRegCache::FlushBeforeCall() {
 	// These registers are not preserved by function calls.
 #if PPSSPP_ARCH(AMD64)
@@ -132,6 +139,9 @@ void X64IRRegCache::FlushBeforeCall() {
 	for (int i = 0; i < 6; ++i)
 		FlushNativeReg(NUM_X_REGS + i);
 #else
+	// RSI and RDI are also volatile, but never allocated.
+	FlushNativeReg(GPRToNativeReg(RCX));
+	FlushNativeReg(GPRToNativeReg(RDX));
 	FlushNativeReg(GPRToNativeReg(R8));
 	FlushNativeReg(GPRToNativeReg(R9));
 	FlushNativeReg(GPRToNativeReg(R10));

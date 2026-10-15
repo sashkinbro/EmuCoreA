@@ -68,8 +68,6 @@ public:
 	u32 GetIRArenaOffset() const { return arenaOffset_; }
 	int GetNumIRInstructions() const { return numIRInstructions_; }
 	MIPSOpcode GetOriginalFirstOp() const { return origFirstOpcode_; }
-	bool HasOriginalFirstOp() const;
-	bool RestoreOriginalFirstOp(int number);
 	bool IsValid() const { return origAddr_ != 0 && origFirstOpcode_.encoding != 0x68FFFFFF; }
 	void SetNativeOffset(int offset) {
 		nativeOffset_ = offset;
@@ -163,11 +161,9 @@ public:
 
 	int FindPreloadBlock(u32 em_address);
 
-	// "Cookie" means the 24 bits we inject into the first instruction of each block.
+	// "Cookie" means the value the block shadow holds for a block: its offset into the
+	// IR arena, or into the native code space when compiling to native.
 	int FindByCookie(int cookie);
-
-	std::vector<u32> SaveAndClearEmuHackOps();
-	void RestoreSavedEmuHackOps(const std::vector<u32> &saved);
 
 	JitBlockDebugInfo GetBlockDebugInfo(int blockNum) const override;
 	JitBlockMeta GetBlockMeta(int blockNum) const override {
@@ -218,13 +214,7 @@ public:
 	void Compile(u32 em_address) override;	// Compiles a block at current MIPS PC
 
 	bool DescribeCodePtr(const u8 *ptr, std::string &name) override;
-	// Not using a regular block cache.
-	JitBlockCache *GetBlockCache() override { return nullptr; }
 	JitBlockCacheDebugInterface *GetBlockCacheDebugInterface() override { return &blocks_; }
-	MIPSOpcode GetOriginalOp(MIPSOpcode op) override;
-
-	std::vector<u32> SaveAndClearEmuHackOps() override { return blocks_.SaveAndClearEmuHackOps(); }
-	void RestoreSavedEmuHackOps(std::vector<u32> saved) override { blocks_.RestoreSavedEmuHackOps(saved); }
 
 	void ClearCache() override;
 	void InvalidateCacheAt(u32 em_address, int length = 4) override;
@@ -237,9 +227,6 @@ public:
 	const u8 *GetDispatcher() const override { return nullptr; }
 	const u8 *GetCrashHandler() const override { return nullptr; }
 
-	void LinkBlock(u8 *exitPoint, const u8 *checkedEntry) override;
-	void UnlinkBlock(u8 *checkedEntry, u32 originalAddress) override;
-
 	// This gets overridden by the native-backed IR jits.
 	const u8 *GetCodeBase() const override { return nullptr; }
 
@@ -247,6 +234,7 @@ protected:
 	bool CompileBlock(u32 em_address, std::vector<IRInst> &instructions, u32 &mipsBytes);
 	virtual bool CompileNativeBlock(IRBlockCache *irBlockCache, int block_num) { return true; }
 	virtual void FinalizeNativeBlock(IRBlockCache *irBlockCache, int block_num) {}
+	virtual void InvalidateNativeBlock(IRBlockCache *irBlockCache, int block_num) {}
 
 	bool compileToNative_;
 

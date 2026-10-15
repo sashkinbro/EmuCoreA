@@ -25,35 +25,21 @@ list(APPEND CoreExtra
 )
 
 list(APPEND CoreExtra
-	MIPS/ARM/ArmAsm.cpp
-	MIPS/ARM/ArmCompALU.cpp
-	MIPS/ARM/ArmCompBranch.cpp
-	MIPS/ARM/ArmCompFPU.cpp
-	MIPS/ARM/ArmCompLoadStore.cpp
-	MIPS/ARM/ArmCompVFPU.cpp
-	MIPS/ARM/ArmCompReplace.cpp
-	MIPS/ARM/ArmJit.cpp
-	MIPS/ARM/ArmJit.h
-	MIPS/ARM/ArmRegCache.cpp
-	MIPS/ARM/ArmRegCache.h
-	MIPS/ARM/ArmRegCacheFPU.cpp
-	MIPS/ARM/ArmRegCacheFPU.h
+	MIPS/ARM/ArmIRAsm.cpp
+	MIPS/ARM/ArmIRCompALU.cpp
+	MIPS/ARM/ArmIRCompBranch.cpp
+	MIPS/ARM/ArmIRCompFPU.cpp
+	MIPS/ARM/ArmIRCompLoadStore.cpp
+	MIPS/ARM/ArmIRCompSystem.cpp
+	MIPS/ARM/ArmIRCompVec.cpp
+	MIPS/ARM/ArmIRJit.cpp
+	MIPS/ARM/ArmIRRegCache.cpp
+	MIPS/ARM/ArmIRJit.h
+	MIPS/ARM/ArmIRRegCache.h
+	MIPS/ARM/ArmVfpuDot.h
 )
 
 list(APPEND CoreExtra
-	MIPS/ARM64/Arm64Asm.cpp
-	MIPS/ARM64/Arm64CompALU.cpp
-	MIPS/ARM64/Arm64CompBranch.cpp
-	MIPS/ARM64/Arm64CompFPU.cpp
-	MIPS/ARM64/Arm64CompLoadStore.cpp
-	MIPS/ARM64/Arm64CompVFPU.cpp
-	MIPS/ARM64/Arm64CompReplace.cpp
-	MIPS/ARM64/Arm64Jit.cpp
-	MIPS/ARM64/Arm64Jit.h
-	MIPS/ARM64/Arm64RegCache.cpp
-	MIPS/ARM64/Arm64RegCache.h
-	MIPS/ARM64/Arm64RegCacheFPU.cpp
-	MIPS/ARM64/Arm64RegCacheFPU.h
 	MIPS/ARM64/Arm64IRAsm.cpp
 	MIPS/ARM64/Arm64IRCompALU.cpp
 	MIPS/ARM64/Arm64IRCompBranch.cpp
@@ -65,25 +51,11 @@ list(APPEND CoreExtra
 	MIPS/ARM64/Arm64IRJit.h
 	MIPS/ARM64/Arm64IRRegCache.cpp
 	MIPS/ARM64/Arm64IRRegCache.h
+	MIPS/ARM64/Arm64VfpuDot.h
 	Util/DisArm64.cpp
 )
 
 list(APPEND CoreExtra
-	MIPS/x86/Asm.cpp
-	MIPS/x86/CompALU.cpp
-	MIPS/x86/CompBranch.cpp
-	MIPS/x86/CompFPU.cpp
-	MIPS/x86/CompLoadStore.cpp
-	MIPS/x86/CompVFPU.cpp
-	MIPS/x86/CompReplace.cpp
-	MIPS/x86/Jit.cpp
-	MIPS/x86/Jit.h
-	MIPS/x86/JitSafeMem.cpp
-	MIPS/x86/JitSafeMem.h
-	MIPS/x86/RegCache.cpp
-	MIPS/x86/RegCache.h
-	MIPS/x86/RegCacheFPU.cpp
-	MIPS/x86/RegCacheFPU.h
 	MIPS/x86/X64IRAsm.cpp
 	MIPS/x86/X64IRCompALU.cpp
 	MIPS/x86/X64IRCompBranch.cpp
@@ -95,6 +67,7 @@ list(APPEND CoreExtra
 	MIPS/x86/X64IRJit.h
 	MIPS/x86/X64IRRegCache.cpp
 	MIPS/x86/X64IRRegCache.h
+	MIPS/x86/X64VfpuDot.h
 )
 
 list(APPEND CoreExtra
@@ -215,8 +188,6 @@ if(NOT LIBRETRO)
 		HW/StereoResampler.h
 		MIPS/MIPSAsm.cpp
 		MIPS/MIPSAsm.h
-		MIPS/fake/FakeJit.cpp
-		MIPS/fake/FakeJit.h
 		Util/GameManager.cpp
 		Util/GameManager.h
 		Util/VideoPlayer.cpp
@@ -396,6 +367,7 @@ add_library(Core STATIC
 	FileSystems/VirtualDiscFileSystem.h
 	Font/PGF.cpp
 	Font/PGF.h
+	HLE/ErrorCodes.h
 	HLE/FunctionWrappers.h
 	HLE/HLE.cpp
 	HLE/HLE.h
@@ -406,6 +378,7 @@ add_library(Core STATIC
 	HLE/HLEHelperThread.h
 	HLE/HLETables.cpp
 	HLE/HLETables.h
+	HLE/KernelThreadDebugInterface.h
 	HLE/KernelWaitHelpers.h
 	HLE/PSPThreadContext.h
 	HLE/KUBridge.h
@@ -657,7 +630,6 @@ add_library(Core STATIC
 	MIPS/MIPSTracer.h
 	MIPS/JitCommon/JitCommon.cpp
 	MIPS/JitCommon/JitCommon.h
-	MIPS/JitCommon/JitBlockCache.cpp
 	MIPS/JitCommon/JitBlockCache.h
 	MIPS/JitCommon/JitState.cpp
 	MIPS/JitCommon/JitState.h
@@ -669,6 +641,7 @@ add_library(Core STATIC
 	MemMap.h
 	MemMapFunctions.cpp
 	MemMapHelpers.h
+	Opcode.h
 	PSPLoaders.cpp
 	PSPLoaders.h
 	Reporting.cpp
@@ -683,6 +656,7 @@ add_library(Core STATIC
 	Screenshot.h
 	System.cpp
 	System.h
+	x360_compat.h
 	Util/AtracTrack.cpp
 	Util/AtracTrack.h
 	Util/AudioFormat.cpp

@@ -5,8 +5,7 @@
 // main.mm: JIT enablement, the System_ functions, starting the next step
 // AppDelegate.mm: Audio session interruptions, deep link and library export helpers
 // SceneDelegate.mm: Runs NativeInit, creates the window and the view controller
-// ViewControllerCommon.mm: Input, keyboard, pickers and sizing, shared by the two below
-// ViewController.mm / ViewControllerMetal.mm: The OpenGL and Vulkan view controllers
+// ViewController.mm: The view controller. Rendering (Vulkan to a CAMetalLayer), input, keyboard, pickers and sizing
 
 #import <UIKit/UIKit.h>
 #import <dlfcn.h>
@@ -20,7 +19,6 @@
 #import <stdio.h>
 #import <stdlib.h>
 #import <sys/syscall.h>
-#import <sys/utsname.h>
 
 #import "AppDelegate.h"
 #import "ViewController.h"
@@ -42,8 +40,9 @@
 #include "Common/Log/LogManager.h"
 #include "Core/Util/DarwinFileSystemServices.h"
 
-// Compile out all the hackery in app store builds.
-#if !PPSSPP_PLATFORM(IOS_APP_STORE)
+// Compile out all the hackery in app store builds. tvOS doesn't have posix_spawn, and there's no
+// jailbreak scene to speak of.
+#if !PPSSPP_PLATFORM(IOS_APP_STORE) && !PPSSPP_PLATFORM(TVOS)
 
 struct cs_blob_index {
 	uint32_t type;
@@ -83,16 +82,6 @@ static void *exception_handler(void *argument) {
 static NSDictionary *parse_entitlements(const void *entitlements, size_t length) {
 	char *copy = (char *)malloc(length);
 	memcpy(copy, entitlements, length);
-
-	// strip out psychic paper entitlement hiding
-	if (@available(iOS 13.5, *)) {
-	} else {
-		static const char *needle = "<!---><!-->";
-		char *found = strnstr(copy, needle, length);
-		if (found) {
-			memset(found, ' ', strlen(needle));
-		}
-	}
 	NSData *data = [NSData dataWithBytes:copy length:length];
 	free(copy);
 
@@ -206,43 +195,6 @@ bool jb_has_cs_disabled(void) {
 	return !csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags)) && (flags & ~CS_KILL) == flags;
 }
 
-#define _COMM_PAGE_START_ADDRESS        (0x0000000FFFFFC000ULL) /* In TTBR0 */
-#define _COMM_PAGE_APRR_SUPPORT         (_COMM_PAGE_START_ADDRESS+0x10C)
-
-static bool is_device_A12_or_newer(void) {
-	// devices without APRR are definitely < A12
-	char aprr_support = *(volatile char *)_COMM_PAGE_APRR_SUPPORT;
-	if (aprr_support == 0) {
-		return false;
-	}
-	// we still have A11 devices that support APRR
-	struct utsname systemInfo;
-	if (uname(&systemInfo) != 0) {
-		return false;
-	}
-	// iPhone 8, 8 Plus, and iPhone X
-	if (strncmp("iPhone10,", systemInfo.machine, 9) == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-bool jb_has_cs_execseg_allow_unsigned(void) {
-	NSDictionary *entitlements = cached_app_entitlements();
-	if (@available(iOS 14.2, *)) {
-		if (@available(iOS 14.4, *)) {
-			return false; // iOS 14.4 broke it again
-		}
-		// technically we need to check the Code Directory and make sure
-		// CS_EXECSEG_ALLOW_UNSIGNED is set but we assume that it is properly
-		// signed, which should reflect the get-task-allow entitlement
-		return is_device_A12_or_newer() && [entitlements[@"get-task-allow"] boolValue];
-	} else {
-		return false;
-	}
-}
-
 static bool jb_has_debugger_attached(void) {
 	int flags;
 	return !csops(getpid(), CS_OPS_STATUS, &flags, sizeof(flags)) && flags & CS_DEBUGGED;
@@ -300,7 +252,11 @@ static std::string version;
 std::string System_GetProperty(SystemProperty prop) {
 	switch (prop) {
 		case SYSPROP_NAME:
+#if PPSSPP_PLATFORM(TVOS)
+			return StringFromFormat("tvOS %s", version.c_str());
+#else
 			return StringFromFormat("iOS %s", version.c_str());
+#endif
 		case SYSPROP_LANGREGION:
 			return [[[NSLocale currentLocale] objectForKey:NSLocaleIdentifier] UTF8String];
 		case SYSPROP_BUILD_VERSION:
@@ -318,20 +274,24 @@ std::vector<std::string> System_GetPropertyStringVec(SystemProperty prop) {
 	}
 }
 
+#if !PPSSPP_PLATFORM(TVOS)
 extern "C" {
 int Apple_GetCurrentBatteryCapacity();
 }
+#endif
 
 int64_t System_GetPropertyInt(SystemProperty prop) {
 	switch (prop) {
 		case SYSPROP_AUDIO_SAMPLE_RATE:
 			return 44100;
 		case SYSPROP_DEVICE_TYPE:
-			return DEVICE_TYPE_MOBILE;
+			return IS_TV() ? DEVICE_TYPE_TV : DEVICE_TYPE_MOBILE;
 		case SYSPROP_SYSTEMVERSION:
 			return g_iosVersionMajor;
+#if !PPSSPP_PLATFORM(TVOS)
 		case SYSPROP_BATTERY_PERCENTAGE:
 			return Apple_GetCurrentBatteryCapacity();
+#endif
 		default:
 			return -1;
 	}
@@ -355,6 +315,34 @@ float System_GetPropertyFloat(SystemProperty prop) {
 }
 
 bool System_GetPropertyBool(SystemProperty prop) {
+#if PPSSPP_PLATFORM(TVOS)
+	// No document picker, share sheet, clipboard, camera, location, motion, microphone, battery,
+	// rotation or web browser. And no files we didn't put there ourselves, so no file browsing either.
+	switch (prop) {
+	case SYSPROP_HAS_FILE_BROWSER:
+	case SYSPROP_HAS_FOLDER_BROWSER:
+	case SYSPROP_HAS_IMAGE_BROWSER:
+	case SYSPROP_HAS_ACCELEROMETER:
+	case SYSPROP_HAS_KEYBOARD:
+	case SYSPROP_KEYBOARD_IS_SOFT:
+	case SYSPROP_SUPPORTS_SHARE_TEXT:
+	case SYSPROP_SUPPORTS_SHARE_FILE:
+	case SYSPROP_CAN_LAUNCH_URL:
+	case SYSPROP_DISPLAY_HAS_CAMERA_CUTOUT:
+	case SYSPROP_CAN_READ_BATTERY_PERCENTAGE:
+	case SYSPROP_CAN_RESTRICT_ORIENTATION:
+	case SYSPROP_MICROPHONE_NEEDS_POLLING:
+		return false;
+	case SYSPROP_HAS_BACK_BUTTON:
+		// The remote's Menu/Back button.
+		return true;
+	case SYSPROP_LIMITED_FILE_BROWSING:
+		// Nothing outside the app's container lists, so there'd be no way back.
+		return true;
+	default:
+		break;
+	}
+#endif
 	switch (prop) {
 		case SYSPROP_HAS_DEEP_LINKS:
 			return true;
@@ -450,11 +438,19 @@ void System_Notify(SystemNotification notification) {
 			}
 		});
 		break;
+	case SystemNotification::TOP_LEVEL_CHANGED:
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if (sharedViewController) {
+				[sharedViewController topLevelChanged];
+			}
+		});
+		break;
 	case SystemNotification::AUDIO_MODE_CHANGED:
 		dispatch_async(dispatch_get_main_queue(), ^{
 			iOSCoreAudioUpdateSession();
 		});
 		break;
+#if !PPSSPP_PLATFORM(TVOS)
 	case SystemNotification::ROTATE_UPDATED:
 		dispatch_async(dispatch_get_main_queue(), ^{
 			if (sharedViewController) {
@@ -467,6 +463,7 @@ void System_Notify(SystemNotification notification) {
 			}
 		});
 		break;
+#endif
 	default:
 		break;
 	}
@@ -505,6 +502,9 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		break;
 	case SystemRequestType::BROWSE_FOR_FILE:
 	{
+		if (!System_GetPropertyBool(SYSPROP_HAS_FILE_BROWSER)) {
+			return false;
+		}
 		DarwinDirectoryPanelCallback callback = [requestId] (bool success, Path path) {
 			if (success) {
 				g_requestManager.PostSystemSuccess(requestId, path.c_str());
@@ -517,6 +517,9 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 	}
 	case SystemRequestType::BROWSE_FOR_FOLDER:
 	{
+		if (!System_GetPropertyBool(SYSPROP_HAS_FOLDER_BROWSER)) {
+			return false;
+		}
 		DarwinDirectoryPanelCallback callback = [requestId] (bool success, Path path) {
 			if (success) {
 				g_requestManager.PostSystemSuccess(requestId, path.c_str());
@@ -529,6 +532,9 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 	}
 	case SystemRequestType::BROWSE_FOR_IMAGE:
 	{
+		if (!System_GetPropertyBool(SYSPROP_HAS_IMAGE_BROWSER)) {
+			return false;
+		}
 		NSString *filename = [NSString stringWithUTF8String:param2.c_str()];
 		dispatch_async(dispatch_get_main_queue(), ^{
 			[sharedViewController pickPhoto:filename requestId:requestId];
@@ -581,6 +587,9 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		return true;
 	case SystemRequestType::SHARE_TEXT:
 	{
+		if (!System_GetPropertyBool(SYSPROP_SUPPORTS_SHARE_TEXT)) {
+			return false;
+		}
 		NSString *text = [NSString stringWithUTF8String:param1.c_str()];
 		dispatch_async(dispatch_get_main_queue(), ^{
 			[sharedViewController shareText:text];
@@ -589,6 +598,9 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 	}
 	case SystemRequestType::SHARE_FILE:
 	{
+		if (!System_GetPropertyBool(SYSPROP_SUPPORTS_SHARE_FILE)) {
+			return false;
+		}
 		// param2, the MIME type, isn't needed. The share sheet goes by the extension.
 		NSString *path = [NSString stringWithUTF8String:param1.c_str()];
 		if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
@@ -632,6 +644,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		return true;
 	}
 #endif
+#if !PPSSPP_PLATFORM(TVOS)
 	case SystemRequestType::COPY_TO_CLIPBOARD:
 	{
 		NSString *text = [NSString stringWithUTF8String:param1.c_str()];
@@ -640,6 +653,7 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		});
 		return true;
 	}
+#endif
 	case SystemRequestType::SET_KEEP_SCREEN_BRIGHT:
 		dispatch_async(dispatch_get_main_queue(), ^{
 			INFO_LOG(Log::System, "SET_KEEP_SCREEN_BRIGHT: %d", (int)param3);
@@ -668,8 +682,12 @@ void System_LaunchUrl(LaunchUrlType urlType, std::string_view url) {
 }
 
 bool System_AudioRecordingIsAvailable() {
+#if PPSSPP_PLATFORM(TVOS)
+	return false;
+#else
 	// Every iPhone and iPad has a microphone. Permission is asked for when recording starts.
 	return true;
+#endif
 }
 
 PermissionStatus System_GetPermissionStatus(SystemPermission permission) {
@@ -677,6 +695,7 @@ PermissionStatus System_GetPermissionStatus(SystemPermission permission) {
 }
 
 void System_Vibrate(int mode) {
+#if !PPSSPP_PLATFORM(TVOS)
 	// Comes from the UI code on the emu thread, and UIKit wants the main thread.
 	dispatch_async(dispatch_get_main_queue(), ^{
 		// Does nothing on devices without a Taptic Engine.
@@ -687,7 +706,15 @@ void System_Vibrate(int mode) {
 		}
 		[feedbackGenerator selectionChanged];
 	});
+#endif
 }
+
+#if PPSSPP_PLATFORM(TVOS)
+// The iOS one is in CameraHelper.mm.
+std::vector<std::string> System_GetCameraDeviceList() {
+	return std::vector<std::string>();
+}
+#endif
 
 AudioBackend *System_CreateAudioBackend() {
 	// Use legacy mechanisms.
@@ -697,13 +724,13 @@ AudioBackend *System_CreateAudioBackend() {
 int main(int argc, char *argv[]) {
 	version = [[[UIDevice currentDevice] systemVersion] UTF8String];
 	if (1 != sscanf(version.c_str(), "%d", &g_iosVersionMajor)) {
-		// Just set it to 14.0 if the parsing fails for whatever reason.
-		g_iosVersionMajor = 14;
+		// Just set it to 15 (the minimum) if the parsing fails for whatever reason.
+		g_iosVersionMajor = 15;
 	}
 
 	g_logManager.EnableOutput(LogOutput::Stdio);
 
-#if PPSSPP_PLATFORM(IOS_APP_STORE)
+#if PPSSPP_PLATFORM(IOS_APP_STORE) || PPSSPP_PLATFORM(TVOS)
 	g_jitAvailable = false;
 #else
 	// Hacky hacks to try to enable JIT by pretending to be a debugger.
@@ -718,8 +745,6 @@ int main(int argc, char *argv[]) {
 		INFO_LOG(Log::System, "JIT: found entitlement\n");
 	} else if (jb_has_cs_disabled()) {
 		INFO_LOG(Log::System, "JIT: CS_KILL disabled\n");
-	} else if (jb_has_cs_execseg_allow_unsigned()) {
-		INFO_LOG(Log::System, "JIT: CS_EXECSEG_ALLOW_UNSIGNED set\n");
 	} else if (jb_enable_ptrace_hack()) {
 		INFO_LOG(Log::System, "JIT: ptrace() hack supported\n");
 	} else {

@@ -124,6 +124,18 @@ int32_t libra_error_free_string(char **) { return 0; }
 
 int main() {
     const VkSemaphore finished = TestHandle<VkSemaphore>(50);
+    for (const auto transform : {VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+                                 VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR,
+                                 VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR}) {
+        VulkanContext context;
+        context.actualExtent = {800, 600};
+        context.caps.currentExtent = {600, 800};
+        context.caps.currentTransform = transform;
+        NativeVulkanPresentation presentation(&context);
+        const VkExtent2D extent = presentation.GetExtent();
+        Check(extent.width == 800 && extent.height == 600,
+              "presentation must use the created swapchain extent after Android rotation");
+    }
 #if defined(EMUCOREA_HAVE_LIBRASHADER)
     Reset();
     {

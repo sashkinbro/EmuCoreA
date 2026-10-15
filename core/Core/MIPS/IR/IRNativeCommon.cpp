@@ -421,8 +421,10 @@ void IRNativeBackend::CompileIRInst(IRInst inst) {
 		break;
 
 	case IROp::Vec4Dot:
+	case IROp::Vec4VfpuDot:
 		CompIR_VecHoriz(inst);
 		break;
+
 
 	case IROp::Vec2Unpack16To31:
 	case IROp::Vec2Unpack16To32:
@@ -529,6 +531,10 @@ void IRNativeJit::FinalizeNativeBlock(IRBlockCache *irblockCache, int block_num)
 	backend_->FinalizeBlock(irblockCache, block_num, jo);
 }
 
+void IRNativeJit::InvalidateNativeBlock(IRBlockCache *irblockCache, int block_num) {
+	backend_->InvalidateBlock(irblockCache, block_num);
+}
+
 void IRNativeJit::RunLoopUntil(u64 globalticks) {
 	if constexpr (enableDebugStats || enableDebugProfiler) {
 		LogDebugStats();
@@ -605,6 +611,10 @@ const u8 *IRNativeJit::GetCodeBase() const {
 	return backend_->CodeBlock().GetBasePtr();
 }
 
+u32 IRNativeJit::GetBlockShadowHookValue() const {
+	return (u32)backend_->OffsetFromCodePtr(backend_->GetNativeHooks().blockShadowHook);
+}
+
 bool IRNativeJit::IsAtDispatchFetch(const u8 *ptr) const {
 	return ptr == backend_->GetNativeHooks().dispatchFetch;
 }
@@ -618,6 +628,7 @@ const u8 *IRNativeJit::GetCrashHandler() const {
 }
 
 void IRNativeJit::UpdateFCR31() {
+	IRJit::UpdateFCR31();
 	backend_->UpdateFCR31(mips_);
 }
 

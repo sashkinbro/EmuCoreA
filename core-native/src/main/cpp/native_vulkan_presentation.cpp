@@ -30,11 +30,6 @@ using namespace PPSSPP_VK;
 
 namespace {
 
-template <typename T>
-T Clamp(T value, T low, T high) {
-    return std::max(low, std::min(value, high));
-}
-
 const VkImageSubresourceRange kColorRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
 
 }  // namespace
@@ -190,23 +185,9 @@ VkResult NativeVulkanPresentation::QueuePresent(VulkanContext *vulkan, VkQueue q
 }
 
 VkExtent2D NativeVulkanPresentation::QueryExtent() const {
-    const VkSurfaceCapabilitiesKHR &caps = vulkan_->GetSurfaceCapabilities();
-    VkExtent2D extent = caps.currentExtent;
-    if (extent.width == UINT32_MAX || extent.height == UINT32_MAX) {
-        extent = caps.minImageExtent;
-    }
-    extent.width = Clamp(extent.width, caps.minImageExtent.width, caps.maxImageExtent.width);
-    extent.height = Clamp(extent.height, caps.minImageExtent.height, caps.maxImageExtent.height);
-
-    // Mirror VulkanContext::InitSwapchain(): a 90-degree pre-rotation swaps the
-    // swapchain extent, and the backbuffer sizes must follow it.
-    const VkSurfaceTransformFlagsKHR t = caps.currentTransform;
-    const bool identity = (t & (VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR | VK_SURFACE_TRANSFORM_INHERIT_BIT_KHR)) != 0;
-    const bool allowed = (t & (VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR | VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR)) != 0;
-    if (!identity && allowed && (t & (VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR | VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR))) {
-        std::swap(extent.width, extent.height);
-    }
-    return extent;
+    // InitSwapchain owns rotation, stale Android extents and size constraints.
+    // Recomputing from capabilities can disagree with the images it created.
+    return vulkan_->GetSwapchainExtent();
 }
 
 VkFormat NativeVulkanPresentation::QueryFormat() const {

@@ -209,7 +209,7 @@ void LoongArch64JitBackend::CompIR_VecAssign(IRInst inst) {
 			} else {
 				regs_.Map(inst);
 				for (int i = 0; i < 4; ++i) {
-					int lane = (inst.src2 >> (i * 2)) & 3;
+					int lane = Vec4ShuffleLane(inst.src2, i);
 					FMOV_S(regs_.F(inst.dest + i), regs_.F(inst.src1 + lane));
 				}
 			}
@@ -301,10 +301,11 @@ void LoongArch64JitBackend::CompIR_VecArith(IRInst inst) {
 		break;
 
 	case IROp::Vec4Scale:
+		// Check overlap before mapping: the reg cache can't map a reg as both a vector and a scalar.
+		if (cpu_info.LOONGARCH_LSX && (Overlap(inst.dest, 4, inst.src2, 1) || Overlap(inst.src1, 4, inst.src2, 1)))
+			DISABLE;
 		regs_.Map(inst);
 		if (cpu_info.LOONGARCH_LSX) {
-			if (Overlap(inst.dest, 4, inst.src2, 1) || Overlap(inst.src1, 4, inst.src2, 1))
-				DISABLE;
 
 			VSHUF4I_W(regs_.V(inst.src2), regs_.V(inst.src2), 0);
 			VFMUL_S(regs_.V(inst.dest), regs_.V(inst.src1), regs_.V(inst.src2));
@@ -355,10 +356,11 @@ void LoongArch64JitBackend::CompIR_VecHoriz(IRInst inst) {
 
 	switch (inst.op) {
 	case IROp::Vec4Dot:
+		// Check overlap before mapping: the reg cache can't map a reg as both a vector and a scalar.
+		if (cpu_info.LOONGARCH_LSX && (Overlap(inst.dest, 1, inst.src1, 4) || Overlap(inst.dest, 1, inst.src2, 4)))
+			DISABLE;
 		regs_.Map(inst);
 		if (cpu_info.LOONGARCH_LSX) {
-			if (Overlap(inst.dest, 1, inst.src1, 4) || Overlap(inst.dest, 1, inst.src2, 4))
-				DISABLE;
 
 			VFMUL_S(regs_.V(inst.dest), regs_.V(inst.src1), regs_.V(inst.src2));
 			VOR_V(EncodeRegToV(SCRATCHF1), regs_.V(inst.dest), regs_.V(inst.dest));
@@ -385,6 +387,11 @@ void LoongArch64JitBackend::CompIR_VecHoriz(IRInst inst) {
 					FMADD_S(regs_.F(inst.dest), regs_.F(inst.src1 + i), regs_.F(inst.src2 + i), regs_.F(inst.dest));
 			}
 		}
+		break;
+
+	case IROp::Vec4VfpuDot:
+		// Through the IR interpreter for now.
+		CompIR_Generic(inst);
 		break;
 
 	default:

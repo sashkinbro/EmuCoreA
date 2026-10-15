@@ -194,7 +194,7 @@ void RiscVJitBackend::CompIR_VecAssign(IRInst inst) {
 		} else {
 			regs_.Map(inst);
 			for (int i = 0; i < 4; ++i) {
-				int lane = (inst.src2 >> (i * 2)) & 3;
+				int lane = Vec4ShuffleLane(inst.src2, i);
 				FMV(32, regs_.F(inst.dest + i), regs_.F(inst.src1 + lane));
 			}
 		}
@@ -310,6 +310,11 @@ void RiscVJitBackend::CompIR_VecHoriz(IRInst inst) {
 			for (int i = 1; i < 4; ++i)
 				FMADD(32, regs_.F(inst.dest), regs_.F(inst.src1 + i), regs_.F(inst.src2 + i), regs_.F(inst.dest));
 		}
+		break;
+
+	case IROp::Vec4VfpuDot:
+		// Through the IR interpreter for now.
+		CompIR_Generic(inst);
 		break;
 
 	default:

@@ -19,6 +19,7 @@
 
 #include <unordered_map>
 
+#include "Common/CodeBlock.h"
 #include "Core/MIPS/IR/IRJit.h"
 #include "Core/MIPS/JitCommon/JitBlockCache.h"
 
@@ -44,6 +45,8 @@ struct IRNativeHooks {
 	const uint8_t *dispatcher = nullptr;
 	const uint8_t *dispatchFetch = nullptr;
 	const uint8_t *crashHandler = nullptr;
+	// The dispatcher's compile path, where a replacement hook's block shadow entry goes.
+	const uint8_t *blockShadowHook = nullptr;
 
 	uint32_t *profilerPC = nullptr;
 	IRProfilerStatus *profilerStatus = nullptr;
@@ -189,6 +192,7 @@ public:
 	bool DescribeCodePtr(const u8 *ptr, std::string &name) override;
 	bool CodeInRange(const u8 *ptr) const override;
 	bool IsAtDispatchFetch(const u8 *ptr) const override;
+	u32 GetBlockShadowHookValue() const override;
 	const u8 *GetDispatcher() const override;
 	const u8 *GetCrashHandler() const override;
 
@@ -202,6 +206,7 @@ protected:
 	void Init(IRNativeBackend &backend);
 	bool CompileNativeBlock(IRBlockCache *irBlockCache, int block_num) override;
 	void FinalizeNativeBlock(IRBlockCache *irBlockCache, int block_num) override;
+	void InvalidateNativeBlock(IRBlockCache *irBlockCache, int block_num) override;
 
 	IRNativeBackend *backend_ = nullptr;
 	IRNativeHooks hooks_;

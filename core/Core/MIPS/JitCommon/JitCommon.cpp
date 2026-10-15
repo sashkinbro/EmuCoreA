@@ -31,7 +31,6 @@
 #include "Common/Serialize/SerializeFuncs.h"
 
 #include "Core/Util/DisArm64.h"
-#include "Core/Config.h"
 
 #include "Core/MIPS/IR/IRJit.h"
 #include "Core/MIPS/JitCommon/JitCommon.h"
@@ -40,19 +39,15 @@
 #include "Core/MIPS/MIPSTables.h"
 
 #if PPSSPP_ARCH(ARM)
-#include "../ARM/ArmJit.h"
+#include "../ARM/ArmIRJit.h"
 #elif PPSSPP_ARCH(ARM64)
-#include "../ARM64/Arm64Jit.h"
 #include "../ARM64/Arm64IRJit.h"
 #elif PPSSPP_ARCH(X86) || PPSSPP_ARCH(AMD64)
-#include "../x86/Jit.h"
 #include "../x86/X64IRJit.h"
 #elif PPSSPP_ARCH(RISCV64)
 #include "../RiscV/RiscVJit.h"
 #elif PPSSPP_ARCH(LOONGARCH64)
 #include "../LoongArch64/LoongArch64Jit.h"
-#else
-#include "../fake/FakeJit.h"
 #endif
 
 namespace MIPSComp {
@@ -106,25 +101,20 @@ namespace MIPSComp {
 		return notTakenTarget;
 }
 
-	JitInterface *CreateNativeJit(MIPSState *mipsState, bool useIR) {
+	JitInterface *CreateNativeJit(MIPSState *mipsState) {
 #if PPSSPP_ARCH(ARM)
-		return new MIPSComp::ArmJit(mipsState);
+		return new MIPSComp::ArmIRJit(mipsState);
 #elif PPSSPP_ARCH(ARM64)
-		if (useIR)
-			return new MIPSComp::Arm64IRJit(mipsState);
-		else
-			return new MIPSComp::Arm64Jit(mipsState);
+		return new MIPSComp::Arm64IRJit(mipsState);
 #elif PPSSPP_ARCH(X86) || PPSSPP_ARCH(AMD64)
-		if (useIR)
-			return new MIPSComp::X64IRJit(mipsState);
-		else
-			return new MIPSComp::Jit(mipsState);
+		return new MIPSComp::X64IRJit(mipsState);
 #elif PPSSPP_ARCH(RISCV64)
 		return new MIPSComp::RiscVJit(mipsState);
 #elif PPSSPP_ARCH(LOONGARCH64)
 		return new MIPSComp::LoongArch64Jit(mipsState);
 #else
-		return new MIPSComp::FakeJit(mipsState);
+		// No native JIT for this architecture.
+		return new MIPSComp::IRJit(mipsState, false);
 #endif
 	}
 
@@ -160,18 +150,18 @@ std::vector<std::string> DisassembleArm2(const u8 *data, int size) {
 		}
 		ArmDis((u32)(intptr_t)codePtr, inst, temp, sizeof(temp), false);
 		std::string buf = temp;
-		if (buf == "BKPT 1") {
+		if (buf == "BKPT #1") {
 			bkpt_count++;
 		} else {
 			if (bkpt_count) {
-				lines.push_back(StringFromFormat("BKPT 1 (x%d)", bkpt_count));
+				lines.push_back(StringFromFormat("BKPT #1 (x%d)", bkpt_count));
 				bkpt_count = 0;
 			}
 			lines.push_back(buf);
 		}
 	}
 	if (bkpt_count) {
-		lines.push_back(StringFromFormat("BKPT 1 (x%d)", bkpt_count));
+		lines.push_back(StringFromFormat("BKPT #1 (x%d)", bkpt_count));
 	}
 	return lines;
 }

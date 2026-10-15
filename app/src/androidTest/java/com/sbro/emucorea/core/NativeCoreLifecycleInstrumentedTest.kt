@@ -234,6 +234,53 @@ class NativeCoreLifecycleInstrumentedTest {
         }
     }
 
+    @Test(timeout = 90_000)
+    fun saveStatesSurviveSwitchingBetweenEveryCpuBackend() {
+        initialize(1)
+        onFrame { assertTrue(NativePpsspp.nativeBoot(guest.path)) }
+        awaitBoot()
+        val save = File(root, "cross-cpu.state")
+        onFrame {
+            assertFrameProgress()
+            assertTrue(NativePpsspp.nativeSaveState(save.path))
+            for ((option, cpu) in listOf("IR JIT" to 2, "JIT" to 1, "Interpreter" to 0, "JIT" to 1)) {
+                NativePpsspp.nativeSetConfig("ppsspp_cpu_core", option)
+                assertFrameProgress()
+                assertEquals("The frame thread applies the selected CPU", cpu, state()[CPU])
+                assertTrue("Load state using $option", NativePpsspp.nativeLoadState(save.path))
+                assertEquals("State load retains the selected CPU", cpu, state()[CPU])
+                assertFrameProgress()
+                assertTrue(NativePpsspp.nativeGetRuntimeError().isEmpty())
+                assertEquals("State load resumes audio", 1, state()[AUDIO])
+                assertTrue(NativePpsspp.nativeSaveState(save.path))
+            }
+        }
+    }
+
+    @Test(timeout = 90_000)
+    fun optionalPreviousVersionStateRunsOnEveryCpuBackend() {
+        val path = InstrumentationRegistry.getArguments().getString("previousVersionState")
+        assumeTrue("Supply a state captured before updating the native core", path != null)
+        val previous = File(checkNotNull(path))
+        assertTrue("The supplied previous-version state must exist", previous.isFile && previous.length() > 128)
+        for ((option, cpu) in listOf("JIT" to 1, "IR JIT" to 2, "Interpreter" to 0)) {
+            initialize(1)
+            onFrame {
+                NativePpsspp.nativeSetConfig("ppsspp_cpu_core", option)
+                assertTrue(NativePpsspp.nativeBoot(guest.path))
+            }
+            awaitBoot()
+            onFrame {
+                assertTrue("Load the previous-version state with $option", NativePpsspp.nativeLoadState(previous.path))
+                assertEquals(cpu, state()[CPU])
+                repeat(5) { assertFrameProgress() }
+                assertTrue(NativePpsspp.nativeGetRuntimeError().isEmpty())
+                assertEquals(1, state()[AUDIO])
+                NativePpsspp.nativeShutdown()
+            }
+        }
+    }
+
     @Test(timeout = 60_000)
     fun truncatedStateStopsSessionAndFreshBootRecovers() {
         initialize(1)

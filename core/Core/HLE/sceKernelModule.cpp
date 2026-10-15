@@ -16,6 +16,7 @@
 // https://github.com/hrydgard/ppsspp and http://www.ppsspp.org/.
 
 #include <algorithm>
+#include <map>
 #include <set>
 
 #include "zlib.h"
@@ -23,6 +24,7 @@
 #include "Common/Data/Convert/SmallDataConvert.h"
 #include "Common/Serialize/Serializer.h"
 #include "Common/Serialize/SerializeFuncs.h"
+#include "Common/Serialize/SerializeMap.h"
 #include "Common/Serialize/SerializeSet.h"
 #include "Common/File/FileUtil.h"
 #include "Common/StringUtils.h"
@@ -64,6 +66,7 @@
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceKernelModule.h"
 #include "Core/HLE/sceKernelThread.h"
+#include "Core/HLE/sceKernelInterrupt.h"
 #include "Core/HLE/sceKernelMemory.h"
 #include "Core/HLE/sceMpeg.h"
 #include "Core/HLE/scePsmf.h"
@@ -492,6 +495,30 @@ static std::set<SceUID> loadedModules;
 // Set once we've seen a PSP_MODULE_VSH_MODE module load (i.e. we're booting the VSH rather
 // than a game), and reset on the next __KernelLoadExec. See ShouldHLEModuleForLoad below.
 static bool g_runningVSH = false;
+
+// A sceKernelLoadModule whose caller is waiting for the file to be read. The module is only put
+// in memory when the wait ends - see sceKernelLoadModule.
+struct PendingModuleLoad {
+	std::string name;
+	u32 flags = 0;
+	bool hasOption = false;
+	SceKernelLMOption option{};
+
+	void DoState(PointerWrap &p) {
+		auto s = p.Section("PendingModuleLoad", 1);
+		if (!s)
+			return;
+		Do(p, name);
+		Do(p, flags);
+		Do(p, hasOption);
+		p.DoVoid(&option, sizeof(option));
+	}
+};
+// By waiting thread.
+static std::map<SceUID, PendingModuleLoad> g_pendingModuleLoads;
+static int eventModuleLoadDone = -1;
+// The wait ID of a thread in sceKernelLoadModule, so hleDelayResult's event can't end that wait.
+static const SceUID LOAD_MODULE_WAIT_ID = 0x4C4D;
 // STATE END
 //////////////////////////////////////////////////////////////////////////
 
@@ -500,12 +527,15 @@ static bool g_runningVSH = false;
 static std::vector<SceUID> g_vshModulesToStart;
 static SceUID g_vshModuleStarting = 0;
 
+static void __KernelLoadModuleDone(u64 userdata, int cyclesLate);
+
 static void __KernelModuleInit() {
 	actionAfterModule = __KernelRegisterActionType(AfterModuleEntryCall::Create);
+	eventModuleLoadDone = CoreTiming::RegisterEvent("LoadModuleDone", &__KernelLoadModuleDone);
 }
 
 void __KernelModuleDoState(PointerWrap &p) {
-	auto s = p.Section("sceKernelModule", 1, 4);
+	auto s = p.Section("sceKernelModule", 1, 5);
 	if (!s)
 		return;
 
@@ -537,6 +567,15 @@ void __KernelModuleDoState(PointerWrap &p) {
 		g_startModuleHandler = 0;
 	}
 
+	if (s >= 5) {
+		Do(p, g_pendingModuleLoads);
+		Do(p, eventModuleLoadDone);
+	} else if (p.mode == p.MODE_READ) {
+		g_pendingModuleLoads.clear();
+		eventModuleLoadDone = -1;
+	}
+	CoreTiming::RestoreRegisterEvent(eventModuleLoadDone, "LoadModuleDone", &__KernelLoadModuleDone);
+
 	if (p.mode == p.MODE_READ) {
 		u32 error;
 		// We process these late, since they depend on loadedModules for interlinking.
@@ -561,6 +600,7 @@ void __KernelModuleShutdown() {
 	// Guest callbacks belong to this kernel session, not the next game's memory.
 	g_startModuleHandler = 0;
 	loadedModules.clear();
+	g_pendingModuleLoads.clear();
 	g_vshModulesToStart.clear();
 	g_vshModuleStarting = 0;
 	MIPSAnalyst::Reset();
@@ -583,7 +623,7 @@ struct WriteVarSymbolState {
 };
 
 static void WriteVarSymbol(WriteVarSymbolState &state, u32 exportAddress, u32 relocAddress, u8 type, bool reverse = false) {
-	u32 relocData = Memory::Read_Instruction(relocAddress, true).encoding;
+	u32 relocData = Memory::Read_Instruction(relocAddress).encoding;
 
 	switch (type) {
 	case R_MIPS_NONE:
@@ -627,7 +667,7 @@ static void WriteVarSymbol(WriteVarSymbolState &state, u32 exportAddress, u32 re
 		// The R_MIPS_LO16 and R_MIPS_HI16 will often be *different* relocAddress values.
 		HI16RelocInfo reloc;
 		reloc.addr = relocAddress;
-		reloc.data = Memory::Read_Instruction(relocAddress, true).encoding;
+		reloc.data = Memory::Read_Instruction(relocAddress).encoding;
 		state.lastHI16Relocs.push_back(reloc);
 		state.lastHI16Processed = false;
 		break;
@@ -1462,7 +1502,7 @@ static void ApplyVshHomebrewPatches(u32 start, u32 end) {
 		discId ? "patched" : "not found", headerType ? "patched" : "not found", headerBytesRetargeted ? "patched" : "not found");
 }
 
-static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 loadAddress, bool fromTop, std::string *error_string, u32 *magic, std::string_view filename, u32 &error, const u8 *prxSeed = nullptr) {
+static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 loadAddress, bool fromTop, std::string *error_string, u32 *magic, std::string_view filename, u32 &error, const u8 *prxSeed = nullptr, const u32 *fuseId = nullptr) {
 	// The magic reads below need four bytes, and the ~SCE branch another four after that. Everything
 	// downstream checks its own sizes; this is just so we can look at the magic at all. The PBP path
 	// in __KernelLoadModule computes elfSize from two offsets in the file and doesn't floor it.
@@ -1535,7 +1575,7 @@ static PSPModule *__KernelLoadELFFromPtr(const u8 *ptr, size_t elfSize, u32 load
 		newptr = new u8[maxElfSize];
 		elfSize = maxElfSize;
 		ptr = newptr;
-		int decryptedSize = pspDecryptPRX(in, (u8*)ptr, head->psp_size, prxSeed);
+		int decryptedSize = pspDecryptPRX(in, (u8*)ptr, head->psp_size, prxSeed, fuseId);
 		// If decryption got us nowhere, the PRX may simply not be encrypted - in which case the ELF
 		// starts right after the header. Check the source buffer, not the destination: on the paths
 		// where decryption bails early nothing has been written to newptr yet, so this used to read
@@ -2518,49 +2558,26 @@ int sceKernelLoadExec(const char *filename, u32 paramPtr) {
 	return hleLogDebug(Log::sceModule, 0);
 }
 
-u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr) {
-	if (!name) {
-		return hleLogError(Log::Loader, SCE_KERNEL_ERROR_ILLEGAL_ADDR, "bad filename");
-	}
+static u32 KernelLoadModuleFromData(const char *name, std::vector<uint8_t> &fileData, u32 flags, const SceKernelLMOption *lmoption, bool *tryLoadExec, const u8 *secureId = nullptr, const u32 *fuseId = nullptr);
 
-	for (size_t i = 0; i < ARRAY_SIZE(lieAboutSuccessModules); i++) {
-		if (!strcmp(name, lieAboutSuccessModules[i].path)) {
-			PSPModule *module = new PSPModule();
-			kernelObjects.Create(module);
-			loadedModules.insert(module->GetUID());
-			memset(&module->nm, 0, sizeof(module->nm));
-			strcpy(module->nm.name, lieAboutSuccessModules[i].name);
-			module->isFake = true;
-			module->nm.entry_addr = -1;
-			module->nm.gp_value = -1;
-
-			u32 moduleSize = sizeof(module->nm);
-			char tag[32];
-			snprintf(tag, sizeof(tag), "SceModule-%d", module->nm.modid);
-			module->modulePtr.ptr = kernelMemory.Alloc(moduleSize, true, tag);
-
-			// Fill the struct.
-			if (module->modulePtr.IsValid()) {
-				*module->modulePtr = module->nm;
-				module->modulePtr.NotifyWrite("KernelModule");
-			}
-
-			// TODO: It would be more ideal to allocate memory for this module.
-			return hleLogInfo(Log::Loader, module->GetUID(), "created fake module");
-		}
-	}
-
+// What sceKernelLoadModule does once the file has been read: decrypt the module, place it in memory
+// and link it. Returns the module's UID or an error. Logs directly rather than through hleLog*,
+// since it also runs from the LoadModuleDone event. Sets *tryLoadExec for a BOOT.BIN we can't load
+// as a module.
+static u32 KernelLoadModuleFromFile(const char *name, u32 flags, const SceKernelLMOption *lmoption, bool *tryLoadExec) {
 	std::vector<uint8_t> fileData;
 	if (pspFileSystem.ReadEntireFile(name, fileData) < 0) {
-		const u32 error = hleLogError(Log::Loader, SCE_KERNEL_ERROR_ERRNO_FILE_NOT_FOUND, "file does not exist");
-		return hleDelayResult(error, "module loaded", 500);
+		ERROR_LOG(Log::Loader, "sceKernelLoadModule(%s): file does not exist", name);
+		return SCE_KERNEL_ERROR_ERRNO_FILE_NOT_FOUND;
 	}
 	if (fileData.empty()) {
-		const u32 error = hleLogError(Log::Loader, SCE_KERNEL_ERROR_FILEERR, "module file size is 0");
-		return hleDelayResult(error, "module loaded", 500);
+		ERROR_LOG(Log::Loader, "sceKernelLoadModule(%s): module file size is 0", name);
+		return SCE_KERNEL_ERROR_FILEERR;
 	}
-	const int fileSize = (int)fileData.size();
+	return KernelLoadModuleFromData(name, fileData, flags, lmoption, tryLoadExec);
+}
 
+static u32 KernelLoadModuleFromData(const char *name, std::vector<uint8_t> &fileData, u32 flags, const SceKernelLMOption *lmoption, bool *tryLoadExec, const u8 *secureId, const u32 *fuseId) {
 	// A .sprx installed by a PKG game update comes wrapped in an NPDRM "\0PSPEDAT" container: a
 	// 0x90-byte header naming the content ID, then the payload at the offset in its u16 at 0x0C.
 	// The payload is an ordinary ~PSP PRX, so stepping over the header is enough to get it to the
@@ -2595,6 +2612,82 @@ u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr) {
 	// We log before hand because ELF loading logs a bunch.
 	DEBUG_LOG(Log::Loader, "sceKernelLoadModule(%s, %08x)", name, flags);
 
+	PSPModule *module = nullptr;
+	u32 magic;
+	u32 error;
+	std::string error_string;
+	module = __KernelLoadELFFromPtr(fileData.data(), fileData.size(), 0, lmoption ? lmoption->position == PSP_SMEM_High : false, &error_string, &magic, name, error, havePrxSeed ? prxSeed : secureId, fuseId);
+
+	if (!module) {
+		if (magic == 0x46535000) {
+			// TODO: What's actually going on here? This is needed to keep Tekken 6 working, the "proper" error breaks it, when it tries to load PARAM.SFO as a module.
+			ERROR_LOG(Log::Loader, "sceKernelLoadModule(%s): Game tried to load an SFO as a module. Go figure? Magic = %08x", name, magic);
+			return (u32)-1;
+		}
+
+		PSPFileInfo info = pspFileSystem.GetFileInfo(name);
+		if (info.name == "BOOT.BIN") {
+			NOTICE_LOG_REPORT(Log::Loader, "Module %s is blacklisted or undecryptable - we try __KernelLoadExec", name);
+			*tryLoadExec = true;
+			return 0;
+		}
+		ERROR_LOG(Log::Loader, "sceKernelLoadModule(%s): failed to load (%08x)", name, error);
+		return error;
+	}
+
+	if (lmoption) {
+		INFO_LOG(Log::sceModule,"%i=sceKernelLoadModule(name=%s,flag=%08x,%08x,%08x,%08x,position = %08x)",
+			module->GetUID(),name,flags,
+			lmoption->size,lmoption->mpidtext,lmoption->mpiddata,lmoption->position);
+	} else {
+		INFO_LOG(Log::sceModule,"%i=sceKernelLoadModule(name=%s,flag=%08x,(...))", module->GetUID(), name, flags);
+	}
+	return module->GetUID();
+}
+
+u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr) {
+	if (!name) {
+		return hleLogError(Log::Loader, SCE_KERNEL_ERROR_ILLEGAL_ADDR, "bad filename");
+	}
+
+	for (size_t i = 0; i < ARRAY_SIZE(lieAboutSuccessModules); i++) {
+		if (!strcmp(name, lieAboutSuccessModules[i].path)) {
+			PSPModule *module = new PSPModule();
+			kernelObjects.Create(module);
+			loadedModules.insert(module->GetUID());
+			memset(&module->nm, 0, sizeof(module->nm));
+			strcpy(module->nm.name, lieAboutSuccessModules[i].name);
+			module->isFake = true;
+			module->nm.entry_addr = -1;
+			module->nm.gp_value = -1;
+
+			u32 moduleSize = sizeof(module->nm);
+			char tag[32];
+			snprintf(tag, sizeof(tag), "SceModule-%d", module->nm.modid);
+			module->modulePtr.ptr = kernelMemory.Alloc(moduleSize, true, tag);
+
+			// Fill the struct.
+			if (module->modulePtr.IsValid()) {
+				*module->modulePtr = module->nm;
+				module->modulePtr.NotifyWrite("KernelModule");
+			}
+
+			// TODO: It would be more ideal to allocate memory for this module.
+			return hleLogInfo(Log::Loader, module->GetUID(), "created fake module");
+		}
+	}
+
+	PSPFileInfo info = pspFileSystem.GetFileInfo(name);
+	if (!info.exists) {
+		const u32 error = hleLogError(Log::Loader, SCE_KERNEL_ERROR_ERRNO_FILE_NOT_FOUND, "file does not exist");
+		return hleDelayResult(error, "module loaded", 500);
+	}
+	if (info.size == 0) {
+		const u32 error = hleLogError(Log::Loader, SCE_KERNEL_ERROR_FILEERR, "module file size is 0");
+		return hleDelayResult(error, "module loaded", 500);
+	}
+	const int fileSize = (int)info.size;
+
 	if (flags != 0) {
 		WARN_LOG_REPORT(Log::Loader, "sceKernelLoadModule: unsupported flags: %08x", flags);
 	}
@@ -2616,46 +2709,64 @@ u32 sceKernelLoadModule(const char *name, u32 flags, u32 optionAddr) {
 		WARN_LOG_REPORT(Log::Loader, "sceKernelLoadModule: unsupported options size=%08x, flags=%08x, pos=%d, access=%d, data=%d, text=%d", lmoption->size, lmoption->flags, lmoption->position, lmoption->access, lmoption->mpiddata, lmoption->mpidtext);
 	}
 
-	PSPModule *module = nullptr;
-	u32 magic;
-	u32 error;
-	std::string error_string;
-	module = __KernelLoadELFFromPtr(fileData.data(), fileData.size(), 0, lmoption ? lmoption->position == PSP_SMEM_High : false, &error_string, &magic, name, error, havePrxSeed ? prxSeed : nullptr);
-
-	if (!module) {
-		if (magic == 0x46535000) {
-			// TODO: What's actually going on here? This is needed to keep Tekken 6 working, the "proper" error breaks it, when it tries to load PARAM.SFO as a module.
-			error = -1;
-			return hleDelayResult(hleLogError(Log::Loader, error, "Game tried to load an SFO as a module. Go figure? Magic = %08x", magic), "module loaded", 500);
-		}
-
-		PSPFileInfo info = pspFileSystem.GetFileInfo(name);
-		if (info.name == "BOOT.BIN") {
-			NOTICE_LOG_REPORT(Log::Loader, "Module %s is blacklisted or undecryptable - we try __KernelLoadExec", name);
-			// Name might get deleted.
-			const std::string safeName = name;
-			if (gpu) {
-				gpu->Reinitialize();
-			}
-			return __KernelLoadExec(currentMIPS, safeName.c_str(), 0, &error_string);
-		} else {
-			return hleDelayResult(hleLogError(Log::Loader, error, "failed to load"), "module loaded", 500);
-		}
-	}
-
-	if (lmoption) {
-		INFO_LOG(Log::sceModule,"%i=sceKernelLoadModule(name=%s,flag=%08x,%08x,%08x,%08x,position = %08x)",
-			module->GetUID(),name,flags,
-			lmoption->size,lmoption->mpidtext,lmoption->mpiddata,lmoption->position);
-	} else {
-		INFO_LOG(Log::sceModule,"%i=sceKernelLoadModule(name=%s,flag=%08x,(...))", module->GetUID(), name, flags);
-	}
-
 	// Opening and reading the file, then about 1ms plus 30us per KB of loader work, the caller waiting
 	// throughout. The loader part is what a load took on hardware beyond an open and a read of the
 	// same file (pspautotests threads/scheduling/callcosts, from an SD card in a memory stick adapter).
 	const int loadUs = __IoOpenDelayUs(name) + __IoReadDelayUs(fileSize) + 1000 + fileSize / 34;
-	return hleDelayResult(hleNoLog(module->GetUID()), "module loaded", loadUs);
+
+	// The module only reaches memory once the wait is over, and until then other threads may use
+	// the memory it will occupy: SOCOM: Fireteam Bravo 2's EU loader overruns its display list into
+	// it while the game module loads (pspautotests modules/loadrace). A BOOT.BIN may turn into a
+	// LoadExec, which can't happen from an event, so that loads right away like a call that can't wait.
+	if (info.name != "BOOT.BIN" && __KernelIsDispatchEnabled() && !__IsInInterrupt()) {
+		const SceUID threadID = __KernelGetCurThread();
+		PendingModuleLoad &load = g_pendingModuleLoads[threadID];
+		load.name = name;
+		load.flags = flags;
+		load.hasOption = lmoption != nullptr;
+		if (lmoption) {
+			load.option = *lmoption;
+		}
+		CoreTiming::ScheduleEvent(usToCycles(loadUs), eventModuleLoadDone, threadID);
+		__KernelWaitCurThread(WAITTYPE_HLEDELAY, LOAD_MODULE_WAIT_ID, 0, 0, false, "module loaded");
+		return hleLogDebug(Log::Loader, 0, "loading, %d us", loadUs);
+	}
+
+	bool tryLoadExec = false;
+	const u32 result = KernelLoadModuleFromFile(name, flags, lmoption, &tryLoadExec);
+	if (tryLoadExec) {
+		std::string error_string;
+		// Name might get deleted.
+		const std::string safeName = name;
+		if (gpu) {
+			gpu->Reinitialize();
+		}
+		return __KernelLoadExec(currentMIPS, safeName.c_str(), 0, &error_string);
+	}
+	return hleDelayResult(hleNoLog(result), "module loaded", loadUs);
+}
+
+static void __KernelLoadModuleDone(u64 userdata, int cyclesLate) {
+	const SceUID threadID = (SceUID)userdata;
+	auto it = g_pendingModuleLoads.find(threadID);
+	if (it == g_pendingModuleLoads.end()) {
+		ERROR_LOG(Log::Loader, "No pending module load for thread %d", threadID);
+		return;
+	}
+	PendingModuleLoad load = std::move(it->second);
+	g_pendingModuleLoads.erase(it);
+
+	u32 error;
+	if (__KernelGetWaitID(threadID, WAITTYPE_HLEDELAY, error) != LOAD_MODULE_WAIT_ID || error != 0) {
+		WARN_LOG(Log::Loader, "sceKernelLoadModule(%s): thread %d stopped waiting, not loading", load.name.c_str(), threadID);
+		return;
+	}
+
+	bool tryLoadExec = false;
+	const u32 result = KernelLoadModuleFromFile(load.name.c_str(), load.flags, load.hasOption ? &load.option : nullptr, &tryLoadExec);
+	_dbg_assert_(!tryLoadExec);
+	__KernelResumeThreadFromWait(threadID, result);
+	__KernelReSchedule("module loaded");
 }
 
 static u32 sceKernelLoadModuleNpDrm(const char *name, u32 flags, u32 optionAddr) {
@@ -2810,6 +2921,8 @@ int __KernelStartModule(SceUID moduleId, u32 argsize, u32 argAddr, u32 returnVal
 				Memory::WriteUnchecked_U32(MIPS_MAKE_LW(MIPS_REG_RA, MIPS_REG_SP, 8), tramp + 0x24);
 				Memory::WriteUnchecked_U32(MIPS_MAKE_J(entryAddr), tramp + 0x28);
 				Memory::WriteUnchecked_U32(MIPS_MAKE_ADDIU(MIPS_REG_SP, MIPS_REG_SP, 16), tramp + 0x2C);
+				// Thread stacks get reused, so an older trampoline may already be compiled here.
+				currentMIPS->InvalidateICacheRangeDeferred(tramp, 0x30);
 				NotifyMemInfo(MemBlockFlags::WRITE, tramp, 0x30, "ModuleStartTrampoline");
 				startThread->context.pc = tramp;
 				startThread->nt.entrypoint = tramp;
@@ -3253,10 +3366,64 @@ static u32 sceKernelLoadModuleByID(u32 id, u32 flags, u32 lmoptionPtr) {
 	return hleNoLog(module->GetUID());
 }
 
-static u32 sceKernelLoadModuleDNAS(const char *name, u32 flags)
-{
-	ERROR_LOG_REPORT(Log::sceModule, "UNIMPL 0=sceKernelLoadModuleDNAS()");
-	return hleNoLog(0);
+// Loads a module installed by the DRM BB install utility (the psheet driver), like the patch
+// Killzone: Liberation's Chapter 5 DLC installs as ms0:/PSP/GAME/<id>/KZL.PRX. That's a PGD around a
+// type 3 PRX, both keyed to the PSP that installed it (KIRK commands 8 and 3) and to the game by the
+// secure install ID passed here, so it only loads with that PSP's Fuse ID in the FuseID setting.
+// Killzone's bootloader takes any negative result as "no patch" and loads its stock module from the
+// disc. A module that isn't encrypted at all loads as is.
+static u32 sceKernelLoadModuleDNAS(const char *name, u32 keyAddr, u32 flags, u32 optionAddr) {
+	if (!name) {
+		return hleLogError(Log::Loader, SCE_KERNEL_ERROR_ILLEGAL_ADDR, "bad filename");
+	}
+	if (!Memory::IsValidRange(keyAddr, 16)) {
+		return hleLogError(Log::Loader, SCE_KERNEL_ERROR_ILLEGAL_ADDR, "bad key");
+	}
+	u8 key[16];
+	Memory::Memcpy(key, keyAddr, 16);
+
+	const SceKernelLMOption *lmoption = nullptr;
+	if (optionAddr) {
+		if (!Memory::IsValidRange(optionAddr, sizeof(SceKernelLMOption))) {
+			return hleLogError(Log::Loader, SCE_KERNEL_ERROR_ILLEGAL_ADDR, "bad option");
+		}
+		lmoption = (const SceKernelLMOption *)Memory::GetPointerUnchecked(optionAddr);
+	}
+
+	std::vector<uint8_t> fileData;
+	if (pspFileSystem.ReadEntireFile(name, fileData) < 0) {
+		return hleLogError(Log::Loader, SCE_KERNEL_ERROR_ERRNO_FILE_NOT_FOUND, "file does not exist");
+	}
+	if (fileData.empty()) {
+		return hleLogError(Log::Loader, SCE_KERNEL_ERROR_FILEERR, "module file size is 0");
+	}
+	const int fileSize = (int)fileData.size();
+	const int loadUs = __IoOpenDelayUs(name) + __IoReadDelayUs(fileSize) + 1000 + fileSize / 34;
+
+	u32 fuseId[2];
+	const bool haveFuseId = pspParseFuseId(g_Config.sFuseID, fuseId);
+	if (!haveFuseId && !g_Config.sFuseID.empty()) {
+		WARN_LOG(Log::Loader, "FuseID setting '%s' isn't 12 hex digits", g_Config.sFuseID.c_str());
+	}
+
+	u32 result;
+	if (fileData.size() >= 0x90 && !memcmp(fileData.data(), "\0PGD", 4) && !pspUnwrapDNASPGD(fileData, key, haveFuseId ? fuseId : nullptr)) {
+		result = SCE_ERROR_PGD_INVALID_HEADER;
+	} else {
+		bool tryLoadExec = false;
+		result = KernelLoadModuleFromData(name, fileData, flags, lmoption, &tryLoadExec, key, haveFuseId ? fuseId : nullptr);
+	}
+
+	if ((s32)result < 0) {
+		auto err = GetI18NCategory(I18NCat::ERRORS);
+		if (haveFuseId) {
+			g_OSD.Show(OSDType::MESSAGE_WARNING, err->T("DNASModuleWrongFuseID", "This game update doesn't decrypt with the Fuse ID that's set. Running without it."), "dnasmodule");
+		} else {
+			g_OSD.Show(OSDType::MESSAGE_WARNING, err->T("DNASModuleNeedsFuseID", "This game update was installed on a real PSP and needs that PSP's Fuse ID. Running without it."), "dnasmodule");
+		}
+		return hleDelayResult(hleLogError(Log::Loader, result, "can't decrypt %s%s", name, haveFuseId ? "" : " (no Fuse ID set)"), "module loaded", loadUs);
+	}
+	return hleDelayResult(hleLogInfo(Log::Loader, result), "module loaded", loadUs);
 }
 
 // Pretty sure this is a badly brute-forced function name...
@@ -3448,7 +3615,7 @@ const HLEFunction ModuleMgrForUser[] = {
 	{0XD8B73127, &WrapU_U<sceKernelGetModuleIdByAddress>,               "sceKernelGetModuleIdByAddress",           'x', "x"      },
 	{0XF0A26395, &WrapU_V<sceKernelGetModuleId>,                        "sceKernelGetModuleId",                    'x', ""       },
 	{0X8F2DF740, &WrapU_UUUUU<sceKernelStopUnloadSelfModuleWithStatus>, "sceKernelStopUnloadSelfModuleWithStatus", 'x', "xxxxx"  },
-	{0XFEF27DC1, &WrapU_CU<sceKernelLoadModuleDNAS>,                    "sceKernelLoadModuleDNAS",                 'x', "sx"     },
+	{0XFEF27DC1, &WrapU_CUUU<sceKernelLoadModuleDNAS>,                  "sceKernelLoadModuleDNAS",                 'x', "sxxx"   },
 	{0X644395E2, &WrapU_UUU<sceKernelGetModuleIdList>,                  "sceKernelGetModuleIdList",                'x', "xxx"    },
 	{0XF2D8D1B4, &WrapU_CUU<sceKernelLoadModuleNpDrm>,                  "sceKernelLoadModuleNpDrm",                'x', "sxx"    },
 	{0XE4C4211C, nullptr,                                               "sceKernelLoadModuleWithBlockOffset",      '?', ""       },

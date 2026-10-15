@@ -858,7 +858,6 @@ SOURCES_CXX += \
 	       $(COREDIR)/Loaders.cpp \
 	       $(COREDIR)/MIPS/JitCommon/JitCommon.cpp \
 	       $(COREDIR)/MIPS/JitCommon/JitState.cpp \
-	       $(COREDIR)/MIPS/JitCommon/JitBlockCache.cpp \
 	       $(COREDIR)/MIPS/IR/IRAnalysis.cpp \
 	       $(COREDIR)/MIPS/IR/IRCompALU.cpp \
 	       $(COREDIR)/MIPS/IR/IRCompBranch.cpp \
@@ -918,16 +917,15 @@ ifeq ($(WITH_DYNAREC),1)
    ifeq ($(TARGET_ARCH),arm)
       DYNAFLAGS += -D_ARCH_32
 		SOURCES_CXX += $(COMMONDIR)/ArmEmitter.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmAsm.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmCompALU.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmCompBranch.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmCompFPU.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmCompLoadStore.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmCompVFPU.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmCompReplace.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmJit.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmRegCache.cpp \
-			       $(COREDIR)/MIPS/ARM/ArmRegCacheFPU.cpp \
+			       $(COREDIR)/MIPS/ARM/ArmIRAsm.cpp \
+			       $(COREDIR)/MIPS/ARM/ArmIRCompALU.cpp \
+			       $(COREDIR)/MIPS/ARM/ArmIRCompBranch.cpp \
+			       $(COREDIR)/MIPS/ARM/ArmIRCompFPU.cpp \
+			       $(COREDIR)/MIPS/ARM/ArmIRCompLoadStore.cpp \
+			       $(COREDIR)/MIPS/ARM/ArmIRCompSystem.cpp \
+			       $(COREDIR)/MIPS/ARM/ArmIRCompVec.cpp \
+			       $(COREDIR)/MIPS/ARM/ArmIRJit.cpp \
+			       $(COREDIR)/MIPS/ARM/ArmIRRegCache.cpp \
 			       $(EXTDIR)/disarm.cpp \
 			       $(GPUCOMMONDIR)/VertexDecoderArm.cpp
 
@@ -939,16 +937,6 @@ ifeq ($(WITH_DYNAREC),1)
 	else ifeq ($(TARGET_ARCH),arm64)
       DYNAFLAGS += -D_ARCH_64
       SOURCES_CXX += $(COMMONDIR)/Arm64Emitter.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64Asm.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64CompALU.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64CompBranch.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64CompFPU.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64CompLoadStore.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64CompVFPU.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64CompReplace.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64Jit.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64RegCache.cpp \
-		     $(COREDIR)/MIPS/ARM64/Arm64RegCacheFPU.cpp \
 		     $(COREDIR)/MIPS/ARM64/Arm64IRAsm.cpp \
 		     $(COREDIR)/MIPS/ARM64/Arm64IRCompALU.cpp \
 		     $(COREDIR)/MIPS/ARM64/Arm64IRCompBranch.cpp \
@@ -981,17 +969,6 @@ ifeq ($(WITH_DYNAREC),1)
 						$(COMMONDIR)/x64Analyzer.cpp \
 						$(COMMONDIR)/ABI.cpp \
 						$(COMMONDIR)/Thunk.cpp \
-						$(COREDIR)/MIPS/x86/CompReplace.cpp \
-						$(COREDIR)/MIPS/x86/CompBranch.cpp \
-						$(COREDIR)/MIPS/x86/Asm.cpp \
-						$(COREDIR)/MIPS/x86/CompALU.cpp \
-						$(COREDIR)/MIPS/x86/CompVFPU.cpp \
-						$(COREDIR)/MIPS/x86/CompLoadStore.cpp \
-						$(COREDIR)/MIPS/x86/CompFPU.cpp \
-						$(COREDIR)/MIPS/x86/Jit.cpp \
-						$(COREDIR)/MIPS/x86/JitSafeMem.cpp \
-						$(COREDIR)/MIPS/x86/RegCache.cpp \
-						$(COREDIR)/MIPS/x86/RegCacheFPU.cpp \
 						$(COREDIR)/MIPS/x86/X64IRAsm.cpp \
 						$(COREDIR)/MIPS/x86/X64IRCompALU.cpp \
 						$(COREDIR)/MIPS/x86/X64IRCompBranch.cpp \

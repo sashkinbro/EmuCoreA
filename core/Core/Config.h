@@ -235,6 +235,8 @@ public:
 	bool bWow64WarningDismissed;
 	bool bForceLagSync;
 	bool bFuncReplacements;
+	// Compute the VFPU's dot products (vdot, vmmul, vtfm and the rest) bit-exactly like the PSP.
+	bool bAccurateVdot;
 	bool bHideSlowWarnings;
 	bool bHideStateWarnings;
 	uint32_t uJitDisableFlags;
@@ -468,11 +470,14 @@ public:
 	int iTiltInputType;
 	bool bTiltInputEnabled;
 
-	// The four tabs (including Remote last)
-	bool bGridView1;
-	bool bGridView2;
-	bool bGridView3;
-	bool bGridView4;
+	// The four tabs (including Remote last). Values from GameBrowserViewMode.
+	int iGameBrowserView1;
+	int iGameBrowserView2;
+	int iGameBrowserView3;
+	int iGameBrowserView4;
+	// The old GridView bools, only read, to migrate to iGameBrowserView*. -1 if missing.
+	int iLegacyGridView1;
+	int iLegacyGridView4;
 
 	// Right analog binding
 	int iRightAnalogUp;
@@ -574,6 +579,8 @@ public:
 	// SystemParam
 	std::string sNickName;  // AdHoc and system nickname
 	std::string sMACAddress;
+	// The Fuse ID of the PSP a game patch was installed on (12 hex digits), to decrypt it with.
+	std::string sFuseID;
 
 	int iLanguage;
 	int iTimeFormat;
@@ -758,7 +765,7 @@ public:
 	int NextValidBackend();
 	bool IsBackendEnabled(GPUBackend backend);
 
-	bool LoadAppendedConfig();
+	bool LoadAppendedConfig(bool save = true);
 	void SetAppendedConfigIni(const Path &path) { appendedConfigFileName_ = path; }
 	void UpdateAfterSettingAutoFrameSkip();
 	void NotifyUpdatedCpuCore();

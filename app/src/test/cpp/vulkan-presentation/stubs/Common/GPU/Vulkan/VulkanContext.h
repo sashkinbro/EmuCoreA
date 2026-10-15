@@ -12,6 +12,7 @@ public:
     VkInstance GetInstance() const { return TestHandle<VkInstance>(4); }
     VkPhysicalDevice GetCurrentPhysicalDevice() const { return TestHandle<VkPhysicalDevice>(5); }
     const VkSurfaceCapabilitiesKHR &GetSurfaceCapabilities() const { return caps; }
+    VkExtent2D GetSwapchainExtent() const { return actualExtent.width ? actualExtent : caps.currentExtent; }
     const std::vector<VkSurfaceFormatKHR> &SurfaceFormats() const { return formats; }
     bool MemoryTypeFromProperties(uint32_t, VkFlags, uint32_t *index) { *index = 0; return true; }
     void DestroySwapchain() { swapchainDestroyed = true; }
@@ -20,6 +21,7 @@ public:
     bool swapchainDestroyed = false;
     bool surfaceDestroyed = false;
     VkSwapchainKHR swapchain = TestHandle<VkSwapchainKHR>(2);
+    VkExtent2D actualExtent{};
     VkSurfaceCapabilitiesKHR caps = [] {
         VkSurfaceCapabilitiesKHR result{};
         result.currentExtent = {8, 8};

@@ -1412,13 +1412,17 @@ void SoftGPU::Execute_Call(u32 op, u32 diff) {
 	}
 
 	const u32 retval = currentList->pc + 4;
-	if (currentList->stackptr == ARRAY_SIZE(currentList->stack)) {
+	if (currentList->HardwareCallDepth() >= 2) {
+		// See GPUCommon::DoExecuteCall.
+		DEBUG_LOG(Log::G3D, "CALL to %08x: skipped, already two levels deep", target);
+	} else if (currentList->stackptr == ARRAY_SIZE(currentList->stack)) {
 		ERROR_LOG(Log::G3D, "CALL: Stack full!");
 	} else {
 		auto &stackEntry = currentList->stack[currentList->stackptr++];
 		stackEntry.pc = retval;
 		stackEntry.offsetAddr = gstate_c.offsetAddr;
-		// The base address is NOT saved/restored for a regular call.
+		// The base address is NOT saved/restored for a regular call, and 0 marks it as one.
+		stackEntry.baseAddr = 0;
 		UpdatePC(currentList->pc, target - 4);
 		currentList->pc = target - 4;	// pc will be increased after we return, counteract that
 	}
@@ -1458,7 +1462,7 @@ void SoftGPU::InvalidateCache(u32 addr, int size, GPUInvalidationType type)
 	// Nothing to invalidate.
 }
 
-void SoftGPU::PerformWriteFormattedFromMemory(u32 addr, int size, int width, GEBufferFormat format)
+void SoftGPU::PerformWriteFormattedFromMemory(u32 addr, int size, int width, GEBufferFormat format, int rectWidth)
 {
 	// Nothing to update, but remember it for EstimateFillCycles.
 	NoteVideoRange(addr, (u32)size);
@@ -1490,6 +1494,12 @@ bool SoftGPU::PerformReadbackToMemory(u32 dest, int size)
 {
 	drawEngine_->transformUnit.FlushIfOverlap(this, "readback", false, dest, size, size, 1);
 	InvalidateCache(dest, size, GPU_INVALIDATE_HINT);
+	return false;
+}
+
+bool SoftGPU::PerformReadbackStencilToMemory(u32 dest, int size) {
+	// Stencil is already in RAM, once any queued drawing is done.
+	drawEngine_->transformUnit.FlushIfOverlap(this, "readback", false, dest, size, size, 1);
 	return false;
 }
 

@@ -58,6 +58,12 @@ pspsh -p 3000 -e ls                 # sanity check - should list the pspautotest
 If `ls` shows `host0:/` contents you have a working chain. If it hangs or shows nothing, PSPLink
 isn't running or the USB driver didn't bind.
 
+**Under WSL** the PSP first has to be passed through from Windows with usbipd-win (steps 10-12 of
+<https://pspdev.github.io/psplink/windows.html>). `Tools/psplink_wsl.sh` does that and then starts
+`usbhostfs_pc` in the current directory, so run it from `pspautotests` in place of the
+`usbhostfs_pc` line above. It asks for a UAC prompt the first time the PSP is shared, and re-attaches
+after a PSPLink reset or a move to another USB port.
+
 ## How a test reports its results
 
 `common/common.c` wraps every test. Before `main()` it redirects the process's `stdout` and
@@ -291,8 +297,9 @@ so on a collision.
 
 `pspautotests` is a git submodule, so a new test is two commits:
 
-1. Commit and push inside `pspautotests/` (the new test directory, including the built `.prx` and
-   the generated `.expected`).
+1. Commit inside `pspautotests/` (the new test directory, including the built `.prx` and the
+   generated `.expected`), rebase it onto `origin/master`, and push it straight to `master` - no
+   branch, no PR, and no need to ask first.
 2. Commit in the PPSSPP repo, including **both** the `test.py` change and the bumped submodule
    pointer (`git add pspautotests`) - otherwise CI checks out the old submodule and the test
    doesn't exist.

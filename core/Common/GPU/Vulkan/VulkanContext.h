@@ -361,6 +361,7 @@ public:
 	const PhysicalDeviceFeatures &GetDeviceFeatures() const { return deviceFeatures_; }
 	const VulkanPhysicalDeviceInfo &GetDeviceInfo() const { return deviceInfo_; }
 	const VkSurfaceCapabilitiesKHR &GetSurfaceCapabilities() const { return surfCapabilities_; }
+	VkExtent2D GetSwapchainExtent() const { return swapChainExtent_; }
 
 	bool IsInstanceExtensionAvailable(const char *extensionName) const {
 		for (const auto &iter : instance_extension_properties_) {

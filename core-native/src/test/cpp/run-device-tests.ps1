@@ -12,6 +12,7 @@ $auditOutput = "$auditRoot/out/native-device-tests/$auditVariant"
 $auditClang = "$SdkRoot/ndk/29.0.14206865/toolchains/llvm/prebuilt/windows-x86_64/bin/clang++.exe"
 $auditAdb = "$SdkRoot/platform-tools/adb.exe"
 $auditRemote = '/data/local/tmp/emucorea-native-tests'
+[string[]]$auditBuildDefines = if ($Configuration -eq 'Debug') { @('-D_DEBUG') } else { @('-DNDEBUG', '-DEMUCOREA_RELEASE') }
 
 function Invoke-AuditAdb([string[]]$CommandArgs) {
     & $auditAdb -s $DeviceSerial @CommandArgs
@@ -26,10 +27,10 @@ $auditTests = @{
     module_handler_lifecycle_test = @("$PSScriptRoot/module_handler_lifecycle_test.cpp")
     stereo_resampler_test = @("$PSScriptRoot/stereo_resampler_test.cpp")
     registry_state_test = @("$PSScriptRoot/registry_state_test.cpp")
-    upstream_math_test = @("$PSScriptRoot/upstream_math_test.cpp", "$auditRoot/core/unittest/TestCrossSIMD.cpp", "$auditRoot/core/unittest/TestGEMath.cpp", "$auditRoot/core/unittest/TestSplineTessellation.cpp")
+    upstream_math_test = @("$PSScriptRoot/upstream_math_test.cpp", "$auditRoot/core/unittest/TestCrossSIMD.cpp", "$auditRoot/core/unittest/TestGEMath.cpp", "$auditRoot/core/unittest/TestSplineTessellation.cpp", "$auditRoot/core/unittest/TestBoundingBox.cpp", "$auditRoot/core/unittest/TestDepthRaster.cpp")
 }
 foreach ($auditTest in $auditTests.Keys) {
-    & $auditClang '--target=aarch64-linux-android26' '-std=c++17' '-O2' "-I$auditRoot/core" "-I$auditRoot/core/ext" @($auditTests[$auditTest]) "-L$auditLibDir" '-lemucorea_core' '-o' "$auditOutput/$auditTest"
+    & $auditClang '--target=aarch64-linux-android26' '-std=c++17' '-O2' @auditBuildDefines "-I$auditRoot/core" "-I$auditRoot/core/ext" @($auditTests[$auditTest]) "-L$auditLibDir" '-lemucorea_core' '-o' "$auditOutput/$auditTest"
     if ($LASTEXITCODE -ne 0) { throw "Native probe compilation failed: $auditTest" }
 }
 

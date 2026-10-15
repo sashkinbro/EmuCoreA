@@ -23,7 +23,6 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/Data/Collections/Hashmaps.h"
-#include "Common/Data/Convert/SmallDataConvert.h"
 #include "Common/Log.h"
 #include "Common/LogReporting.h"
 #include "GPU/ge_constants.h"
@@ -40,8 +39,6 @@
 #include "Common/RiscVEmitter.h"
 #elif PPSSPP_ARCH(LOONGARCH64)
 #include "Common/LoongArch64Emitter.h"
-#else
-#include "Common/FakeEmitter.h"
 #endif
 
 // Keep this in 4 bits.
@@ -433,13 +430,13 @@ private:
 #endif
 };
 #else
-class VertexDecoderJitCache : public FakeGen::FakeXCodeBlock {
+// No vertex decoder JIT for this architecture.
+class VertexDecoderJitCache {
 public:
-	VertexDecoderJitCache();
-
 	JittedVertexDecoder Compile(const VertexDecoder &dec, int32_t *jittedSize) {
 		return nullptr;
 	}
-	void Clear();
+	void Clear() {}
+	bool IsInSpace(const u8 *ptr) const { return false; }
 };
 #endif

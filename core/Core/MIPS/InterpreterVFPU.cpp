@@ -28,6 +28,7 @@
 #include "Core/Core.h"
 #include "Core/MemMap.h"
 #include "Core/Reporting.h"
+#include "Core/Config.h"
 #include "Core/System.h"
 
 #include "Core/MIPS/MIPS.h"
@@ -74,7 +75,13 @@
 #define M_SQRT1_2  0.707106781186547524401f
 #endif
 
-static const bool USE_VFPU_DOT = false;
+// The VFPU's own handling of NaN and denormal results in vadd, vsub, vmul and vdiv (see Int_VecDo3).
+static const bool USE_VFPU_RESULT_FIXUP = false;
+
+// The dot products (vdot, vmmul, vtfm and the rest) through vfpu_dot(), bit-exact with the PSP.
+static inline bool AccurateVdot() {
+	return g_Config.bAccurateVdot || PSP_CoreParameter().compat.flags().ForceAccurateVdot;
+}
 
 union FloatBits {
 	float f[4];
@@ -129,17 +136,16 @@ static void ApplyPrefixST(MIPSState *mips, float *r, u32 data, VectorSize size, 
 
 	int n = GetNumVectorElements(size);
 	float origV[4]{ invalid, invalid, invalid, invalid };
-	static const float constantArray[8] = {0.f, 1.f, 2.f, 0.5f, 3.f, 1.f/3.f, 0.25f, 1.f/6.f};
 
 	for (int i = 0; i < n; i++) {
 		origV[i] = r[i];
 	}
 
 	for (int i = 0; i < n; i++) {
-		int regnum = (data >> (i*2)) & 3;
-		int abs    = (data >> (8+i)) & 1;
-		int negate = (data >> (16+i)) & 1;
-		int constants = (data >> (12+i)) & 1;
+		int regnum = VFPUPrefixSwizzle(data, i);
+		bool abs = VFPUPrefixAbs(data, i);
+		bool negate = VFPUPrefixNegate(data, i);
+		bool constants = VFPUPrefixIsConstant(data, i);
 
 		if (!constants) {
 			if (regnum >= n) {
@@ -150,7 +156,7 @@ static void ApplyPrefixST(MIPSState *mips, float *r, u32 data, VectorSize size, 
 			if (abs)
 				((u32 *)r)[i] = ((u32 *)r)[i] & 0x7FFFFFFF;
 		} else {
-			r[i] = constantArray[regnum + (abs<<2)];
+			r[i] = vfpuPrefixConstants[regnum + (abs << 2)];
 		}
 
 		if (negate)
@@ -176,7 +182,7 @@ void ApplyPrefixD(MIPSState *mips, float *v, VectorSize size, bool onlyWriteMask
 	int n = GetNumVectorElements(size);
 	for (int i = 0; i < n; i++)
 	{
-		int sat = (data >> (i * 2)) & 3;
+		int sat = VFPUPrefixSat(data, i);
 		if (sat == 1)
 			v[i] = vfpu_clamp(v[i], 0.0f, 1.0f);
 		else if (sat == 3)
@@ -202,10 +208,10 @@ static void RetainInvalidSwizzleST(MIPSState *mips, float *d, VectorSize sz) {
 
 	// TODO: We can probably do some faster check of sPrefix and tPrefix to skip over this loop.
 	for (int i = 0; i < n; i++) {
-		int swizzleS = (sPrefix >> (i + i)) & 3;
-		int swizzleT = (tPrefix >> (i + i)) & 3;
-		int constS = (sPrefix >> (12 + i)) & 1;
-		int constT = (tPrefix >> (12 + i)) & 1;
+		int swizzleS = VFPUPrefixSwizzle(sPrefix, i);
+		int swizzleT = VFPUPrefixSwizzle(tPrefix, i);
+		bool constS = VFPUPrefixIsConstant(sPrefix, i);
+		bool constT = VFPUPrefixIsConstant(tPrefix, i);
 		if ((swizzleS >= n && !constS) || (swizzleT >= n && !constT))
 			d[i] = 0.0f;
 	}
@@ -228,6 +234,15 @@ namespace MIPSInt
 			data &= 0x00000FFF;
 		mips->vfpuCtrl[VFPU_CTRL_SPREFIX + regnum] = data;
 		PC += 4;
+	}
+
+	// The loads write every lane, whatever mask a pending D prefix has, and leave the prefix pending
+	// (cpu/vfpu/prefix_load).
+	static void WriteLoadedVector(MIPSState *mips, const float *d, int vt) {
+		const u32 dprefix = mips->vfpuCtrl[VFPU_CTRL_DPREFIX];
+		mips->vfpuCtrl[VFPU_CTRL_DPREFIX] = dprefix & ~0xF00;
+		WriteVector(mips, d, V_Quad, vt);
+		mips->vfpuCtrl[VFPU_CTRL_DPREFIX] = dprefix;
 	}
 
 	void Int_SVQ(MIPSState *mips, MIPSOpcode op) {
@@ -263,7 +278,7 @@ namespace MIPSInt
 						d[i] = valid ? Memory::ReadUnchecked_Float(addr + 4 * i) : 0.0f;
 					}
 				}
-				WriteVector(mips, d, V_Quad, vt);
+				WriteLoadedVector(mips, d, vt);
 			}
 			break;
 
@@ -273,13 +288,13 @@ namespace MIPSInt
 			if ((addr & 0xF) || !Memory::IsValid4AlignedAddress(addr)) {
 				Core_MemoryException(addr, 16, PC, MemoryExceptionType::READ_WORD, "lv.q");
 				const float zero[4]{};
-				WriteVector(mips, zero, V_Quad, vt);
+				WriteLoadedVector(mips, zero, vt);
 				break;
 			}
 
 #ifndef COMMON_BIG_ENDIAN
 			cf = reinterpret_cast<const float *>(Memory::GetPointerUnchecked(addr));
-			WriteVector(mips, cf, V_Quad, vt);
+			WriteLoadedVector(mips, cf, vt);
 #else
 			float lvqd[4];
 
@@ -288,7 +303,7 @@ namespace MIPSInt
 			lvqd[2] = Memory::ReadUnchecked_Float(addr + 8);
 			lvqd[3] = Memory::ReadUnchecked_Float(addr + 12);
 
-			WriteVector(mips, lvqd, V_Quad, vt);
+			WriteLoadedVector(mips, lvqd, vt);
 #endif
 			break;
 
@@ -459,7 +474,7 @@ namespace MIPSInt
 		if (type == 6) {
 			f[0] = (float)imm;  // viim
 		} else if (type == 7) {
-			f[0] = Float16ToFloat32((u16)uimm16);   // vfim
+			f[0] = vfpu_h2f_float((u16)uimm16);  // vfim, converted like vh2f (cpu/vfpu/vfim)
 		} else {
 			_dbg_assert_msg_( 0, "Invalid Viim opcode type %d", type);
 			f[0] = 0;
@@ -508,8 +523,7 @@ namespace MIPSInt
 		ReadMatrix(mips, s, sz, vs);
 		ReadMatrix(mips, t, sz, vt);
 
-		// TODO: Always use the more accurate path in interpreter?
-		bool useAccurateDot = USE_VFPU_DOT || PSP_CoreParameter().compat.flags().MoreAccurateVMMUL;
+		bool useAccurateDot = AccurateVdot();
 		for (int a = 0; a < n; a++) {
 			for (int b = 0; b < n; b++) {
 				union { float f; uint32_t u; } sum = { 0.0f };
@@ -1209,7 +1223,7 @@ namespace MIPSInt
 		ReadVector(mips, t, sz, vt);
 		ApplySwizzleT(mips, t, V_Quad);
 
-		if (USE_VFPU_DOT) {
+		if (AccurateVdot()) {
 			d.f = vfpu_dot(s, t);
 			if (my_isnan(d.f)) {
 				d.u = 0x7f800001;
@@ -1260,7 +1274,7 @@ namespace MIPSInt
 		ApplyPrefixST(mips, s, VFPURewritePrefix(mips, VFPU_CTRL_SPREFIX, sprefixRemove, sprefixAdd), V_Quad);
 
 		float sum = 0.0f;
-		if (USE_VFPU_DOT) {
+		if (AccurateVdot()) {
 			sum = vfpu_dot(s, t);
 		} else {
 			for (int i = 0; i < 4; i++) {
@@ -1480,7 +1494,7 @@ namespace MIPSInt
 		u32 tprefixAdd = VFPU_SWIZZLE(1, 0, 0, 0);
 		ApplyPrefixST(mips, t, VFPURewritePrefix(mips, VFPU_CTRL_TPREFIX, tprefixRemove, tprefixAdd), V_Quad);
 
-		if (USE_VFPU_DOT) {
+		if (AccurateVdot()) {
 			s[1] = -s[1];
 			d[0] = vfpu_dot(s, t);
 		} else {
@@ -1508,7 +1522,7 @@ namespace MIPSInt
 		u32 tprefixAdd = VFPU_MAKE_CONSTANTS(VFPUConst::ONE, VFPUConst::ONE, VFPUConst::ONE, VFPUConst::ONE);
 		ApplyPrefixST(mips, t, VFPURewritePrefix(mips, VFPU_CTRL_TPREFIX, tprefixRemove, tprefixAdd), V_Quad);
 
-		if (USE_VFPU_DOT) {
+		if (AccurateVdot()) {
 			d = vfpu_dot(s, t);
 		} else {
 			d = 0.0f;
@@ -1546,7 +1560,7 @@ namespace MIPSInt
 			tprefixAdd = 0;
 		ApplyPrefixST(mips, t, VFPURewritePrefix(mips, VFPU_CTRL_TPREFIX, tprefixRemove, tprefixAdd), V_Quad);
 
-		if (USE_VFPU_DOT) {
+		if (AccurateVdot()) {
 			d = vfpu_dot(s, t);
 		} else {
 			d = 0.0f;
@@ -1588,8 +1602,9 @@ namespace MIPSInt
 	}
 
 	void Int_Vrnds(MIPSState *mips, MIPSOpcode op) {
-		int vd = _VD;
-		int seed = VI(vd);
+		// The seed is in the vs field. The toolchain leaves vd zero, so reading vd gets S000.
+		int vs = _VS;
+		int seed = VI(vs);
 		// Swizzles apply a constant value, constants/abs/neg work to vary the seed.
 		ApplySwizzleS(mips, reinterpret_cast<float *>(&seed), V_Single);
                 vrnd_init(uint32_t(seed), mips->vfpuCtrl + VFPU_CTRL_RCX0);
@@ -1709,7 +1724,7 @@ namespace MIPSInt
 		ReadMatrix(mips, s, msz, vs);
 		ReadVector(mips, t, sz, vt);
 
-		if (USE_VFPU_DOT) {
+		if (AccurateVdot()) {
 			float t2[4];
 			for (int i = 0; i < 4; i++) {
 				if (i < tn) {
@@ -1763,7 +1778,7 @@ namespace MIPSInt
 		ApplyPrefixST(mips, t, VFPURewritePrefix(mips, VFPU_CTRL_TPREFIX, tprefixRemove, tprefixAdd), V_Quad);
 
 		// Really this is the operation all rows probably use (with constant wiring.)
-		if (USE_VFPU_DOT) {
+		if (AccurateVdot()) {
 			d.f[ins] = vfpu_dot(&s[ins * 4], t);
 
 			if (my_isnan(d.f[ins])) {
@@ -1833,10 +1848,9 @@ namespace MIPSInt
 					R(rt) = VI(imm);
 				} else if (imm < 128 + VFPU_CTRL_MAX) { //mfvc
 					R(rt) = mips->vfpuCtrl[imm - 128];
-				} else {
-					//ERROR - maybe need to make this value too an "interlock" value?
-					_dbg_assert_msg_(false,"mfv - invalid register");
 				}
+				// Past the control registers, rt is left alone. Every core does this (the IR
+				// interprets these), but no hardware test has checked it.
 			}
 			break;
 
@@ -1848,10 +1862,8 @@ namespace MIPSInt
 				if (GetVFPUCtrlMask(imm - 128, &mask)) {
 					mips->vfpuCtrl[imm - 128] = (R(rt) & mask) | GetVFPUCtrlSetBits(imm - 128);
 				}
-			} else {
-				//ERROR
-				_dbg_assert_msg_(false,"mtv - invalid register");
 			}
+			// Past the control registers, nothing is written (as with mfv above.)
 			break;
 
 		default:
@@ -1974,38 +1986,16 @@ namespace MIPSInt
 		ReadVector(mips, t.f, sz, vt);
 		ApplySwizzleT(mips, t.f, sz);
 
-		// If both are zero, take t's sign.
-		// Otherwise: -NAN < -INF < real < INF < NAN (higher mantissa is farther from 0.)
-
+		// See vfpu_minmax_key for the order.
 		switch ((op >> 23) & 3) {
 		case 2: // vmin
 			for (int i = 0; i < numElements; i++) {
-				if (my_isnanorinf(s.f[i]) || my_isnanorinf(t.f[i])) {
-					// If both are negative, we flip the comparison (not two's compliment.)
-					if (s.i[i] < 0 && t.i[i] < 0) {
-						// If at least one side is NAN, we take the highest mantissa bits.
-						d.i[i] = std::max(t.i[i], s.i[i]);
-					} else {
-						// Otherwise, we take the lowest value (negative or lowest mantissa.)
-						d.i[i] = std::min(t.i[i], s.i[i]);
-					}
-				} else {
-					d.f[i] = std::min(t.f[i], s.f[i]);
-				}
+				d.u[i] = vfpu_minmax_key(s.u[i]) < vfpu_minmax_key(t.u[i]) ? s.u[i] : t.u[i];
 			}
 			break;
 		case 3: // vmax
 			for (int i = 0; i < numElements; i++) {
-				// This is the same logic as vmin, just reversed.
-				if (my_isnanorinf(s.f[i]) || my_isnanorinf(t.f[i])) {
-					if (s.i[i] < 0 && t.i[i] < 0) {
-						d.i[i] = std::min(t.i[i], s.i[i]);
-					} else {
-						d.i[i] = std::max(t.i[i], s.i[i]);
-					}
-				} else {
-					d.f[i] = std::max(t.f[i], s.f[i]);
-				}
+				d.u[i] = vfpu_minmax_key(s.u[i]) > vfpu_minmax_key(t.u[i]) ? s.u[i] : t.u[i];
 			}
 			break;
 		default:
@@ -2119,18 +2109,17 @@ namespace MIPSInt
 
 		int CC = mips->vfpuCtrl[VFPU_CTRL_CC];
 
-		if (imm3 < 6) {
-			if (((CC >> imm3) & 1) == !tf) {
-				for (int i = 0; i < n; i++)
-					d[i] = s[i];
-			}
-		} else if (imm3 == 6) {
+		if (imm3 == 6) {
 			for (int i = 0; i < n; i++) {
 				if (((CC >> i) & 1) == !tf)
 					d[i] = s[i];
 			}
 		} else {
-			ERROR_LOG_REPORT(Log::CPU, "Bad Imm3 in cmov: %d", imm3);
+			// 7 tests a CC bit that is always clear (cpu/vfpu/undefined).
+			if (((CC >> imm3) & 1) == !tf) {
+				for (int i = 0; i < n; i++)
+					d[i] = s[i];
+			}
 		}
 		ApplyPrefixD(mips, d, sz);
 		WriteVector(mips, d, sz, vd);
@@ -2190,7 +2179,7 @@ namespace MIPSInt
 			case 8: d.f[i] = s[i] * t[i]; break; //vmul
 			}
 
-			if (USE_VFPU_DOT) {
+			if (USE_VFPU_RESULT_FIXUP) {
 				if (my_isnan(d.f[i])) {
 					d.u[i] = (d.u[i] & 0xff800001) | 1;
 				} else if ((d.u[i] & 0x7F800000) == 0) {
@@ -2233,7 +2222,7 @@ namespace MIPSInt
 		switch (sz) {
 		case V_Triple:  // vcrsp.t
 		{
-			if (USE_VFPU_DOT) {
+			if (AccurateVdot()) {
 				float t0[4] = { 0.0f, t[2], -t[1], 0.0f };
 				float t1[4] = { -t[2], 0.0f, t[0], 0.0f };
 				d[0] = vfpu_dot(s, t0);
@@ -2247,14 +2236,8 @@ namespace MIPSInt
 			tprefixAdd = VFPU_SWIZZLE(1, 0, 3, 2) | VFPU_NEGATE(0, 1, 0, 0);
 			ApplyPrefixST(mips, t, VFPURewritePrefix(mips, VFPU_CTRL_TPREFIX, tprefixRemove, tprefixAdd), V_Quad);
 			ApplySwizzleS(mips, s, V_Quad);
-			if (USE_VFPU_DOT) {
-				// TODO: But flush any infs to 0?  This seems sketchy.
-				for (int i = 0; i < 4; ++i) {
-					if (my_isinf(s[i]))
-						s[i] = 0.0f;
-					if (my_isinf(t[i]))
-						t[i] = 0.0f;
-				}
+			if (AccurateVdot()) {
+				// Infinities stay: inf * 0 gives the VFPU's NaN here (cpu/vfpu/nan_gen).
 				d[2] = vfpu_dot(s, t);
 			} else {
 				d[2] = s[0] * t[0] + s[1] * t[1] + s[2] * t[2] + s[3] * t[3];
@@ -2264,7 +2247,7 @@ namespace MIPSInt
 
 		case V_Quad:   // vqmul.q
 		{
-			if (USE_VFPU_DOT) {
+			if (AccurateVdot()) {
 				float t0[4] = { t[3], t[2], -t[1], t[0] };
 				float t1[4] = { -t[2], t[3], t[0], t[1] };
 				float t2[4] = { t[1], -t[0], t[3], t[2] };
@@ -2281,7 +2264,7 @@ namespace MIPSInt
 			tprefixAdd = VFPU_SWIZZLE(0, 1, 2, 3) | VFPU_NEGATE(1, 1, 1, 0);
 			ApplyPrefixST(mips, t, VFPURewritePrefix(mips, VFPU_CTRL_TPREFIX, tprefixRemove, tprefixAdd), V_Quad);
 			ApplySwizzleS(mips, s, sz);
-			if (USE_VFPU_DOT)
+			if (AccurateVdot())
 				d[3] = vfpu_dot(s, t);
 			else
 				d[3] = s[0] * t[0] + s[1] * t[1] + s[2] * t[2] + s[3] * t[3];

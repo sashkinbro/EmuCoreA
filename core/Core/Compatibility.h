@@ -60,6 +60,7 @@ struct CompatFlags {
 	bool RequireDefaultCPUClock;
 	bool MGS2AcidHack;
 	bool SonicRivalsHack;
+	bool TiledDepalHack;
 	bool BlockTransferAllowCreateFB;
 	bool IntraVRAMBlockTransferAllowCreateFB;
 	bool YugiohSaveFix;
@@ -67,9 +68,8 @@ struct CompatFlags {
 	bool ForceMax60FPS;
 	bool GoWFramerateHack60;
 	bool FramerateHack30;
-	bool JitInvalidationHack;
 	bool HideISOFiles;
-	bool MoreAccurateVMMUL;
+	bool ForceAccurateVdot;
 	bool ForceSoftwareRenderer;
 	bool DarkStalkersPresentHack;
 	bool ReportSmallMemstick;
@@ -122,6 +122,8 @@ struct CompatFlags {
 	bool DisableRangeCulling;
 	bool BlockTransferReadbackSmall;
 	bool DepthCLUTIntoHalves;
+	bool AccurateSplines;
+	bool ReadbackShadow;
 };
 
 struct VRCompat {

@@ -24,6 +24,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <vector>
 #include <unordered_map>
 
@@ -127,8 +128,11 @@ struct VirtualFramebuffer {
 	// Tracking for downloads-to-CLUT.
 	u16 clutUpdatedBytes;
 
-	// Means that the whole image has already been read back to memory - used when combining small readbacks (gameUsesSequentialCopies_).
+	// Means that the whole image has already been read back to memory.
 	bool memoryUpdated;
+	// The whole color image is in readbackShadows_, for partial readbacks to copy from. Like memoryUpdated,
+	// it holds until the next render to the buffer.
+	bool readbackShadowValid;
 
 	// TODO: Fold into usageFlags?
 	bool dirtyAfterDisplay;
@@ -346,10 +350,12 @@ public:
 	void CopyDisplayToOutput(const DisplayLayoutConfig &config);
 
 	bool NotifyFramebufferCopy(u32 src, u32 dest, int size, GPUCopyFlag flags, u32 skipDrawReason);
-	void PerformWriteFormattedFromMemory(u32 addr, int size, int width, GEBufferFormat fmt);
+	void PerformWriteFormattedFromMemory(u32 addr, int size, int width, GEBufferFormat fmt, int rectWidth);
+	void WriteRectFromMemory(u32 addr, int size, int stride, GEBufferFormat fmt, int rectWidth);
 	void UpdateFromMemory(u32 addr, int size);
 	void ApplyClearToMemory(int x1, int y1, int x2, int y2, u32 clearColor);
 	bool PerformWriteStencilFromMemory(u32 addr, int size, WriteStencil flags);
+	bool ReadbackStencilToMemory(u32 addr, int size);
 	void WriteStencilFromFramebufferAlpha(VirtualFramebuffer *dst);
 
 	// We changed our depth mode, gotta start over.
@@ -525,7 +531,12 @@ public:
 	inline int PeekBindSeqCount() const { return fbBindSeqCount_; }
 
 protected:
-	virtual void ReadbackFramebuffer(VirtualFramebuffer *vfb, int x, int y, int w, int h, RasterChannel channel, Draw::ReadbackMode mode);
+	// With shadow, writes there instead of to PSP memory, at the same offsets from the buffer's address.
+	virtual void ReadbackFramebuffer(VirtualFramebuffer *vfb, int x, int y, int w, int h, RasterChannel channel, Draw::ReadbackMode mode, u8 *shadow = nullptr);
+	bool ReadFromShadow(VirtualFramebuffer *vfb, int x, int y, int w, int h);
+	static int ShadowWidth(const VirtualFramebuffer *vfb) {
+		return std::min((int)vfb->bufferWidth, (int)vfb->fb_stride);
+	}
 	// Used for when a shader is required, such as GLES.
 	virtual bool ReadbackDepthbuffer(Draw::Framebuffer *fbo, int x, int y, int w, int h, uint16_t *pixels, int pixelsStride, int destW, int destH, Draw::ReadbackMode mode);
 	virtual bool ReadbackStencilbuffer(Draw::Framebuffer *fbo, int x, int y, int w, int h, uint8_t *pixels, int pixelsStride, Draw::ReadbackMode mode);
@@ -579,6 +590,7 @@ protected:
 
 	static void SetColorUpdated(VirtualFramebuffer *dstBuffer, int skipDrawReason) {
 		dstBuffer->memoryUpdated = false;
+		dstBuffer->readbackShadowValid = false;
 		dstBuffer->clutUpdatedBytes = 0;
 		dstBuffer->dirtyAfterDisplay = true;
 		dstBuffer->drawnWidth = dstBuffer->width;
@@ -630,7 +642,8 @@ protected:
 
 	std::vector<DrawPixelsEntry> drawPixelsCache_;
 
-	bool gameUsesSequentialCopies_ = false;
+	// Whole color buffers, read back for partial readbacks to copy from (see ReadFramebufferToMemory).
+	std::unordered_map<const VirtualFramebuffer *, std::vector<u8>> readbackShadows_;
 
 	// Sampled in BeginFrame/UpdateSize for safety.
 	float renderWidth_ = 0.0f;

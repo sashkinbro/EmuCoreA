@@ -1,7 +1,33 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
 #include <metal_stdlib>
 #include <simd/simd.h>
 
 using namespace metal;
+
+template <typename T>
+static inline depth2d<T> spvDepthCast(texture2d<T> t)
+{
+    return reinterpret_cast<thread const depth2d<T> &>(t);
+}
+
+template <typename T>
+static inline depth2d_array<T> spvDepthCast(texture2d_array<T> t)
+{
+    return reinterpret_cast<thread const depth2d_array<T> &>(t);
+}
+
+template <typename T>
+static inline depthcube<T> spvDepthCast(texturecube<T> t)
+{
+    return reinterpret_cast<thread const depthcube<T> &>(t);
+}
+
+template <typename T>
+static inline depthcube_array<T> spvDepthCast(texturecube_array<T> t)
+{
+    return reinterpret_cast<thread const depthcube_array<T> &>(t);
+}
 
 struct type_View
 {
@@ -189,21 +215,21 @@ struct type_Globals
     float4 PointLightDepthBiasAndProjParameters;
 };
 
-constant float4 _471 = {};
+constant float4 _459 = {};
 
 struct main0_out
 {
     float4 out_var_SV_Target0 [[color(0)]];
 };
 
-fragment main0_out main0(constant type_View& View [[buffer(0)]], constant type_Globals& _Globals [[buffer(1)]], texture2d<float> SceneTexturesStruct_SceneDepthTexture [[texture(0)]], texture2d<float> SceneTexturesStruct_GBufferATexture [[texture(1)]], texture2d<float> SceneTexturesStruct_GBufferBTexture [[texture(2)]], texture2d<float> SceneTexturesStruct_GBufferDTexture [[texture(3)]], depthcube<float> ShadowDepthCubeTexture [[texture(4)]], texture2d<float> SSProfilesTexture [[texture(5)]], sampler SceneTexturesStruct_SceneDepthTextureSampler [[sampler(0)]], sampler SceneTexturesStruct_GBufferATextureSampler [[sampler(1)]], sampler SceneTexturesStruct_GBufferBTextureSampler [[sampler(2)]], sampler SceneTexturesStruct_GBufferDTextureSampler [[sampler(3)]], sampler ShadowDepthTextureSampler [[sampler(4)]], sampler ShadowDepthCubeTextureSampler [[sampler(5)]], float4 gl_FragCoord [[position]])
+fragment main0_out main0(constant type_View& View [[buffer(0)]], constant type_Globals& _Globals [[buffer(1)]], texture2d<float> SceneTexturesStruct_SceneDepthTexture [[texture(0)]], texture2d<float> SceneTexturesStruct_GBufferATexture [[texture(1)]], texture2d<float> SceneTexturesStruct_GBufferBTexture [[texture(2)]], texture2d<float> SceneTexturesStruct_GBufferDTexture [[texture(3)]], texturecube<float> ShadowDepthCubeTexture [[texture(4)]], texture2d<float> SSProfilesTexture [[texture(5)]], sampler SceneTexturesStruct_SceneDepthTextureSampler [[sampler(0)]], sampler SceneTexturesStruct_GBufferATextureSampler [[sampler(1)]], sampler SceneTexturesStruct_GBufferBTextureSampler [[sampler(2)]], sampler SceneTexturesStruct_GBufferDTextureSampler [[sampler(3)]], sampler ShadowDepthTextureSampler [[sampler(4)]], sampler ShadowDepthCubeTextureSampler [[sampler(5)]], float4 gl_FragCoord [[position]])
 {
     main0_out out = {};
     float2 _114 = gl_FragCoord.xy * View.View_BufferSizeAndInvSize.zw;
     float4 _118 = SceneTexturesStruct_SceneDepthTexture.sample(SceneTexturesStruct_SceneDepthTextureSampler, _114, level(0.0));
     float _119 = _118.x;
-    float _133 = fma(_119, View.View_InvDeviceZToWorldZTransform.x, View.View_InvDeviceZToWorldZTransform.y) + (1.0 / fma(_119, View.View_InvDeviceZToWorldZTransform.z, -View.View_InvDeviceZToWorldZTransform.w));
-    float4 _147 = View.View_ScreenToWorld * float4((fma(gl_FragCoord.xy, View.View_BufferSizeAndInvSize.zw, -View.View_ScreenPositionScaleBias.wz) / View.View_ScreenPositionScaleBias.xy) * float2(_133), _133, 1.0);
+    float _133 = ((_119 * View.View_InvDeviceZToWorldZTransform.x) + View.View_InvDeviceZToWorldZTransform.y) + (1.0 / ((_119 * View.View_InvDeviceZToWorldZTransform.z) - View.View_InvDeviceZToWorldZTransform.w));
+    float4 _147 = View.View_ScreenToWorld * float4(((_114 - View.View_ScreenPositionScaleBias.wz) / View.View_ScreenPositionScaleBias.xy) * float2(_133), _133, 1.0);
     float3 _148 = _147.xyz;
     float3 _152 = _Globals.LightPositionAndInvRadius.xyz - _148;
     float _158 = length(_152);
@@ -236,27 +262,27 @@ fragment main0_out main0(constant type_View& View [[buffer(0)]], constant type_G
         }
         float4 _196 = _Globals.ShadowViewProjectionMatrices[_189] * float4(_147.xyz, 1.0);
         float _198 = _196.w;
-        _207 = ShadowDepthCubeTexture.sample_compare(ShadowDepthCubeTextureSampler, (_152 / float3(_158)), (_196.z / _198) + ((-_Globals.PointLightDepthBiasAndProjParameters.x) / _198), level(0.0));
+        _207 = spvDepthCast(ShadowDepthCubeTexture).sample_compare(ShadowDepthCubeTextureSampler, (_152 / float3(_158)), (_196.z / _198) + ((-_Globals.PointLightDepthBiasAndProjParameters.x) / _198), level(0.0));
     }
     else
     {
         _207 = 1.0;
     }
-    float _213 = fast::clamp(fma(_207 - 0.5, _Globals.ShadowSharpen, 0.5), 0.0, 1.0);
+    float _213 = fast::clamp(((_207 - 0.5) * _Globals.ShadowSharpen) + 0.5, 0.0, 1.0);
     float _218 = sqrt(mix(1.0, _213 * _213, _Globals.ShadowFadeFraction));
     float4 _219;
     _219.z = _218;
     float4 _220 = float4(float3(1.0).x, float3(1.0).y, _219.z, float3(1.0).z);
-    float3 _236 = fast::normalize(fma(SceneTexturesStruct_GBufferATexture.sample(SceneTexturesStruct_GBufferATextureSampler, _114, level(0.0)).xyz, float3(2.0), float3(-1.0)));
+    float3 _236 = fast::normalize((SceneTexturesStruct_GBufferATexture.sample(SceneTexturesStruct_GBufferATextureSampler, _114, level(0.0)).xyz * float3(2.0)) - float3(1.0));
     uint _240 = uint(round(SceneTexturesStruct_GBufferBTexture.sample(SceneTexturesStruct_GBufferBTextureSampler, _114, level(0.0)).w * 255.0));
     bool _248 = (_240 & 15u) == 5u;
     float _448;
     if (_248)
     {
-        float4 _260 = SSProfilesTexture.read(uint2(int3(1, int(uint(fma(select(float4(0.0), SceneTexturesStruct_GBufferDTexture.sample(SceneTexturesStruct_GBufferDTextureSampler, _114, level(0.0)), bool4(!(((_240 & 4294967280u) & 16u) != 0u))).x, 255.0, 0.5))), 0).xy), 0);
+        float4 _260 = SSProfilesTexture.read(uint2(int3(1, int(uint((select(float4(0.0), SceneTexturesStruct_GBufferDTexture.sample(SceneTexturesStruct_GBufferDTextureSampler, _114, level(0.0)), bool4((_240 & 16u) == 0u)).x * 255.0) + 0.5)), 0).xy), 0);
         float _263 = _260.y * 0.5;
-        float3 _266 = fma(-_236, float3(_263), _148);
-        float _274 = pow(fast::clamp(dot(-(_152 * float3(rsqrt(dot(_152, _152)))), _236), 0.0, 1.0), 1.0);
+        float3 _266 = _148 - (_236 * float3(_263));
+        float _274 = powr(fast::clamp(dot(-(_152 * float3(rsqrt(dot(_152, _152)))), _236), 0.0, 1.0), 1.0);
         float _445;
         if (_160)
         {
@@ -290,25 +316,19 @@ fragment main0_out main0(constant type_View& View [[buffer(0)]], constant type_G
             }
             float4 _318 = _Globals.ShadowViewProjectionMatrices[_311] * float4(_266, 1.0);
             float _323 = _260.x * (10.0 / _Globals.LightPositionAndInvRadius.w);
-            float _457 = -_Globals.PointLightDepthBiasAndProjParameters.w;
-            float _328 = 1.0 / fma(_318.z / _318.w, _Globals.PointLightDepthBiasAndProjParameters.z, _457);
-            float _341 = fma(_328, _Globals.LightPositionAndInvRadius.w, -((1.0 / fma(float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, fma(_286, float3(2.5), _278), level(0.0))).x, _Globals.PointLightDepthBiasAndProjParameters.z, _457)) * _Globals.LightPositionAndInvRadius.w));
-            float _342 = _341 * _323;
-            float _363 = fma(_328, _Globals.LightPositionAndInvRadius.w, -((1.0 / fma(float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, fma(_286, float3(0.77254199981689453125), fma(_285, float3(2.3776409626007080078125), _278)), level(0.0))).x, _Globals.PointLightDepthBiasAndProjParameters.z, _457)) * _Globals.LightPositionAndInvRadius.w));
-            float _364 = _363 * _323;
-            float _386 = fma(_328, _Globals.LightPositionAndInvRadius.w, -((1.0 / fma(float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, fma(_286, float3(-2.0225429534912109375), fma(_285, float3(1.46946299076080322265625), _278)), level(0.0))).x, _Globals.PointLightDepthBiasAndProjParameters.z, _457)) * _Globals.LightPositionAndInvRadius.w));
-            float _387 = _386 * _323;
-            float _409 = fma(_328, _Globals.LightPositionAndInvRadius.w, -((1.0 / fma(float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, fma(_286, float3(-2.02254199981689453125), fma(_285, float3(-1.46946299076080322265625), _278)), level(0.0))).x, _Globals.PointLightDepthBiasAndProjParameters.z, _457)) * _Globals.LightPositionAndInvRadius.w));
-            float _410 = _409 * _323;
-            float _432 = fma(_328, _Globals.LightPositionAndInvRadius.w, -((1.0 / fma(float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, fma(_286, float3(0.772543013095855712890625), fma(_285, float3(-2.3776409626007080078125), _278)), level(0.0))).x, _Globals.PointLightDepthBiasAndProjParameters.z, _457)) * _Globals.LightPositionAndInvRadius.w));
-            float _433 = _432 * _323;
-            _445 = (((((fast::clamp(abs((_342 > 0.0) ? fma(_341, _323, _263) : fast::max(0.0, fma(_342, _274, _263))), 0.1500000059604644775390625, 5.0) + 0.25) + (fast::clamp(abs((_364 > 0.0) ? fma(_363, _323, _263) : fast::max(0.0, fma(_364, _274, _263))), 0.1500000059604644775390625, 5.0) + 0.25)) + (fast::clamp(abs((_387 > 0.0) ? fma(_386, _323, _263) : fast::max(0.0, fma(_387, _274, _263))), 0.1500000059604644775390625, 5.0) + 0.25)) + (fast::clamp(abs((_410 > 0.0) ? fma(_409, _323, _263) : fast::max(0.0, fma(_410, _274, _263))), 0.1500000059604644775390625, 5.0) + 0.25)) + (fast::clamp(abs((_433 > 0.0) ? fma(_432, _323, _263) : fast::max(0.0, fma(_433, _274, _263))), 0.1500000059604644775390625, 5.0) + 0.25)) * 0.20000000298023223876953125;
+            float _329 = (1.0 / (((_318.z / _318.w) * _Globals.PointLightDepthBiasAndProjParameters.z) - _Globals.PointLightDepthBiasAndProjParameters.w)) * _Globals.LightPositionAndInvRadius.w;
+            float _342 = (_329 - ((1.0 / ((float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, (_278 + (_286 * float3(2.5))), level(0.0))).x * _Globals.PointLightDepthBiasAndProjParameters.z) - _Globals.PointLightDepthBiasAndProjParameters.w)) * _Globals.LightPositionAndInvRadius.w)) * _323;
+            float _364 = (_329 - ((1.0 / ((float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, ((_278 + (_285 * float3(2.3776409626007080078125))) + (_286 * float3(0.77254199981689453125))), level(0.0))).x * _Globals.PointLightDepthBiasAndProjParameters.z) - _Globals.PointLightDepthBiasAndProjParameters.w)) * _Globals.LightPositionAndInvRadius.w)) * _323;
+            float _387 = (_329 - ((1.0 / ((float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, ((_278 + (_285 * float3(1.46946299076080322265625))) + (_286 * float3(-2.0225429534912109375))), level(0.0))).x * _Globals.PointLightDepthBiasAndProjParameters.z) - _Globals.PointLightDepthBiasAndProjParameters.w)) * _Globals.LightPositionAndInvRadius.w)) * _323;
+            float _410 = (_329 - ((1.0 / ((float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, ((_278 + (_285 * float3(-1.46946299076080322265625))) + (_286 * float3(-2.02254199981689453125))), level(0.0))).x * _Globals.PointLightDepthBiasAndProjParameters.z) - _Globals.PointLightDepthBiasAndProjParameters.w)) * _Globals.LightPositionAndInvRadius.w)) * _323;
+            float _433 = (_329 - ((1.0 / ((float4(ShadowDepthCubeTexture.sample(ShadowDepthTextureSampler, ((_278 + (_285 * float3(-2.3776409626007080078125))) + (_286 * float3(0.772543013095855712890625))), level(0.0))).x * _Globals.PointLightDepthBiasAndProjParameters.z) - _Globals.PointLightDepthBiasAndProjParameters.w)) * _Globals.LightPositionAndInvRadius.w)) * _323;
+            _445 = (1.25 + ((((fast::clamp(abs((_342 > 0.0) ? (_342 + _263) : fast::max(0.0, (_342 * _274) + _263)), 0.1500000059604644775390625, 5.0) + fast::clamp(abs((_364 > 0.0) ? (_364 + _263) : fast::max(0.0, (_364 * _274) + _263)), 0.1500000059604644775390625, 5.0)) + fast::clamp(abs((_387 > 0.0) ? (_387 + _263) : fast::max(0.0, (_387 * _274) + _263)), 0.1500000059604644775390625, 5.0)) + fast::clamp(abs((_410 > 0.0) ? (_410 + _263) : fast::max(0.0, (_410 * _274) + _263)), 0.1500000059604644775390625, 5.0)) + fast::clamp(abs((_433 > 0.0) ? (_433 + _263) : fast::max(0.0, (_433 * _274) + _263)), 0.1500000059604644775390625, 5.0))) * 0.20000000298023223876953125;
         }
         else
         {
             _445 = 1.0;
         }
-        _448 = fma(-_445, 0.20000000298023223876953125, 1.0);
+        _448 = 1.0 - (_445 * 0.20000000298023223876953125);
     }
     else
     {

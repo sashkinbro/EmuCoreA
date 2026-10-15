@@ -30,13 +30,9 @@
 #endif
 
 #if __has_include(<UIKit/UIKit.h>)
-#include "../ios/ViewControllerCommon.h"
+#include "../ios/ViewController.h"
 #include <UIKit/UIKit.h>
 #include <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
-
-@interface DocumentPickerDelegate : NSObject <UIDocumentPickerDelegate>
-@property DarwinDirectoryPanelCallback panelCallback;
-@end
 
 static std::map<std::string, void*> activeAccessTokens;
 
@@ -48,6 +44,14 @@ void DarwinFileSystemServices::ClearDelegate() {
 	__pickerDelegate = NULL;
 }
 
+static void addBookmark(NSURL *url);
+
+// tvOS has no document picker.
+#if !PPSSPP_PLATFORM(TVOS)
+@interface DocumentPickerDelegate : NSObject <UIDocumentPickerDelegate>
+@property DarwinDirectoryPanelCallback panelCallback;
+@end
+
 @implementation DocumentPickerDelegate
 -(instancetype)initWithCallback: (DarwinDirectoryPanelCallback)panelCallback {
 	if (self = [super init]) {
@@ -55,8 +59,6 @@ void DarwinFileSystemServices::ClearDelegate() {
 	}
 	return self;
 }
-
-static void addBookmark(NSURL *url);
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
 	NSURL *url = urls.firstObject;
@@ -91,6 +93,7 @@ static void addBookmark(NSURL *url);
 	[sharedViewController hideKeyboard];
 }
 @end
+#endif  // !PPSSPP_PLATFORM(TVOS)
 
 // Internal helper to generate and store a bookmark for a given URL.
 // Also activates the security scope for the current session.
@@ -279,6 +282,9 @@ void DarwinFileSystemServices::presentDirectoryPanel(
 			WARN_LOG(Log::System, "Mac: Received unknown responsde from modal");
 			panelCallback(false, Path());
 		}
+#elif PPSSPP_PLATFORM(TVOS)
+		// No document picker. SYSPROP_HAS_FILE_BROWSER/FOLDER_BROWSER are false, so we shouldn't get here.
+		panelCallback(false, Path());
 #elif PPSSPP_PLATFORM(IOS)
 		// The window's root view controller.
 		UIViewController *rootViewController = sharedViewController;
@@ -286,22 +292,12 @@ void DarwinFileSystemServices::presentDirectoryPanel(
 			return;
 
 		// Open, not import - we don't want the files copied, we handle that ourselves if needed.
-		UIDocumentPickerViewController *pickerVC;
-		if (@available(iOS 14.0, *)) {
-			NSMutableArray<UTType *> *types = [NSMutableArray array];
-			if (allowDirectories)
-				[types addObject:UTTypeFolder];
-			if (allowFiles)
-				[types addObject:UTTypeItem];
-			pickerVC = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types];
-		} else {
-			NSMutableArray<NSString *> *types = [NSMutableArray array];
-			if (allowDirectories)
-				[types addObject:(__bridge NSString *)kUTTypeFolder];
-			if (allowFiles)
-				[types addObject:(__bridge NSString *)kUTTypeItem];
-			pickerVC = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:types inMode:UIDocumentPickerModeOpen];
-		}
+		NSMutableArray<UTType *> *types = [NSMutableArray array];
+		if (allowDirectories)
+			[types addObject:UTTypeFolder];
+		if (allowFiles)
+			[types addObject:UTTypeItem];
+		UIDocumentPickerViewController *pickerVC = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types];
 		// What if you wanted to go to heaven, but then God showed you the next few lines?
 		// serious note: have to do this, because __pickerDelegate has to stay retained as a class property
 		__pickerDelegate = (void *)CFBridgingRetain([[DocumentPickerDelegate alloc] initWithCallback:panelCallback]);
@@ -320,7 +316,16 @@ Path DarwinFileSystemServices::appropriateMemoryStickDirectoryToUse() {
 }
 
 Path DarwinFileSystemServices::defaultMemoryStickPath() {
-#if PPSSPP_PLATFORM(IOS)
+#if PPSSPP_PLATFORM(TVOS)
+    // tvOS apps get no persistent storage beyond NSUserDefaults. Everything else has to be
+    // purgeable, so the memory stick lives in Caches, and the system may clear it when space runs low.
+    // In a folder of its own, since the system keeps things in Caches too.
+    NSString *cachesPath = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES)
+                            objectAtIndex:0];
+    NSString *memstickPath = [cachesPath stringByAppendingPathComponent:@"PPSSPP"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:memstickPath withIntermediateDirectories:YES attributes:nil error:nil];
+    return Path(memstickPath.UTF8String);
+#elif PPSSPP_PLATFORM(IOS)
     NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)
                                objectAtIndex:0];
     return Path(documentsPath.UTF8String);

@@ -19,7 +19,6 @@
 #include "Common/Profiler/Profiler.h"
 
 #include "Core/Reporting.h"
-#include "Core/Config.h"
 #include "Core/MemMap.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/HLETables.h"
@@ -136,7 +135,8 @@ void IRFrontend::BranchRSZeroComp(MIPSOpcode op, IRComparison cc, bool andLink, 
 	js.downcountAmount += MIPSGetInstructionCycleEstimate(branchInfo.delaySlotOp);
 
 	MIPSGPReg lhs = rs;
-	if (!branchInfo.delaySlotIsNice) {  // if likely, we don't need this
+	// The link happens after rs is read, which matters for ra (cpu/cpu_alu/branch_link_ra).
+	if (!branchInfo.delaySlotIsNice || (andLink && rs == MIPS_REG_RA)) {
 		ir.Write(IROp::Mov, IRTEMP_LHS, rs);
 		lhs = (MIPSGPReg)IRTEMP_LHS;
 	}

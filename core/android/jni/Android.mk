@@ -280,10 +280,6 @@ RCHEEVOS_FILES := \
 ifeq ($(TARGET_ARCH_ABI),arm64-v8a)
 	ADRENOTOOLS_FILES := \
 	  ${SRC}/ext/libadrenotools/src/driver.cpp \
-	  ${SRC}/ext/libadrenotools/src/hook/hook_impl.cpp \
-	  ${SRC}/ext/libadrenotools/src/hook/file_redirect_hook.c \
-	  ${SRC}/ext/libadrenotools/src/hook/gsl_alloc_hook.c \
-	  ${SRC}/ext/libadrenotools/src/hook/main_hook.c \
 	  ${SRC}/ext/libadrenotools/lib/linkernsbypass/android_linker_ns.cpp \
 	  ${SRC}/ext/libadrenotools/lib/linkernsbypass/elf_soname_patcher.cpp
 endif
@@ -502,17 +498,6 @@ LOCAL_WHOLE_STATIC_LIBRARIES += ppsspp_common libchdr lua pugixml
 
 ifeq ($(TARGET_ARCH_ABI),x86_64)
 ARCH_FILES := \
-  $(SRC)/Core/MIPS/x86/CompALU.cpp \
-  $(SRC)/Core/MIPS/x86/CompBranch.cpp \
-  $(SRC)/Core/MIPS/x86/CompFPU.cpp \
-  $(SRC)/Core/MIPS/x86/CompLoadStore.cpp \
-  $(SRC)/Core/MIPS/x86/CompVFPU.cpp \
-  $(SRC)/Core/MIPS/x86/CompReplace.cpp \
-  $(SRC)/Core/MIPS/x86/Asm.cpp \
-  $(SRC)/Core/MIPS/x86/Jit.cpp \
-  $(SRC)/Core/MIPS/x86/JitSafeMem.cpp \
-  $(SRC)/Core/MIPS/x86/RegCache.cpp \
-  $(SRC)/Core/MIPS/x86/RegCacheFPU.cpp \
   $(SRC)/Core/MIPS/x86/X64IRAsm.cpp \
   $(SRC)/Core/MIPS/x86/X64IRCompALU.cpp \
   $(SRC)/Core/MIPS/x86/X64IRCompBranch.cpp \
@@ -525,30 +510,19 @@ ARCH_FILES := \
   $(SRC)/GPU/Common/VertexDecoderX86.cpp
 else ifeq ($(findstring armeabi-v7a,$(TARGET_ARCH_ABI)),armeabi-v7a)
 ARCH_FILES := \
-  $(SRC)/Core/MIPS/ARM/ArmCompALU.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmCompBranch.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmCompFPU.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmCompLoadStore.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmCompVFPU.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmCompReplace.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmAsm.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmJit.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmRegCache.cpp \
-  $(SRC)/Core/MIPS/ARM/ArmRegCacheFPU.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmIRAsm.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmIRCompALU.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmIRCompBranch.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmIRCompFPU.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmIRCompLoadStore.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmIRCompSystem.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmIRCompVec.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmIRJit.cpp \
+  $(SRC)/Core/MIPS/ARM/ArmIRRegCache.cpp \
   $(SRC)/GPU/Common/VertexDecoderArm.cpp \
   ArmEmitterTest.cpp
 else ifeq ($(findstring arm64-v8a,$(TARGET_ARCH_ABI)),arm64-v8a)
 ARCH_FILES := \
-  $(SRC)/Core/MIPS/ARM64/Arm64CompALU.cpp \
-  $(SRC)/Core/MIPS/ARM64/Arm64CompBranch.cpp \
-  $(SRC)/Core/MIPS/ARM64/Arm64CompFPU.cpp \
-  $(SRC)/Core/MIPS/ARM64/Arm64CompLoadStore.cpp \
-  $(SRC)/Core/MIPS/ARM64/Arm64CompVFPU.cpp \
-  $(SRC)/Core/MIPS/ARM64/Arm64CompReplace.cpp \
-  $(SRC)/Core/MIPS/ARM64/Arm64Asm.cpp \
-  $(SRC)/Core/MIPS/ARM64/Arm64Jit.cpp \
-  $(SRC)/Core/MIPS/ARM64/Arm64RegCache.cpp \
-  $(SRC)/Core/MIPS/ARM64/Arm64RegCacheFPU.cpp \
   $(SRC)/Core/MIPS/ARM64/Arm64IRAsm.cpp \
   $(SRC)/Core/MIPS/ARM64/Arm64IRCompALU.cpp \
   $(SRC)/Core/MIPS/ARM64/Arm64IRCompBranch.cpp \
@@ -870,7 +844,6 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/FileSystems/VirtualDiscFileSystem.cpp \
   $(SRC)/Core/FileSystems/tlzrc.cpp \
   $(SRC)/Core/MIPS/JitCommon/JitCommon.cpp \
-  $(SRC)/Core/MIPS/JitCommon/JitBlockCache.cpp \
   $(SRC)/Core/MIPS/JitCommon/JitState.cpp \
   $(SRC)/Core/Util/AtracTrack.cpp \
   $(SRC)/Core/Util/AudioFormat.cpp \
@@ -1091,7 +1064,8 @@ ifeq ($(HEADLESS),1)
   LOCAL_SRC_FILES := \
     $(SRC)/headless/Headless.cpp \
     $(SRC)/headless/ReverseEngineer.cpp \
-    $(SRC)/headless/Compare.cpp
+    $(SRC)/headless/Compare.cpp \
+    $(SRC)/headless/AndroidHeadlessGLContext.cpp
 
   include $(BUILD_EXECUTABLE)
 endif
@@ -1112,12 +1086,13 @@ ifeq ($(UNITTEST),1)
   LOCAL_MODULE := ppsspp_unittest
   LOCAL_SRC_FILES := \
     $(SRC)/unittest/JitHarness.cpp \
-    $(SRC)/Core/MIPS/ARM/ArmRegCacheFPU.cpp \
     $(SRC)/Core/Util/DisArm64.cpp \
     $(SRC)/ext/riscv-disas.cpp \
     $(SRC)/ext/loongarch-disasm.cpp \
     $(SRC)/unittest/TestArmEmitter.cpp \
     $(SRC)/unittest/TestArm64Emitter.cpp \
+    $(SRC)/unittest/TestArm64Disasm.cpp \
+    $(SRC)/unittest/TestArmDisasm.cpp \
 	$(SRC)/unittest/TestX64Emitter.cpp \
     $(SRC)/unittest/TestRiscVEmitter.cpp \
     $(SRC)/unittest/TestLoongArch64Emitter.cpp \
@@ -1125,6 +1100,8 @@ ifeq ($(UNITTEST),1)
     $(SRC)/unittest/TestIRPassSimplify.cpp \
     $(SRC)/unittest/TestShaderGenerators.cpp \
     $(SRC)/unittest/TestThreadManager.cpp \
+    $(SRC)/unittest/TestBoundingBox.cpp \
+    $(SRC)/unittest/TestDepthRaster.cpp \
     $(SRC)/unittest/TestVertexJit.cpp \
     $(SRC)/unittest/TestTextureReplacer.cpp \
     $(SRC)/unittest/TestVFS.cpp \

@@ -1,0 +1,12 @@
+[submodule "core/pspautotests"]
+	path = core/pspautotests
+	url = https://github.com/hrydgard/pspautotests.git
+[submodule "core/frametests"]
+	path = core/frametests
+	url = https://github.com/hrydgard/ppsspp-frametest-ci.git
+[submodule "core/ios/MoltenVK"]
+	path = core/ios/MoltenVK
+	url = https://github.com/hrydgard/ppsspp-moltenvk.git
+[submodule "core/SDL/macOS"]
+	path = core/SDL/macOS
+	url = https://github.com/hrydgard/ppsspp-mac-sdl.git

@@ -4,9 +4,7 @@
 #import "AppDelegate.h"
 
 #import "iOSCoreAudio.h"
-#import "ViewControllerCommon.h"
 #import "ViewController.h"
-#import "ViewControllerMetal.h"
 #import "Common/System/NativeApp.h"
 #import "Common/System/System.h"
 #import "Core/System.h"
@@ -15,6 +13,7 @@
 #import "IAPManager.h"
 #include "Core/Util/PathUtil.h"
 #include "Core/CmdLine.h"
+#include "Core/Util/DarwinFileSystemServices.h"
 
 #import <AVFoundation/AVFoundation.h>
 #include <string>
@@ -169,7 +168,8 @@ static NSString *ExtractGameInfoScheme(NSURL *url) {
 		break;
 	}
 
-	NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex:0];
+	// Documents, except on tvOS, which has no persistent storage. See defaultMemoryStickPath().
+	NSString *documentsPath = @(DarwinFileSystemServices::defaultMemoryStickPath().c_str());
 	NSString *bundlePath = [[[NSBundle mainBundle] resourcePath] stringByAppendingString:@"/assets/"];
 	// Caches the system may clear when space runs low, and the zips ShareFilesAsZip hands to other apps.
 	NSString *cachesPath = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) objectAtIndex:0];
@@ -186,17 +186,8 @@ static NSString *ExtractGameInfoScheme(NSURL *url) {
 	self.window = [[UIWindow alloc] initWithWindowScene:self.windowScene];
 //	self.window = [[UIWindow alloc] initWithFrame:[[UIScreen mainScreen] bounds]];
 
-	// Choose viewcontroller depending on backend.
-	if (g_Config.iGPUBackend == (int)GPUBackend::VULKAN) {
-		PPSSPPViewControllerMetal *vc = [[PPSSPPViewControllerMetal alloc] init];
-		// sharedViewController gets initialized in the constructor.
-		self.window.rootViewController = vc;
-
-	} else {
-		PPSSPPViewControllerGL *vc = [[PPSSPPViewControllerGL alloc] init];
-		// Here we can switch viewcontroller depending on backend.
-		self.window.rootViewController = vc;
-	}
+	// sharedViewController gets initialized in the constructor.
+	self.window.rootViewController = [[PPSSPPViewController alloc] init];
 
 	[self.window makeKeyAndVisible];
 }

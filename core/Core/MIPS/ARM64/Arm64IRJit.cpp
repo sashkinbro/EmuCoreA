@@ -20,6 +20,7 @@
 #if PPSSPP_ARCH(ARM64) || (PPSSPP_PLATFORM(WINDOWS) && !defined(__LIBRETRO__))
 
 #include <cstddef>
+#include <map>
 #include "Core/MemMap.h"
 #include "Core/MIPS/MIPSTables.h"
 #include "Core/MIPS/ARM64/Arm64IRJit.h"
@@ -71,7 +72,12 @@ bool Arm64JitBackend::CompileBlock(IRBlockCache *irBlockCache, int block_num) {
 		return false;
 
 	IRBlock *block = irBlockCache->GetBlock(block_num);
-	BeginWrite(std::min(GetSpaceLeft(), (size_t)block->GetNumIRInstructions() * 32));
+	// An accurate dot product can flush several registers around its call.
+	size_t sizeEstimate = 0;
+	const IRInst *estimateInsts = irBlockCache->GetBlockInstructionPtr(*block);
+	for (int i = 0; i < block->GetNumIRInstructions(); ++i)
+		sizeEstimate += estimateInsts[i].op == IROp::Vec4VfpuDot ? 96 : 32;
+	BeginWrite(std::min(GetSpaceLeft(), sizeEstimate));
 
 	u32 startPC = block->GetOriginalStart();
 	bool wroteCheckedOffset = false;
@@ -384,7 +390,7 @@ void Arm64JitBackend::MovToPC(ARM64Reg r) {
 void Arm64JitBackend::WriteDebugPC(uint32_t pc) {
 	if (hooks_.profilerPC) {
 		int offset = (int)((const u8 *)hooks_.profilerPC - GetBasePtr());
-		MOVI2R(SCRATCH2, MIPS_EMUHACK_OPCODE + offset);
+		MOVI2R(SCRATCH2, offset);
 		MOVI2R(SCRATCH1, pc);
 		STR(SCRATCH1, JITBASEREG, SCRATCH2);
 	}
@@ -393,7 +399,7 @@ void Arm64JitBackend::WriteDebugPC(uint32_t pc) {
 void Arm64JitBackend::WriteDebugPC(ARM64Reg r) {
 	if (hooks_.profilerPC) {
 		int offset = (int)((const u8 *)hooks_.profilerPC - GetBasePtr());
-		MOVI2R(SCRATCH2, MIPS_EMUHACK_OPCODE + offset);
+		MOVI2R(SCRATCH2, offset);
 		STR(r, JITBASEREG, SCRATCH2);
 	}
 }
@@ -401,7 +407,7 @@ void Arm64JitBackend::WriteDebugPC(ARM64Reg r) {
 void Arm64JitBackend::WriteDebugProfilerStatus(IRProfilerStatus status) {
 	if (hooks_.profilerPC) {
 		int offset = (int)((const u8 *)hooks_.profilerStatus - GetBasePtr());
-		MOVI2R(SCRATCH2, MIPS_EMUHACK_OPCODE + offset);
+		MOVI2R(SCRATCH2, offset);
 		MOVI2R(SCRATCH1, (int)status);
 		STR(SCRATCH1, JITBASEREG, SCRATCH2);
 	}

@@ -6,6 +6,34 @@ if(WIN32)
 	)
 endif()
 
+# GLFeatures (gl_extensions) is used by the shader generators, so it's built even without GL.
+if(NOT NO_OPENGL)
+	set(CommonGL
+		GPU/OpenGL/GLCommon.h
+		GPU/OpenGL/GLDebugLog.cpp
+		GPU/OpenGL/GLDebugLog.h
+		GPU/OpenGL/GLSLProgram.cpp
+		GPU/OpenGL/GLSLProgram.h
+		GPU/OpenGL/gl3stub.c
+		GPU/OpenGL/gl3stub.h
+		GPU/OpenGL/GLFrameData.cpp
+		GPU/OpenGL/GLFrameData.h
+		GPU/OpenGL/thin3d_gl.cpp
+		GPU/OpenGL/GLMemory.cpp
+		GPU/OpenGL/GLMemory.h
+		GPU/OpenGL/GLRenderManager.cpp
+		GPU/OpenGL/GLRenderManager.h
+		GPU/OpenGL/GLQueueRunner.cpp
+		GPU/OpenGL/GLQueueRunner.h
+		GPU/OpenGL/GLProfiler.cpp
+		GPU/OpenGL/GLProfiler.h
+		GPU/OpenGL/DataFormatGL.cpp
+		GPU/OpenGL/DataFormatGL.h
+		GPU/OpenGL/OpenGLGraphicsContext.cpp
+		GPU/OpenGL/OpenGLGraphicsContext.h
+	)
+endif()
+
 set(CommonVR
 	VR/OpenXRLoader.cpp
 	VR/OpenXRLoader.h
@@ -35,6 +63,7 @@ add_library(Common STATIC
 	x64Emitter.cpp
 	x64Emitter.h
 	ArmCPUDetect.cpp
+	ArmCommon.h
 	ArmEmitter.h
 	ArmEmitter.cpp
 	Arm64Emitter.h
@@ -69,6 +98,8 @@ add_library(Common STATIC
 	Data/Collections/FastVec.h
 	Data/Collections/CharQueue.h
 	Data/Collections/CyclicBuffer.h
+	Data/Collections/LinkedList.h
+	Data/Collections/Slice.h
 	Data/Color/RGBAUtil.cpp
 	Data/Color/RGBAUtil.h
 	Data/Convert/ColorConv.cpp
@@ -149,30 +180,10 @@ add_library(Common STATIC
 	GPU/ShaderWriter.h
 	GPU/ShaderTranslation.h
 	GPU/ShaderTranslation.cpp
-	GPU/OpenGL/GLCommon.h
-	GPU/OpenGL/GLDebugLog.cpp
-	GPU/OpenGL/GLDebugLog.h
-	GPU/OpenGL/GLSLProgram.cpp
-	GPU/OpenGL/GLSLProgram.h
-	GPU/OpenGL/gl3stub.c
-	GPU/OpenGL/gl3stub.h
 	GPU/OpenGL/GLFeatures.cpp
 	GPU/OpenGL/GLFeatures.h
-	GPU/OpenGL/GLFrameData.cpp
-	GPU/OpenGL/GLFrameData.h
-	GPU/OpenGL/thin3d_gl.cpp
-	GPU/OpenGL/GLMemory.cpp
-	GPU/OpenGL/GLMemory.h
-	GPU/OpenGL/GLRenderManager.cpp
-	GPU/OpenGL/GLRenderManager.h
-	GPU/OpenGL/GLQueueRunner.cpp
-	GPU/OpenGL/GLQueueRunner.h
-	GPU/OpenGL/GLProfiler.cpp
-	GPU/OpenGL/GLProfiler.h
-	GPU/OpenGL/DataFormatGL.cpp
-	GPU/OpenGL/DataFormatGL.h
-	GPU/OpenGL/OpenGLGraphicsContext.cpp
-	GPU/OpenGL/OpenGLGraphicsContext.h
+	${CommonGL}
+	GPU/Vulkan/VulkanAlloc.h
 	GPU/Vulkan/VulkanBarrier.cpp
 	GPU/Vulkan/VulkanBarrier.h
 	GPU/Vulkan/VulkanDebug.cpp
@@ -201,6 +212,7 @@ add_library(Common STATIC
 	GPU/Vulkan/VulkanFrameData.h
 	GPU/Vulkan/VulkanPresentation.h
 	GPU/Vulkan/VulkanGraphicsContext.cpp
+	GPU/Vulkan/VulkanGraphicsContext.h
 	Input/GestureDetector.cpp
 	Input/GestureDetector.h
 	Input/KeyCodes.h
@@ -208,10 +220,13 @@ add_library(Common STATIC
 	Input/InputState.h
 	Math/SIMDHeaders.h
 	Math/SIMDHeaders.h
+	Math/CrossSIMD.h
 	Math/curves.cpp
 	Math/curves.h
 	Math/expression_parser.cpp
 	Math/expression_parser.h
+	Math/fast/fast_matrix.h
+	Math/geom2d.h
 	Math/lin/matrix4x4.cpp
 	Math/lin/matrix4x4.h
 	Math/lin/vec3.cpp
@@ -251,6 +266,7 @@ add_library(Common STATIC
 	Render/DrawBuffer.h
 	Render/ManagedTexture.cpp
 	Render/ManagedTexture.h
+	Render/Text/Font.h
 	Render/Text/draw_text.cpp
 	Render/Text/draw_text.h
 	Render/Text/draw_text_android.cpp
@@ -270,7 +286,9 @@ add_library(Common STATIC
 	System/Request.h
 	System/OSD.cpp
 	System/OSD.h
+	Thread/Barrier.h
 	Thread/Channel.h
+	Thread/Event.h
 	Thread/ParallelLoop.cpp
 	Thread/ParallelLoop.h
 	Thread/Promise.h
@@ -278,6 +296,7 @@ add_library(Common STATIC
 	Thread/ThreadUtil.h
 	Thread/ThreadManager.cpp
 	Thread/ThreadManager.h
+	Thread/Waitable.h
 	UI/AsyncImageFileView.cpp
 	UI/AsyncImageFileView.h
 	UI/Root.cpp
@@ -316,8 +335,8 @@ add_library(Common STATIC
 	Common.h
 	CommonFuncs.h
 	CommonTypes.h
+	CommonWindows.h
 	DbgNew.h
-	FakeEmitter.h
 	FakeCPUDetect.cpp
 	ExceptionHandlerSetup.cpp
 	ExceptionHandlerSetup.h
@@ -331,6 +350,7 @@ add_library(Common STATIC
 	Log/LogManager.h
 	LogReporting.cpp
 	LogReporting.h
+	MachineContext.h
 	MemArenaAndroid.cpp
 	MemArenaDarwin.cpp
 	MemArenaPosix.cpp
@@ -340,10 +360,12 @@ add_library(Common STATIC
 	MemoryUtil.cpp
 	MemoryUtilHorizon.cpp
 	MemoryUtil.h
+	MsgHandler.h
 	OSVersion.cpp
 	OSVersion.h
 	StringUtils.cpp
 	StringUtils.h
+	Swap.h
 	SysError.h
 	SysError.cpp
 	TimeUtil.cpp
@@ -360,7 +382,7 @@ endif()
 
 setup_target_project(Common Common)
 
-if(IOS)
+if(IOS AND NOT NO_OPENGL)
 	target_compile_definitions(Common PUBLIC GLES_SILENCE_DEPRECATION)
 endif()
 
