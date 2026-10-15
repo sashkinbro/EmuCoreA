@@ -18,6 +18,10 @@
 #pragma once
 
 bool TestJit();
+bool TestJitDotBench();
+bool TestJitMultiDotRounding();
+bool TestJitProfileLifecycle();
+bool TestJitProfileReportFailure();
 bool TestJitReplacementHooks();
 bool TestCPUEquivalence();
 bool TestCPURoundingMode();

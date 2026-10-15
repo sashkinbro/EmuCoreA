@@ -21,15 +21,21 @@
 #include <cfloat>
 #include <cstring>
 #include <vector>
+#if !defined(_WIN32) && (defined(__linux__) || defined(__APPLE__))
+#include <csignal>
+#endif
 
 #include "ppsspp_config.h"
 
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
 #include "Common/TimeUtil.h"
+#include "Common/StringUtils.h"
 #include "Core/ConfigValues.h"
 #include "Core/Debugger/SymbolMap.h"
 #include "Core/MIPS/JitCommon/JitCommon.h"
+#include "Core/MIPS/JitCommon/JitProfiler.h"
+#include "Common/File/FileUtil.h"
 #include "Core/MIPS/JitCommon/JitBlockCache.h"
 #include "Core/MIPS/MIPSCodeUtils.h"
 #include "Core/MIPS/MIPSDebugInterface.h"
@@ -242,6 +248,66 @@ bool TestJit() {
 	return memoryClean && jit_speed >= interp_speed;
 }
 
+// Times the JIT on the VFPU dot product shapes games use most, for working on their routines. Prints
+// nanoseconds per dot product; the operands are ordinary floats. Each group stores its results, or
+// the IR would drop all but the last as dead.
+bool TestJitDotBench() {
+	SetupJitHarness();
+	g_Config.bFastMemory = true;
+	const bool oldAccurateVdot = g_Config.bAccurateVdot;
+	g_Config.bAccurateVdot = true;
+
+	struct Sequence {
+		const char *name;
+		int dots;
+		std::vector<const char *> lines;
+	};
+	const Sequence sequences[] = {
+		{ "vdot.q alone", 4, { "vdot.q S000, C100, C200", "vdot.q S001, C110, C210", "vdot.q S002, C120, C220", "vdot.q S003, C130, C230", "sv.q C000, 0(a0)" } },
+		{ "vtfm4.q", 4, { "vtfm4.q C000, M100, C200", "sv.q C000, 0(a0)" } },
+		{ "vmmul.q", 16, { "vmmul.q M000, M100, M200", "sv.q C000, 0(a0)", "sv.q C010, 16(a0)", "sv.q C020, 32(a0)", "sv.q C030, 48(a0)" } },
+		{ "vdot.t run", 4, { "vdot.t S300, C400, C000", "vdot.t S301, C400, C010", "vdot.t S302, C400, C020", "vdot.t S303, C400, C030", "sv.q C300, 0(a0)" } },
+		{ "vdot.q rows", 3, { "vdot.q S200, R100, C000", "vdot.q S201, R101, C000", "vdot.q S202, R102, C000", "sv.q C200, 0(a0)" } },
+	};
+
+	bool ok = true;
+	for (const Sequence &seq : sequences) {
+		currentMIPS->pc = PSP_GetUserMemoryBase();
+		currentMIPS->r[MIPS_REG_A0] = PSP_GetUserMemoryBase() + 0x100000;
+		u32 addr = currentMIPS->pc;
+		const int groups = 50;
+		for (int i = 0; i < groups && ok; ++i) {
+			for (const char *line : seq.lines) {
+				std::string error;
+				if (!MipsAssembleOpcode(line, currentDebugMIPS, addr, &error)) {
+					printf("ERROR: %s: %s\n", line, error.c_str());
+					ok = false;
+				}
+				addr += 4;
+			}
+		}
+		Memory::WriteUnchecked_U32(MIPS_MAKE_SYSCALL("UnitTestFakeSyscalls", "UnitTestTerminator"), addr);
+		Memory::WriteUnchecked_U32(MIPS_MAKE_BREAK(1), addr + 4);
+		Memory::WriteUnchecked_U32(MIPS_MAKE_JR_RA(), addr + 8);
+
+		for (int i = 0; i < 128; ++i)
+			currentMIPS->v[i] = 0.75f + (float)((i * 37) % 101) * 0.37f * ((i & 1) ? -1.0f : 1.0f);
+		mipsr4k.UpdateCore(CPUCore::JIT);
+		const double callsPerSecond = ExecCPUTest(false);
+		if (getenv("PPSSPP_JITBENCH_DISASM")) {
+			JitBlockDebugInfo block = MIPSComp::jit->GetBlockCacheDebugInterface()->GetBlockDebugInfo(0);
+			for (size_t i = 0; i < block.targetDisasm.size() && i < 80; i++)
+				printf("  %s\n", block.targetDisasm[i].c_str());
+		}
+		MIPSComp::jit->ClearCache();
+		printf("%-14s %6.2f ns per dot\n", seq.name, 1e9 / (callsPerSecond * groups * seq.dots));
+	}
+
+	g_Config.bAccurateVdot = oldAccurateVdot;
+	DestroyJitHarness();
+	return ok;
+}
+
 // Follows a replacement hook's block shadow entry through compiling, invalidating, clearing and
 // switching cores. The hook is installed the normal way, by naming a function memcpy.
 static bool CheckReplacementHooks(u32 func, u32 size, const std::vector<u8> &code) {
@@ -401,7 +467,9 @@ bool TestJitReplacementHooks() {
 //   PPSSPP_CPUFUZZ_ACCURATE_VDOT  0 to run without AccurateVdot (the VFPU's own dot products), which is on by default.
 //   PPSSPP_CPUFUZZ_OPS      comma-separated instruction name prefixes to generate only, for fast
 //                           runs on the instructions being worked on. "dot" is the dot products
-//                           and the prefixes. Without PPSSPP_CPUFUZZ_CLASSES, the class is "v".
+//                           and the prefixes. Without PPSSPP_CPUFUZZ_CLASSES, the class is "v"
+//                           ("vr" for "dot": r is a run of vdots the IR batches). b adds forward
+//                           conditional branches.
 
 namespace {
 
@@ -566,7 +634,10 @@ static u32 GenerateFuzzOp(FuzzRng &rng, const char *classes) {
 		case 'a': top = aluOps[rng.Below(ARRAY_SIZE(aluOps))]; break;
 		case 'i': top = immOps[rng.Below(ARRAY_SIZE(immOps))]; break;
 		case 'f': top = 0x11; break;
-		case 'v': top = vfpuOps[rng.Below(ARRAY_SIZE(vfpuOps))]; break;
+		case 'v':
+		case 'r':
+			top = vfpuOps[rng.Below(ARRAY_SIZE(vfpuOps))];
+			break;
 		default: top = memOps[rng.Below(ARRAY_SIZE(memOps))]; break;
 		}
 		u32 op = (top << 26) | (rng.Next() & 0x03FFFFFF);
@@ -602,6 +673,86 @@ struct FuzzCase {
 	std::vector<u32> code;
 	FuzzState init;
 };
+
+// Turns some instructions into conditional branches forward, to a later instruction or the end, so
+// every case still finishes. Never two in a row, so each delay slot is an ordinary instruction.
+static void AddFuzzBranches(FuzzRng &rng, std::vector<u32> &code) {
+	const int n = (int)code.size();
+	for (int i = 0; i + 1 < n; i++) {
+		if (!rng.Chance(20))
+			continue;
+		const int target = i + 2 + (int)rng.Below(n - i - 1);  // up to n, the terminator
+		const u32 offset = (u32)(target - (i + 1)) & 0xFFFF;
+		const u32 rs = 1 + rng.Below(31), rt = rng.Chance(30) ? 0 : 1 + rng.Below(31);
+		u32 op;
+		switch (rng.Below(6)) {
+		case 0: op = (0x04 << 26) | (rs << 21) | (rt << 16); break;  // beq
+		case 1: op = (0x05 << 26) | (rs << 21) | (rt << 16); break;  // bne
+		case 2: op = ((rng.Chance(50) ? 0x06 : 0x07) << 26) | (rs << 21); break;  // blez, bgtz
+		case 3: op = (0x01 << 26) | (rs << 21) | (rng.Below(2) << 16); break;  // bltz, bgez
+		case 4: op = ((rng.Chance(50) ? 0x14 : 0x15) << 26) | (rs << 21) | (rt << 16); break;  // beql, bnel
+		default: op = (0x01 << 26) | (rs << 21) | ((rng.Chance(50) ? 0x10 : 0x11) << 16); break;  // bltzal, bgezal
+		}
+		code[i] = op | offset;
+		// The delay slot mustn't be a branch.
+		if (MIPSGetInfo(MIPSOpcode(code[i + 1])) & (IS_CONDBRANCH | IS_JUMP))
+			code[i + 1] = 0;
+		i++;
+	}
+}
+
+// A run of 2-4 vdots of one size against one vector, the others rows or columns of one matrix: the
+// shape the IR frontend turns into a Vec4VfpuMultiDot. The results go to lanes of one vector or
+// anywhere, sometimes over the operands.
+static void AppendVdotRun(FuzzRng &rng, std::vector<u32> &code) {
+	static const VectorSize sizes[] = { V_Pair, V_Triple, V_Quad };
+	static const u32 sizeBits[] = { 0x0080, 0x8000, 0x8080 };
+	const int si = rng.Below(3);
+	const VectorSize sz = sizes[si];
+	const int n = GetNumVectorElements(sz);
+	auto regsOf = [&](int field, VectorSize s, u8 regs[4]) { GetVectorRegs(regs, s, field); };
+	auto singleField = [&](int voffset) {
+		for (int f = 0; f < 128; f++) {
+			u8 r[4];
+			regsOf(f, V_Single, r);
+			if (r[0] == voffset)
+				return f;
+		}
+		return (int)rng.Below(128);
+	};
+
+	const int shared = rng.Below(128);
+	const bool transposed = rng.Chance(50);
+	const int base = 16 * rng.Below(8);
+	const int count = 2 + rng.Below(3);
+	const bool laneDests = rng.Chance(50);
+	const int destBase = 4 * rng.Below(32);
+	const bool sharedIsT = rng.Chance(50);
+	int lanesUsed = 0;
+	for (int k = 0; k < count; k++) {
+		// A free lane, and a vector field reading the block's row or Vec4 at that lane.
+		int lane = rng.Below(4);
+		while (lanesUsed & (1 << lane))
+			lane = (lane + 1) & 3;
+		lanesUsed |= 1 << lane;
+		int field = -1;
+		for (int f = 0; f < 128 && field < 0; f++) {
+			u8 r[4];
+			regsOf(f, sz, r);
+			bool ok = true;
+			for (int i = 0; i < n; i++)
+				ok = ok && r[i] == (transposed ? base + 4 * lane + i : base + 4 * i + lane);
+			if (ok)
+				field = f;
+		}
+		if (field < 0)
+			field = rng.Below(128);
+		const int dest = laneDests ? singleField(destBase + lane) : (int)rng.Below(128);
+		const int vs = sharedIsT ? field : shared;
+		const int vt = sharedIsT ? shared : field;
+		code.push_back(0x64800000 | sizeBits[si] | (vt << 16) | (vs << 8) | dest);
+	}
+}
 
 static FuzzCase GenerateFuzzCase(u64 seed, const char *classes, const std::vector<u32> &codeOverride) {
 	FuzzRng rng(seed);
@@ -643,9 +794,15 @@ static FuzzCase GenerateFuzzCase(u64 seed, const char *classes, const std::vecto
 	}
 
 	const int count = 1 + rng.Below(FUZZ_MAX_INSTRS);
-	for (int i = 0; i < count; ++i) {
-		c.code.push_back(GenerateFuzzOp(rng, classes));
+	const bool runs = strchr(classes, 'r') != nullptr;
+	while ((int)c.code.size() < count) {
+		if (runs && rng.Chance(25) && (int)c.code.size() + 4 <= FUZZ_MAX_INSTRS)
+			AppendVdotRun(rng, c.code);
+		else
+			c.code.push_back(GenerateFuzzOp(rng, classes));
 	}
+	if (strchr(classes, 'b'))
+		AddFuzzBranches(rng, c.code);
 	if (!codeOverride.empty()) {
 		c.code = codeOverride;
 	}
@@ -805,12 +962,15 @@ static void DumpFuzzState(FILE *f, const char *core, u64 seed, const FuzzState &
 	fprintf(f, "\n");
 }
 
+// Nops are left out, as the minimizer leaves a lot of them in code with branches.
 static void PrintFuzzCode(const std::vector<u32> &code) {
 	u32 addr = PSP_GetUserMemoryBase() + FUZZ_CODE_OFFSET;
 	for (u32 op : code) {
-		char line[512];
-		MIPSDisAsm(MIPSOpcode(op), addr, line, sizeof(line), true);
-		printf("    %08x  %s\n", op, line);
+		if (op != 0) {
+			char line[512];
+			MIPSDisAsm(MIPSOpcode(op), addr, line, sizeof(line), true);
+			printf("    %08x  %s\n", op, line);
+		}
 		addr += 4;
 	}
 }
@@ -877,11 +1037,22 @@ static bool CoreMismatches(CPUCore core, const std::vector<u32> &code, const Fuz
 	return DiffFuzzStates(ref, other, nullptr) != 0;
 }
 
-// Drops instructions while the core still disagrees with the interpreter.
+// Drops instructions while the core still disagrees with the interpreter. With branches in the
+// code, they become nops instead, so no branch changes its target or lands in a delay slot.
 static std::vector<u32> MinimizeFuzzCase(CPUCore core, std::vector<u32> code, const FuzzState &init) {
+	bool branches = false;
+	for (u32 op : code)
+		branches = branches || (MIPSGetInfo(MIPSOpcode(op)) & (IS_CONDBRANCH | IS_JUMP)) != 0;
 	for (size_t i = 0; i < code.size(); ) {
 		std::vector<u32> shorter = code;
-		shorter.erase(shorter.begin() + i);
+		if (branches && code[i] == 0) {
+			++i;
+			continue;
+		}
+		if (branches)
+			shorter[i] = 0;
+		else
+			shorter.erase(shorter.begin() + i);
 		if (!shorter.empty() && CoreMismatches(core, shorter, init)) {
 			code = shorter;
 		} else {
@@ -928,7 +1099,7 @@ bool TestCPUEquivalence() {
 		}
 	}
 	if (!classes || !classes[0]) {
-		classes = g_fuzzOps.empty() ? "aaiffvvvmm" : "v";
+		classes = g_fuzzOps.empty() ? "aaiffvvvmmr" : (!strcmp(getenv("PPSSPP_CPUFUZZ_OPS"), "dot") ? "vr" : "v");
 	}
 	std::vector<u32> codeOverride;
 	const char *codeSeedStr = getenv("PPSSPP_CPUFUZZ_CODE_SEED");
@@ -1017,7 +1188,11 @@ bool TestCPUEquivalence() {
 			RunFuzzCase(code, fc.init, &b);
 			std::string diff;
 			DiffFuzzStates(a, b, &diff);
-			culprits[std::string(CoreName(cores[c])) + ": " + MIPSGetName(MIPSOpcode(code.back()))]++;
+			// The last instruction that isn't a nop left by minimizing.
+			u32 last = code.back();
+			for (auto it = code.rbegin(); it != code.rend() && last == 0; ++it)
+				last = *it;
+			culprits[std::string(CoreName(cores[c])) + ": " + MIPSGetName(MIPSOpcode(last))]++;
 			printf("Seed %llu: %s differs from the interpreter (fcr31 %08x, cc %02x):\n", (unsigned long long)(firstSeed + i), CoreName(cores[c]), fc.init.fcr31, fc.init.vfpuCtrl[VFPU_CTRL_CC]);
 			PrintFuzzCode(code);
 			PrintFuzzInputs(code, fc.init);
@@ -1071,6 +1246,150 @@ static bool AssembleLines(const std::vector<const char *> &lines, std::vector<u3
 		addr += 4;
 	}
 	return true;
+}
+
+bool TestJitMultiDotRounding() {
+	SetupJitHarness();
+	const bool oldAccurate = g_Config.bAccurateVdot;
+	const bool oldSkip = g_Config.bSkipDeadbeefFilling;
+	const u32 oldDisable = g_Config.uJitDisableFlags;
+	g_Config.bFastMemory = true;
+	g_Config.bAccurateVdot = true;
+	g_Config.bSkipDeadbeefFilling = true;
+	g_Config.uJitDisableFlags = 0;
+	bool success = true;
+	for (const char *size : { "p", "t", "q" }) {
+		std::vector<std::string> lines{ "ctc1 t0, $31" };
+		// Keep sixteen dirty quads live across the batch, including the helper's scratch registers.
+		for (int i = 0; i < 16; i++) {
+			lines.push_back(StringFromFormat("vone.q C%d%d0", i / 4, i % 4));
+		}
+		lines.push_back(StringFromFormat("vdot.%s S400, C000, C100", size));
+		lines.push_back(StringFromFormat("vdot.%s S401, C010, C100", size));
+		for (int i = 0; i < 16; i++) {
+			lines.push_back(StringFromFormat("sv.q C%d%d0, %d(k0)", i / 4, i % 4, i * 16));
+		}
+		std::vector<const char *> source;
+		for (const auto &line : lines) {
+			source.push_back(line.c_str());
+		}
+		std::vector<u32> code;
+		if (!AssembleLines(source, &code)) {
+			success = false;
+			break;
+		}
+		for (u32 mode = 0; mode < 4; mode++) {
+			FuzzState init{};
+			init.r[MIPS_REG_T0] = mode;
+			init.vfpuCtrl[VFPU_CTRL_SPREFIX] = 0xE4;
+			init.vfpuCtrl[VFPU_CTRL_TPREFIX] = 0xE4;
+			mipsr4k.UpdateCore(CPUCore::INTERPRETER);
+			FuzzState reference;
+			RunFuzzCase(code, init, &reference);
+			for (CPUCore core : { CPUCore::IR_INTERPRETER, CPUCore::JIT }) {
+				mipsr4k.UpdateCore(core);
+				FuzzState result;
+				RunFuzzCase(code, init, &result);
+				std::string diff;
+				if (DiffFuzzStates(reference, result, &diff)) {
+					printf("Multi-dot .%s rounding %u core %d corrupted guest state:\n%s", size, mode, (int)core, diff.c_str());
+					success = false;
+				}
+			}
+		}
+	}
+	mipsr4k.UpdateCore(CPUCore::INTERPRETER);
+	g_Config.bAccurateVdot = oldAccurate;
+	g_Config.bSkipDeadbeefFilling = oldSkip;
+	g_Config.uJitDisableFlags = oldDisable;
+	DestroyJitHarness();
+	return success;
+}
+
+bool TestJitProfileReportFailure() {
+	if (!JitProfiler::Supported()) {
+		return true;
+	}
+	const Path report("__jit_profile_report_failure_test.txt");
+	EXPECT_FALSE(File::Exists(report));
+	FILE *file = File::OpenCFile(report, "wb");
+	EXPECT_TRUE(file != nullptr);
+	fclose(file);
+	const std::string oldProfile = g_Config.sJitProfileFile;
+	// A file cannot be a parent directory, so opening this report must fail.
+	g_Config.sJitProfileFile = (report / "blocked.txt").ToString();
+	SetupJitHarness();
+	g_Config.bFastMemory = true;
+	u32 addr = PSP_GetUserMemoryBase();
+	bool success = true;
+	for (int i = 0; i < 1000; i++) {
+		std::string error;
+		if (!MipsAssembleOpcode("vmmul.q M000, M100, M200", currentDebugMIPS, addr, &error)) {
+			success = false;
+			break;
+		}
+		addr += 4;
+	}
+	Memory::WriteUnchecked_U32(MIPS_MAKE_SYSCALL("UnitTestFakeSyscalls", "UnitTestTerminator"), addr);
+	if (success) {
+		mipsr4k.UpdateCore(CPUCore::JIT);
+		// Accumulate more than the report's 1000-sample threshold before retiring this cache.
+		for (int i = 0; i < 4; i++) {
+			ExecCPUTest(false);
+		}
+		JitProfiler::Stop();
+		MIPSComp::jit->ClearCache();
+		g_Config.sJitProfileFile = report.ToString();
+		// No old block indices or samples may survive into the empty cache epoch.
+		MIPSComp::jit->ClearCache();
+		success = File::GetFileSize(report) == 0;
+	}
+	DestroyJitHarness();
+	g_Config.sJitProfileFile = oldProfile;
+	File::Delete(report, true);
+	return success;
+}
+
+bool TestJitProfileLifecycle() {
+	if (!JitProfiler::Supported()) {
+		return true;
+	}
+	const Path report("__jit_profile_lifecycle_test.txt");
+	EXPECT_FALSE(File::Exists(report));
+	const std::string oldProfile = g_Config.sJitProfileFile;
+	g_Config.sJitProfileFile = report.ToString();
+	SetupJitHarness();
+	bool success = true;
+	for (CPUCore next : { CPUCore::INTERPRETER, CPUCore::IR_INTERPRETER }) {
+#if !defined(_WIN32) && (defined(__linux__) || defined(__APPLE__))
+		struct sigaction before{}, after{};
+		success = sigaction(SIGPROF, nullptr, &before) == 0 && success;
+#endif
+		mipsr4k.UpdateCore(CPUCore::JIT);
+		const u32 pc = PSP_GetUserMemoryBase();
+		Memory::WriteUnchecked_U32(MIPS_MAKE_SYSCALL("UnitTestFakeSyscalls", "UnitTestTerminator"), pc);
+		currentMIPS->pc = pc;
+		coreState = CORE_RUNNING_CPU;
+		mipsr4k.RunLoopUntil(CoreTiming::GetTicks(currentMIPS) + 1000000);
+		const bool started = JitProfiler::IsRunning();
+		mipsr4k.UpdateCore(next);
+		const bool stopped = !JitProfiler::IsRunning();
+		bool restored = true;
+#if !defined(_WIN32) && (defined(__linux__) || defined(__APPLE__))
+		restored = sigaction(SIGPROF, nullptr, &after) == 0 &&
+			(before.sa_flags & SA_SIGINFO) == (after.sa_flags & SA_SIGINFO) &&
+			((before.sa_flags & SA_SIGINFO) ? before.sa_sigaction == after.sa_sigaction : before.sa_handler == after.sa_handler);
+#endif
+		// Clean up even when the regression leaves the sampler alive.
+		JitProfiler::Stop();
+		printf("JIT profile switch to %d: started=%d stopped=%d signal restored=%d\n", (int)next, started, stopped, restored);
+		success = started && stopped && restored && success;
+		mipsr4k.UpdateCore(CPUCore::INTERPRETER);
+	}
+	DestroyJitHarness();
+	g_Config.sJitProfileFile = oldProfile;
+	File::Delete(report, true);
+	return success;
 }
 
 // The guest's rounding mode and flush-to-zero apply exactly while emulated code runs, on every

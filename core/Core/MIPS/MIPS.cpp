@@ -311,6 +311,7 @@ static void UpdateBlockShadowHook() {
 void MIPSState::Shutdown() {
 	MIPSComp::JitInterface *oldjit = MIPSComp::jit;
 	if (oldjit) {
+		oldjit->FlushProfile();
 		MIPSComp::jit = nullptr;
 		delete oldjit;
 	}
@@ -384,6 +385,7 @@ void MIPSState::UpdateCore(CPUCore desired) {
 
 	// Get rid of the old JIT first, before switching.
 	if (MIPSComp::jit) {
+		MIPSComp::jit->FlushProfile();
 		delete MIPSComp::jit;
 		MIPSComp::jit = nullptr;
 	}
