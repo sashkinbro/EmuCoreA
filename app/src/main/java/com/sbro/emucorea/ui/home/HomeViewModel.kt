@@ -80,6 +80,7 @@ data class HomeUiState(
     val homeBackgroundDim: Int = AppPreferences.DEFAULT_HOME_BACKGROUND_DIM,
     val searchQuery: String = "",
     val sortOption: HomeSortOption = HomeSortOption.TITLE_ASC,
+    val showDlc: Boolean = false,
     val libraryViewMode: HomeLibraryViewMode = HomeLibraryViewMode.GRID,
     val lastStandardLibraryViewMode: HomeLibraryViewMode = HomeLibraryViewMode.GRID,
     val isCoverArtDisabled: Boolean = true,
@@ -279,6 +280,7 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
             preferences.hideDlcInLibrary.distinctUntilChanged().collect { enabled ->
                 if (hideDlcInLibrary == enabled) return@collect
                 hideDlcInLibrary = enabled
+                _uiState.value = _uiState.value.copy(showDlc = !enabled)
                 publishVisibleGames()
             }
         }
@@ -397,6 +399,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSortOption(option: HomeSortOption) {
         _uiState.value = _uiState.value.copy(sortOption = option)
         publishVisibleGames()
+    }
+
+    fun toggleDlcVisibility() {
+        viewModelScope.launch {
+            preferences.setHideDlcInLibrary(_uiState.value.showDlc)
+        }
     }
 
     fun toggleLibraryViewMode() {
