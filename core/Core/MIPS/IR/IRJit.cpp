@@ -88,7 +88,7 @@ IRJit::IRJit(MIPSState *mipsState, bool actualJit) : frontend_(mipsState->HasDef
 	opts.vfpuMultiDot = !actualJit;
 	opts.moreVec4Ops = !actualJit;
 #endif
-	opts.continueBranches = true;
+	opts.continueBranches = IR_CONTINUE_BRANCHES;
 	frontend_.SetOptions(opts);
 
 	profiling_ = !g_Config.sJitProfileFile.empty();
@@ -283,7 +283,8 @@ void IRJit::RunBlocks() {
 					block->profileStats_.executions += 1;
 					block->profileStats_.totalNanos += start.ElapsedNanos();
 				} else {
-					mips->pc = IRInterpret(mips, instPtr);
+					// Runs on through the blocks it can, as long as downcount lasts.
+					mips->pc = IRInterpret(mips, instPtr, blocks_.GetArenaPtr());
 				}
 				// Note: this will "jump to zero" on a badly constructed block missing exits.
 				if (!Memory::IsValid4AlignedAddress(mips->pc)) {
