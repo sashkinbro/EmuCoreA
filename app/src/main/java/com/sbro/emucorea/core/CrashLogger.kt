@@ -1,5 +1,8 @@
 package com.sbro.emucorea.core
 
+import android.annotation.SuppressLint
+import android.app.ActivityManager
+import android.app.ApplicationExitInfo
 import android.content.Context
 import android.os.Build
 import android.util.Log
@@ -32,6 +35,7 @@ object CrashLogger {
         logFile = resolveLogFile(context)
         installUncaughtExceptionHandler()
         writeStartupLine(context)
+        writePreviousExitInfo(context)
     }
 
     fun logError(tag: String, message: String, throwable: Throwable? = null) {
@@ -76,6 +80,60 @@ object CrashLogger {
         val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "?"
 
         writeEntry("START", "APP START — v$appVersion | Android $androidVer | $device | $abi")
+    }
+
+    /**
+     * Records how the previous run of the app ended. Java exceptions go through the uncaught
+     * handler below, but a native crash, ANR or system kill never reaches Java code - without
+     * this entry the log just stops mid-session and the cause is lost. Available since Android 11.
+     */
+    @SuppressLint("NewApi")
+    private fun writePreviousExitInfo(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return
+        val exits = try {
+            activityManager.getHistoricalProcessExitReasons(context.packageName, 0, 1)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read the previous exit reasons", e)
+            return
+        }
+        val info = exits.firstOrNull() ?: return
+
+        val reason = info.reason
+        val normalExit = reason == ApplicationExitInfo.REASON_EXIT_SELF ||
+            reason == ApplicationExitInfo.REASON_USER_REQUESTED ||
+            reason == ApplicationExitInfo.REASON_USER_STOPPED ||
+            reason == ApplicationExitInfo.REASON_UNKNOWN
+        val level = if (normalExit) "INFO" else "ERROR"
+        val description = info.description?.takeIf { it.isNotBlank() } ?: "-"
+        writeEntry(
+            level,
+            "[PreviousExit] reason=${exitReasonName(reason)}($reason) status=${info.status} " +
+                "importance=${info.importance} at=${dateFmt.format(Date(info.timestamp))} " +
+                "description=$description"
+        )
+    }
+
+    // Constants are inlined at compile time, so naming the newer ones is safe on older devices.
+    @SuppressLint("InlinedApi")
+    private fun exitReasonName(reason: Int): String = when (reason) {
+        ApplicationExitInfo.REASON_EXIT_SELF -> "EXIT_SELF"
+        ApplicationExitInfo.REASON_SIGNALED -> "SIGNALED"
+        ApplicationExitInfo.REASON_LOW_MEMORY -> "LOW_MEMORY"
+        ApplicationExitInfo.REASON_CRASH -> "CRASH"
+        ApplicationExitInfo.REASON_CRASH_NATIVE -> "CRASH_NATIVE"
+        ApplicationExitInfo.REASON_ANR -> "ANR"
+        ApplicationExitInfo.REASON_INITIALIZATION_FAILURE -> "INITIALIZATION_FAILURE"
+        ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "PERMISSION_CHANGE"
+        ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "EXCESSIVE_RESOURCE_USAGE"
+        ApplicationExitInfo.REASON_USER_REQUESTED -> "USER_REQUESTED"
+        ApplicationExitInfo.REASON_USER_STOPPED -> "USER_STOPPED"
+        ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "DEPENDENCY_DIED"
+        ApplicationExitInfo.REASON_OTHER -> "OTHER"
+        ApplicationExitInfo.REASON_FREEZER -> "FREEZER"
+        ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE -> "PACKAGE_STATE_CHANGE"
+        ApplicationExitInfo.REASON_PACKAGE_UPDATED -> "PACKAGE_UPDATED"
+        else -> "UNKNOWN"
     }
 
     private fun installUncaughtExceptionHandler() {

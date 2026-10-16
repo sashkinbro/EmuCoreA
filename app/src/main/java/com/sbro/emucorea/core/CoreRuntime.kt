@@ -1419,7 +1419,11 @@ internal object CoreRuntime {
     }
 
     private fun reportFailure(detail: String) {
-        if (_failure.compareAndSet(null, RuntimeFailure(detail))) Log.e(TAG, detail)
+        if (_failure.compareAndSet(null, RuntimeFailure(detail))) {
+            Log.e(TAG, detail)
+            // The in-app dialog is gone once the app restarts, so keep the reason in crash.log.
+            CrashLogger.logError(TAG, detail)
+        }
     }
 
     private fun prepareLaunchPath(gamePath: String): String? {
