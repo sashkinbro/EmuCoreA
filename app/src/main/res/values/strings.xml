@@ -1728,4 +1728,15 @@
     <string name="core_update_reset_keep">Keep current settings</string>
     <string name="core_update_reset_done">Settings have been reset</string>
     <string name="settings_network_restart_lan_note">Network changes apply after restarting the game. For LAN play, every device must use the host’s LAN IP; enable the built-in server only on the host.</string>
+
+    <string name="home_game_menu_restore_cover">Restore default cover</string>
+    <string name="home_game_menu_restore_cover_success">Default cover restored.</string>
+    <string name="home_game_menu_restore_cover_failed">Could not restore the default cover.</string>
+    <string name="settings_reset_custom_covers">Reset custom covers</string>
+    <string name="settings_reset_custom_covers_desc">Restore default covers for all games.</string>
+    <string name="settings_reset_custom_covers_confirm_title">Reset all custom covers?</string>
+    <string name="settings_reset_custom_covers_confirm_body">Custom covers will be removed from the library and replaced with default covers. Your original images and game files will be kept.</string>
+    <string name="settings_reset_custom_covers_action">Reset</string>
+    <string name="settings_reset_custom_covers_success">Custom covers reset.</string>
+    <string name="settings_reset_custom_covers_partial">Some custom covers could not be reset. Please try again.</string>
 </resources>

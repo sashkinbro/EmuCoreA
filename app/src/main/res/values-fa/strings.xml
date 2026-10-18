@@ -1720,4 +1720,15 @@
     <string name="core_update_reset_keep">حفظ تنظیمات</string>
     <string name="core_update_reset_done">تنظیمات بازنشانی شد</string>
     <string name="settings_network_restart_lan_note">تغییرات شبکه پس از راه‌اندازی مجدد بازی اعمال می‌شوند. برای بازی در شبکه محلی، همه دستگاه‌ها باید از IP محلی میزبان استفاده کنند؛ سرور داخلی را فقط روی دستگاه میزبان فعال کنید.</string>
+
+    <string name="home_game_menu_restore_cover">بازگرداندن جلد پیش‌فرض</string>
+    <string name="home_game_menu_restore_cover_success">جلد پیش‌فرض بازگردانده شد.</string>
+    <string name="home_game_menu_restore_cover_failed">بازگرداندن جلد پیش‌فرض ممکن نشد.</string>
+    <string name="settings_reset_custom_covers">بازنشانی جلدهای سفارشی</string>
+    <string name="settings_reset_custom_covers_desc">بازگرداندن جلد پیش‌فرض همهٔ بازی‌ها.</string>
+    <string name="settings_reset_custom_covers_confirm_title">همهٔ جلدهای سفارشی بازنشانی شوند؟</string>
+    <string name="settings_reset_custom_covers_confirm_body">جلدهای سفارشی از کتابخانه حذف و با جلدهای پیش‌فرض جایگزین می‌شوند. تصاویر اصلی و فایل‌های بازی‌ها حفظ خواهند شد.</string>
+    <string name="settings_reset_custom_covers_action">بازنشانی</string>
+    <string name="settings_reset_custom_covers_success">جلدهای سفارشی بازنشانی شدند.</string>
+    <string name="settings_reset_custom_covers_partial">بازنشانی برخی از جلدهای سفارشی ممکن نشد. لطفاً دوباره تلاش کنید.</string>
 </resources>

@@ -1705,4 +1705,15 @@
     <string name="core_update_reset_keep">Mantieni impostazioni</string>
     <string name="core_update_reset_done">Impostazioni ripristinate</string>
     <string name="settings_network_restart_lan_note">Le modifiche di rete si applicano dopo il riavvio del gioco. Per giocare in LAN, tutti i dispositivi devono usare l’IP LAN dell’host; attiva il server integrato solo sull’host.</string>
+
+    <string name="home_game_menu_restore_cover">Ripristina copertina predefinita</string>
+    <string name="home_game_menu_restore_cover_success">Copertina predefinita ripristinata.</string>
+    <string name="home_game_menu_restore_cover_failed">Impossibile ripristinare la copertina predefinita.</string>
+    <string name="settings_reset_custom_covers">Reimposta copertine personalizzate</string>
+    <string name="settings_reset_custom_covers_desc">Ripristina le copertine predefinite di tutti i giochi.</string>
+    <string name="settings_reset_custom_covers_confirm_title">Reimpostare tutte le copertine personalizzate?</string>
+    <string name="settings_reset_custom_covers_confirm_body">Le copertine personalizzate saranno rimosse dalla libreria e sostituite con quelle predefinite. Le immagini originali e i file dei giochi saranno conservati.</string>
+    <string name="settings_reset_custom_covers_action">Reimposta</string>
+    <string name="settings_reset_custom_covers_success">Copertine personalizzate reimpostate.</string>
+    <string name="settings_reset_custom_covers_partial">Impossibile reimpostare alcune copertine personalizzate. Riprova.</string>
 </resources>

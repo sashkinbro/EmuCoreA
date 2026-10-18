@@ -29,6 +29,7 @@ import com.sbro.emucorea.core.UPSCALE_DEFAULT
 import com.sbro.emucorea.core.normalizeUpscale
 import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.AppFontChoice
+import com.sbro.emucorea.data.CustomGameCoverRepository
 import com.sbro.emucorea.data.HomeBackgroundRepository
 import com.sbro.emucorea.data.HomeBackgroundPreset
 import com.sbro.emucorea.data.HomeBackgroundType
@@ -1041,6 +1042,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             withContext(Dispatchers.Main) {
                 onComplete(result)
             }
+        }
+    }
+
+    fun resetCustomCovers(onComplete: (Boolean) -> Unit) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val result = CustomGameCoverRepository(getApplication()).resetAllCustomCovers()
+            clearCoverImageMemoryCache()
+            preferences.notifyCustomCoversReset()
+            withContext(Dispatchers.Main) { onComplete(result) }
         }
     }
 

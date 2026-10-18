@@ -327,6 +327,15 @@ fun HomeScreen(
     var gameAwaitingPickerLaunch by remember { mutableStateOf<GameItem?>(null) }
     val customCoverAppliedMessage = stringResource(R.string.home_game_menu_custom_cover_applied)
     val customCoverFailedMessage = stringResource(R.string.home_game_menu_custom_cover_failed)
+    val defaultCoverRestoredMessage = stringResource(R.string.home_game_menu_restore_cover_success)
+    val defaultCoverFailedMessage = stringResource(R.string.home_game_menu_restore_cover_failed)
+    val restoreCustomCover: (GameItem) -> Unit = { game ->
+        scope.launch {
+            val success = viewModel.resetCustomCover(game)
+            Toast.makeText(context, if (success) defaultCoverRestoredMessage else defaultCoverFailedMessage,
+                Toast.LENGTH_SHORT).show()
+        }
+    }
     val customCoverPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
@@ -476,7 +485,8 @@ fun HomeScreen(
                         onLongClickCreateShortcut = onCreateShortcutClick,
                         onLongClickCustomCover = { game ->
                             gameAwaitingPickerLaunch = game
-                        }
+                        },
+                        onLongClickRestoreCover = { game -> restoreCustomCover(game) }
                     )
                 } else {
                     val columns = if (isListView) GridCells.Fixed(1) else GridCells.Adaptive(minSize = minCellSize)
@@ -584,6 +594,7 @@ fun HomeScreen(
                                                         onLongClickCustomCover = {
                                                             gameAwaitingPickerLaunch = game
                                                         },
+                                                        onLongClickRestoreCover = { restoreCustomCover(game) },
                                                         compact = isLandscape,
                                                         coverScale = uiState.homeGridScale
                                                     )
@@ -618,7 +629,8 @@ fun HomeScreen(
                                             onLoadSaveClick = onLoadSaveClick,
                                             onManageGameClick = onManageGameClick,
                                             onCreateShortcutClick = onCreateShortcutClick,
-                                            onLongClickCustomCover = { game -> gameAwaitingPickerLaunch = game }
+                                            onLongClickCustomCover = { game -> gameAwaitingPickerLaunch = game },
+                                            onLongClickRestoreCover = { game -> restoreCustomCover(game) }
                                         )
                                         if (uiState.dlcGames.isNotEmpty()) {
                                             Row(
@@ -648,7 +660,8 @@ fun HomeScreen(
                                                 onLoadSaveClick = onLoadSaveClick,
                                                 onManageGameClick = onManageGameClick,
                                                 onCreateShortcutClick = onCreateShortcutClick,
-                                                onLongClickCustomCover = { game -> gameAwaitingPickerLaunch = game }
+                                                onLongClickCustomCover = { game -> gameAwaitingPickerLaunch = game },
+                                                onLongClickRestoreCover = { game -> restoreCustomCover(game) }
                                             )
                                         }
                                     }
@@ -1433,6 +1446,7 @@ private fun RecentGameCard(
     onLongClickManage: () -> Unit,
     onLongClickCreateShortcut: () -> Unit,
     onLongClickCustomCover: () -> Unit,
+    onLongClickRestoreCover: () -> Unit,
     compact: Boolean,
     coverScale: Float
 ) {
@@ -1511,6 +1525,7 @@ private fun RecentGameCard(
                 .padding(end = 8.dp, bottom = 8.dp)
         ) {
             GameCardContextMenu(
+                game = game,
                 expanded = showMenu,
                 offset = DpOffset(x = 0.dp, y = 10.dp),
                 onDismiss = { showMenu = false },
@@ -1537,6 +1552,10 @@ private fun RecentGameCard(
                 onCustomCover = {
                     showMenu = false
                     onLongClickCustomCover()
+                },
+                onRestoreCover = {
+                    showMenu = false
+                    onLongClickRestoreCover()
                 }
             )
         }
@@ -1555,7 +1574,8 @@ private fun GameCard(
     onLongClickLoadSave: () -> Unit,
     onLongClickManage: () -> Unit,
     onLongClickCreateShortcut: () -> Unit,
-    onLongClickCustomCover: () -> Unit
+    onLongClickCustomCover: () -> Unit,
+    onLongClickRestoreCover: () -> Unit
 ) {
     val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val interactionSource = remember { MutableInteractionSource() }
@@ -1639,6 +1659,7 @@ private fun GameCard(
                 .padding(end = 8.dp, bottom = 8.dp)
         ) {
             GameCardContextMenu(
+                game = game,
                 expanded = showMenu,
                 offset = DpOffset(x = 0.dp, y = 10.dp),
                 onDismiss = { showMenu = false },
@@ -1665,6 +1686,10 @@ private fun GameCard(
                 onCustomCover = {
                     showMenu = false
                     onLongClickCustomCover()
+                },
+                onRestoreCover = {
+                    showMenu = false
+                    onLongClickRestoreCover()
                 }
             )
         }
@@ -1683,7 +1708,8 @@ private fun GameListCard(
     onLongClickLoadSave: () -> Unit,
     onLongClickManage: () -> Unit,
     onLongClickCreateShortcut: () -> Unit,
-    onLongClickCustomCover: () -> Unit
+    onLongClickCustomCover: () -> Unit,
+    onLongClickRestoreCover: () -> Unit
 ) {
     val debouncedClick = rememberDebouncedClick(onClick = onClick)
     val interactionSource = remember { MutableInteractionSource() }
@@ -1780,6 +1806,7 @@ private fun GameListCard(
                 .padding(end = 8.dp, bottom = 8.dp)
         ) {
             GameCardContextMenu(
+                game = game,
                 expanded = showMenu,
                 offset = DpOffset.Zero,
                 onDismiss = { showMenu = false },
@@ -1806,6 +1833,10 @@ private fun GameListCard(
                 onCustomCover = {
                     showMenu = false
                     onLongClickCustomCover()
+                },
+                onRestoreCover = {
+                    showMenu = false
+                    onLongClickRestoreCover()
                 }
             )
         }
@@ -1857,6 +1888,7 @@ internal fun CoverPlaceholderArt(
 
 @Composable
 internal fun GameCardContextMenu(
+    game: GameItem,
     expanded: Boolean,
     offset: DpOffset,
     onDismiss: () -> Unit,
@@ -1865,8 +1897,14 @@ internal fun GameCardContextMenu(
     onLoadSave: () -> Unit,
     onManage: () -> Unit,
     onCreateShortcut: () -> Unit,
-    onCustomCover: () -> Unit
+    onCustomCover: () -> Unit,
+    onRestoreCover: () -> Unit
 ) {
+    val context = LocalContext.current
+    val customCovers = remember(context) { CustomGameCoverRepository(context) }
+    val hasCustomCover = remember(game.coverArtPath, customCovers) {
+        customCovers.isCustomCoverPath(game.coverArtPath)
+    }
     DropdownMenu(
         expanded = expanded,
         offset = offset,
@@ -1910,6 +1948,11 @@ internal fun GameCardContextMenu(
             text = stringResource(R.string.home_game_menu_custom_cover),
             icon = Icons.Rounded.Image,
             onClick = onCustomCover
+        )
+        if (hasCustomCover) GameContextMenuItem(
+            text = stringResource(R.string.home_game_menu_restore_cover),
+            icon = Icons.Rounded.Restore,
+            onClick = onRestoreCover
         )
     }
 }
@@ -2029,7 +2072,8 @@ private fun HomeGameGridRows(
     onLoadSaveClick: (GameItem) -> Unit,
     onManageGameClick: (GameItem) -> Unit,
     onCreateShortcutClick: (GameItem) -> Unit,
-    onLongClickCustomCover: (GameItem) -> Unit
+    onLongClickCustomCover: (GameItem) -> Unit,
+    onLongClickRestoreCover: (GameItem) -> Unit
 ) {
     games.chunked(if (isListView) 1 else columnsCount).forEach { rowGames ->
         Row(
@@ -2056,7 +2100,8 @@ private fun HomeGameGridRows(
                             onLongClickLoadSave = { onLoadSaveClick(game) },
                             onLongClickManage = { onManageGameClick(game) },
                             onLongClickCreateShortcut = { onCreateShortcutClick(game) },
-                            onLongClickCustomCover = { onLongClickCustomCover(game) }
+                            onLongClickCustomCover = { onLongClickCustomCover(game) },
+                            onLongClickRestoreCover = { onLongClickRestoreCover(game) }
                         )
                     } else {
                         GameCard(
@@ -2069,7 +2114,8 @@ private fun HomeGameGridRows(
                             onLongClickLoadSave = { onLoadSaveClick(game) },
                             onLongClickManage = { onManageGameClick(game) },
                             onLongClickCreateShortcut = { onCreateShortcutClick(game) },
-                            onLongClickCustomCover = { onLongClickCustomCover(game) }
+                            onLongClickCustomCover = { onLongClickCustomCover(game) },
+                            onLongClickRestoreCover = { onLongClickRestoreCover(game) }
                         )
                     }
                 }

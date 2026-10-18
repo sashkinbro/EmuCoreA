@@ -1707,4 +1707,15 @@
     <string name="core_update_reset_keep">Conserver les paramètres</string>
     <string name="core_update_reset_done">Paramètres réinitialisés</string>
     <string name="settings_network_restart_lan_note">Les modifications réseau prennent effet après le redémarrage du jeu. Pour jouer en LAN, chaque appareil doit utiliser l’adresse IP LAN de l’hôte ; activez le serveur intégré uniquement sur l’hôte.</string>
+
+    <string name="home_game_menu_restore_cover">Rétablir la jaquette par défaut</string>
+    <string name="home_game_menu_restore_cover_success">Jaquette par défaut rétablie.</string>
+    <string name="home_game_menu_restore_cover_failed">Impossible de rétablir la jaquette par défaut.</string>
+    <string name="settings_reset_custom_covers">Réinitialiser les jaquettes personnalisées</string>
+    <string name="settings_reset_custom_covers_desc">Rétablir les jaquettes par défaut de tous les jeux.</string>
+    <string name="settings_reset_custom_covers_confirm_title">Réinitialiser toutes les jaquettes personnalisées ?</string>
+    <string name="settings_reset_custom_covers_confirm_body">Les jaquettes personnalisées seront retirées de la bibliothèque et remplacées par les jaquettes par défaut. Vos images originales et les fichiers des jeux seront conservés.</string>
+    <string name="settings_reset_custom_covers_action">Réinitialiser</string>
+    <string name="settings_reset_custom_covers_success">Jaquettes personnalisées réinitialisées.</string>
+    <string name="settings_reset_custom_covers_partial">Certaines jaquettes personnalisées n’ont pas pu être réinitialisées. Veuillez réessayer.</string>
 </resources>

@@ -1705,4 +1705,15 @@
     <string name="core_update_reset_keep">Ayarları koru</string>
     <string name="core_update_reset_done">Ayarlar sıfırlandı</string>
     <string name="settings_network_restart_lan_note">Ağ değişiklikleri oyun yeniden başlatıldıktan sonra uygulanır. LAN üzerinden oynamak için tüm cihazlar sunucuyu barındıran cihazın LAN IP adresini kullanmalıdır; yerleşik sunucuyu yalnızca o cihazda etkinleştirin.</string>
+
+    <string name="home_game_menu_restore_cover">Varsayılan kapağı geri yükle</string>
+    <string name="home_game_menu_restore_cover_success">Varsayılan kapak geri yüklendi.</string>
+    <string name="home_game_menu_restore_cover_failed">Varsayılan kapak geri yüklenemedi.</string>
+    <string name="settings_reset_custom_covers">Özel kapakları sıfırla</string>
+    <string name="settings_reset_custom_covers_desc">Tüm oyunların varsayılan kapaklarını geri yükle.</string>
+    <string name="settings_reset_custom_covers_confirm_title">Tüm özel kapaklar sıfırlansın mı?</string>
+    <string name="settings_reset_custom_covers_confirm_body">Özel kapaklar kütüphaneden kaldırılacak ve varsayılan kapaklarla değiştirilecek. Özgün görselleriniz ve oyun dosyalarınız korunacak.</string>
+    <string name="settings_reset_custom_covers_action">Sıfırla</string>
+    <string name="settings_reset_custom_covers_success">Özel kapaklar sıfırlandı.</string>
+    <string name="settings_reset_custom_covers_partial">Bazı özel kapaklar sıfırlanamadı. Lütfen tekrar deneyin.</string>
 </resources>

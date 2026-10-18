@@ -1713,4 +1713,15 @@
     <string name="core_update_reset_keep">الاحتفاظ بالإعدادات</string>
     <string name="core_update_reset_done">تمت إعادة تعيين الإعدادات</string>
     <string name="settings_network_restart_lan_note">تسري تغييرات الشبكة بعد إعادة تشغيل اللعبة. للعب عبر الشبكة المحلية، يجب أن يستخدم كل جهاز عنوان IP المحلي للمضيف؛ فعّل الخادم المدمج على جهاز المضيف فقط.</string>
+
+    <string name="home_game_menu_restore_cover">استعادة الغلاف الافتراضي</string>
+    <string name="home_game_menu_restore_cover_success">تمت استعادة الغلاف الافتراضي.</string>
+    <string name="home_game_menu_restore_cover_failed">تعذرت استعادة الغلاف الافتراضي.</string>
+    <string name="settings_reset_custom_covers">إعادة ضبط الأغلفة المخصصة</string>
+    <string name="settings_reset_custom_covers_desc">استعادة الأغلفة الافتراضية لجميع الألعاب.</string>
+    <string name="settings_reset_custom_covers_confirm_title">هل تريد إعادة ضبط جميع الأغلفة المخصصة؟</string>
+    <string name="settings_reset_custom_covers_confirm_body">ستُزال الأغلفة المخصصة من المكتبة وتُستبدل بالأغلفة الافتراضية. ستُحفظ الصور الأصلية وملفات الألعاب.</string>
+    <string name="settings_reset_custom_covers_action">إعادة الضبط</string>
+    <string name="settings_reset_custom_covers_success">تمت إعادة ضبط الأغلفة المخصصة.</string>
+    <string name="settings_reset_custom_covers_partial">تعذرت إعادة ضبط بعض الأغلفة المخصصة. يُرجى المحاولة مجددًا.</string>
 </resources>

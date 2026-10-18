@@ -1705,4 +1705,15 @@
     <string name="core_update_reset_keep">सेटिंग्स रखें</string>
     <string name="core_update_reset_done">सेटिंग्स रीसेट हो गईं</string>
     <string name="settings_network_restart_lan_note">नेटवर्क में बदलाव गेम को फिर से शुरू करने के बाद लागू होते हैं। LAN पर खेलने के लिए हर डिवाइस को होस्ट का LAN IP इस्तेमाल करना होगा; बिल्ट-इन सर्वर केवल होस्ट पर चालू करें।</string>
+
+    <string name="home_game_menu_restore_cover">डिफ़ॉल्ट कवर बहाल करें</string>
+    <string name="home_game_menu_restore_cover_success">डिफ़ॉल्ट कवर बहाल हो गया।</string>
+    <string name="home_game_menu_restore_cover_failed">डिफ़ॉल्ट कवर बहाल नहीं किया जा सका।</string>
+    <string name="settings_reset_custom_covers">कस्टम कवर रीसेट करें</string>
+    <string name="settings_reset_custom_covers_desc">सभी गेम के डिफ़ॉल्ट कवर बहाल करें।</string>
+    <string name="settings_reset_custom_covers_confirm_title">सभी कस्टम कवर रीसेट करें?</string>
+    <string name="settings_reset_custom_covers_confirm_body">कस्टम कवर लाइब्रेरी से हटाकर उनकी जगह डिफ़ॉल्ट कवर लगा दिए जाएँगे। आपकी मूल तस्वीरें और गेम की फ़ाइलें सुरक्षित रहेंगी।</string>
+    <string name="settings_reset_custom_covers_action">रीसेट करें</string>
+    <string name="settings_reset_custom_covers_success">कस्टम कवर रीसेट हो गए।</string>
+    <string name="settings_reset_custom_covers_partial">कुछ कस्टम कवर रीसेट नहीं किए जा सके। कृपया फिर कोशिश करें।</string>
 </resources>
