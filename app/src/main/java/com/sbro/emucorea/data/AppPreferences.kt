@@ -109,6 +109,8 @@ data class SettingsSnapshot(
     val stickyButtons: Set<String> = emptySet(),
     val touchscreenRightStick: Boolean = AppPreferences.DEFAULT_TOUCHSCREEN_RIGHT_STICK,
     val touchscreenRightStickSensitivity: Int = AppPreferences.DEFAULT_TOUCHSCREEN_RIGHT_STICK_SENSITIVITY,
+    val touchscreenLeftStick: Boolean = AppPreferences.DEFAULT_TOUCHSCREEN_LEFT_STICK,
+    val touchscreenLeftStickSensitivity: Int = AppPreferences.DEFAULT_TOUCHSCREEN_LEFT_STICK_SENSITIVITY,
     val touchHaptics: Boolean = false,
     val touchHapticsPreset: Int = AppPreferences.DEFAULT_TOUCH_HAPTICS_PRESET,
     val touchHapticsStrength: Int = AppPreferences.DEFAULT_TOUCH_HAPTICS_STRENGTH,
@@ -199,6 +201,7 @@ class AppPreferences(private val context: Context) {
             "fpsOverlayMetrics", "confirmSaveLoadActions", "backButtonExitsGame",
             "compactControls", "keepScreenOn", "overlayScale", "overlayOpacity", "overlayShow",
             "racingMode", "stickyButtons", "touchscreenRightStick", "touchscreenRightStickSensitivity",
+            "touchscreenLeftStick", "touchscreenLeftStickSensitivity",
             "touchHaptics", "touchHapticsPreset", "touchHapticsStrength", "gyroMode",
             "gyroSensitivity", "gyroSmoothing", "gyroInvertX", "gyroInvertY",
             "gamepadStickDeadzone", "gamepadLeftStickSensitivity", "gamepadRightStickSensitivity",
@@ -260,6 +263,8 @@ class AppPreferences(private val context: Context) {
         const val TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN = 50
         const val TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX = 200
         const val DEFAULT_TOUCHSCREEN_RIGHT_STICK_SENSITIVITY = 100
+        const val DEFAULT_TOUCHSCREEN_LEFT_STICK = false
+        const val DEFAULT_TOUCHSCREEN_LEFT_STICK_SENSITIVITY = 100
         const val DEFAULT_GAMEPAD_STICK_DEADZONE = 15
         const val DEFAULT_GAMEPAD_STICK_SENSITIVITY = 110
         const val DEFAULT_FLOATING_QUICK_SAVE_POSITION_X = 0.88f
@@ -419,6 +424,8 @@ class AppPreferences(private val context: Context) {
         private val STICKY_BUTTONS = stringSetPreferencesKey("sticky_buttons")
         private val TOUCHSCREEN_RIGHT_STICK = booleanPreferencesKey("touchscreen_right_stick")
     private val TOUCHSCREEN_RIGHT_STICK_SENSITIVITY = intPreferencesKey("touchscreen_right_stick_sensitivity")
+    private val TOUCHSCREEN_LEFT_STICK = booleanPreferencesKey("touchscreen_left_stick")
+    private val TOUCHSCREEN_LEFT_STICK_SENSITIVITY = intPreferencesKey("touchscreen_left_stick_sensitivity")
     private val ENABLE_CHEATS = booleanPreferencesKey("enable_cheats")
     private val TEXTURE_REPLACEMENTS_ENABLED = booleanPreferencesKey("texture_replacements_enabled")
         private val TEXTURE_REPLACEMENTS_PRECACHE = booleanPreferencesKey("texture_replacements_precache")
@@ -1326,6 +1333,12 @@ class AppPreferences(private val context: Context) {
                     TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN,
                     TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX
                 ),
+                touchscreenLeftStick = prefs[TOUCHSCREEN_LEFT_STICK] ?: DEFAULT_TOUCHSCREEN_LEFT_STICK,
+                touchscreenLeftStickSensitivity = (prefs[TOUCHSCREEN_LEFT_STICK_SENSITIVITY]
+                    ?: DEFAULT_TOUCHSCREEN_LEFT_STICK_SENSITIVITY).coerceIn(
+                    TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN,
+                    TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX
+                ),
                 touchHaptics = prefs[TOUCH_HAPTICS] ?: false,
                 touchHapticsPreset = (prefs[TOUCH_HAPTICS_PRESET] ?: DEFAULT_TOUCH_HAPTICS_PRESET).coerceIn(TOUCH_HAPTICS_PRESET_SOFT, TOUCH_HAPTICS_PRESET_STRONG),
                 touchHapticsStrength = (prefs[TOUCH_HAPTICS_STRENGTH] ?: DEFAULT_TOUCH_HAPTICS_STRENGTH).coerceIn(10, 100),
@@ -1862,6 +1875,31 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    val touchscreenLeftStick: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[TOUCHSCREEN_LEFT_STICK] ?: DEFAULT_TOUCHSCREEN_LEFT_STICK
+    }
+
+    suspend fun setTouchscreenLeftStick(enabled: Boolean) {
+        context.dataStore.edit { it[TOUCHSCREEN_LEFT_STICK] = enabled }
+    }
+
+    val touchscreenLeftStickSensitivity: Flow<Int> = context.dataStore.data.map { prefs ->
+        (prefs[TOUCHSCREEN_LEFT_STICK_SENSITIVITY]
+            ?: DEFAULT_TOUCHSCREEN_LEFT_STICK_SENSITIVITY).coerceIn(
+            TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN,
+            TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX
+        )
+    }
+
+    suspend fun setTouchscreenLeftStickSensitivity(value: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[TOUCHSCREEN_LEFT_STICK_SENSITIVITY] = value.coerceIn(
+                TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN,
+                TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX
+            )
+        }
+    }
+
     val gamepadStickDeadzone: Flow<Int> = context.dataStore.data.map { prefs ->
         prefs[GAMEPAD_STICK_DEADZONE] ?: DEFAULT_GAMEPAD_STICK_DEADZONE
     }
@@ -2392,6 +2430,8 @@ class AppPreferences(private val context: Context) {
                 prefs.remove(LEFT_STICK_SENSITIVITY)
                 prefs.remove(RIGHT_STICK_SENSITIVITY)
                 prefs.remove(TOUCHSCREEN_RIGHT_STICK_SENSITIVITY)
+                prefs.remove(TOUCHSCREEN_LEFT_STICK)
+                prefs.remove(TOUCHSCREEN_LEFT_STICK_SENSITIVITY)
                 prefs.remove(STICK_SURFACE_MODE)
                 prefs.remove(CONTROL_LAYOUTS)
             } else {
@@ -2570,6 +2610,18 @@ class AppPreferences(private val context: Context) {
                 "touchscreenRightStickSensitivity",
                 (prefs[TOUCHSCREEN_RIGHT_STICK_SENSITIVITY]
                     ?: DEFAULT_TOUCHSCREEN_RIGHT_STICK_SENSITIVITY).coerceIn(
+                    TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN,
+                    TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX
+                )
+            )
+            put(
+                "touchscreenLeftStick",
+                prefs[TOUCHSCREEN_LEFT_STICK] ?: DEFAULT_TOUCHSCREEN_LEFT_STICK
+            )
+            put(
+                "touchscreenLeftStickSensitivity",
+                (prefs[TOUCHSCREEN_LEFT_STICK_SENSITIVITY]
+                    ?: DEFAULT_TOUCHSCREEN_LEFT_STICK_SENSITIVITY).coerceIn(
                     TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN,
                     TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX
                 )
@@ -2829,6 +2881,17 @@ class AppPreferences(private val context: Context) {
             prefs[TOUCHSCREEN_RIGHT_STICK_SENSITIVITY] = json.optInt(
                 "touchscreenRightStickSensitivity",
                 DEFAULT_TOUCHSCREEN_RIGHT_STICK_SENSITIVITY
+            ).coerceIn(
+                TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN,
+                TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX
+            )
+            prefs[TOUCHSCREEN_LEFT_STICK] = json.optBoolean(
+                "touchscreenLeftStick",
+                DEFAULT_TOUCHSCREEN_LEFT_STICK
+            )
+            prefs[TOUCHSCREEN_LEFT_STICK_SENSITIVITY] = json.optInt(
+                "touchscreenLeftStickSensitivity",
+                DEFAULT_TOUCHSCREEN_LEFT_STICK_SENSITIVITY
             ).coerceIn(
                 TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN,
                 TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX

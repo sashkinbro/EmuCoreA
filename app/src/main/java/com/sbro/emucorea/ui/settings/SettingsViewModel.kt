@@ -882,6 +882,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setTouchscreenRightStickSensitivity(value: Int) {
         viewModelScope.launch { preferences.setTouchscreenRightStickSensitivity(value) }
     }
+    fun setTouchscreenLeftStick(enabled: Boolean) { viewModelScope.launch { preferences.setTouchscreenLeftStick(enabled) } }
+    fun setTouchscreenLeftStickSensitivity(value: Int) {
+        viewModelScope.launch { preferences.setTouchscreenLeftStickSensitivity(value) }
+    }
     fun setTouchHapticsPreset(value: Int) { viewModelScope.launch { preferences.setTouchHapticsPreset(value) } }
     fun setStickToggleTarget(value: Int) {
         viewModelScope.launch { preferences.setStickToggleTarget(value) }

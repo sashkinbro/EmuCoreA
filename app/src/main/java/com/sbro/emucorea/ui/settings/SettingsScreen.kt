@@ -1073,6 +1073,14 @@ private fun SettingsContent(
     val floatingQuickActionsEnabled by viewModel.floatingQuickActionsEnabled.collectAsState()
     val orientationLock by viewModel.orientationLock.collectAsState()
     val emulationAllowsBothOrientations by viewModel.emulationAllowsBothOrientations.collectAsState()
+    // Kept outside SettingsUiState: that data class already sits at the JVM argument limit.
+    val settingsPreferences = remember(context) { AppPreferences(context) }
+    val touchscreenLeftStick by settingsPreferences.touchscreenLeftStick.collectAsState(
+        initial = AppPreferences.DEFAULT_TOUCHSCREEN_LEFT_STICK
+    )
+    val touchscreenLeftStickSensitivity by settingsPreferences.touchscreenLeftStickSensitivity.collectAsState(
+        initial = AppPreferences.DEFAULT_TOUCHSCREEN_LEFT_STICK_SENSITIVITY
+    )
     val notSetLabel = stringResource(R.string.settings_not_set)
     var selectedGamepadPadIndex by rememberSaveable { mutableIntStateOf(0) }
     Box(
@@ -1382,6 +1390,42 @@ private fun SettingsContent(
                             helpText = stringResource(R.string.settings_help_overlay_opacity),
                             onResetToDefault = { viewModel.setOverlayOpacity(overlayDefaults.overlayOpacity) }
                         )
+                        ToggleItem(
+                            icon = Icons.Rounded.TouchApp,
+                            title = stringResource(R.string.settings_touchscreen_left_stick),
+                            subtitle = stringResource(R.string.settings_touchscreen_left_stick_desc),
+                            checked = touchscreenLeftStick,
+                            onCheckedChange = viewModel::setTouchscreenLeftStick,
+                            helpText = stringResource(R.string.settings_help_touchscreen_left_stick),
+                            onResetToDefault = {
+                                viewModel.setTouchscreenLeftStick(
+                                    AppPreferences.DEFAULT_TOUCHSCREEN_LEFT_STICK
+                                )
+                            }
+                        )
+                        if (touchscreenLeftStick) {
+                            SliderItem(
+                                icon = Icons.Rounded.TouchApp,
+                                title = stringResource(R.string.settings_touchscreen_left_stick_sensitivity),
+                                subtitle = "${touchscreenLeftStickSensitivity}%",
+                                value = touchscreenLeftStickSensitivity.toFloat(),
+                                range = AppPreferences.TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN.toFloat()..
+                                    AppPreferences.TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX.toFloat(),
+                                steps = AppPreferences.TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MAX -
+                                    AppPreferences.TOUCHSCREEN_RIGHT_STICK_SENSITIVITY_MIN - 1,
+                                onValueChange = {
+                                    viewModel.setTouchscreenLeftStickSensitivity(it.roundToInt())
+                                },
+                                helpText = stringResource(
+                                    R.string.settings_help_touchscreen_left_stick_sensitivity
+                                ),
+                                onResetToDefault = {
+                                    viewModel.setTouchscreenLeftStickSensitivity(
+                                        AppPreferences.DEFAULT_TOUCHSCREEN_LEFT_STICK_SENSITIVITY
+                                    )
+                                }
+                            )
+                        }
                         ToggleItem(
                             icon = Icons.Rounded.TouchApp,
                             title = stringResource(R.string.settings_touchscreen_right_stick),
