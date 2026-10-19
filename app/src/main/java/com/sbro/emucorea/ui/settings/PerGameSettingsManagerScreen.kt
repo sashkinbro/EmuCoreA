@@ -41,11 +41,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.FolderOpen
+import androidx.compose.material.icons.rounded.Gamepad
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Save
 import com.sbro.emucorea.core.AudioDefaults
 import com.sbro.emucorea.core.EmulatorBridge
+import com.sbro.emucorea.core.GamepadManager
 import com.sbro.emucorea.core.GpuHardwareProfiles
 import com.sbro.emucorea.core.RendererDefaults
 import com.sbro.emucorea.core.TARGET_FPS_CHOICES
@@ -79,6 +81,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -111,6 +114,7 @@ import com.sbro.emucorea.R
 import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.GameLibraryCacheRepository
 import com.sbro.emucorea.data.GameItem
+import com.sbro.emucorea.data.GamepadBindingRules
 import com.sbro.emucorea.data.GameRepository
 import com.sbro.emucorea.data.PerGameSettings
 import com.sbro.emucorea.data.PerGameSettingsRepository
@@ -123,6 +127,8 @@ import com.sbro.emucorea.ui.common.GameCoverArt
 import com.sbro.emucorea.ui.common.ScreenTopBar
 import com.sbro.emucorea.ui.common.appScreenTopPadding
 import com.sbro.emucorea.ui.common.SettingHelpButton
+import com.sbro.emucorea.ui.common.SettingsStyledDialog
+import com.sbro.emucorea.ui.common.gamepadActionLabel
 import com.sbro.emucorea.ui.common.gamepadFocusableCard
 import com.sbro.emucorea.ui.common.tvGamepadFocusableCard
 import com.sbro.emucorea.ui.common.tvFocusGroup
@@ -1238,6 +1244,12 @@ private fun GameSettingsTabContent(
                         onResetToDefault = { onDraftChange(draft.copy(gamepadRightStickSensitivity = defaultProfile.gamepadRightStickSensitivity)) }
                     )
                 }
+                PerGameGamepadMappingSection(
+                    bindingsByPad = draft.gamepadBindingsByPad,
+                    onBindingsChange = { bindings ->
+                        onDraftChange(draft.copy(gamepadBindingsByPad = bindings))
+                    }
+                )
 
                 EditorSection(title = stringResource(R.string.settings_core_input)) {
                     CoreOptionManagerRows(
@@ -1573,6 +1585,254 @@ private fun ManagerActionButton(
             )
         }
     }
+}
+
+@Composable
+private fun PerGameGamepadMappingSection(
+    bindingsByPad: Map<Int, Map<String, Int>>,
+    onBindingsChange: (Map<Int, Map<String, Int>>) -> Unit
+) {
+    val context = LocalContext.current
+    val preferences = remember(context) { AppPreferences(context) }
+    val globalBindingsByPad by preferences.gamepadBindingsByPad.collectAsState(initial = emptyMap())
+    var showMappingDialog by remember { mutableStateOf(false) }
+
+    EditorSection(title = stringResource(R.string.settings_gamepad_mapping_title)) {
+        Text(
+            text = stringResource(R.string.settings_gamepad_mapping_game_desc),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        ManagerActionButton(
+            icon = Icons.Rounded.Gamepad,
+            title = stringResource(R.string.settings_gamepad_mapping_configure),
+            onClick = { showMappingDialog = true }
+        )
+        if (bindingsByPad.isNotEmpty()) {
+            ManagerActionButton(
+                icon = Icons.Rounded.Restore,
+                title = stringResource(R.string.settings_gamepad_mapping_use_global),
+                onClick = { onBindingsChange(emptyMap()) }
+            )
+        }
+    }
+
+    if (showMappingDialog) {
+        PerGameGamepadMappingDialog(
+            globalBindingsByPad = globalBindingsByPad,
+            bindingsByPad = bindingsByPad,
+            onBindingsChange = onBindingsChange,
+            onDismiss = { showMappingDialog = false }
+        )
+    }
+}
+
+@Composable
+private fun PerGameGamepadMappingDialog(
+    globalBindingsByPad: Map<Int, Map<String, Int>>,
+    bindingsByPad: Map<Int, Map<String, Int>>,
+    onBindingsChange: (Map<Int, Map<String, Int>>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val gamepadActions = remember { GamepadManager.mappableButtonActions() }
+    var selectedPadIndex by remember { mutableIntStateOf(0) }
+    var pendingActionId by remember { mutableStateOf<String?>(null) }
+
+    DisposableEffect(pendingActionId) {
+        val actionId = pendingActionId
+        if (actionId != null) {
+            GamepadManager.startBindingCapture(selectedPadIndex) { keyCode ->
+                val padBindings = GamepadBindingRules.assign(
+                    bindingsByPad[selectedPadIndex].orEmpty(),
+                    actionId,
+                    keyCode
+                )
+                onBindingsChange(bindingsByPad + (selectedPadIndex to padBindings))
+                pendingActionId = null
+            }
+        } else {
+            GamepadManager.cancelBindingCapture()
+        }
+        onDispose { GamepadManager.cancelBindingCapture() }
+    }
+
+    val effectiveBindings = remember(globalBindingsByPad, bindingsByPad) {
+        GamepadBindingRules.merge(globalBindingsByPad, bindingsByPad)
+    }
+    val overrides = bindingsByPad[selectedPadIndex].orEmpty()
+    val selectedBindings = effectiveBindings[selectedPadIndex].orEmpty()
+    val connectedControllerName = GamepadManager.connectedControllerName(selectedPadIndex)
+
+    SettingsStyledDialog(
+        title = stringResource(R.string.settings_gamepad_mapping_title),
+        eyebrow = stringResource(R.string.app_name),
+        icon = Icons.Rounded.Gamepad,
+        onDismissRequest = { if (pendingActionId == null) onDismiss() }
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(0, 1).forEach { padIndex ->
+                FilterChip(
+                    shape = neonShape(16.dp),
+                    selected = selectedPadIndex == padIndex,
+                    onClick = {
+                        if (pendingActionId == null) selectedPadIndex = padIndex
+                    },
+                    label = { Text(gamepadPlayerLabel(padIndex)) }
+                )
+            }
+        }
+        Text(
+            text = connectedControllerName?.let {
+                stringResource(
+                    R.string.settings_gamepad_mapping_player_connected,
+                    gamepadPlayerLabel(selectedPadIndex),
+                    it
+                )
+            } ?: stringResource(
+                R.string.settings_gamepad_mapping_player_disconnected,
+                gamepadPlayerLabel(selectedPadIndex)
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        pendingActionId?.let { actionId ->
+            Text(
+                text = stringResource(
+                    R.string.settings_gamepad_mapping_listening_player_desc,
+                    gamepadPlayerLabel(selectedPadIndex),
+                    gamepadActionLabel(actionId)
+                ),
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            gamepadActions.forEach { action ->
+                val assignedKeyCode = GamepadManager.resolveBindingForAction(
+                    actionId = action.id,
+                    customBindings = selectedBindings
+                )
+                val isOverride = overrides.containsKey(action.id)
+                ManagerGamepadBindingRow(
+                    title = gamepadActionLabel(action.id),
+                    value = assignedKeyCode?.let(GamepadManager::keyCodeLabel)
+                        ?: stringResource(R.string.settings_not_set),
+                    autoLabel = if (isOverride || action.defaultKeyCodes.isEmpty()) {
+                        null
+                    } else {
+                        stringResource(R.string.settings_gamepad_mapping_auto_format)
+                    },
+                    highlight = pendingActionId == action.id,
+                    onBindClick = { pendingActionId = action.id },
+                    onClearClick = if (isOverride) {
+                        {
+                            val updatedPad = overrides - action.id
+                            val updated = if (updatedPad.isEmpty()) {
+                                bindingsByPad - selectedPadIndex
+                            } else {
+                                bindingsByPad + (selectedPadIndex to updatedPad)
+                            }
+                            onBindingsChange(updated)
+                        }
+                    } else {
+                        null
+                    }
+                )
+            }
+        }
+        ManagerActionButton(
+            icon = Icons.Rounded.Restore,
+            title = stringResource(R.string.settings_gamepad_mapping_use_global),
+            onClick = { onBindingsChange(emptyMap()) }
+        )
+        Button(
+            onClick = onDismiss,
+            enabled = pendingActionId == null,
+            modifier = Modifier.fillMaxWidth(),
+            shape = neonShape(18.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.close),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(vertical = 6.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ManagerGamepadBindingRow(
+    title: String,
+    value: String,
+    autoLabel: String?,
+    highlight: Boolean,
+    onBindClick: () -> Unit,
+    onClearClick: (() -> Unit)?
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = neonShape(16.dp),
+        color = if (highlight) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
+        },
+        border = if (highlight) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
+        } else {
+            null
+        },
+        onClick = onBindClick
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    autoLabel?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            onClearClick?.let { clear ->
+                TextButton(onClick = clear) {
+                    Text(stringResource(R.string.settings_gamepad_mapping_clear))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun gamepadPlayerLabel(padIndex: Int): String {
+    return stringResource(
+        if (padIndex == 0) R.string.settings_gamepad_player_1 else R.string.settings_gamepad_player_2
+    )
 }
 
 private fun Modifier.gameManagerFullBleed(): Modifier {
