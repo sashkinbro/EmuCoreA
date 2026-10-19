@@ -250,6 +250,21 @@ object PpssppCoreOptions {
             defaultValue = "enabled",
         ),
         Option(
+            key = "ppsspp_display_crop",
+            label = "Screen edge crop",
+            category = "video",
+            choices = listOf(
+                Choice("0", "Off"),
+                Choice("2", "2 dp"),
+                Choice("4", "4 dp"),
+                Choice("6", "6 dp"),
+                Choice("8", "8 dp"),
+                Choice("10", "10 dp"),
+                Choice("12", "12 dp"),
+            ),
+            defaultValue = "4",
+        ),
+        Option(
             key = "ppsspp_frameskip",
             label = "Frameskip",
             category = "video",
@@ -1291,6 +1306,7 @@ object PpssppCoreOptions {
     fun gameMenuGraphicsOptions(renderer: Int = RendererDefaults.VULKAN): List<Option> = listOfNotNull(
         option("ppsspp_frameskip"),
         option("ppsspp_auto_frameskip"),
+        option("ppsspp_display_crop"),
         if (renderer == RendererDefaults.VULKAN) option("ppsspp_mulitsample_level") else null,
         option("ppsspp_texture_scaling_type"),
         option("ppsspp_texture_scaling_level"),

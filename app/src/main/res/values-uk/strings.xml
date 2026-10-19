@@ -1373,6 +1373,7 @@
     <string name="settings_help_core_internal_resolution">З Vulkan потрібен перезапуск ядра.</string>
     <string name="settings_help_core_mulitsample_level">Лише Vulkan. Потрібен перезапуск ядра.</string>
     <string name="settings_help_core_cropto16x9">Прибирає по одному рядку зверху і знизу для точного 16:9. З Vulkan потрібен перезапуск ядра.</string>
+    <string name="settings_help_core_display_crop">Обрізає нестабільні пікселі з усіх країв зображення гри. Рекомендовано 4 dp — це прибирає більшість мерехтіння країв; збільшуйте лише за потреби.</string>
     <string name="settings_help_core_frame_duplication">Може згладити частоту кадрів в іграх із нижчою частотою.</string>
     <string name="settings_help_core_detect_vsync_swap_interval">Повідомляє фронтенд.</string>
     <string name="settings_help_core_inflight_frames">Лише GL/Vulkan; повільніше, менша затримка, потрібен перезапуск.</string>

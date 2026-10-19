@@ -2087,6 +2087,10 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         if (hasBool) g_Config.bDisplayCropTo16x9 = on;
         return;
     }
+    if (key == "ppsspp_display_crop" || key == "display_crop") {
+        if (ParseIntInRange(value, 0, 64, &number)) SetDisplayCropDp(number);
+        return;
+    }
     if (key == "vsync") {
         if (hasBool) g_Config.bVSync = on;
         return;

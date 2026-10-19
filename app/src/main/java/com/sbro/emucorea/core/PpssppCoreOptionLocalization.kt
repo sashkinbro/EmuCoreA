@@ -252,6 +252,7 @@ object PpssppCoreOptionLocalization {
         "fa" to mapOf("ppsspp_skip_gpu_readbacks" to "رد کردن بازخوانی GPU"),
         "in" to mapOf("ppsspp_skip_gpu_readbacks" to "Lewati pembacaan balik GPU"),
         "pt" to mapOf("ppsspp_enable_builtin_pro_ad_hoc_server" to "Ativar servidor PRO Ad Hoc integrado"),
+        "uk" to mapOf("ppsspp_display_crop" to "Обрізання країв екрана"),
         "hi" to mapOf(
             "ppsspp_memstick_size" to "मेमोरी स्टिक क्षमता",
             "ppsspp_texture_scaling_type" to "टेक्सचर स्केलिंग प्रकार",

@@ -53,6 +53,10 @@ struct DisplayProperties {
 
 extern DisplayProperties g_display;
 
+// EmuCoreA: removes unstable pixels from every edge of the presented image.
+void SetDisplayCropDp(int dp);
+int GetDisplayCropDp();
+
 template<class T>
 struct DisplayRect {
 	T x, y, w, h;

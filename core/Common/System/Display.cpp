@@ -7,6 +7,16 @@
 
 DisplayProperties g_display;
 
+static int g_displayCropDp = 4;
+
+void SetDisplayCropDp(int dp) {
+	g_displayCropDp = clamp_value(dp, 0, 64);
+}
+
+int GetDisplayCropDp() {
+	return g_displayCropDp;
+}
+
 DeviceOrientation DisplayProperties::GetDeviceOrientation() const {
 	return (dp_yres > dp_xres * 1.1f) ? DeviceOrientation::Portrait : DeviceOrientation::Landscape;
 }

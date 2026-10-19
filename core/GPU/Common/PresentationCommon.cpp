@@ -703,6 +703,19 @@ void PresentationCommon::RunPostshaderPasses(const DisplayLayoutConfig &config, 
 		rc_.h = (v1 - v0) * srcHeight_;
 		rc_.x = 0.0f;
 		rc_.y = (flags & OutputFlags::BACKBUFFER_FLIPPED) ? pixelHeight - rc_.h : 0.0f;
+	} else if (GetDisplayCropDp() > 0 && rc_.w > 0.0f && rc_.h > 0.0f) {
+		// Crop the source by the same number of device-independent pixels on
+		// every edge, then stretch the remainder back over the display rect.
+		const float cropU = (GetDisplayCropDp() * g_display.dpi_scale_x) / rc_.w;
+		const float cropV = (GetDisplayCropDp() * g_display.dpi_scale_y) / rc_.h;
+		const float uRange = u1 - u0;
+		const float vRange = v1 - v0;
+		if (cropU * 2.0f < uRange && cropV * 2.0f < vRange) {
+			u0 += cropU * uRange;
+			u1 -= cropU * uRange;
+			v0 += cropV * vRange;
+			v1 -= cropV * vRange;
+		}
 	}
 
 	if (!srcTexture_ && !srcFramebuffer_) {

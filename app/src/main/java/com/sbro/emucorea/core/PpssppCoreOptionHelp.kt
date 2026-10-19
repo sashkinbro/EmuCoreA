@@ -48,6 +48,7 @@ fun ppssppCoreOptionHelpRes(key: String): Int? = when {
     key == "ppsspp_internal_resolution" -> R.string.settings_help_core_internal_resolution
     key == "ppsspp_mulitsample_level" -> R.string.settings_help_core_mulitsample_level
     key == "ppsspp_cropto16x9" -> R.string.settings_help_core_cropto16x9
+    key == "ppsspp_display_crop" -> R.string.settings_help_core_display_crop
     key == "ppsspp_frame_duplication" -> R.string.settings_help_core_frame_duplication
     key == "ppsspp_detect_vsync_swap_interval" -> R.string.settings_help_core_detect_vsync_swap_interval
     key == "ppsspp_inflight_frames" -> R.string.settings_help_core_inflight_frames

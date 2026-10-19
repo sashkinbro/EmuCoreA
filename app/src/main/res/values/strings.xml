@@ -1391,6 +1391,7 @@
     <string name="settings_help_core_internal_resolution">Core restart required with Vulkan.</string>
     <string name="settings_help_core_mulitsample_level">Vulkan only. Core restart required.</string>
     <string name="settings_help_core_cropto16x9">Remove one line from top and bottom to get exact 16:9. Core restart required with Vulkan.</string>
+    <string name="settings_help_core_display_crop">Crops unstable pixels from every edge of the game image. 4 dp is recommended and hides most edge flicker; increase it only if artifacts remain.</string>
     <string name="settings_help_core_frame_duplication">Can make framerate smoother in games that run at lower framerates.</string>
     <string name="settings_help_core_detect_vsync_swap_interval">Notify frontend.</string>
     <string name="settings_help_core_inflight_frames">GL/Vulkan only, slower, less lag, restart.</string>
