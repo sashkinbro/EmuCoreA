@@ -106,6 +106,9 @@ struct CommandLineOptions {
 	// way to compare the two without editing a config, and the way out if the real one breaks a game.
 	std::optional<int> forceHLE;
 
+	// Overrides g_Config.iLockedCPUSpeed, in MHz.
+	std::optional<int> lockedCPUSpeed;
+
 	// Headless: install the game update in a .pkg (given as the boot filename) into this
 	// directory, then exit without booting anything. The directory is the game folder itself -
 	// the app puts that under PSP/GAME/<DISC_ID>, but here the caller picks. See
@@ -192,6 +195,8 @@ struct CommandLineOptions {
 
 	std::optional<std::string> screenshotFilename;
 	std::optional<std::string> screenshotFilenameSave;
+	// Headless: save each test's screenshot as DIR/<test path>.png, for many dumps in one run.
+	std::optional<std::string> screenshotDir;
 	std::optional<std::string> depthFilenameSave;
 	std::optional<std::string> dumpAudioFilename;
 	std::optional<int> replayEnd;

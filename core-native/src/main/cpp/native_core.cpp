@@ -986,6 +986,10 @@ void NativeFrame(GraphicsContext *graphicsContext) {}
 void NativeResized() {}
 void System_Toast(std::string_view str) {}
 void System_LaunchUrl(LaunchUrlType urlType, std::string_view url) {}
+PermissionStatus System_GetPermissionStatus(SystemPermission permission) {
+    return PERMISSION_STATUS_GRANTED;
+}
+void System_AskForPermission(SystemPermission permission) {}
 std::vector<std::string> System_GetCameraDeviceList() { return {}; }
 
 bool NativeSaveSecret(std::string_view nameOfSecret, std::string_view data) { return false; }

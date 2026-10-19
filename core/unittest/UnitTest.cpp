@@ -59,8 +59,11 @@
 #include "Common/Data/Text/Parsers.h"
 #include "Common/Data/Text/WrapText.h"
 #include "Common/Data/Encoding/Utf8.h"
+#include "Common/Data/Encoding/Utf16.h"
+#include "Common/Data/Encoding/Shiftjis.h"
 #include "Common/Buffer.h"
 #include "Common/File/Path.h"
+#include "Common/File/FileUtil.h"
 #include "Common/Log/LogManager.h"
 #include "Common/Math/SIMDHeaders.h"
 #include "Common/Math/CrossSIMD.h"
@@ -134,6 +137,24 @@
 
 // Set to true for more verbose unit tests.
 bool g_testLog = false;
+
+Path UnitTestTempPath(const char *name) {
+#if PPSSPP_PLATFORM(WINDOWS)
+	const wchar_t *temp = _wgetenv(L"TEMP");
+	if (temp && *temp) {
+		return Path(ConvertWStringToUTF8(temp)) / name;
+	}
+#else
+	const char *temp = getenv("TMPDIR");
+	if (temp && *temp) {
+		return Path(temp) / name;
+	}
+#if !PPSSPP_PLATFORM(ANDROID)
+	return Path("/tmp") / name;
+#endif
+#endif
+	return Path(name);
+}
 
 std::string System_GetProperty(SystemProperty prop) { return ""; }
 std::vector<std::string> System_GetPropertyStringVec(SystemProperty prop) { return std::vector<std::string>(); }
@@ -360,6 +381,55 @@ bool TestUtf8() {
 			const std::string once = ReplaceInvalidUTF8(input);
 			EXPECT_TRUE(ReplaceInvalidUTF8(once) == once);
 		}
+	}
+
+	return true;
+}
+
+bool TestTextDecoders() {
+	{
+		const char16_t pair[] = { 0xD83C, 0xDFAE, 0 };
+		UTF16LE utf(pair);
+		EXPECT_EQ_HEX((uint32_t)utf.next(), 0x1F3AEu);
+		EXPECT_TRUE(utf.end());
+	}
+
+	// An unpaired surrogate is invalid on its own, and decoding carries on after it.
+	{
+		const char16_t highThenA[] = { 0xD800, 'A', 0 };
+		UTF16LE utf(highThenA);
+		EXPECT_TRUE(utf.next() == UTF16LE::INVALID);
+		EXPECT_EQ_HEX((uint32_t)utf.next(), (uint32_t)'A');
+		EXPECT_TRUE(utf.end());
+
+		const char16_t lowThenA[] = { 0xDC00, 'A', 0 };
+		UTF16LE utf2(lowThenA);
+		EXPECT_TRUE(utf2.next() == UTF16LE::INVALID);
+		EXPECT_EQ_HEX((uint32_t)utf2.next(), (uint32_t)'A');
+	}
+
+	// A high surrogate right before the terminator must not consume it.
+	{
+		const char16_t highAtEnd[] = { 0xD800, 0, 'A', 0 };
+		UTF16LE utf(highAtEnd);
+		EXPECT_TRUE(utf.next() == UTF16LE::INVALID);
+		EXPECT_EQ_INT(utf.shortIndex(), 1);
+		EXPECT_TRUE(utf.end());
+	}
+
+	{
+		ShiftJIS sjis("A\xA1\x82\xA0");
+		EXPECT_EQ_HEX(sjis.next(), 0x41u);
+		EXPECT_EQ_HEX(sjis.next(), 0xA1u);
+		EXPECT_EQ_HEX(sjis.next(), 0x2422u);
+		EXPECT_TRUE(sjis.end());
+	}
+
+	// Lead bytes that encode nothing.
+	for (const char *bad : { "\x80", "\xA0", "\xFD", "\xFE", "\xFF" }) {
+		ShiftJIS sjis(bad);
+		EXPECT_TRUE(sjis.next() == ShiftJIS::INVALID);
+		EXPECT_EQ_INT(sjis.byteIndex(), 1);
 	}
 
 	return true;
@@ -2425,6 +2495,13 @@ static bool TestPath() {
 	Path path2("/asdf/jkl");
 	EXPECT_EQ_STR(path2.NavigateUp().ToString(), std::string("/asdf"));
 
+	// Relative to the current directory. This used to create nothing and still report success.
+	const Path relDir("unittest_createfullpath");
+	File::DeleteDirRecursively(relDir);
+	EXPECT_TRUE(File::CreateFullPath(relDir / "a/b"));
+	EXPECT_TRUE(File::IsDirectory(File::GetCurDirectory() / "unittest_createfullpath/a/b"));
+	File::DeleteDirRecursively(relDir);
+
 	Path path3 = path2 / "foo/bar";
 	EXPECT_EQ_STR(path3.WithExtraExtension(".txt").ToString(), std::string("/asdf/jkl/foo/bar.txt"));
 
@@ -3745,6 +3822,7 @@ TestItem availableTests[] = {
 	TEST_ITEM(Breakpoints),
 	TEST_ITEM(TempBreakpoints),
 	TEST_ITEM(Utf8),
+	TEST_ITEM(TextDecoders),
 	TEST_ITEM(IRPassSimplify),
 	TEST_ITEM(Jit),
 	TEST_ITEM(JitDotBench),

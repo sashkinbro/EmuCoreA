@@ -206,6 +206,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(enableLogging), CmdParamType::Bool, "log", '\0', "Full log output, not just emulated printfs", CmdLineMode::Headless},
 	{POFF(screenshotFilename), CmdParamType::String, "screenshot", '\0', "Compare rendered output against a reference screenshot FILE", CmdLineMode::Headless},
 	{POFF(screenshotFilenameSave), CmdParamType::String, "screenshot-save", '\0', "Save rendered screenshot to specified path (PNG if the path ends in .png, BMP otherwise)", CmdLineMode::Headless},
+	{POFF(screenshotDir), CmdParamType::String, "screenshot-dir", '\0', "Save each test's screenshot as DIR/<test path>.png (relative test paths keep their folders)", CmdLineMode::Headless},
 	{POFF(replayEnd), CmdParamType::Int, "replay-end", '\0', "When replaying a GE frame dump, only draw primitives up to this one (1-based)", CmdLineMode::Headless},
 	{POFF(dumpCompat), CmdParamType::Bool, "dump-compat", '\0', "Apply the game's compat.ini settings when replaying a GE frame dump (off by default)", CmdLineMode::Headless},
 	{POFF(hardwareTransform), CmdParamType::Bool, "hardware-transform", '\0', "Transform vertices on the GPU (default true); false transforms them on the CPU", CmdLineMode::Headless},
@@ -243,6 +244,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(odsLog), CmdParamType::Bool, "odslog", 'o', "Also log through OutputDebugString (Windows)", CmdLineMode::Headless},
 	{POFF(generateInterpreterDispatch), CmdParamType::Bool, "generate-interpreter-dispatch", '\0', "Generate C++ interpreter dispatch code (ExecInstruction) to stdout and exit", CmdLineMode::Headless},
 	{POFF(resolutionScale), CmdParamType::Int, "resolution-scale", '\0', "Set the resolution scale factor"},
+	{POFF(lockedCPUSpeed), CmdParamType::Int, "cpu-mhz", '\0', "Lock the emulated CPU clock at this many MHz (0 = let the game set it)"},
 	{POFF(msaa), CmdParamType::Int, "msaa", '\0', "Set the MSAA level (0 = off, 1 = 2x, 2 = 4x, 3 = 8x)"},
 	{POFF(debuggerPort), CmdParamType::Int, "debugger", '\0', "Enable the WebSocket debugger on this port (0 = pick automatically); see docs/WebSocketDebugger.md"},
 	{POFF(debuggerRunPort), CmdParamType::Int, "debugger-run", '\0', "Like --debugger, but starts running instead of waiting at the entry point", CmdLineMode::Headless},
@@ -619,6 +621,11 @@ void CommandLineOptions::ApplyToConfig() const {
 	if (logLevel.has_value()) {
 		g_logManager.SetAllLogLevels(logLevel.value());
 		g_logManager.DoNotSaveChannels();
+	}
+
+	if (lockedCPUSpeed.has_value()) {
+		g_Config.iLockedCPUSpeed = lockedCPUSpeed.value();
+		g_Config.DoNotSaveSetting(&g_Config.iLockedCPUSpeed);
 	}
 
 	if (oldAtrac.has_value()) {
