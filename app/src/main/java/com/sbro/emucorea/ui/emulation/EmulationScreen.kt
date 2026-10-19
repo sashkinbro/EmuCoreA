@@ -120,6 +120,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -2940,21 +2941,15 @@ private fun EmulationSidebarMenu(
                         horizontalArrangement = Arrangement.spacedBy(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Surface(
-                            shape = neonShape(12.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                        GameCoverArt(
+                            coverPath = gameHeader.coverPath,
+                            fallbackTitle = menuTitle,
+                            contentScale = ContentScale.Fit,
                             modifier = Modifier
-                                .width(64.dp)
-                                .aspectRatio(com.sbro.emucorea.ui.common.GameCoverAspectRatio)
-                        ) {
-                            GameCoverArt(
-                                coverPath = gameHeader.coverPath,
-                                fallbackTitle = menuTitle,
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        }
+                                .width(72.dp)
+                                .aspectRatio(com.sbro.emucorea.ui.common.GameCoverAspectRatio),
+                            placeholderShape = RectangleShape
+                        )
                         Column(
                             modifier = Modifier.weight(1f),
                             verticalArrangement = Arrangement.spacedBy(4.dp)

@@ -80,6 +80,7 @@ fun GameCoverArt(
     matchImageAspectRatio: Boolean = false,
     showTitleWhileLoading: Boolean = true,
     shimmerWhileLoading: Boolean = true,
+    placeholderShape: Shape = neonShape(20.dp),
     decodeWidth: Int = DEFAULT_COVER_DECODE_WIDTH,
     decodeHeight: Int = DEFAULT_COVER_DECODE_HEIGHT,
     onAspectRatioResolved: ((Float) -> Unit)? = null
@@ -173,7 +174,7 @@ fun GameCoverArt(
     } else {
         Box(
             modifier = imageModifier
-                .clip(neonShape(20.dp))
+                .clip(placeholderShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
                 .shimmer(showShimmer = isLoading && shimmerWhileLoading),
             contentAlignment = Alignment.Center

@@ -90,7 +90,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -126,7 +126,6 @@ import com.sbro.emucorea.data.TouchControlPressEffect
 import com.sbro.emucorea.data.TouchControlVisualStyle
 import com.sbro.emucorea.ui.common.GameCoverArt
 import com.sbro.emucorea.ui.common.gameCoverContentScale
-import com.sbro.emucorea.ui.common.gameCoverShape
 import com.sbro.emucorea.ui.common.ScreenTopBar
 import com.sbro.emucorea.ui.common.appScreenTopPadding
 import com.sbro.emucorea.ui.common.SettingHelpButton
@@ -693,7 +692,7 @@ private fun GamePickerCard(
     Surface(
         modifier = Modifier
             .width(280.dp)
-            .height(96.dp),
+            .height(106.dp),
         shape = neonShape(22.dp),
         color = if (selected) {
             MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f)
@@ -713,21 +712,20 @@ private fun GamePickerCard(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
+                .padding(10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
-                modifier = Modifier.width(48.dp).aspectRatio(com.sbro.emucorea.ui.common.GameCoverAspectRatio),
-                shape = neonShape(16.dp),
+                modifier = Modifier.width(56.dp).aspectRatio(com.sbro.emucorea.ui.common.GameCoverAspectRatio),
+                shape = RectangleShape,
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.26f)
             ) {
                 GameCoverArt(
                     coverPath = game.coverArtPath,
                     fallbackTitle = game.title,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clip(gameCoverShape(game.coverArtPath, neonShape(16.dp))),
+                    modifier = Modifier.fillMaxSize(),
+                    placeholderShape = RectangleShape,
                     contentScale = gameCoverContentScale(game.coverArtPath, ContentScale.Fit)
                 )
             }
