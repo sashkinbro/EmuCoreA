@@ -1105,6 +1105,14 @@ class AppPreferences(private val context: Context) {
         }
     }
 
+    fun getGamePathsSync(): List<String> {
+        return kotlinx.coroutines.runBlocking { gamePaths.first() }
+    }
+
+    fun getRecentGamesSync(): List<RecentGameEntry> {
+        return kotlinx.coroutines.runBlocking { recentGames.first() }
+    }
+
     val coverDownloadBaseUrl: Flow<String?> = context.dataStore.data.map { prefs ->
         prefs[COVER_DOWNLOAD_BASE_URL]
     }

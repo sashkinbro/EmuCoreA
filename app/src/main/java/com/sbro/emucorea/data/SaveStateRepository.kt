@@ -203,7 +203,7 @@ class SaveStateRepository(private val context: Context) {
         }
     }
 
-    suspend fun enrichGlobalEntries(entries: List<SaveStateEntryInfo>): List<SaveStateEntryInfo> {
+    fun enrichGlobalEntries(entries: List<SaveStateEntryInfo>): List<SaveStateEntryInfo> {
         if (entries.isEmpty()) return entries
         val libraryIndex = loadLibraryIndex()
         val unresolvedSlots = entries.asSequence()
@@ -580,13 +580,13 @@ class SaveStateRepository(private val context: Context) {
             .sortedByDescending { it.lastModified }
     }
 
-    private suspend fun loadLibraryIndex(): LibraryIndex {
-        val libraryPaths = preferences.gamePaths.first()
+    private fun loadLibraryIndex(): LibraryIndex {
+        val libraryPaths = preferences.getGamePathsSync()
         val cachedLibraryGames = when {
             libraryPaths.isEmpty() -> emptyList()
             else -> gameLibraryCacheRepository.loadSnapshot(GameLibraryCacheRepository.libraryKey(libraryPaths)).games
         }
-        val recentGames = preferences.recentGames.first().map { recent ->
+        val recentGames = preferences.getRecentGamesSync().map { recent ->
             GameItem(
                 title = recent.title.ifBlank { recent.path.substringAfterLast('/').substringBeforeLast('.') },
                 path = recent.path,

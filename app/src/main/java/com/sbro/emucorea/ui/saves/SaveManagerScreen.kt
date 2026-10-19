@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -105,11 +106,33 @@ fun SaveManagerScreen(
     val deleteSuccessMessage = stringResource(R.string.save_manager_delete_success)
     val deleteFailureMessage = stringResource(R.string.save_manager_delete_failed)
 
-    var entries by remember(gamePath, gameTitle, gameSerial) { mutableStateOf<List<SaveStateEntryInfo>>(emptyList()) }
-    var previewPaths by remember(gamePath, gameTitle, gameSerial) { mutableStateOf<Map<String, String>>(emptyMap()) }
+    val initialEntries = remember(gamePath, gameTitle, gameSerial) {
+        val rawEntries = runCatching {
+            repository.listEntries(
+                filterGamePath = gamePath,
+                filterGameTitle = gameTitle,
+                filterGameSerial = gameSerial
+            )
+        }.getOrDefault(emptyList())
+        if (gamePath.isNullOrBlank()) {
+            runCatching { repository.enrichGlobalEntries(rawEntries) }.getOrDefault(rawEntries)
+        } else {
+            rawEntries
+        }
+    }
+    val initialPreviewPaths = remember(initialEntries) {
+        initialEntries.mapNotNull { entry ->
+            repository.getPreviewImagePath(entry)?.let { path -> entry.absolutePath to path }
+        }.toMap()
+    }
+
+    var entries by remember(gamePath, gameTitle, gameSerial) { mutableStateOf(initialEntries) }
+    var previewPaths by remember(gamePath, gameTitle, gameSerial) { mutableStateOf(initialPreviewPaths) }
     var isWorking by remember { mutableStateOf(false) }
-    var isPreparingEntries by remember(gamePath, gameTitle, gameSerial) { mutableStateOf(true) }
-    var isResolvingEntries by remember(gamePath, gameTitle, gameSerial) { mutableStateOf(false) }
+    var isPreparingEntries by remember(gamePath, gameTitle, gameSerial) { mutableStateOf(initialEntries.isEmpty()) }
+    var isResolvingEntries by remember(gamePath, gameTitle, gameSerial) {
+        mutableStateOf(gamePath.isNullOrBlank())
+    }
     val pendingDelete = remember { mutableStateOf<SaveStateEntryInfo?>(null) }
     var importPreview by remember { mutableStateOf<SaveStateImportPreview?>(null) }
     var refreshGeneration by remember(gamePath, gameTitle, gameSerial) { mutableIntStateOf(0) }
@@ -124,15 +147,13 @@ fun SaveManagerScreen(
         }
     }
 
-    fun refresh() {
+    fun refresh(showProgress: Boolean = true) {
         val generation = refreshGeneration + 1
         refreshGeneration = generation
         scope.launch {
-            isWorking = true
-            isPreparingEntries = true
-            entries = emptyList()
-            previewPaths = emptyMap()
-            val initialEntries = withContext(Dispatchers.IO) {
+            isWorking = showProgress
+            isPreparingEntries = entries.isEmpty()
+            val rawEntries = withContext(Dispatchers.IO) {
                 repository.listEntries(
                     filterGamePath = gamePath,
                     filterGameTitle = gameTitle,
@@ -141,23 +162,20 @@ fun SaveManagerScreen(
             }
             if (refreshGeneration != generation) return@launch
 
-            entries = initialEntries
-            isPreparingEntries = false
-            isWorking = false
-
-            val resolvedEntries = if (gamePath.isNullOrBlank() && initialEntries.isNotEmpty()) {
+            val resolvedEntries = if (gamePath.isNullOrBlank() && rawEntries.isNotEmpty()) {
                 isResolvingEntries = true
                 withContext(Dispatchers.IO) {
-                    repository.enrichGlobalEntries(initialEntries)
+                    repository.enrichGlobalEntries(rawEntries)
                 }
             } else {
-                initialEntries
+                rawEntries
             }
             if (refreshGeneration != generation) return@launch
-            if (resolvedEntries !== initialEntries) {
-                entries = resolvedEntries
-            }
+
+            entries = resolvedEntries
+            isPreparingEntries = false
             isResolvingEntries = false
+            isWorking = false
 
             scope.launch(Dispatchers.IO) {
                 resolvedEntries.forEach { entry ->
@@ -173,7 +191,7 @@ fun SaveManagerScreen(
     }
 
     LaunchedEffect(gamePath, gameTitle, gameSerial) {
-        refresh()
+        refresh(showProgress = false)
     }
 
     val backupLauncher = rememberLauncherForActivityResult(
@@ -345,10 +363,10 @@ fun SaveManagerScreen(
                 }
 
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                         FilledTonalButton(
                             onClick = {
                                 val fileName = if (isFiltered) {
@@ -673,7 +691,8 @@ private fun SaveEntryCard(
             ) {
                 Surface(
                     modifier = Modifier
-                        .width(152.dp),
+                        .width(152.dp)
+                        .aspectRatio(16f / 9f),
                     shape = neonShape(4.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
                     tonalElevation = 0.dp,
@@ -682,9 +701,10 @@ private fun SaveEntryCard(
                     GameCoverArt(
                         coverPath = previewPath,
                         fallbackTitle = entry.gameTitle,
-                        modifier = Modifier.fillMaxWidth(),
-                        contentScale = ContentScale.Fit,
-                        matchImageAspectRatio = true
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        decodeWidth = 480,
+                        decodeHeight = 270
                     )
                 }
 
