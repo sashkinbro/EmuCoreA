@@ -1699,12 +1699,7 @@
     <string name="touch_control_creator_preview_mode">पूर्वावलोकन मोड</string>
     <string name="touch_control_creator_pro_desc">मुफ़्त में हर विकल्प एक्सप्लोर करें। गेम्स में कस्टम नियंत्रण बनाने, सहेजने, डुप्लिकेट करने या सक्षम करने के लिए PRO आवश्यक है।</string>
     <string name="touch_control_creator_unlock">PRO अनलॉक करें</string>
-    <string name="core_update_reset_title">कोर अपडेट</string>
-    <string name="core_update_reset_body">इस अपडेट में एमुलेटर कोर में बदलाव शामिल हैं। समस्याओं से बचने के लिए कैश और कॉन्फ़िगरेशन रीसेट करें।</string>
-    <string name="core_update_reset_kept">गेम फ़ोल्डर, नियंत्रण, सेव, मेमोरी कार्ड और कवर सुरक्षित रहेंगे।</string>
-    <string name="core_update_reset_action">सेटिंग्स रीसेट करें</string>
-    <string name="core_update_reset_keep">सेटिंग्स रखें</string>
-    <string name="core_update_reset_done">सेटिंग्स रीसेट हो गईं</string>
+    <string name="core_update_reset_done">एमुलेटर कोर अपडेट हुआ — कैश साफ़ किया गया</string>
     <string name="settings_network_restart_lan_note">नेटवर्क में बदलाव गेम को फिर से शुरू करने के बाद लागू होते हैं। LAN पर खेलने के लिए हर डिवाइस को होस्ट का LAN IP इस्तेमाल करना होगा; बिल्ट-इन सर्वर केवल होस्ट पर चालू करें।</string>
 
     <string name="home_game_menu_restore_cover">डिफ़ॉल्ट कवर बहाल करें</string>

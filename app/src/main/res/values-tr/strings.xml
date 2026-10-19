@@ -1699,12 +1699,7 @@
     <string name="touch_control_creator_preview_mode">Önizleme modu</string>
     <string name="touch_control_creator_pro_desc">Her seçeneği ücretsiz keşfedin. Oyunlarda özel kontrolleri oluşturmak, kaydetmek, çoğaltmak veya etkinleştirmek için PRO gereklidir.</string>
     <string name="touch_control_creator_unlock">PRO Kilidini Aç</string>
-    <string name="core_update_reset_title">Çekirdek güncellemesi</string>
-    <string name="core_update_reset_body">Bu güncelleme emülatör çekirdeğinde değişiklikler içeriyor. Sorun yaşamamak için önbelleği ve yapılandırmayı sıfırlayın.</string>
-    <string name="core_update_reset_kept">Oyun klasörleri, kontroller, kayıtlar, hafıza kartları ve kapaklar korunur.</string>
-    <string name="core_update_reset_action">Ayarları sıfırla</string>
-    <string name="core_update_reset_keep">Ayarları koru</string>
-    <string name="core_update_reset_done">Ayarlar sıfırlandı</string>
+    <string name="core_update_reset_done">Emülatör çekirdeği güncellendi — önbellek temizlendi</string>
     <string name="settings_network_restart_lan_note">Ağ değişiklikleri oyun yeniden başlatıldıktan sonra uygulanır. LAN üzerinden oynamak için tüm cihazlar sunucuyu barındıran cihazın LAN IP adresini kullanmalıdır; yerleşik sunucuyu yalnızca o cihazda etkinleştirin.</string>
 
     <string name="home_game_menu_restore_cover">Varsayılan kapağı geri yükle</string>

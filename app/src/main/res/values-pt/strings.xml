@@ -1701,12 +1701,7 @@
     <string name="touch_control_creator_preview_mode">Modo de visualização</string>
     <string name="touch_control_creator_pro_desc">Explore todas as opções gratuitamente. O PRO é necessário para criar, salvar, duplicar ou ativar controles personalizados nos jogos.</string>
     <string name="touch_control_creator_unlock">Desbloquear PRO</string>
-    <string name="core_update_reset_title">Atualização do núcleo</string>
-    <string name="core_update_reset_body">Esta atualização inclui alterações no núcleo do emulador. Redefina a cache e a configuração para evitar falhas.</string>
-    <string name="core_update_reset_kept">Pastas de jogos, controles, saves, cartões de memória e capas são mantidos.</string>
-    <string name="core_update_reset_action">Redefinir configurações</string>
-    <string name="core_update_reset_keep">Manter configurações</string>
-    <string name="core_update_reset_done">Configurações redefinidas</string>
+    <string name="core_update_reset_done">Núcleo do emulador atualizado — cache limpa</string>
     <string name="settings_network_restart_lan_note">As alterações de rede são aplicadas após reiniciar o jogo. Para jogar em LAN, todos os dispositivos devem usar o IP de LAN do anfitrião; ative o servidor integrado apenas no anfitrião.</string>
 
     <string name="home_game_menu_restore_cover">Restaurar capa padrão</string>
