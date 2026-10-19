@@ -31,6 +31,7 @@ import com.sbro.emucorea.ui.common.AppAlertDialog
 import com.sbro.emucorea.ui.common.ScreenTopBar
 import com.sbro.emucorea.ui.common.appScreenTopPadding
 import com.sbro.emucorea.ui.common.navigationBarsHorizontalPaddingValues
+import com.sbro.emucorea.ui.common.premiumFilterChipColors
 import com.sbro.emucorea.ui.theme.ScreenHorizontalPadding
 import com.sbro.emucorea.ui.theme.neon.LocalNeonTheme
 import com.sbro.emucorea.ui.theme.neon.NeonSystemBanner
@@ -117,6 +118,7 @@ fun PspMemoryStickScreen(onBackClick: () -> Unit) {
                             FilterChip(shape = neonChipShape(),
                                 selected = pendingSize == choice.value,
                                 onClick = { pendingSize = choice.value },
+                                colors = premiumFilterChipColors(),
                                 label = { Text(choice.label) })
                         }
                     }

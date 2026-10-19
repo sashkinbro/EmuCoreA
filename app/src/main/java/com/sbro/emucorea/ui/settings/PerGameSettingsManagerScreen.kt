@@ -134,6 +134,7 @@ import com.sbro.emucorea.ui.common.SettingsStyledDialog
 import com.sbro.emucorea.ui.common.StickyTabHeader
 import com.sbro.emucorea.ui.common.gamepadActionLabel
 import com.sbro.emucorea.ui.common.gamepadFocusableCard
+import com.sbro.emucorea.ui.common.premiumFilterChipColors
 import com.sbro.emucorea.ui.common.rememberStickyTabHeaderPinned
 import com.sbro.emucorea.ui.common.stickyTabTopInset
 import com.sbro.emucorea.ui.common.tvGamepadFocusableCard
@@ -1731,6 +1732,7 @@ private fun PerGameGamepadMappingDialog(
                     onClick = {
                         if (pendingActionId == null) selectedPadIndex = padIndex
                     },
+                    colors = premiumFilterChipColors(),
                     label = { Text(gamepadPlayerLabel(padIndex)) }
                 )
             }
@@ -1831,7 +1833,7 @@ private fun ManagerGamepadBindingRow(
         modifier = Modifier.fillMaxWidth(),
         shape = neonShape(16.dp),
         color = if (highlight) {
-            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+            MaterialTheme.colorScheme.primaryContainer
         } else {
             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
         },

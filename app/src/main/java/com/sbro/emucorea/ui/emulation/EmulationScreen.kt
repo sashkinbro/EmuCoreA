@@ -202,6 +202,7 @@ import com.sbro.emucorea.ui.common.VectorOverlayButton
 import com.sbro.emucorea.ui.common.buildOverlayCanvasLayout
 import com.sbro.emucorea.ui.common.gamepadActionLabel
 import com.sbro.emucorea.ui.common.gamepadFocusableCard
+import com.sbro.emucorea.ui.common.premiumFilterChipColors
 import com.sbro.emucorea.ui.common.rememberDebouncedClick
 import com.sbro.emucorea.ui.common.tvFocusGroup
 import com.sbro.emucorea.ui.settings.ControlsEditorScreen
@@ -1737,6 +1738,7 @@ fun EmulationScreen(
                         shape = neonChipShape(),
                         selected = selectedGamepadPadIndex == padIndex,
                         onClick = { selectedGamepadPadIndex = padIndex },
+                        colors = premiumFilterChipColors(),
                         label = { Text(gamepadPlayerLabel(padIndex)) }
                     )
                 }
@@ -4321,7 +4323,7 @@ private fun GameMenuNavigationTile(
         shape = shape,
         color = when {
             destructive -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
-            selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+            selected -> MaterialTheme.colorScheme.primaryContainer
             else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.26f)
         },
         border = BorderStroke(
@@ -4347,7 +4349,7 @@ private fun GameMenuNavigationTile(
                 contentDescription = resolvedLabel,
                 tint = when {
                     destructive -> MaterialTheme.colorScheme.error
-                    selected -> MaterialTheme.colorScheme.primary
+                    selected -> MaterialTheme.colorScheme.onPrimaryContainer
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 modifier = Modifier.size(21.dp)
@@ -4356,7 +4358,11 @@ private fun GameMenuNavigationTile(
                 Text(
                     text = resolvedLabel,
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                    color = when {
+                        destructive -> MaterialTheme.colorScheme.error
+                        selected -> MaterialTheme.colorScheme.onPrimaryContainer
+                        else -> MaterialTheme.colorScheme.onSurface
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -4421,7 +4427,7 @@ private fun EmulationMenuRailButton(
         shape = shape,
         color = when {
             isDestructive -> MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
-            selected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+            selected -> MaterialTheme.colorScheme.primaryContainer
             else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
         },
         border = border
@@ -4436,7 +4442,7 @@ private fun EmulationMenuRailButton(
                 contentDescription = contentDescription,
                 tint = when {
                     isDestructive -> MaterialTheme.colorScheme.error
-                    selected -> MaterialTheme.colorScheme.primary
+                    selected -> MaterialTheme.colorScheme.onPrimaryContainer
                     else -> MaterialTheme.colorScheme.onSurfaceVariant
                 },
                 modifier = Modifier
@@ -4699,13 +4705,13 @@ private fun LiveSelectionRow(
                         onClick = { onValueChange(option.value) },
                         shape = neonShape(12.dp),
                         color = if (selected) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                            MaterialTheme.colorScheme.primaryContainer
                         } else {
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f)
                         },
                         border = BorderStroke(
                             1.dp,
-                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.38f)
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
                         )
                     ) {
@@ -4719,7 +4725,7 @@ private fun LiveSelectionRow(
                                 Icon(
                                     imageVector = option.icon,
                                     contentDescription = option.contentDescription,
-                                    tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(18.dp)
                                 )
                             } else {
@@ -4729,7 +4735,7 @@ private fun LiveSelectionRow(
                                     maxLines = 1,
                                     softWrap = false,
                                     overflow = TextOverflow.Clip,
-                                    color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    color = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
                                 )
                             }
                         }
@@ -5111,6 +5117,7 @@ private fun LiveSelectionChip(
         modifier = modifier,
         selected = selected,
         onClick = onClick,
+        colors = premiumFilterChipColors(),
         // Icon-only options (for example "Stretch to full screen") must not
         // render an empty label slot: Material reserves its padding and the
         // chip ends up as a big half-empty button.
@@ -5431,6 +5438,7 @@ private fun LiveBitmaskChoiceRow(
                     shape = neonChipShape(),
                     selected = PerformanceOverlayMetrics.isEnabled(selectedMask, metric),
                     onClick = { onToggle(metric) },
+                    colors = premiumFilterChipColors(),
                     label = { Text(text = label) }
                 )
             }

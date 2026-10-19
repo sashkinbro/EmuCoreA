@@ -75,6 +75,7 @@ import com.sbro.emucorea.data.CustomThemeLibrary
 import com.sbro.emucorea.data.SavedCustomTheme
 import com.sbro.emucorea.ui.common.ScreenTopBar
 import com.sbro.emucorea.ui.common.appScreenTopPadding
+import com.sbro.emucorea.ui.common.premiumFilterChipColors
 import com.sbro.emucorea.ui.theme.neon.neonShape
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -416,6 +417,7 @@ fun ThemeManagerScreen(
                         enabled = isProUnlocked,
                         label = { Text(stringResource(R.string.theme_manager_light_canvas)) },
                         leadingIcon = { Icon(Icons.Rounded.LightMode, contentDescription = null) },
+                        colors = premiumFilterChipColors(),
                         shape = managerControlShape(),
                         modifier = Modifier.weight(1f)
                     )
@@ -425,6 +427,7 @@ fun ThemeManagerScreen(
                         enabled = isProUnlocked,
                         label = { Text(stringResource(R.string.theme_manager_dark_canvas)) },
                         leadingIcon = { Icon(Icons.Rounded.DarkMode, contentDescription = null) },
+                        colors = premiumFilterChipColors(),
                         shape = managerControlShape(),
                         modifier = Modifier.weight(1f)
                     )
@@ -516,6 +519,7 @@ fun ThemeManagerScreen(
                             } else {
                                 null
                             },
+                            colors = premiumFilterChipColors(),
                             shape = managerSmallShape()
                         )
                     }
