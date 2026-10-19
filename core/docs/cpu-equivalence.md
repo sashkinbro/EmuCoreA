@@ -34,7 +34,6 @@ Environment variables:
 | `PPSSPP_CPUFUZZ_DUMP` | write every core's end state of every case to a file |
 | `PPSSPP_CPUFUZZ_STRICT` | fail on any difference, not only on a crash |
 | `PPSSPP_CPUFUZZ_OPS` | comma-separated instruction name prefixes to generate only; `dot` is the dot products and the prefix ops |
-| `PPSSPP_CPUFUZZ_ACCURATE_VDOT` | `0` to run without the accurate dot products, which are on by default |
 | `PPSSPP_CPUFUZZ_HOSTEXT` | `+` or `-`: turn the JIT's optional host extensions on or off (RISC-V Zba/Zbb/Zbs/Zcb/Zfa/Zfh/Zicond, and V with `-`, LoongArch LSX/LASX); the `VFPUDotJit` test follows it too |
 | `PPSSPP_CPUFUZZ_BLOCKS` | print the IR and host code of every block the JITs ran, after each case |
 | `PPSSPP_CPUFUZZ_UNKNOWNPREFIX` | compile as after a block left a prefix uneaten |
@@ -63,7 +62,9 @@ timing, of course.
 
 ## Fixed
 
-Crashes (JIT emitter asserts) and wrong code found by the fuzzer:
+Crashes (JIT emitter asserts) and wrong code found by the fuzzer. Entries for the "ARM64 JIT", the
+"x86 JIT" and "both JITs" are about the legacy JITs, which have since been removed. Every JIT is now
+IR-based (the "IR JIT" and "native IR backend" entries).
 
 - ARM64 JIT: `ext` with pos + size past 32, and `ins` with msb below pos, asserted in UBFX/BFI.
 - ARM64 JIT: `ApplyPrefixST` read an uninitialized register for a swizzle naming a lane past the

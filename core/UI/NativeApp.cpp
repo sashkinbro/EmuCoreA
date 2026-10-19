@@ -341,10 +341,12 @@ void runImDebugger(Draw::DrawContext *draw) {
 		const bool keyCtrl = (modifiers & KeyModifier::LCTRL) || (modifiers & KeyModifier::RCTRL);
 		const bool keyShift = (modifiers & KeyModifier::LSHIFT) || (modifiers & KeyModifier::RSHIFT);
 		const bool keyAlt = (modifiers & KeyModifier::LALT) || (modifiers & KeyModifier::RALT);
+		const bool keySuper = (modifiers & KeyModifier::LMETA) || (modifiers & KeyModifier::RMETA);
 		io.AddKeyEvent(ImGuiMod_Ctrl, keyCtrl);
 		io.AddKeyEvent(ImGuiMod_Shift, keyShift);
 		io.AddKeyEvent(ImGuiMod_Alt, keyAlt);
-		// io.AddKeyEvent(ImGuiMod_Super, e.key.super);
+		// On Mac, ImGui swaps Super and Ctrl itself (ConfigMacOSXBehaviors), so Cmd+V pastes.
+		io.AddKeyEvent(ImGuiMod_Super, keySuper);
 
 		ImGuiID dockID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_NoDockingOverCentralNode);
 		ImGuiDockNode* node = ImGui::DockBuilderGetCentralNode(dockID);
@@ -1862,11 +1864,15 @@ void NativeShutdown() {
 
 	g_i18nrepo.LogMissingKeys();
 
+	// Each of these waits for a thread. Log them, so a hang on exit shows which one it was.
+	INFO_LOG(Log::System, "Shutting down the web server");
 	ShutdownWebServer();
 
+	INFO_LOG(Log::System, "Shutting down UPnP");
 	__UPnPShutdown();
 
 	// A request finishing while globals are destroyed at exit touches g_OSD, which may be gone by then.
+	INFO_LOG(Log::System, "Cancelling downloads");
 	g_DownloadManager.CancelAll();
 
 	net::Shutdown();
@@ -1875,6 +1881,7 @@ void NativeShutdown() {
 
 	ShaderTranslationShutdown();
 
+	INFO_LOG(Log::System, "Stopping the thread pool");
 	// Avoid shutting this down when restarting core.
 	g_logManager.Shutdown();
 	g_threadManager.Teardown();

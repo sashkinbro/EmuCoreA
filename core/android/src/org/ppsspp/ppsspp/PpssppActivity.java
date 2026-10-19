@@ -408,10 +408,6 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 	}
 
 	public void Initialize() {
-		// isLandscape is used to trigger GetAppInfo currently, we
-		boolean landscape = NativeApp.isLandscape();
-		Log.d(TAG, "Landscape: " + landscape);
-
 		ApplicationInfo appInfo = getApplicationInfo();
 
 		int deviceType = NativeApp.DEVICE_TYPE_MOBILE;
@@ -1833,6 +1829,10 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 			return true;
 		} else if (command.equals("gps_command")) {
 			if (params.equals("open")) {
+				if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_LOCATION)) {
+					Log.i(TAG, "No location hardware, not starting location updates");
+					return true;
+				}
 				if (!askForPermissions(permissionsForLocation, REQUEST_CODE_LOCATION_PERMISSION)) {
 					mLocationHelper.startLocationUpdates();
 				}
@@ -1877,6 +1877,11 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 			return true;
 		} else if (command.equals("microphone_command")) {
 			if (params.startsWith("startRecording:")) {
+				// No point asking for permission for a microphone the device doesn't have.
+				if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_MICROPHONE)) {
+					Log.i(TAG, "No microphone, not starting recording");
+					return true;
+				}
 				int sampleRate = Integer.parseInt(params.replace("startRecording:", ""));
 				NativeApp.audioRecording_SetSampleRate(sampleRate);
 				if (!askForPermissions(permissionsForMicrophone, REQUEST_CODE_MICROPHONE_PERMISSION)) {

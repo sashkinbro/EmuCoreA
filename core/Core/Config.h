@@ -237,8 +237,6 @@ public:
 	bool bWow64WarningDismissed;
 	bool bForceLagSync;
 	bool bFuncReplacements;
-	// Compute the VFPU's dot products (vdot, vmmul, vtfm and the rest) bit-exactly like the PSP.
-	bool bAccurateVdot;
 	bool bHideSlowWarnings;
 	bool bHideStateWarnings;
 	uint32_t uJitDisableFlags;
@@ -476,8 +474,7 @@ public:
 	int iGameBrowserView2;
 	int iGameBrowserView3;
 	int iGameBrowserView4;
-	// The old GridView bools, only read, to migrate to iGameBrowserView*. -1 if missing.
-	int iLegacyGridView1;
+	// The old GridView bool, only read, to migrate to iGameBrowserView4. -1 if missing.
 	int iLegacyGridView4;
 
 	// Right analog binding
