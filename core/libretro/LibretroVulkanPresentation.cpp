@@ -1,13 +1,11 @@
 #include "libretro/LibretroVulkanPresentation.h"
 
-#include <algorithm>
 #include "Common/GPU/Vulkan/VulkanContext.h"
-#include "Core/Config.h"
 
 using namespace PPSSPP_VK;
 
 LibretroVulkanPresentation::LibretroVulkanPresentation(retro_hw_render_interface_vulkan *vulkan, VkFormat format, VkExtent2D extent)
-	: vulkan_(vulkan), format_(format), extent_(extent) {
+	: vulkan_(vulkan), format_(format), extent_(extent), requestedExtent_(PackExtent(extent)) {
 }
 
 uint32_t LibretroVulkanPresentation::ImageCountFromMask(uint32_t mask) {
@@ -113,22 +111,13 @@ void LibretroVulkanPresentation::Destroy(VulkanContext *context) {
 }
 
 bool LibretroVulkanPresentation::NeedsRecreate() const {
-	const uint32_t scale = (uint32_t)std::max(1, g_Config.iInternalResolution);
-	const uint32_t width = scale * 480;
-	const uint32_t height = scale * (g_Config.bDisplayCropTo16x9 ? 270 : 272);
-	return vulkan_->get_sync_index_mask(vulkan_->handle) != syncIndexMask_ ||
-		extent_.width != width || extent_.height != height;
+	return vulkan_->get_sync_index_mask(vulkan_->handle) != syncIndexMask_ || requestedExtent_ != PackExtent(extent_);
 }
 
 bool LibretroVulkanPresentation::Recreate(VulkanContext *context) {
-	// The libretro output images are allocated at the resolution in effect when
-	// the game starts. A live upscale change must resize those images too; the
-	// PPSSPP render targets alone are not enough and sampling past the old image
-	// produces a visible strip at the right edge.
-	context->WaitUntilQueueIdle();
 	Destroy(context);
-	const uint32_t scale = (uint32_t)std::max(1, g_Config.iInternalResolution);
-	extent_ = { scale * 480, scale * (g_Config.bDisplayCropTo16x9 ? 270u : 272u) };
+	const uint32_t requested = requestedExtent_;
+	extent_ = { requested >> 16, requested & 0xFFFF };
 	return Create(context);
 }
 

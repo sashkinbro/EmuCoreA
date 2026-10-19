@@ -427,17 +427,6 @@ object PpssppCoreOptions {
             defaultValue = "disabled",
         ),
         Option(
-            key = "ppsspp_spline_quality",
-            label = "Spline/Bezier Curves Quality",
-            category = "hacks",
-            choices = listOf(
-                Choice("Low", "Low"),
-                Choice("Medium", "Medium"),
-                Choice("High", "High"),
-            ),
-            defaultValue = "High",
-        ),
-        Option(
             key = "ppsspp_lower_resolution_for_effects",
             label = "Lower Resolution for Effects",
             category = "hacks",
@@ -1314,7 +1303,6 @@ object PpssppCoreOptions {
         option("ppsspp_gpu_hardware_transform"),
         option("ppsspp_skip_buffer_effects"),
         option("ppsspp_skip_gpu_readbacks"),
-        option("ppsspp_spline_quality"),
         option("ppsspp_lower_resolution_for_effects"),
         option("ppsspp_frame_duplication"),
         option("ppsspp_inflight_frames"),

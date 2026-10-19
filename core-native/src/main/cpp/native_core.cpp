@@ -2435,12 +2435,6 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         if (hasBool) g_Config.iSkipGPUReadbackMode = on ? 1 : 0;
         return;
     }
-    if (key == "ppsspp_spline_quality") {
-        if (EqualsIgnoreCase(value, "Low")) g_Config.iSplineBezierQuality = 0;
-        else if (EqualsIgnoreCase(value, "Medium")) g_Config.iSplineBezierQuality = 1;
-        else if (EqualsIgnoreCase(value, "High")) g_Config.iSplineBezierQuality = 2;
-        return;
-    }
     if (key == "ppsspp_lower_resolution_for_effects") {
         if (EqualsIgnoreCase(value, "disabled")) g_Config.iBloomHack = 0;
         else if (EqualsIgnoreCase(value, "Safe")) g_Config.iBloomHack = 1;

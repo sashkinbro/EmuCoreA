@@ -34,7 +34,13 @@ void LibretroVulkanContext::SwapBuffers() {
 	if (presentation) {
 		presentation->WaitForPresentation();
 	}
-	LibretroHWRenderContext::SwapBuffers();
+	unsigned w = PSP_CoreParameter().pixelWidth;
+	unsigned h = PSP_CoreParameter().pixelHeight;
+	Libretro::GetFrameSize(&w, &h);
+	if (presentation) {
+		presentation->RequestExtent({ w, h });
+	}
+	video_cb(RETRO_HW_FRAME_BUFFER_VALID, w, h, 0);
 }
 
 static const VkApplicationInfo *GetApplicationInfo(void);

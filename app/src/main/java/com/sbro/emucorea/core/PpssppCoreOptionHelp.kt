@@ -55,7 +55,6 @@ fun ppssppCoreOptionHelpRes(key: String): Int? = when {
     key == "ppsspp_analog_sensitivity" -> R.string.settings_help_core_analog_sensitivity
     key == "ppsspp_skip_buffer_effects" -> R.string.settings_help_core_skip_buffer_effects
     key == "ppsspp_skip_gpu_readbacks" -> R.string.settings_help_core_skip_gpu_readbacks
-    key == "ppsspp_spline_quality" -> R.string.settings_help_core_spline_quality
     key == "ppsspp_lower_resolution_for_effects" -> R.string.settings_help_core_lower_resolution_for_effects
     key == "ppsspp_texture_scaling_level" -> R.string.settings_help_core_texture_scaling_level
     key == "ppsspp_texture_deposterize" -> R.string.settings_help_core_texture_deposterize
