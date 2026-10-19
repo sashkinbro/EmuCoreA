@@ -363,10 +363,10 @@ fun SaveManagerScreen(
                 }
 
                 item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
                         FilledTonalButton(
                             onClick = {
                                 val fileName = if (isFiltered) {
@@ -687,7 +687,7 @@ private fun SaveEntryCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
                     modifier = Modifier
