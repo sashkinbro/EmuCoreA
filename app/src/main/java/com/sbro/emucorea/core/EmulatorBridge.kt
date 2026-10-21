@@ -950,6 +950,24 @@ object EmulatorBridge {
         } catch (_: Exception) { }
     }
 
+    /**
+     * Source-tagged pad input for keyboard/mouse. NativeApp merges the source
+     * slots before publishing the pad state, so a release only clears a bind
+     * when no other source is still holding it.
+     */
+    fun setPadButtonFromSource(
+        padIndex: Int,
+        index: Int,
+        range: Int,
+        pressed: Boolean,
+        source: Int
+    ) {
+        if (!isNativeLoaded) return
+        try {
+            NativeApp.setPadButtonFromSource(padIndex, index, range, pressed, source)
+        } catch (_: Exception) { }
+    }
+
     fun resetKeyStatus() {
         if (!isNativeLoaded || !isVmActive) return
         launchSerial {

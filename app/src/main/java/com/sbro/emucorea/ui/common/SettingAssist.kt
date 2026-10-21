@@ -175,6 +175,7 @@ fun SettingsStyledDialog(
     eyebrow: String,
     icon: ImageVector,
     onDismissRequest: () -> Unit,
+    edgeToEdgeContent: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     StyledDialogScaffold(
@@ -195,6 +196,7 @@ fun SettingsStyledDialog(
                 color = MaterialTheme.colorScheme.onSurface
             )
         },
+        edgeToEdgeContent = edgeToEdgeContent,
         content = content
     )
 }
@@ -280,6 +282,7 @@ private fun StyledDialogScaffold(
         usePlatformDefaultWidth = false,
         decorFitsSystemWindows = false
     ),
+    edgeToEdgeContent: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val containerSize = LocalWindowInfo.current.containerSize
@@ -329,15 +332,17 @@ private fun StyledDialogScaffold(
                         .heightIn(max = maxDialogHeight)
                         .verticalScroll(rememberScrollState())
                         .padding(
-                            start = contentHorizontalPadding,
+                            start = if (edgeToEdgeContent) 0.dp else contentHorizontalPadding,
                             top = contentTopPadding,
-                            end = contentHorizontalPadding,
+                            end = if (edgeToEdgeContent) 0.dp else contentHorizontalPadding,
                             bottom = contentBottomPadding
                         ),
                     verticalArrangement = Arrangement.spacedBy(contentSpacing)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = contentHorizontalPadding),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         if (showIconContainer) {
@@ -388,7 +393,10 @@ private fun StyledDialogScaffold(
                         }
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f))
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = contentHorizontalPadding),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+                    )
                     content()
                 }
             }

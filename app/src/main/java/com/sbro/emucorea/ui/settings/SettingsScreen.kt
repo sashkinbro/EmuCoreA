@@ -1809,6 +1809,8 @@ private fun SettingsContent(
                         )
                     }
 
+                    GlobalKeyboardMouseSettingsSection()
+
                     SettingsSection(title = stringResource(R.string.settings_core_input)) {
                         var coreControlsVersion by remember { mutableIntStateOf(0) }
                         CoreOptionSettingsRows(
@@ -3935,6 +3937,13 @@ private fun rememberSettingsSearchEntries(): List<SettingsSearchEntry> {
         entry(SettingsTab.Controls, R.string.settings_gamepad_stick_deadzone),
         entry(SettingsTab.Controls, R.string.settings_gamepad_left_stick_sensitivity),
         entry(SettingsTab.Controls, R.string.settings_gamepad_right_stick_sensitivity),
+        entry(SettingsTab.Controls, R.string.settings_keyboard_input),
+        entry(SettingsTab.Controls, R.string.settings_mouse_input),
+        entry(SettingsTab.Controls, R.string.settings_keyboard_mapping_title),
+        entry(SettingsTab.Controls, R.string.settings_mouse_mapping_title),
+        entry(SettingsTab.Controls, R.string.settings_mouse_aim_mode),
+        entry(SettingsTab.Controls, R.string.settings_mouse_sensitivity),
+        entry(SettingsTab.Controls, R.string.settings_mouse_capture),
         entry(SettingsTab.Library, R.string.settings_game_path),
         entry(SettingsTab.Library, R.string.emulator_data_location_title),
         entry(SettingsTab.Library, R.string.settings_cover_art_style),

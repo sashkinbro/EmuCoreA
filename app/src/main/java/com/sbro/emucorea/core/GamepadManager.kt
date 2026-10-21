@@ -366,6 +366,13 @@ object GamepadManager {
     fun mappableButtonActions(): List<MappableButtonAction> =
         mappableActions.filterNot { it.id in setOf("l2", "r2", "l3", "r3") }
 
+    /**
+     * Every controller action a physical keyboard or mouse may drive. The gamepad
+     * editor hides the trigger/stick-click actions, but keyboard and mouse bindings
+     * can still address them because the core accepts those buttons.
+     */
+    fun keyboardMouseMappableActions(): List<MappableButtonAction> = mappableActions
+
     fun resolveBindingForAction(actionId: String, customBindings: Map<String, Int>): Int? {
         return customBindings[actionId] ?: actionsById[actionId]?.defaultKeyCodes?.firstOrNull()
     }
@@ -432,6 +439,10 @@ object GamepadManager {
         if (device == null) return false
         if (device.isVirtual) return false
         if (isFingerprintUinputDevice(device)) return false
+        val deviceName = device.name.lowercase()
+        if (deviceName.contains("system control") || deviceName.contains("consumer control")) {
+            return false
+        }
         val sources = device.sources
         val hasControllerSource =
             (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
@@ -458,6 +469,14 @@ object GamepadManager {
             resetAnalogState()
             EmulatorBridge.resetKeyStatus()
         }
+        KeyboardMouseManager.setEmulationInputEnabled(enabled)
+    }
+
+    /** Allows keyboard/mouse mappings to reuse the existing quick save/load flow. */
+    fun triggerShortcutAction(padIndex: Int, actionId: String) {
+        if (!emulationInputEnabled) return
+        if (actionId != ACTION_QUICK_SAVE && actionId != ACTION_QUICK_LOAD) return
+        _gamepadShortcutActions.tryEmit(GamepadShortcutAction(normalizePadIndex(padIndex), actionId))
     }
 
     fun setRightStickTriggerMapping(upToR2: Boolean, downToL2: Boolean) {

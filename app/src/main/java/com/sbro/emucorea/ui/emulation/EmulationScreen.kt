@@ -70,7 +70,9 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.Gamepad
+import androidx.compose.material.icons.rounded.Keyboard
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Mouse
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Restore
@@ -167,6 +169,7 @@ import com.sbro.emucorea.core.AndroidTouchHaptics.ButtonPhase
 import com.sbro.emucorea.core.EmulatorBridge
 import com.sbro.emucorea.core.NativeApp
 import com.sbro.emucorea.core.GamepadManager
+import com.sbro.emucorea.core.KeyboardMouseManager
 import com.sbro.emucorea.core.LocalTvUiEnvironment
 import com.sbro.emucorea.core.buildUpscaleOptions
 import com.sbro.emucorea.core.upscaleKeyToMultiplier
@@ -207,6 +210,7 @@ import com.sbro.emucorea.ui.common.premiumFilterChipColors
 import com.sbro.emucorea.ui.common.rememberDebouncedClick
 import com.sbro.emucorea.ui.common.tvFocusGroup
 import com.sbro.emucorea.ui.settings.ControlsEditorScreen
+import com.sbro.emucorea.ui.settings.KeyboardMouseSettingsDialog
 import com.sbro.emucorea.ui.settings.toControlsEditorState
 import com.sbro.emucorea.core.PpssppCoreOptions
 import com.sbro.emucorea.core.RendererDefaults
@@ -473,6 +477,7 @@ fun EmulationScreen(
     var showAutoSaveLoadDialog by remember { mutableStateOf(false) }
     var showControlsEditor by remember { mutableStateOf(false) }
     var showGamepadMappingDialog by remember { mutableStateOf(false) }
+    var showKeyboardMouseSettingsDialog by remember { mutableStateOf(false) }
     var pendingGamepadActionId by remember { mutableStateOf<String?>(null) }
     var pendingGamepadPadIndex by rememberSaveable { mutableIntStateOf(0) }
     var selectedGamepadPadIndex by rememberSaveable { mutableIntStateOf(0) }
@@ -483,6 +488,11 @@ fun EmulationScreen(
     var lastTapY by remember { mutableFloatStateOf(0f) }
     val connectedGamepadCount by GamepadManager.connectedGamepadCountState.collectAsState()
     val gamepadConnected = connectedGamepadCount > 0
+    val keyboardMouseConnection by KeyboardMouseManager.connection.collectAsState()
+    val keyboardMouseOverride by viewModel.keyboardMouseOverride.collectAsState()
+    val globalKeyboardMouseSettings by KeyboardMouseManager.globalSettings.collectAsState()
+    val keyboardConnected = keyboardMouseConnection.keyboardConnected
+    val mouseConnected = keyboardMouseConnection.mouseConnected
     val touchPadIndex = GamepadManager.resolveTouchPadIndex()
     val overlayPadIndex = touchPadIndex ?: 0
     val currentOverlayPadIndex by rememberUpdatedState(overlayPadIndex)
@@ -605,6 +615,7 @@ fun EmulationScreen(
         showQuickLoadDialog ||
         showAutoSaveLoadDialog ||
         showGamepadMappingDialog ||
+        showKeyboardMouseSettingsDialog ||
         pendingGamepadActionId != null
 
     BackHandler(enabled = true) {
@@ -625,6 +636,10 @@ fun EmulationScreen(
                 }
                 showGamepadMappingDialog -> {
                     dismissGamepadMappingDialog()
+                    true
+                }
+                showKeyboardMouseSettingsDialog -> {
+                    showKeyboardMouseSettingsDialog = false
                     true
                 }
                 showQuickLoadDialog -> {
@@ -743,14 +758,21 @@ fun EmulationScreen(
         )
     }
 
-    LaunchedEffect(gamepadConnected, uiState.showMenu) {
-        if (gamepadConnected && !uiState.showMenu) {
-            showGamepadIndicator = true
-            delay(5000.milliseconds)
-            showGamepadIndicator = false
-        } else {
-            showGamepadIndicator = false
+    LaunchedEffect(gamepadConnected, keyboardConnected, mouseConnected, uiState.showMenu) {
+        val anyConnected = gamepadConnected || keyboardConnected || mouseConnected
+        if (!anyConnected || uiState.showMenu) {
+            if (showGamepadIndicator) {
+                delay(700.milliseconds)
+                val stillDisconnected =
+                    !(gamepadConnected || keyboardConnected || mouseConnected) &&
+                        !uiState.showMenu
+                if (stillDisconnected) showGamepadIndicator = false
+            }
+            return@LaunchedEffect
         }
+        showGamepadIndicator = true
+        delay(5000.milliseconds)
+        showGamepadIndicator = false
     }
 
     LaunchedEffect(showOverlayShortcut, uiState.showMenu) {
@@ -997,25 +1019,41 @@ fun EmulationScreen(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Gamepad indicator
+                // Connected input indicators
                 AnimatedVisibility(
-                    visible = gamepadConnected && !uiState.showMenu && showGamepadIndicator,
+                    visible = (gamepadConnected || keyboardConnected || mouseConnected) &&
+                        !uiState.showMenu &&
+                        showGamepadIndicator,
                     enter = fadeIn(tween(300)),
                     exit = fadeOut(tween(300))
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(neonShape(12.dp))
-                            .background(Color(0xFF50D9A0).copy(alpha = 0.20f))
-                            .padding(horizontal = 9.dp, vertical = 9.dp),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Gamepad,
-                            contentDescription = stringResource(R.string.gamepad_connected),
-                            tint = Color(0xFF50D9A0),
-                            modifier = Modifier.size(16.dp)
-                        )
+                        if (gamepadConnected) {
+                            ConnectedInputBadge(
+                                icon = Icons.Rounded.Gamepad,
+                                contentDescription = stringResource(R.string.gamepad_connected),
+                                active = true
+                            )
+                        }
+                        if (keyboardConnected) {
+                            ConnectedInputBadge(
+                                icon = Icons.Rounded.Keyboard,
+                                contentDescription =
+                                    stringResource(R.string.settings_keyboard_connected),
+                                active = true
+                            )
+                        }
+                        if (mouseConnected) {
+                            ConnectedInputBadge(
+                                icon = Icons.Rounded.Mouse,
+                                contentDescription =
+                                    stringResource(R.string.settings_mouse_connected),
+                                active = true
+                            )
+                        }
                     }
                 }
 
@@ -1567,6 +1605,7 @@ fun EmulationScreen(
                     onToggleControls = toggleControlsClick,
                     onOpenControlsEditor = { showControlsEditor = true },
                     onOpenGamepadMapping = { showGamepadMappingDialog = true },
+                    onOpenKeyboardMouseSettings = { showKeyboardMouseSettingsDialog = true },
                     onSetRenderer = { viewModel.setRenderer(it) },
                     onSetUpscale = { viewModel.setUpscale(it) },
                     onSetAspectRatio = { viewModel.setAspectRatio(it) },
@@ -1731,9 +1770,13 @@ fun EmulationScreen(
             title = stringResource(R.string.settings_gamepad_mapping_title),
             eyebrow = stringResource(R.string.app_name),
             icon = Icons.Rounded.Gamepad,
-            onDismissRequest = dismissGamepadMappingDialog
+            onDismissRequest = dismissGamepadMappingDialog,
+            edgeToEdgeContent = true
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 listOf(0, 1).forEach { padIndex ->
                     FilterChip(
                         shape = neonChipShape(),
@@ -1756,7 +1799,8 @@ fun EmulationScreen(
                     gamepadPlayerLabel(selectedGamepadPadIndex)
                 ),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
             Column(
                 modifier = Modifier.fillMaxWidth(),
@@ -1809,10 +1853,13 @@ fun EmulationScreen(
                     )
                 }
             }
-            MenuButton(
+            EmulationGamepadBindingRow(
+                title = stringResource(R.string.settings_gamepad_mapping_reset_title),
+                value = stringResource(R.string.settings_gamepad_mapping_reset_desc),
+                autoLabel = null,
                 icon = Icons.Rounded.SettingsSuggest,
-                text = stringResource(R.string.settings_gamepad_mapping_reset_title),
-                onClick = {
+                valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                onBindClick = {
                     scope.launch {
                         if (uiState.gameSettingsProfileActive) {
                             val currentBindings = uiState.gamepadBindingsByPad.toMutableMap()
@@ -1823,11 +1870,13 @@ fun EmulationScreen(
                         }
                     }
                 },
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                onClearClick = null
             )
             Button(
                 onClick = dismissGamepadMappingDialogClick,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
                 shape = neonShape(18.dp)
             ) {
                 Text(
@@ -1838,6 +1887,19 @@ fun EmulationScreen(
                 )
             }
         }
+    }
+
+    if (showKeyboardMouseSettingsDialog) {
+        KeyboardMouseSettingsDialog(
+            settings = keyboardMouseOverride ?: globalKeyboardMouseSettings,
+            onSettingsChange = viewModel::setKeyboardMouseSettings,
+            onUseGlobal = if (keyboardMouseOverride != null) {
+                { viewModel.setKeyboardMouseSettings(null) }
+            } else {
+                null
+            },
+            onDismiss = { showKeyboardMouseSettingsDialog = false }
+        )
     }
 
     if (pendingGamepadActionId != null && uiState.runtimeFailure == null) {
@@ -2834,6 +2896,7 @@ private fun EmulationSidebarMenu(
     onToggleControls: () -> Unit,
     onOpenControlsEditor: () -> Unit,
     onOpenGamepadMapping: () -> Unit,
+    onOpenKeyboardMouseSettings: () -> Unit,
     onSetRenderer: (Int) -> Unit,
     onSetUpscale: (Float) -> Unit,
     onSetAspectRatio: (Int) -> Unit,
@@ -3612,6 +3675,13 @@ private fun EmulationSidebarMenu(
                             text = stringResource(R.string.settings_gamepad_mapping_title),
                             onClick = onOpenGamepadMapping,
                             enabled = gamepadConnected,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f)
+                        )
+
+                        MenuButton(
+                            icon = Icons.Rounded.Keyboard,
+                            text = stringResource(R.string.settings_keyboard_mouse_section),
+                            onClick = onOpenKeyboardMouseSettings,
                             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f)
                         )
 
@@ -4456,11 +4526,15 @@ private fun EmulationGamepadBindingRow(
     title: String,
     value: String,
     autoLabel: String?,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Rounded.Gamepad,
+    valueColor: Color? = null,
     onBindClick: () -> Unit,
     onClearClick: (() -> Unit)?
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
         shape = neonShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
         onClick = onBindClick
@@ -4468,7 +4542,7 @@ private fun EmulationGamepadBindingRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 12.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -4480,7 +4554,7 @@ private fun EmulationGamepadBindingRow(
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    imageVector = Icons.Rounded.Gamepad,
+                    imageVector = icon,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(20.dp)
@@ -4499,7 +4573,7 @@ private fun EmulationGamepadBindingRow(
                     Text(
                         text = value,
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.primary
+                        color = valueColor ?: MaterialTheme.colorScheme.primary
                     )
                     autoLabel?.let {
                         Text(
@@ -4524,6 +4598,29 @@ private fun gamepadPlayerLabel(padIndex: Int): String {
     return stringResource(
         if (padIndex == 0) R.string.settings_gamepad_player_1 else R.string.settings_gamepad_player_2
     )
+}
+
+@Composable
+private fun ConnectedInputBadge(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    active: Boolean
+) {
+    val accent = Color(0xFF50D9A0)
+    Box(
+        modifier = Modifier
+            .clip(neonShape(12.dp))
+            .background(accent.copy(alpha = if (active) 0.20f else 0.10f))
+            .padding(horizontal = 9.dp, vertical = 9.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = if (active) accent else accent.copy(alpha = 0.45f),
+            modifier = Modifier.size(16.dp)
+        )
+    }
 }
 
 @Composable

@@ -29,6 +29,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.sbro.emucorea.core.AppLocaleManager
 import com.sbro.emucorea.core.GamepadManager
+import com.sbro.emucorea.core.KeyboardMouseManager
 import com.sbro.emucorea.core.NativeApp
 import com.sbro.emucorea.core.PlayInAppReviewManager
 import com.sbro.emucorea.core.LocalTvUiEnvironment
@@ -90,6 +91,15 @@ open class MainActivity : ComponentActivity() {
         restoredFromSavedState = savedInstanceState != null
 
         GamepadManager.ensureInitialized(this)
+        KeyboardMouseManager.ensureInitialized(this)
+        KeyboardMouseManager.setPointerCaptureListener { enabled ->
+            runOnUiThread { updatePointerCapture(enabled) }
+        }
+        window.decorView.setOnCapturedPointerListener { _, event ->
+            // Captured pointers deliver motion, buttons and wheel movement here
+            // instead of through the regular dispatch pipeline.
+            KeyboardMouseManager.handleCapturedPointerEvent(event)
+        }
         appliedLanguageTag = preferences.getStoredLanguageTagSync()
 
         lifecycleScope.launch {
@@ -282,6 +292,7 @@ open class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        KeyboardMouseManager.refreshConnectionState()
         window.decorView.post {
             applySystemBarTheme(appliedDarkTheme)
         }
@@ -291,6 +302,46 @@ open class MainActivity : ComponentActivity() {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) {
             applySystemBarTheme(appliedDarkTheme)
+            KeyboardMouseManager.refreshConnectionState()
+            KeyboardMouseManager.refreshPointerCapture()
+        } else {
+            KeyboardMouseManager.releaseAll()
+            updatePointerCapture(false)
+        }
+    }
+
+    override fun onPause() {
+        KeyboardMouseManager.releaseAll()
+        updatePointerCapture(false)
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        KeyboardMouseManager.setPointerCaptureListener(null)
+        KeyboardMouseManager.releaseAll()
+        super.onDestroy()
+    }
+
+    private fun updatePointerCapture(enabled: Boolean) {
+        val decorView = window.decorView
+        if (enabled && hasWindowFocus()) {
+            decorView.isFocusable = true
+            decorView.isFocusableInTouchMode = true
+            if (!decorView.hasFocus()) decorView.requestFocus()
+            if (!decorView.hasPointerCapture()) {
+                decorView.post {
+                    if (!isFinishing && hasWindowFocus() && !decorView.hasPointerCapture()) {
+                        decorView.requestPointerCapture()
+                    }
+                }
+            }
+        } else {
+            if (decorView.hasPointerCapture()) {
+                decorView.releasePointerCapture()
+            }
+            decorView.isFocusable = false
+            decorView.isFocusableInTouchMode = false
+            decorView.clearFocus()
         }
     }
 
@@ -315,6 +366,8 @@ open class MainActivity : ComponentActivity() {
 
     @SuppressLint("RestrictedApi", "GestureBackNavigation")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (KeyboardMouseManager.handleKeyBindingCapture(event)) return true
+
         if (GamepadManager.isGameController(event.device)) {
             if (GamepadManager.handleBindingCapture(event)) return true
             if (GamepadManager.isEmulationInputEnabled()) {
@@ -326,6 +379,10 @@ open class MainActivity : ComponentActivity() {
                     return super.dispatchKeyEvent(event.withKeyCode(KeyEvent.KEYCODE_DPAD_CENTER))
                 }
             }
+        }
+
+        if (GamepadManager.isEmulationInputEnabled() && KeyboardMouseManager.handleKeyEvent(event)) {
+            return true
         }
 
         if (GamepadManager.isEmulationInputEnabled() && shouldRouteHostKeyEvent(event)) {
@@ -345,6 +402,18 @@ open class MainActivity : ComponentActivity() {
         }
         if (event != null && GamepadManager.handleMotionEvent(event)) return true
         return super.onGenericMotionEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        if (KeyboardMouseManager.handleMouseBindingCapture(event)) return true
+        if (GamepadManager.isEmulationInputEnabled() && handleMouseMotionEvent(event)) return true
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (KeyboardMouseManager.handleMouseBindingCapture(event)) return true
+        if (GamepadManager.isEmulationInputEnabled() && handleMouseTouchEvent(event)) return true
+        return super.dispatchTouchEvent(event)
     }
 
     @SuppressLint("GestureBackNavigation")
@@ -385,6 +454,54 @@ open class MainActivity : ComponentActivity() {
             KeyEvent.KEYCODE_BUTTON_THUMBR -> true
             else -> false
         }
+    }
+
+    private fun handleMouseTouchEvent(event: MotionEvent): Boolean {
+        if (!isMouseEvent(event)) return false
+
+        val keyboardMouseHandled = KeyboardMouseManager.handleMouseButtonEvent(event) ||
+            KeyboardMouseManager.handleMouseMotionEvent(event)
+
+        return when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN,
+            MotionEvent.ACTION_BUTTON_PRESS -> true
+            MotionEvent.ACTION_UP,
+            MotionEvent.ACTION_BUTTON_RELEASE,
+            MotionEvent.ACTION_CANCEL -> true
+            MotionEvent.ACTION_MOVE,
+            MotionEvent.ACTION_HOVER_MOVE -> true
+            else -> keyboardMouseHandled
+        }
+    }
+
+    private fun handleMouseMotionEvent(event: MotionEvent): Boolean {
+        if (!isMouseEvent(event)) return false
+
+        val keyboardMouseHandled = KeyboardMouseManager.handleMouseButtonEvent(event) ||
+            KeyboardMouseManager.handleMouseWheelEvent(event) ||
+            KeyboardMouseManager.handleMouseMotionEvent(event)
+
+        if (event.actionMasked == MotionEvent.ACTION_SCROLL) {
+            return true
+        }
+
+        if (event.actionMasked == MotionEvent.ACTION_BUTTON_PRESS ||
+            event.actionMasked == MotionEvent.ACTION_BUTTON_RELEASE
+        ) {
+            return true
+        }
+
+        return keyboardMouseHandled ||
+            event.actionMasked == MotionEvent.ACTION_HOVER_MOVE ||
+            event.actionMasked == MotionEvent.ACTION_MOVE
+    }
+
+    private fun isMouseEvent(event: MotionEvent): Boolean {
+        val source = event.source
+        return (source and android.view.InputDevice.SOURCE_MOUSE) ==
+            android.view.InputDevice.SOURCE_MOUSE ||
+            (source and android.view.InputDevice.SOURCE_MOUSE_RELATIVE) ==
+            android.view.InputDevice.SOURCE_MOUSE_RELATIVE
     }
 
     private fun KeyEvent.withKeyCode(keyCode: Int): KeyEvent {

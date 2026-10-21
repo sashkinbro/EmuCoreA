@@ -41,14 +41,22 @@ object NativeApp {
     // the writer and every listing agree even when the core needs a prepared
     // (materialized) launch path.
     @Volatile private var saveStateIdentityPath: String? = null
-    private val padButtons = intArrayOf(0xFFFF, 0xFFFF)
+    // Each physical input source owns an independent pad state. The values are merged
+    // before they reach the core, so releasing a key or a mouse button can never clear
+    // a button that the gamepad or the touch overlay is still holding.
+    private val padButtonsBySource =
+        Array(2) { IntArray(PAD_INPUT_SOURCE_COUNT) { DPAD_ALL_RELEASED } }
+    private val padAnalogHalfAxesBySource =
+        Array(2) { Array(PAD_INPUT_SOURCE_COUNT) { IntArray(8) } }
     private val derivedDpadButtons = intArrayOf(0xFFFF, 0xFFFF)
     private val padAnalogMode = booleanArrayOf(false, false)
     private val analogDpadOptionCache = arrayOfNulls<Boolean>(2)
-    private val padAnalogHalfAxes = Array(2) { IntArray(8) }
     private val timeControlHandler = Handler(Looper.getMainLooper())
     private val timeControlButtons = Array(2) { Array(4) { HoldButton() } }
-    private val timeControlTapPulse = Array(2) { BooleanArray(2) }
+    private val timeControlLegacyPressed = Array(2) { BooleanArray(4) }
+    private val timeControlSourcePressed =
+        Array(2) { Array(PAD_INPUT_SOURCE_COUNT) { BooleanArray(4) } }
+    private val timeControlTapPressed = Array(2) { BooleanArray(2) }
     private val _timeControlMode = MutableStateFlow(0)
     val timeControlMode: StateFlow<Int> = _timeControlMode.asStateFlow()
 
@@ -96,35 +104,76 @@ object NativeApp {
     @JvmStatic fun setRewindEnabled(enabled: Boolean) =
         CoreRuntime.updateSetting("EmuCoreA/GS", "RewindEnabled", enabled.toString())
     @JvmStatic @Synchronized fun setPadButton(padIndex: Int, index: Int, range: Int, pressed: Boolean) {
+        applyPadButton(padIndex, index, range, pressed, PAD_INPUT_SOURCE_LEGACY)
+    }
+
+    /**
+     * Source-aware pad entry point used by the keyboard and mouse dispatchers.
+     * Keeping a separate slot per source means the merged core state only clears a
+     * bind once every source has released it.
+     */
+    @JvmStatic @Synchronized fun setPadButtonFromSource(
+        padIndex: Int,
+        index: Int,
+        range: Int,
+        pressed: Boolean,
+        source: Int
+    ) {
+        if (source != PAD_INPUT_SOURCE_KEYBOARD && source != PAD_INPUT_SOURCE_MOUSE) {
+            setPadButton(padIndex, index, range, pressed)
+            return
+        }
+        applyPadButton(padIndex, index, range, pressed, source)
+    }
+
+    private fun applyPadButton(
+        padIndex: Int,
+        index: Int,
+        range: Int,
+        pressed: Boolean,
+        source: Int
+    ) {
         if (padIndex !in 0..1) return
-        if (index == PAD_START || index == PAD_SELECT || index == PAD_FAST_FORWARD || index == PAD_REWIND) {
-            handleTimeControlHold(padIndex, index, pressed)
+        val timeControlSlot = timeControlSlot(index)
+        if (timeControlSlot != null) {
+            if (source == PAD_INPUT_SOURCE_LEGACY) {
+                timeControlLegacyPressed[padIndex][timeControlSlot] = pressed
+            } else {
+                timeControlSourcePressed[padIndex][source][timeControlSlot] = pressed
+            }
+            syncTimeControlHold(padIndex, index, timeControlSlot)
             return
         }
         if (index == PAD_ANALOG_TOGGLE) {
-            if (pressed) {
-                val analog = CoreRuntime.togglePadAnalogMode(padIndex)
-                if (analog != null) {
-                    padAnalogMode[padIndex] = analog
-                    if (analog && derivedDpadButtons[padIndex] != 0xFFFF) {
-                        derivedDpadButtons[padIndex] = 0xFFFF
-                        CoreRuntime.setPadButtons(padIndex, effectivePadButtons(padIndex))
-                    }
-                }
-            }
+            if (pressed) togglePadAnalogMode(padIndex)
             return
         }
         val halfAxis = analogHalfAxisIndex(index)
         if (halfAxis != null) {
-            padAnalogHalfAxes[padIndex][halfAxis] = if (pressed) range.coerceIn(0, 255) else 0
+            padAnalogHalfAxesBySource[padIndex][source][halfAxis] =
+                if (pressed) range.coerceIn(0, 255) else 0
             dispatchPadAnalog(padIndex)
             return
         }
         val bit = pspButtonBit(index) ?: return
-        padButtons[padIndex] = if (pressed) padButtons[padIndex] and (1 shl bit).inv()
-        else padButtons[padIndex] or (1 shl bit)
+        val current = padButtonsBySource[padIndex][source]
+        padButtonsBySource[padIndex][source] = if (pressed) {
+            current and (1 shl bit).inv()
+        } else {
+            current or (1 shl bit)
+        }
         CoreRuntime.setPadButtons(padIndex, effectivePadButtons(padIndex))
     }
+
+    private fun togglePadAnalogMode(padIndex: Int) {
+        val analog = CoreRuntime.togglePadAnalogMode(padIndex) ?: return
+        padAnalogMode[padIndex] = analog
+        if (analog && derivedDpadButtons[padIndex] != 0xFFFF) {
+            derivedDpadButtons[padIndex] = 0xFFFF
+            CoreRuntime.setPadButtons(padIndex, effectivePadButtons(padIndex))
+        }
+    }
+
     @JvmStatic fun onHostKeyEvent(keyCode: Int, pressed: Boolean) {
         setPadButton(0, keyCode, 0, pressed)
     }
@@ -132,16 +181,18 @@ object NativeApp {
     @JvmStatic @Synchronized fun resetPadState(padIndex: Int) {
         if (padIndex !in 0..1) return
         timeControlButtons[padIndex].forEach { it.reset() }
-        timeControlTapPulse[padIndex].fill(false)
+        timeControlLegacyPressed[padIndex].fill(false)
+        timeControlSourcePressed[padIndex].forEach { it.fill(false) }
+        timeControlTapPressed[padIndex].fill(false)
         updateTimeControl()
-        padButtons[padIndex] = 0xFFFF
-        derivedDpadButtons[padIndex] = 0xFFFF
-        padAnalogHalfAxes[padIndex].fill(0)
-        CoreRuntime.setPadButtons(padIndex, 0xFFFF)
+        padButtonsBySource[padIndex].fill(DPAD_ALL_RELEASED)
+        derivedDpadButtons[padIndex] = DPAD_ALL_RELEASED
+        padAnalogHalfAxesBySource[padIndex].forEach { it.fill(0) }
+        CoreRuntime.setPadButtons(padIndex, DPAD_ALL_RELEASED)
         CoreRuntime.setPadAnalog(padIndex, 128, 128, 128, 128)
     }
 
-    @JvmStatic fun setPadAnalogMode(padIndex: Int, enabled: Boolean): Boolean {
+    @JvmStatic @Synchronized fun setPadAnalogMode(padIndex: Int, enabled: Boolean): Boolean {
         if (padIndex !in 0..1) return false
         val applied = CoreRuntime.setPadAnalogMode(padIndex, enabled)
         if (applied) {
@@ -377,21 +428,33 @@ object NativeApp {
         }
     }
 
-    private fun handleTimeControlHold(padIndex: Int, index: Int, pressed: Boolean) {
-        val slot = when (index) {
-            PAD_START -> 0
-            PAD_SELECT -> 1
-            PAD_FAST_FORWARD -> 2
-            else -> 3
-        }
+    private fun timeControlSlot(index: Int): Int? = when (index) {
+        PAD_START -> 0
+        PAD_SELECT -> 1
+        PAD_FAST_FORWARD -> 2
+        PAD_REWIND -> 3
+        else -> null
+    }
+
+    private fun syncTimeControlHold(padIndex: Int, index: Int, slot: Int) {
+        val legacyPressed = timeControlLegacyPressed[padIndex][slot]
+        val keyboardPressed = timeControlSourcePressed[padIndex][PAD_INPUT_SOURCE_KEYBOARD][slot]
+        val mousePressed = timeControlSourcePressed[padIndex][PAD_INPUT_SOURCE_MOUSE][slot]
+        handleTimeControlHold(
+            padIndex,
+            index,
+            slot,
+            legacyPressed || keyboardPressed || mousePressed
+        )
+    }
+
+    private fun handleTimeControlHold(padIndex: Int, index: Int, slot: Int, pressed: Boolean) {
         val button = timeControlButtons[padIndex][slot]
         if (button.pressed == pressed) return
         if (pressed) {
             val generation = button.press() ?: return
-            if (slot < 2 && timeControlTapPulse[padIndex][slot]) {
-                timeControlTapPulse[padIndex][slot] = false
-                val bit = pspButtonBit(index) ?: return
-                padButtons[padIndex] = padButtons[padIndex] or (1 shl bit)
+            if (slot < 2 && timeControlTapPressed[padIndex][slot]) {
+                timeControlTapPressed[padIndex][slot] = false
                 CoreRuntime.setPadButtons(padIndex, effectivePadButtons(padIndex))
             }
             timeControlHandler.postDelayed({
@@ -406,16 +469,13 @@ object NativeApp {
             val generation = button.generation
             updateTimeControl()
             if (wasTap && slot < 2) {
-                // A tap still reaches PSP as a normal Start/Select press.
-                val bit = pspButtonBit(index) ?: return
-                timeControlTapPulse[padIndex][slot] = true
-                padButtons[padIndex] = padButtons[padIndex] and (1 shl bit).inv()
+                // A tap still reaches the PSP as a normal Start/Select press.
+                timeControlTapPressed[padIndex][slot] = true
                 CoreRuntime.setPadButtons(padIndex, effectivePadButtons(padIndex))
                 timeControlHandler.postDelayed({
                     synchronized(this) {
                         if (button.generation == generation) {
-                            timeControlTapPulse[padIndex][slot] = false
-                            padButtons[padIndex] = padButtons[padIndex] or (1 shl bit)
+                            timeControlTapPressed[padIndex][slot] = false
                             CoreRuntime.setPadButtons(padIndex, effectivePadButtons(padIndex))
                         }
                     }
@@ -474,12 +534,19 @@ object NativeApp {
         else 128 - (((-delta) * 128 + 127) / 255)
     }
 
+    private fun mergedHalfAxis(padIndex: Int, axis: Int): Int {
+        var value = 0
+        for (source in 0 until PAD_INPUT_SOURCE_COUNT) {
+            value = maxOf(value, padAnalogHalfAxesBySource[padIndex][source][axis])
+        }
+        return value
+    }
+
     private fun dispatchPadAnalog(padIndex: Int) {
-        val axes = padAnalogHalfAxes[padIndex]
-        val lx = mergeHalfAxes(axes[3], axes[1])
-        val ly = mergeHalfAxes(axes[0], axes[2])
-        val rx = mergeHalfAxes(axes[7], axes[5])
-        val ry = mergeHalfAxes(axes[4], axes[6])
+        val lx = mergeHalfAxes(mergedHalfAxis(padIndex, 3), mergedHalfAxis(padIndex, 1))
+        val ly = mergeHalfAxes(mergedHalfAxis(padIndex, 0), mergedHalfAxis(padIndex, 2))
+        val rx = mergeHalfAxes(mergedHalfAxis(padIndex, 7), mergedHalfAxis(padIndex, 5))
+        val ry = mergeHalfAxes(mergedHalfAxis(padIndex, 4), mergedHalfAxis(padIndex, 6))
         CoreRuntime.setPadAnalog(padIndex, lx, ly, rx, ry)
         updateDerivedDpadButtons(padIndex, lx, ly)
     }
@@ -509,8 +576,21 @@ object NativeApp {
         }
     }
 
-    private fun effectivePadButtons(padIndex: Int): Int =
-        padButtons[padIndex] and derivedDpadButtons[padIndex]
+    private fun effectivePadButtons(padIndex: Int): Int {
+        var merged = DPAD_ALL_RELEASED
+        for (source in 0 until PAD_INPUT_SOURCE_COUNT) {
+            merged = merged and padButtonsBySource[padIndex][source]
+        }
+        // Start/Select taps between two polls are held here so they still reach
+        // the core even when the key was released before the frame was sampled.
+        if (timeControlTapPressed[padIndex][0]) {
+            merged = merged and (1 shl PS1_BUTTON_START).inv()
+        }
+        if (timeControlTapPressed[padIndex][1]) {
+            merged = merged and (1 shl PS1_BUTTON_SELECT).inv()
+        }
+        return merged and derivedDpadButtons[padIndex]
+    }
 
     private fun isAnalogDpadInDigitalModeEnabled(padIndex: Int): Boolean {
         if (padAnalogMode[padIndex]) return false
@@ -547,10 +627,16 @@ object NativeApp {
     private const val PAD_REWIND = 127
     private const val PAD_START = 108
     private const val PAD_SELECT = 109
+    private const val PAD_INPUT_SOURCE_LEGACY = 0
+    private const val PAD_INPUT_SOURCE_KEYBOARD = 1
+    private const val PAD_INPUT_SOURCE_MOUSE = 2
+    private const val PAD_INPUT_SOURCE_COUNT = 3
     private const val TIME_CONTROL_HOLD_MS = 450L
     private const val TIME_CONTROL_TAP_MS = 60L
     private const val DPAD_ALL_RELEASED = 0xFFFF
     private const val ANALOG_DPAD_THRESHOLD = 64
+    private const val PS1_BUTTON_SELECT = 0
+    private const val PS1_BUTTON_START = 3
     private const val PS1_BUTTON_UP = 4
     private const val PS1_BUTTON_RIGHT = 5
     private const val PS1_BUTTON_DOWN = 6

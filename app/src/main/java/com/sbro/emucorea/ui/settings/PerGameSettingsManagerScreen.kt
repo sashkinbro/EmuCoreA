@@ -90,6 +90,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -117,6 +118,7 @@ import com.sbro.emucorea.data.GameLibraryCacheRepository
 import com.sbro.emucorea.data.GameItem
 import com.sbro.emucorea.data.GamepadBindingRules
 import com.sbro.emucorea.data.GameRepository
+import com.sbro.emucorea.data.KeyboardMouseSettings
 import com.sbro.emucorea.data.PerGameSettings
 import com.sbro.emucorea.data.PerGameSettingsRepository
 import com.sbro.emucorea.data.RetroArchShaderPreset
@@ -876,6 +878,11 @@ private fun GameSettingsTabContent(
     onDraftChange: (PerGameSettings) -> Unit
 ) {
     val nativeUpscaleLabel = stringResource(R.string.settings_upscale_native)
+    val context = LocalContext.current
+    val preferences = remember(context) { AppPreferences(context.applicationContext) }
+    val globalKeyboardMouseSettings by preferences.keyboardMouseSettings.collectAsState(
+        initial = KeyboardMouseSettings()
+    )
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1302,6 +1309,14 @@ private fun GameSettingsTabContent(
                     }
                 )
 
+                PerGameKeyboardMouseSettingsSection(
+                    override = draft.keyboardMouse,
+                    globalSettings = globalKeyboardMouseSettings,
+                    onOverrideChange = { keyboardMouse ->
+                        onDraftChange(draft.copy(keyboardMouse = keyboardMouse))
+                    }
+                )
+
                 EditorSection(title = stringResource(R.string.settings_core_input)) {
                     CoreOptionManagerRows(
                         options = PpssppCoreOptions.controlsOptions(),
@@ -1720,9 +1735,13 @@ private fun PerGameGamepadMappingDialog(
         title = stringResource(R.string.settings_gamepad_mapping_title),
         eyebrow = stringResource(R.string.app_name),
         icon = Icons.Rounded.Gamepad,
-        onDismissRequest = { if (pendingActionId == null) onDismiss() }
+        onDismissRequest = { if (pendingActionId == null) onDismiss() },
+        edgeToEdgeContent = true
     ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             listOf(0, 1).forEach { padIndex ->
                 FilterChip(
                     shape = neonChipShape(),
@@ -1747,7 +1766,8 @@ private fun PerGameGamepadMappingDialog(
                 gamepadPlayerLabel(selectedPadIndex)
             ),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp)
         )
         pendingActionId?.let { actionId ->
             Text(
@@ -1797,15 +1817,21 @@ private fun PerGameGamepadMappingDialog(
                 )
             }
         }
-        ManagerActionButton(
-            icon = Icons.Rounded.Restore,
+        ManagerGamepadBindingRow(
             title = stringResource(R.string.settings_gamepad_mapping_use_global),
-            onClick = { onBindingsChange(emptyMap()) }
+            value = stringResource(R.string.settings_gamepad_mapping_use_global_desc),
+            autoLabel = null,
+            icon = Icons.Rounded.Restore,
+            valueColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            onBindClick = { onBindingsChange(emptyMap()) },
+            onClearClick = null
         )
         Button(
             onClick = onDismiss,
             enabled = pendingActionId == null,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
             shape = neonShape(18.dp)
         ) {
             Text(
@@ -1823,12 +1849,16 @@ private fun ManagerGamepadBindingRow(
     title: String,
     value: String,
     autoLabel: String?,
-    highlight: Boolean,
+    highlight: Boolean = false,
+    icon: ImageVector = Icons.Rounded.Gamepad,
+    valueColor: androidx.compose.ui.graphics.Color? = null,
     onBindClick: () -> Unit,
     onClearClick: (() -> Unit)?
 ) {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
         shape = neonShape(16.dp),
         color = if (highlight) {
             MaterialTheme.colorScheme.primaryContainer
@@ -1845,10 +1875,24 @@ private fun ManagerGamepadBindingRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .clip(neonShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = title,
@@ -1862,7 +1906,7 @@ private fun ManagerGamepadBindingRow(
                     Text(
                         text = value,
                         style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-                        color = MaterialTheme.colorScheme.primary
+                        color = valueColor ?: MaterialTheme.colorScheme.primary
                     )
                     autoLabel?.let {
                         Text(
@@ -1996,6 +2040,7 @@ private fun PerGameSettings.resolveAgainst(defaultProfile: PerGameSettings): Per
         gameKey = gameKey,
         gameTitle = gameTitle,
         gameSerial = gameSerial,
+        keyboardMouse = pick("keyboardMouse", keyboardMouse, defaultProfile.keyboardMouse),
         renderer = pick("renderer", renderer, defaultProfile.renderer),
         gpuDriverType = pick("gpuDriverType", gpuDriverType, defaultProfile.gpuDriverType),
         customDriverPath = pick("customDriverPath", customDriverPath, defaultProfile.customDriverPath),
