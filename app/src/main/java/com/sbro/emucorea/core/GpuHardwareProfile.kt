@@ -75,13 +75,17 @@ object GpuHardwareProfiles {
         val hints = rawHints.lowercase()
         return when {
             listOf("powervr", "imgtec", "imagination technologies").any(hints::contains) -> POWERVR
-            listOf("qualcomm", "qcom", "snapdragon", "adreno").any(hints::contains) -> ADRENO
+            listOf("qualcomm", "qcom", "qti", "snapdragon", "adreno").any(hints::contains) ||
+                QUALCOMM_SOC_CODE.containsMatchIn(hints) -> ADRENO
             hasMediaTekSocHints(hints) -> MALI
             listOf("samsung", "exynos", "xclipse").any(hints::contains) -> MALI
             listOf("mali", "immortalis", "arm").any(hints::contains) -> MALI
             else -> MALI
         }
     }
+
+    private val QUALCOMM_SOC_CODE =
+        Regex("""\b(?:sm|msm|sdm|apq|qcs|qcm)\d{3,4}[a-z]*\b""", RegexOption.IGNORE_CASE)
 
     /**
      * Human-readable GPU name for UI/statistics (e.g. "Adreno 750", "Mali-G57 MC4").
