@@ -60,6 +60,8 @@
 #include "Core/HLE/sceKernel.h"
 #include "Core/HLE/sceUtility.h"
 #include "Core/HW/Display.h"
+#include "Core/HW/MMIO.h"
+#include "Core/MIPS/MeCore.h"
 #include "Core/Config.h"
 #include "Core/Core.h"
 #include "Core/Util/PathUtil.h"
@@ -382,6 +384,7 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 	std::string geDumpDiscID;
 
 	std::string gameTitle = "Unidentified PSP title";
+	bool homebrew = false;
 
 	switch (type) {
 	case IdentifiedFileType::PSP_ISO:
@@ -436,7 +439,7 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 		// would, and the program would then overwrite its own heap and stacks.
 		// Homebrew is identified by the MG ("memory stick game") category, or no PARAM.SFO at all.
 		// (g_paramSFO only gets a few keys copied over for a PBP, so the category is in the raw copy.)
-		const bool homebrew = !hasSFO || g_paramSFORaw.GetValueString("CATEGORY") == "MG";
+		homebrew = !hasSFO || g_paramSFORaw.GetValueString("CATEGORY") == "MG";
 		if (homebrew && Memory::g_PSPModel != PSP_MODEL_FAT && Memory::g_MemorySize == Memory::RAM_NORMAL_SIZE) {
 			INFO_LOG(Log::Loader, "Homebrew PBP: mapping the PSP-2000 extra RAM, outside the user partition");
 			Memory::g_MemorySize = Memory::RAM_DOUBLE_SIZE;
@@ -445,6 +448,7 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 		break;
 	}
 	case IdentifiedFileType::PSP_ELF:
+		homebrew = true;
 		if (Memory::g_PSPModel != PSP_MODEL_FAT) {
 			INFO_LOG(Log::Loader, "ELF, using full PSP-2000 memory access");
 			Memory::g_MemorySize = Memory::RAM_DOUBLE_SIZE;
@@ -457,6 +461,10 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 			g_paramSFO.SetValue("DISC_ID", geDumpDiscID, 16);
 			gameTitle = g_CoreParameter.fileToStart.GetFilename();
 		}
+		break;
+	case IdentifiedFileType::PSP_PS1_PBP:
+		// Title and disc ID; the PS1 image itself is read by the firmware's POPS manager.
+		LoadParamSFOFromPBP(fileLoader);
 		break;
 	case IdentifiedFileType::PSP_UMD_VIDEO_ISO:
 	{
@@ -506,6 +514,10 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 		// Headless replays frame dumps to compare them with references and with the PSP, which a game's
 		// workarounds would skew: DarkStalkers' present hack replaces the game's final upscale.
 		g_CoreParameter.compat.Clear();
+	} else if (type == IdentifiedFileType::PSP_PS1_PBP) {
+		// The PS1 emulator's workarounds don't depend on the PS1 game it runs. Only compat.ini sees this ID:
+		// savestates, save data and everything else use the game's own ID.
+		g_CoreParameter.compat.Load(POPS_COMPAT_ID);
 	} else {
 		g_CoreParameter.compat.Load(discId);
 	}
@@ -548,9 +560,18 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 	LoadSymbolsIfSupported();
 	LoadGameSymbolsIfEnabled();
 
+	currentMIPS = &mipsr4k;
 	mipsr4k.Reset();
 
 	CoreTiming::Init(&mipsr4k);
+	MMIO::Init();
+	const bool pops = type == IdentifiedFileType::PSP_PS1_PBP;
+	if (MeCore::Wanted(homebrew, pops) && !MeCore::Init() && pops) {
+		// The firmware's PS1 emulator plays its sound on the ME.
+		auto er = GetI18NCategory(I18NCat::ERRORS);
+		*errorString = er->T("PS1NoMediaEngine", "PS1 games need the PSP's Media Engine, which PPSSPP can't emulate on this platform yet.");
+		return false;
+	}
 
 	DisplayHWInit();
 
@@ -627,6 +648,12 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 		}
 		break;
 
+	case IdentifiedFileType::PSP_PS1_PBP:
+		if (!Load_PSP_POPS(fileLoader, errorString)) {
+			return false;
+		}
+		break;
+
 	default:
 		GetBootError(type, errorString);
 		g_CoreParameter.fileToStart.clear();
@@ -675,6 +702,8 @@ void CPU_Shutdown(bool success) {
 	Replacement_Shutdown();
 
 	CoreTiming::Shutdown();
+	MeCore::Shutdown();
+	MMIO::Shutdown();
 	__KernelShutdown();
 	HLEShutdown();
 

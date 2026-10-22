@@ -31,6 +31,7 @@
 #include "Common/Thread/ThreadUtil.h"
 #include "Common/Data/Text/Parsers.h"
 #include "Common/System/System.h"
+#include "Common/System/OSD.h"
 
 #include "Common/File/FileUtil.h"
 #include "Common/File/DirListing.h"
@@ -53,6 +54,7 @@
 #include "Core/HLE/ReplaceTables.h"
 #include "Core/HLE/sceDisplay.h"
 #include "Core/HLE/sceKernel.h"
+#include "Core/HLE/sceKernelModule.h"
 #include "Core/HLE/sceUtility.h"
 #include "Core/HLE/sceSas.h"
 #include "Core/HLE/sceIo.h"
@@ -60,8 +62,11 @@
 #include "GPU/GPU.h"
 #include "GPU/GPUCommon.h"
 #include "Core/MIPS/JitCommon/JitBlockCache.h"
+#include "Core/MIPS/JitCommon/JitCommon.h"
 #include "Core/RetroAchievements.h"
 #include "HW/MemoryStick.h"
+#include "Core/HW/MMIO.h"
+#include "Core/MIPS/MeCore.h"
 
 #ifndef MOBILE_DEVICE
 #include "Core/AVIDump.h"
@@ -106,12 +111,6 @@ static std::map<std::string, uint64_t, std::less<>> g_files;  // the value is th
 // Set when a slot save finishes. That's on the emu thread, so the rescan is left to the next reader.
 static std::atomic<bool> g_filesStale;
 
-struct SaveStart {
-	void DoState(PointerWrap &p);
-	// Rewind snapshots and verification don't count towards IsStale().
-	bool countsAsSave = true;
-};
-
 enum class OperationType {
 	Save,
 	Load,
@@ -131,6 +130,15 @@ struct PendingRead {
 	std::string savedBy;
 };
 
+// A save from when it's asked for until its file is written.
+struct SaveRecord {
+	Path path;
+	// How many loads had been applied when its snapshot was taken, or -1 before that.
+	int loadCount = -1;
+	// Callbacks of repeats of it (a save key pressed twice). They hear its result, with no message.
+	std::vector<Callback> repeats;
+};
+
 struct Operation {
 	// The slot number is for visual purposes only. Set to -1 for operations where we don't display a message for example.
 	Operation(OperationType t, const Path &f, int slot_, Callback cb)
@@ -147,15 +155,18 @@ struct Operation {
 	// worker part is done.
 	bool started = false;
 	std::shared_ptr<PendingRead> read;
+	// For a save. Its fields are under mutex.
+	std::shared_ptr<SaveRecord> save;
 };
 
 // Front to back, each operation's emu thread part runs in turn. A load or rewind that's still
 // waiting for the worker holds up the operations behind it.
 static std::deque<Operation> g_pendingOperations;
 
-// Saves asked for and not yet written, by path, with the callbacks of any repeats of them (a save
-// key pressed again before the first save finished). Under mutex.
-static std::map<std::string, std::vector<Callback>> g_pendingSaves;
+// Saves asked for and not yet written, oldest first. Under mutex.
+static std::vector<std::shared_ptr<SaveRecord>> g_pendingSaves;
+// Loads (and rewinds) applied, so a save can tell whether one came after its snapshot.
+static std::atomic<int> g_loadCount;
 // Save snapshots in memory, waiting to be compressed and written. Each is a whole state.
 static std::atomic<int> g_saveSnapshots;
 constexpr int MAX_SAVE_SNAPSHOTS = 2;
@@ -202,7 +213,7 @@ int g_screenshotFailures;
 		if (gpu)
 			gpu->FlushPendingDrawing();
 
-		auto s = p.Section("SaveStart", 1, 3);
+		auto s = p.Section("SaveStart", 1, 5);
 		if (!s)
 			return;
 
@@ -233,13 +244,20 @@ int g_screenshotFailures;
 
 		// The state may hold different code. KernelModuleDoState hooks the functions again.
 		std::vector<std::pair<u32, u32>> hookedOps;
+		// The loaded modules' code is compared with the state's as it's loaded. Where it's the same,
+		// the JIT keeps its blocks, so they don't all have to be compiled again.
+		Memory::RamCompare codeCompare;
 		if (p.mode == p.MODE_READ) {
+			g_loadCount++;
 			hookedOps = Replacement_GetHookedOps();
 			RestoreReplacedInstructions(0, 0xFFFFFFFF);
+			codeCompare.ranges = __KernelModuleCodeRanges();
 		}
-		Memory::DoState(p);
+		Memory::DoState(p, &codeCompare);
 		if (p.mode == p.MODE_READ) {
 			Replacement_RepairStaleHookOps(hookedOps);
+			__KernelModuleSetUnchangedCodeOnLoad(codeCompare.unchanged);
+			currentMIPS->KeepJitBlocksOnNextLoad(std::move(codeCompare.unchanged));
 		}
 
 		if (s >= 3) {
@@ -253,6 +271,22 @@ int g_screenshotFailures;
 		Achievements::DoState(p);
 		// Kernel object destructors might close open files, so do the filesystem last.
 		pspFileSystem.DoState(p);
+		if (s >= 4) {
+			MMIO::DoState(p);
+		} else if (p.mode == p.MODE_READ) {
+			MMIO::Init();
+		}
+		if (s >= 5) {
+			MeCore::DoState(p);
+		} else if (p.mode == p.MODE_READ) {
+			MeCore::Shutdown();
+		}
+
+		if (p.mode == p.MODE_READ && p.error == PointerWrap::ERROR_FAILURE) {
+			// RAM may be loaded and the JIT not told, or the other way round. Keep nothing.
+			currentMIPS->KeepJitBlocksOnNextLoad({});
+			currentMIPS->ClearJitCacheDeferred();
+		}
 	}
 
 	static void WorkerLoop() {
@@ -340,42 +374,72 @@ int g_screenshotFailures;
 
 	static bool IsSavePending(const Path &path) {
 		std::lock_guard<std::mutex> guard(mutex);
-		return g_pendingSaves.find(path.ToString()) != g_pendingSaves.end();
+		for (const auto &save : g_pendingSaves) {
+			if (save->path == path) {
+				return true;
+			}
+		}
+		return false;
 	}
 
-	// If a save to path is already pending, this is a repeat of it (a key pressed twice): the callback
-	// hears that save's result, with no message so it's only shown once. Returns true if so.
+	// If a save to path hasn't finished yet, this is a repeat of it (a key pressed twice): the
+	// callback hears that save's result, with no message so it's only shown once. Returns true if so.
+	// Unless a load was applied after that save's snapshot: then this saves something else.
 	static bool AttachToPendingSave(const Path &path, const Callback &callback) {
 		std::lock_guard<std::mutex> guard(mutex);
-		auto iter = g_pendingSaves.find(path.ToString());
-		if (iter == g_pendingSaves.end()) {
-			return false;
+		// One queued and not yet applied comes before this save too.
+		for (const Operation &op : g_pendingOperations) {
+			if (op.type == OperationType::Load || op.type == OperationType::Rewind) {
+				return false;
+			}
 		}
-		if (callback) {
-			iter->second.push_back(callback);
+		for (auto iter = g_pendingSaves.rbegin(); iter != g_pendingSaves.rend(); ++iter) {
+			SaveRecord &save = **iter;
+			if (!(save.path == path)) {
+				continue;
+			}
+			if (save.loadCount != -1 && save.loadCount != g_loadCount) {
+				return false;
+			}
+			if (callback) {
+				save.repeats.push_back(callback);
+			}
+			return true;
 		}
-		return true;
+		return false;
 	}
 
-	// Takes a save out of g_pendingSaves, returning the callbacks of its repeats.
-	static std::vector<Callback> TakePendingSave(const Path &path) {
+	// A save is done (written, failed or refused). Returns the callbacks of its repeats.
+	static std::vector<Callback> FinishPendingSave(const std::shared_ptr<SaveRecord> &save) {
 		std::lock_guard<std::mutex> guard(mutex);
-		std::vector<Callback> repeats;
-		auto iter = g_pendingSaves.find(path.ToString());
-		if (iter != g_pendingSaves.end()) {
-			repeats = std::move(iter->second);
-			g_pendingSaves.erase(iter);
-		}
-		return repeats;
+		g_pendingSaves.erase(std::remove(g_pendingSaves.begin(), g_pendingSaves.end(), save), g_pendingSaves.end());
+		return std::move(save->repeats);
 	}
 
 	static void RefuseOperation(const Operation &op) {
 		CallbackRefused(op.callback);
-		if (op.type == OperationType::Save) {
-			for (const Callback &repeat : TakePendingSave(op.path)) {
+		if (op.type == OperationType::Save && op.save) {
+			for (const Callback &repeat : FinishPendingSave(op.save)) {
 				CallbackRefused(repeat);
 			}
 		}
+	}
+
+	// A session booted into the XMB inserts and ejects discs, which changes the mounts, and keeps
+	// doing so for a game launched from it. MetaFileSystem's state pairs its sections with mounts by
+	// position and doesn't record which disc was in, so a state from such a session could fail to
+	// load, or load one disc's file state onto another.
+	static bool IsVSHSession() {
+		return PSP_CoreParameter().fileToStart.GetFilename() == "vshmain.prx";
+	}
+
+	static bool WarnUserIfVSHSession() {
+		if (!IsVSHSession()) {
+			return false;
+		}
+		auto pa = GetI18NCategory(I18NCat::PAUSE);
+		g_OSD.Show(OSDType::MESSAGE_INFO, pa->T("Save states are not available in the XMB"), 3.0f, "savevsh");
+		return true;
 	}
 
 	bool Enqueue(const SaveState::Operation &op) {
@@ -392,12 +456,20 @@ int g_screenshotFailures;
 			CallbackRefused(op.callback);
 			return false;
 		}
+		// Verify saves and loads back in place, with the mounts as they are.
+		if (op.type != OperationType::Verify && WarnUserIfVSHSession()) {
+			CallbackRefused(op.callback);
+			return false;
+		}
 
 		std::lock_guard<std::mutex> guard(mutex);
-		if (op.type == OperationType::Save) {
-			g_pendingSaves.emplace(op.path.ToString(), std::vector<Callback>());
-		}
 		g_pendingOperations.push_back(op);
+		if (op.type == OperationType::Save) {
+			Operation &queued = g_pendingOperations.back();
+			queued.save = std::make_shared<SaveRecord>();
+			queued.save->path = op.path;
+			g_pendingSaves.push_back(queued.save);
+		}
 
 		// Don't actually run it until next frame.
 		needsProcess = true;
@@ -406,6 +478,7 @@ int g_screenshotFailures;
 
 	static bool QueueLoad(const Operation &op) {
 		if (NetworkWarnUserIfOnlineAndCantSavestate()) {
+			CallbackRefused(op.callback);
 			return false;
 		}
 
@@ -417,6 +490,7 @@ int g_screenshotFailures;
 
 	static bool QueueSave(const Operation &op) {
 		if (NetworkWarnUserIfOnlineAndCantSavestate()) {
+			CallbackRefused(op.callback);
 			return false;
 		}
 		if (AttachToPendingSave(op.path, op.callback)) {
@@ -613,7 +687,7 @@ int g_screenshotFailures;
 
 	void LoadSlot(std::string_view gamePrefix, int slot, Callback callback) {
 		// Enqueue() would refuse too, but only after the load undo backup below has replaced the old one.
-		if (NetworkWarnUserIfOnlineAndCantSavestate() || Achievements::WarnUserIfHardcoreModeActive(false)) {
+		if (NetworkWarnUserIfOnlineAndCantSavestate() || Achievements::WarnUserIfHardcoreModeActive(false) || WarnUserIfVSHSession()) {
 			CallbackRefused(callback);
 			return;
 		}
@@ -642,6 +716,7 @@ int g_screenshotFailures;
 
 	bool UndoLoad(std::string_view gamePrefix, Callback callback) {
 		if (NetworkWarnUserIfOnlineAndCantSavestate()) {
+			CallbackRefused(callback);
 			return false;
 		}
 
@@ -668,7 +743,7 @@ int g_screenshotFailures;
 
 	void SaveSlot(std::string_view gamePrefix, int slot, Callback callback) {
 		// Enqueue() would refuse too, but only after the screenshots below have been rotated.
-		if (NetworkWarnUserIfOnlineAndCantSavestate() || Achievements::WarnUserIfHardcoreModeActive(true)) {
+		if (NetworkWarnUserIfOnlineAndCantSavestate() || Achievements::WarnUserIfHardcoreModeActive(true) || WarnUserIfVSHSession()) {
 			CallbackRefused(callback);
 			return;
 		}
@@ -1058,6 +1133,22 @@ int g_screenshotFailures;
 #endif
 	}
 
+	// Freeze-frame reloads its snapshot every frame, which would undo any other load right away. So a
+	// load while frozen becomes the new frozen state (freezeNext snapshots it), and is a full load:
+	// the GPU only skips its resets for freeze-frame's own reloads, which it tells by frozen.
+	struct FrozenLoadScope {
+		const bool frozen = PSP_CoreParameter().frozen;
+		FrozenLoadScope() {
+			PSP_CoreParameter().frozen = false;
+		}
+		~FrozenLoadScope() {
+			if (frozen) {
+				PSP_CoreParameter().frozen = true;
+				PSP_CoreParameter().freezeNext = true;
+			}
+		}
+	};
+
 	// What a save's worker job needs, and its completion after.
 	struct SaveJob {
 		Path path;
@@ -1069,6 +1160,7 @@ int g_screenshotFailures;
 		bool keepUndo = false;
 		Path undoPath;
 		Callback callback;
+		std::shared_ptr<SaveRecord> save;
 	};
 
 	// Emu thread, once the file is written (or failed to be).
@@ -1096,7 +1188,7 @@ int g_screenshotFailures;
 			status = Status::FAILURE;
 		}
 
-		std::vector<Callback> repeats = TakePendingSave(job.path);
+		std::vector<Callback> repeats = FinishPendingSave(job.save);
 		if (!callCallbacks) {
 			return;
 		}
@@ -1121,6 +1213,7 @@ int g_screenshotFailures;
 		job.slotGamePrefix = op.slotGamePrefix;
 		job.slot = op.slot;
 		job.callback = op.callback;
+		job.save = op.save;
 		if (!op.slotGamePrefix.empty()) {
 			job.keepUndo = g_Config.bEnableStateUndo;
 			job.undoPath = GenerateSaveSlotPath(op.slotGamePrefix, op.slot, UNDO_STATE_EXTENSION);
@@ -1155,7 +1248,10 @@ int g_screenshotFailures;
 				} else {
 					DeleteIfExists(job.path);
 				}
-				File::Rename(job.writePath, job.path);
+				if (!File::Rename(job.writePath, job.path)) {
+					ERROR_LOG(Log::SaveState, "Failed to move '%s' into place", job.writePath.c_str());
+					result = CChunkFileReader::ERROR_BAD_FILE;
+				}
 			}
 			PostCompletion([job, result](bool callCallbacks) {
 				FinishSave(job, result, callCallbacks);
@@ -1164,20 +1260,13 @@ int g_screenshotFailures;
 		return true;
 	}
 
-	// Keeps the state a slot load is about to replace, as load undo. Snapshotted here, compressed and
-	// written on the worker.
-	static void SaveLoadUndo(const std::string &gamePrefix) {
+	// Keeps the state a slot load replaced, as load undo: the snapshot RunLoad took before loading (which
+	// this takes ownership of), compressed and written on the worker.
+	static void SaveLoadUndo(const std::string &gamePrefix, u8 *buffer, size_t size) {
 		Path backup = GetSysDirectory(DIRECTORY_SAVESTATE) / LOAD_UNDO_NAME;
 		if (backup.empty()) {
 			ERROR_LOG(Log::SaveState, "Saving load undo state failed. Error in the file system.");
-			return;
-		}
-
-		u8 *buffer = nullptr;
-		size_t size = 0;
-		SaveStart state;
-		if (CChunkFileReader::MeasureAndSavePtr(state, &buffer, &size) != CChunkFileReader::ERROR_NONE) {
-			ERROR_LOG(Log::SaveState, "Saving load undo state failed");
+			free(buffer);
 			return;
 		}
 
@@ -1189,7 +1278,10 @@ int g_screenshotFailures;
 			g_saveSnapshots--;
 			if (result == CChunkFileReader::ERROR_NONE) {
 				DeleteIfExists(backup);
-				File::Rename(temp, backup);
+				if (!File::Rename(temp, backup)) {
+					// The undo would load whatever was there before, maybe another game's state.
+					result = CChunkFileReader::ERROR_BAD_FILE;
+				}
 			}
 			// Not a callback, so it runs at shutdown too.
 			PostCompletion([result, gamePrefix](bool) {
@@ -1241,17 +1333,48 @@ int g_screenshotFailures;
 			return true;
 		}
 
-		// Kept even if the load fails: that resets the game, and this is the way back.
-		if (!op.slotGamePrefix.empty() && g_Config.bEnableStateUndo) {
-			SaveLoadUndo(op.slotGamePrefix);
+		// A load that fails partway leaves the emulator half in the new state. With a snapshot of the current
+		// one, we can go back to it rather than reset the game. The snapshot is also what load undo keeps.
+		const bool keepUndo = !op.slotGamePrefix.empty() && g_Config.bEnableStateUndo;
+		u8 *snapshot = nullptr;
+		size_t snapshotSize = 0;
+		{
+			SaveStart current;
+			current.countsAsSave = keepUndo;
+			if (CChunkFileReader::MeasureAndSavePtr(current, &snapshot, &snapshotSize) != CChunkFileReader::ERROR_NONE) {
+				// Out of memory, most likely. A failed load will have to reset the game.
+				WARN_LOG(Log::SaveState, "Couldn't snapshot the current state before loading");
+				snapshot = nullptr;
+			}
 		}
 
 		// Use the state's latest version as a guess for saveStateInitialGitVersion.
 		saveStateInitialGitVersion = read.gitVersion;
 		SaveStart state;
 		std::string errorString;
-		CChunkFileReader::Error result = CChunkFileReader::LoadPtr(read.buffer.get(), read.size, state, &errorString);
-		read.buffer.reset();
+		CChunkFileReader::Error result;
+		bool restored = false;
+		{
+			FrozenLoadScope frozenScope;
+			result = CChunkFileReader::LoadPtr(read.buffer.get(), read.size, state, &errorString);
+			read.buffer.reset();
+			if (result != CChunkFileReader::ERROR_NONE && snapshot) {
+				SaveStart current;
+				std::string restoreError;
+				restored = CChunkFileReader::LoadPtr(snapshot, snapshotSize, current, &restoreError) == CChunkFileReader::ERROR_NONE;
+				if (!restored) {
+					ERROR_LOG(Log::SaveState, "Restoring the state from before the failed load also failed, at %s", restoreError.c_str());
+				}
+			}
+		}
+
+		// After a failed load we're back where we were (unless that failed too, and the game resets), so
+		// the undo already on disk is still the useful one.
+		if (snapshot && keepUndo && !restored) {
+			SaveLoadUndo(op.slotGamePrefix, snapshot, snapshotSize);
+		} else {
+			free(snapshot);
+		}
 
 		if (result == CChunkFileReader::ERROR_NONE) {
 			message = op.slot != LOAD_UNDO_SLOT ? sc->T("Loaded State") : sc->T("State load undone");
@@ -1267,7 +1390,9 @@ int g_screenshotFailures;
 			ResetAVDumping();
 			g_lastSaveTime = time_now_d();
 		} else {
-			HandleLoadFailure(false, &metadata);
+			if (!restored) {
+				HandleLoadFailure(false, &metadata);
+			}
 			// The file was fine, its contents weren't: almost always a state from another version.
 			// errorString is the section that failed.
 			message = sc->T("LoadStateWrongVersion", i18nLoadFailure);
@@ -1304,6 +1429,8 @@ int g_screenshotFailures;
 		std::string message;
 		std::string metadata;
 		std::string errorString;
+		// Covers HandleLoadFailure()'s retries below too.
+		FrozenLoadScope frozenScope;
 		CChunkFileReader::Error result = rewindStates.FinishRestore(&errorString, &metadata);
 		if (result == CChunkFileReader::ERROR_NONE) {
 			message = sc->T("Loaded State");
@@ -1381,8 +1508,9 @@ int g_screenshotFailures;
 
 	// NOTE: This can cause ending of the current renderpass, due to the readback needed for the screenshot.
 	void Process(bool captureRewind) {
-		if (captureRewind)
+		if (captureRewind && !IsVSHSession()) {
 			rewindStates.Process();
+		}
 		RunCompletions(true);
 
 		if (!needsProcess)
@@ -1401,6 +1529,9 @@ int g_screenshotFailures;
 			needsProcess = false;
 			lock.unlock();
 			for (const Operation &op : operations) {
+				if (op.type == OperationType::Rewind && op.started) {
+					rewindStates.CancelRestore();
+				}
 				RefuseOperation(op);
 			}
 			return;
@@ -1411,6 +1542,10 @@ int g_screenshotFailures;
 			// Enqueue() only appends, which leaves this reference alone. Unlocked, since callbacks can
 			// queue more.
 			Operation &op = g_pendingOperations.front();
+			if (op.save) {
+				// Its snapshot is next: nothing can be loaded in between, it's first in the queue.
+				op.save->loadCount = g_loadCount;
+			}
 			lock.unlock();
 			const bool finished = RunOperation(op);
 			lock.lock();

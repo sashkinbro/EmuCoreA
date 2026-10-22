@@ -1,0 +1,491 @@
+#include <stdlib.h>
+#include <string.h>
+
+#include "client.h"
+#include "log.h"
+#include "../../server_cpp/native_socket.h"
+#include "../../server_cpp/common.h"
+
+#include "../packets_v1.h"
+
+using namespace aemu_postoffice_server;
+
+namespace aemu_postoffice_adhocctl_server {
+
+Client::Client(int sock_fd, aemu_postoffice_enet::BasicEnetClient *enet_server, std::string ip, uint16_t port, std::string socket_name, int protocol_revision, struct aemu_postoffice_server::config *config){
+	this->sock_fd = sock_fd;
+	this->ip = ip;
+	this->enet_server = enet_server;
+	this->port = port;
+	this->socket_name = socket_name;
+	this->protocol_revision = protocol_revision;
+	this->logged_in = false;
+	this->config = config;
+
+	this->game_code = "";
+	this->group = "";
+
+	this->create_time = std::chrono::high_resolution_clock::now();
+	this->last_seen = std::chrono::high_resolution_clock::now();
+
+	LOG_TS("%s: client with socket name %s created\n", __func__, socket_name.c_str());
+}
+
+void Client::close_socket(){
+	if (enet_server == NULL)
+		native_close(this->sock_fd);
+	else
+		enet_server->close(this->sock_fd);
+}
+
+Client::~Client(){
+
+}
+
+static bool client_sent_too_much(const std::string &recv_buf, struct aemu_postoffice_server::config *config, Client *client){
+	if (recv_buf.length() > config->adhocctl_data_queue_size_limit_byte){
+		LOG_TS("%s: client %s %s is sending too much data\n", __func__, mac_bytes_to_mac_string(client->get_mac()).c_str(), client->get_socket_name().c_str());
+		return true;
+	}
+	return false;
+}
+
+static ServerToClientOpQueueStatus check_send_queue_size(const std::string &send_buf, struct aemu_postoffice_server::config *config, Client *client){
+	if (send_buf.length() > config->adhocctl_data_queue_size_limit_byte){
+		LOG_TS("%s: client %s %s is not receiving data timely\n", __func__, mac_bytes_to_mac_string(client->get_mac()).c_str(), client->get_socket_name().c_str());
+		return ServerToClientOpQueueStatus::OVERFLOW;
+	}
+	return ServerToClientOpQueueStatus::SUCCESS;
+}
+
+static void connect_ack_v1(std::string &send_buf, std::string group_mac){
+	SceNetAdhocctlConnectBSSIDPacketS2C packet = {0};
+	packet.base.opcode = OPCODE_CONNECT_BSSID;
+	memcpy(packet.mac.data, group_mac.data(), 6);
+	send_buf.append((char *)&packet, sizeof(packet));
+}
+
+ServerToClientOpQueueStatus Client::connect_ack(std::string group_mac){
+	switch(this->protocol_revision){
+		case 1:
+			connect_ack_v1(this->send_buf, group_mac);
+			break;
+		default:
+			LOG("%s: bad protocol revision %d, debug this\n", __func__, this->protocol_revision);
+			exit(1);
+	}
+	return check_send_queue_size(this->send_buf, this->config, this);
+}
+
+static void disconnect_notify_v1(std::string &send_buf, uint32_t ip){
+	SceNetAdhocctlDisconnectPacketS2C packet = {0};
+	packet.base.opcode = OPCODE_DISCONNECT;
+	packet.ip = ip;
+	send_buf.append((char *)&packet, sizeof(packet));
+}
+
+ServerToClientOpQueueStatus Client::disconnect_notify(Client *peer){
+	switch(this->protocol_revision){
+		case 1:
+			disconnect_notify_v1(this->send_buf, peer->id);
+			break;
+		default:
+			LOG("%s: bad protocol revision %d, debug this\n", __func__, this->protocol_revision);
+			exit(1);
+	}
+	return check_send_queue_size(this->send_buf, this->config, this);
+}
+
+static void chat_v1(std::string &send_buf, std::string nickname, std::string msg){
+	SceNetAdhocctlChatPacketS2C packet = {0};
+	packet.base.base.opcode = OPCODE_CHAT;
+	strncpy(packet.base.message, msg.c_str(), sizeof(packet.base.message) - 1);
+	strncpy((char *)packet.name.data, nickname.c_str(), sizeof(packet.name.data) - 1);
+	send_buf.append((char *)&packet, sizeof(packet));
+}
+
+ServerToClientOpQueueStatus Client::chat(std::string nickname, std::string msg){
+	switch(this->protocol_revision){
+		case 1:
+			chat_v1(this->send_buf, nickname, msg);
+			break;
+		default:
+			LOG("%s: bad protocol revision %d, debug this\n", __func__, this->protocol_revision);
+			exit(1);
+	}
+	return check_send_queue_size(this->send_buf, this->config, this);
+}
+
+static void scan_result_v1(std::string &send_buf, std::string group_name, std::string leader_mac){
+	SceNetAdhocctlScanPacketS2C packet = {0};
+	packet.base.opcode = OPCODE_SCAN;
+	memcpy(packet.group.data, group_name.data(), group_name.length() > sizeof(packet.group.data) ? sizeof(packet.group.data) : group_name.length());
+	memcpy(packet.mac.data, leader_mac.data(), 6);
+	send_buf.append((char *)&packet, sizeof(packet));
+}
+
+ServerToClientOpQueueStatus Client::scan_result(std::string group_name, std::string leader_mac){
+	switch(this->protocol_revision){
+		case 1:
+			scan_result_v1(this->send_buf, group_name, leader_mac);
+			break;
+		default:
+			LOG("%s: bad protocol revision %d, debug this\n", __func__, this->protocol_revision);
+			exit(1);
+	}
+	return check_send_queue_size(this->send_buf, this->config, this);
+}
+
+static void scan_complete_v1(std::string &send_buf){
+	SceNetAdhocctlPacketBase packet = {0};
+	packet.opcode = OPCODE_SCAN_COMPLETE;
+	send_buf.append((char *)&packet, sizeof(packet));
+}
+
+ServerToClientOpQueueStatus Client::scan_complete(){
+	switch(this->protocol_revision){
+		case 1:
+			scan_complete_v1(this->send_buf);
+			break;
+		default:
+			LOG("%s: bad protocol revision %d, debug this\n", __func__, this->protocol_revision);
+			exit(1);
+	}
+	return check_send_queue_size(this->send_buf, this->config, this);
+}
+
+static void connect_notify_v1(std::string &send_buf, std::string nickname, std::string mac, uint32_t ip){
+	SceNetAdhocctlConnectPacketS2C packet = {0};
+	packet.base.opcode = OPCODE_CONNECT;
+	memcpy(packet.name.data, nickname.data(), nickname.length() > sizeof(packet.name.data) - 1 ? sizeof(packet.name.data) - 1 : nickname.length());
+	memcpy(packet.mac.data, mac.data(), 6);
+	packet.ip = ip;
+	send_buf.append((char *)&packet, sizeof(packet));
+}
+
+ServerToClientOpQueueStatus Client::connect_notify(Client *peer){
+	switch(this->protocol_revision){
+		case 1:
+			connect_notify_v1(this->send_buf, peer->get_nickname(), peer->get_mac(), peer->id);
+			break;
+		default:
+			LOG("%s: bad protocol revision %d, debug this\n", __func__, this->protocol_revision);
+			exit(1);
+	}
+	return check_send_queue_size(this->send_buf, this->config, this);
+}
+
+ClientPumpStatus Client::process_recv_buf_v1(){
+	bool processed_packet = false;
+	while(true){
+		if (recv_buf.length() < sizeof(SceNetAdhocctlPacketBase)){
+			if (processed_packet){
+				last_seen = std::chrono::high_resolution_clock::now();
+			}
+			return ClientPumpStatus::SUCCESS;
+		}
+
+		const SceNetAdhocctlPacketBase *packet_base = (SceNetAdhocctlPacketBase *)recv_buf.data();
+		int packet_size = 0;
+		switch(packet_base->opcode){
+			case OPCODE_LOGIN:
+				packet_size = sizeof(SceNetAdhocctlLoginPacketC2S);
+				break;
+			case OPCODE_PING:
+				packet_size = sizeof(SceNetAdhocctlPacketBase);
+				break;
+			case OPCODE_CONNECT:
+				if (!logged_in){
+					LOG_TS("%s: client %s sending OPCODE_CONNECT before logging in\n", __func__, socket_name.c_str());
+					return ClientPumpStatus::ERROR;
+				}
+				packet_size = sizeof(SceNetAdhocctlConnectPacketC2S);
+				break;
+			case OPCODE_DISCONNECT:
+				if (!logged_in){
+					LOG_TS("%s: client %s sending OPCODE_DISCONNECT before logging in\n", __func__, socket_name.c_str());
+					return ClientPumpStatus::ERROR;
+				}
+				packet_size = sizeof(SceNetAdhocctlPacketBase);
+				break;
+			case OPCODE_SCAN:
+				if (!logged_in){
+					LOG_TS("%s: client %s sending OPCODE_SCAN before logging in\n", __func__, socket_name.c_str());
+					return ClientPumpStatus::ERROR;
+				}
+				packet_size = sizeof(SceNetAdhocctlPacketBase);
+				break;
+			case OPCODE_CHAT:
+				if (!logged_in){
+					LOG_TS("%s: client %s sending OPCODE_CHAT before logging in\n", __func__, socket_name.c_str());
+					return ClientPumpStatus::ERROR;
+				}
+				packet_size = sizeof(SceNetAdhocctlChatPacketC2S);
+				break;
+			default:
+				LOG_TS("%s: client %s sent invalid opcode %d\n", __func__,socket_name.c_str(), packet_base->opcode);
+				return ClientPumpStatus::ERROR;
+		}
+
+		if (recv_buf.length() < packet_size){
+			if (processed_packet){
+				last_seen = std::chrono::high_resolution_clock::now();
+			}
+			return ClientPumpStatus::SUCCESS;
+		}
+
+		processed_packet = true;
+		switch(packet_base->opcode){
+			case OPCODE_LOGIN:{
+				const SceNetAdhocctlLoginPacketC2S *packet = (SceNetAdhocctlLoginPacketC2S *)recv_buf.data();
+				mac = std::string((char *)packet->mac.data, 6);
+				nickname = std::string((char *)packet->name.data, sizeof(packet->name.data));
+				game_code = std::string((char *)packet->game.data, sizeof(packet->game.data));
+				nickname.push_back('\0');
+				game_code.push_back('\0');
+				// re-string it so that crosslink lookup works
+				game_code = std::string(game_code.c_str());
+				// re-string it to not waste space
+				nickname = std::string(nickname.c_str());
+				channel = V1_PROTOCOL_DEFAULT_CHANNEL;
+				logged_in = true;
+
+				// TODO might need more sanity checks
+				static const char bad_mac[6] = {0};
+				if (memcmp(&mac.data()[1], &bad_mac[1], 5) == 0){
+					// check 5 bytes only because some games corrupt the first byte and matching in aemu/ppsspp is done using 5 bytes
+					LOG_TS("%s: client %s %s tries to use xx:00:00:00:00:00 as mac, rejecting\n", __func__, socket_name.c_str(), nickname.c_str());
+					return ClientPumpStatus::ERROR;
+				}
+
+				if (game_code.size() < 9){
+					LOG_TS("%s: client %s %s logs in with bad game code %s (len %d), rejecting\n", __func__, socket_name.c_str(), nickname.c_str(), game_code.c_str(), game_code.size());
+					return ClientPumpStatus::ERROR;
+				}
+
+				for (int i = 0;i < 9;i++){
+					if (game_code.data()[i] >= '0' && game_code.data()[i] <= '9'){
+						continue;
+					}
+					/*
+					// can a game use small letters for game code? standalone adhocctl never really allowed small letters, meanwhile
+					if (game_code.data()[i] >= 'a' && game_code.data()[i] <= 'z'){
+						continue;
+					}
+					*/
+					if (game_code.data()[i] >= 'A' && game_code.data()[i] <= 'Z'){
+						continue;
+					}
+					LOG_TS("%s: client %s %s logs in with bad game code %s (bad character %c), rejecting\n", __func__, socket_name.c_str(), nickname.c_str(), game_code.c_str(), game_code.data()[i]);
+					return ClientPumpStatus::ERROR;
+				}
+
+				if (nickname.size() >= 128){
+					// it should be at most 128 including a null termination
+					LOG_TS("%s: client %s %s has bad nickname, rejecting\n", __func__, socket_name.c_str(), nickname.c_str());
+					return ClientPumpStatus::ERROR;
+				}
+
+				LOG_TS("%s: client %s %s logged in game %s with mac address %s channel %d\n", __func__, socket_name.c_str(), nickname.c_str(), game_code.c_str(), mac_bytes_to_mac_string(mac).c_str(), channel);
+
+				break;
+			}
+			case OPCODE_PING:{
+				// no op, last seen will be updated later
+				break;
+			}
+			case OPCODE_CONNECT:{
+				const SceNetAdhocctlConnectPacketC2S *packet = (SceNetAdhocctlConnectPacketC2S *)recv_buf.data();
+				client_op op;
+				op.mac = mac;
+				op.op = ClientOp::CONNECT;
+				op.connect.group = std::string((char *)packet->group.data, sizeof(packet->group.data));
+				op.connect.group.push_back('\0');
+				// restring this to not waste space
+				op.connect.group = std::string(op.connect.group.c_str());
+				// v1 protocol has no channel
+				op.connect.channel = channel;
+				client_ops.push_back(op);
+
+				LOG_TS("%s: client %s %s on channel %d joining group %s %s\n", __func__, socket_name.c_str(), mac_bytes_to_mac_string(mac).c_str(), channel, game_code.c_str(), op.connect.group.c_str());
+
+				break;
+			}
+			case OPCODE_DISCONNECT:{
+				client_op op;
+				op.mac = mac;
+				op.op = ClientOp::DISCONNECT;
+				op.disconnect.channel = channel;
+				client_ops.push_back(op);
+
+				LOG_TS("%s: client %s %s disconnecting from group %s %s\n", __func__, socket_name.c_str(), mac_bytes_to_mac_string(mac).c_str(), game_code.c_str(), group.c_str());
+				break;
+			}
+			case OPCODE_SCAN:{
+				client_op op;
+				op.mac = mac;
+				op.op = ClientOp::SCAN;
+				client_ops.push_back(op);
+
+				LOG_TS("%s: client %s %s on channel %d requesting scan\n", __func__, socket_name.c_str(), mac_bytes_to_mac_string(mac).c_str(), channel);
+				break;
+			}
+			case OPCODE_CHAT:{
+				const SceNetAdhocctlChatPacketC2S *packet = (SceNetAdhocctlChatPacketC2S *)recv_buf.data();
+				client_op op;
+				op.mac = mac;
+				op.op = ClientOp::CHAT;
+				char buf[sizeof(packet->message) + 1] = {0};
+				strncpy(buf, packet->message, sizeof(packet->message));
+				op.chat.msg = std::string(buf);
+				client_ops.push_back(op);
+
+				LOG_TS("%s: client %s %s sending message [%s] to group %s %s\n", __func__, socket_name.c_str(), mac_bytes_to_mac_string(mac).c_str(), buf, game_code.c_str(), group.c_str());
+				break;
+			}
+			default:
+				LOG("%s: unreachable codepath, debug this\n", __func__);
+				exit(1);
+		}
+
+		recv_buf.erase(0, packet_size);
+	}
+}
+
+ClientPumpStatus Client::pump_from_client(){
+	if (!logged_in){
+		if ((std::chrono::high_resolution_clock::now() - create_time) / std::chrono::seconds(1) > 5){
+			LOG_TS("%s: pending client %s has timed out\n", __func__, get_socket_name().c_str());
+			return ClientPumpStatus::TIMEDOUT;
+		}
+	}
+
+	if ((std::chrono::high_resolution_clock::now() - last_seen) / std::chrono::milliseconds(1) > config->adhocctl_timeout_ms){
+		LOG_TS("%s: client %s %s has timed out\n", __func__, get_socket_name().c_str(), mac_bytes_to_mac_string(mac).c_str());
+		return ClientPumpStatus::TIMEDOUT;
+	}
+
+	// drain kernel buffer into our buffer
+	Buffer _recv_buf(4096);
+	char *recv_buf = _recv_buf.get_buf();
+	int recv_buf_size = _recv_buf.get_size();
+	while(true){
+		int recv_len = 0;
+		if (enet_server == NULL){
+			recv_len = native_recv(sock_fd, recv_buf, recv_buf_size);
+			if (recv_len == 0){
+				LOG_TS("%s: client %s %s has disconnected\n", __func__, get_socket_name().c_str(), mac_bytes_to_mac_string(mac).c_str());
+				return ClientPumpStatus::DISCONNECT;
+			}
+			if (recv_len == -1){
+				int error = native_get_last_socket_error();
+				if (native_error_is_would_block(error)){
+					break;
+				}
+				LOG_TS("%s: client %s %s has errored 0x%x\n", __func__, get_socket_name().c_str(), mac_bytes_to_mac_string(mac).c_str(), error);
+				return ClientPumpStatus::ERROR;
+			}
+		} else {
+			aemu_postoffice_enet::EnetRecvStatus status;
+			recv_len = enet_server->recv(sock_fd, recv_buf, recv_buf_size, 0, status);
+			if (recv_len == -1){
+				if (status == aemu_postoffice_enet::EnetRecvStatus::WOULD_BLOCK){
+					break;
+				}
+				LOG_TS("%s: client %s %s has enet error %d\n", __func__, get_socket_name().c_str(), mac_bytes_to_mac_string(mac).c_str(), status);
+				return ClientPumpStatus::ERROR;
+			}
+		}
+		// we have data otherwise
+		this->recv_buf.append(recv_buf, recv_len);
+	}
+
+	if (client_sent_too_much(recv_buf, config, this)){
+		return ClientPumpStatus::OVERFLOW;
+	}
+
+	// process packets into op list
+	switch(this->protocol_revision){
+		case 1:
+			return process_recv_buf_v1();
+			// TODO v2 protocol's login should handle some kind of auth
+		default:
+			LOG("%s: bad protocol revision %d, debug this\n", __func__, this->protocol_revision);
+			exit(1);
+			return ClientPumpStatus::SUCCESS;
+	}
+}
+
+ClientPumpStatus Client::pump_to_client(){
+	while (true){
+		if (send_buf.length() == 0){
+			return ClientPumpStatus::SUCCESS;
+		}
+
+		int send_len = 0;
+		if (enet_server == NULL) {
+			send_len = native_send(sock_fd, send_buf.data(), send_buf.length());
+			if (send_len == -1){
+				int err = native_get_last_socket_error();
+				if (native_error_is_would_block(err)){
+					return ClientPumpStatus::SUCCESS;
+				}
+				LOG_TS("%s: failed sending to client, 0x%x\n", __func__, err);
+				return ClientPumpStatus::ERROR;
+			}
+		} else {
+			int to_send = send_buf.size();
+			if (to_send > 500){
+				to_send = 500;
+			}
+			aemu_postoffice_enet::EnetSendStatus status;
+			send_len = enet_server->send(sock_fd, send_buf.data(), to_send, 0, true, status);
+			if (send_len == -1){
+				LOG_TS("%s: failed sending to enet client, %d\n", __func__, status);
+				return ClientPumpStatus::ERROR;
+			}
+		}
+
+		send_buf.erase(0, send_len);
+	}
+}
+
+std::string Client::get_ip(){
+	return ip;
+}
+
+std::string Client::get_socket_name(){
+	return socket_name;
+}
+
+std::string Client::get_nickname(){
+	return nickname;
+}
+
+bool Client::is_logged_in(){
+	return logged_in;
+}
+
+std::string Client::get_mac(){
+	return mac;
+}
+
+uint16_t Client::get_port(){
+	return port;
+}
+
+int Client::get_protocol_revision(){
+	return protocol_revision;
+}
+
+int Client::get_channel(){
+	return channel;
+}
+
+void Client::get_client_ops(std::vector<client_op> &container){
+	std::swap(client_ops, container);
+	client_ops.clear();
+}
+
+}
+

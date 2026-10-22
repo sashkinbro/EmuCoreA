@@ -14,7 +14,7 @@ finds the debugger port, connects, and cleans up after itself - no wrapper scrip
 ```bash
 printf 'cpu.runUntilTime us=6000000\ncpu.status\n:quit\n' | \
   Tools/wsdbg/target/release/wsdbg.exe --sync --compact --quiet \
-    --launch Windows/x64/Debug/PPSSPPHeadless.exe --vsh -i --graphics=vulkan --loglevel=3 2>emu.log
+    --launch Windows/x64/Debug/PPSSPPHeadless.exe --vsh --cpu=interpreter --graphics=vulkan --loglevel=3 2>emu.log
 ```
 
 That takes a few seconds. Protocol replies come back on stdout, the emulator's log on stderr.
@@ -23,7 +23,7 @@ Put more commands in the script to inspect state once it stops. Three things to 
 1. **Don't add `:wait cpu.stepping` after `cpu.runUntilTime`** (or any resume/step command).
    `--sync` already waits for it; a second one never arrives and burns the whole timeout. This is
    the single most likely reason a run seems to take minutes - emulation itself is ~real time.
-2. **`-i` (interpreter)** is what this path is known to work with, and breakpoints are most
+2. **`--cpu=interpreter`** is what this path is known to work with, and breakpoints are most
    reliable there.
 3. Boot needs a real firmware dump in `assets/flash0/` (and optionally `assets/flash1/`), neither
    of which is in the repo.
@@ -35,17 +35,46 @@ code is not correct." Cancel it with circle and the menu is there and usable.
 
 Two separate things:
 
-- **It thinks a disc is inserted**, because nothing in PPSSPP models an empty drive.
-  `sceUmd.cpp` reports `PSP_UMD_PRESENT | PSP_UMD_READY` unconditionally, and `sceIoDevctl`
-  `0x01F20001` (get disc type) always answers `0x10`, "game disc". JPCSP answers `0` when no ISO is
-  loaded, which is why it never asks the next question. Fixing this properly means giving those two
-  a notion of "no disc" - low risk for games, which always have one, but it is on a path every game
-  uses.
+- **It thought a disc was inserted**, because nothing in PPSSPP modelled an empty drive. Now a shell
+  booted without a game starts with an empty drive: `sceUmdActivate` tells the shell's drive callback
+  (`SceVshMediaDetectUMD`) there's no disc, and `sceIoDevctl` `0x01F20001` (get disc type) answers `0`,
+  as JPCSP does. Activation used to report a readable disc regardless, so the shell asked for its type,
+  got nothing it knew, and showed "The disc could not be read."
+
+  A disc goes in with the WebSocket debugger's `game.umd.insert` (`path`), which mounts the image
+  and calls the drive callback the way a PSP does when a disc is inserted, and comes out with
+  `game.umd.eject`. The shell then lists the disc in the Game column with its icon, background and
+  animated preview, and launching it boots the game through `sceKernelLoadExecVSHDisc` (Daxter on
+  6.61, to its title menu). In the app, the pause screen offers "Insert UMD" and "Eject UMD" while
+  the XMB is running.
+
+  UMD Video discs work too: the disc type comes from what's on the disc (`PSP_GAME`, `UMD_VIDEO`,
+  `UMD_AUDIO`), the shell lists a video disc in the Video column, and selecting it hands it to the
+  firmware's own player (`video_plugin`, `video_main_plugin`, with `mpeg_vsh.prx`). Bourne Supremacy
+  and the Spider-Man 2 trailer on the EUR Video Demo Disc play with sound. What that player needed
+  from our Media Engine HLE (per-picture SEI records, keyframe flags, field conversion in
+  `sceMpegBaseCscAvc`) is in pspautotests `video/mpeg/avcdetail` and `video/mpeg/cscavc`.
 - **It then asked whether the region matched and we didn't answer.** `sceIoDevctl` `0x01E18030` is
   the region check, and unusually it answers through the *return value* (1 matches, 0 doesn't)
   rather than an output buffer. It was unimplemented, so the VSH read the failure as a mismatch and
   retried 12 times. Implemented now - PPSSPP has no region-locked discs, so anything it can load is
   something it should run - and the call drops to one.
+
+## Around the XMB (6.61)
+
+- **Game**: the memory stick list shows PSP games, PS1 EBOOTs and homebrew with icons and info.
+  Homebrew and PS1 games launch from it; PSN titles stop at "The copyright protection information
+  is invalid (8010850E)", since there's no licence (`PSP/LICENSE/*.RIF`). A game that exits goes
+  back to the XMB, as on a PSP. The Saved Data Utility lists saves: it needed the raw stick device
+  `msstor0p1:/` (pspautotests `io/msstor/msstor`) and `sceSdGetLastIndex` without a key.
+- **Photo**: folders under `PICTURE/` list with thumbnails, and JPEG and PNG open full screen (R
+  for the next one).
+- **Music**: MP3 plays. SensMe stops at 8002013A.
+- **Settings**: the menus open. System Information shows "-" for the MAC address: wlan.prx reads it
+  from IdStorage key 0x44, and IdStorage is left failing on purpose (see below).
+- **Network**: the browser and the online manuals reach their Network Connection screen once
+  `sceNetApctl_lib` is there, then stop at 8002013A on `sceHttp` functions only the NetFront browser
+  uses (06488A1C, 2C3C82CF, 3A67F306, 739C2D79, 77EE5319, 8046E250, A461A167, B0257723).
 
 ## Current status
 

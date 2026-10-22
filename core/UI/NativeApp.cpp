@@ -209,6 +209,8 @@ static std::string g_savedAchievementsHost;
 static bool g_savedAchievementsHardcoreMode = false;
 static bool g_hasSavedAchievementsSettings = false;
 static bool g_nativeMainThreadReady = false;
+// Kept to apply again after a config reload.
+static CommandLineOptions g_cmdLineOptions;
 
 static std::mutex g_inputEventQueueLock;
 static std::vector<QueuedEvent> g_inputEventQueue;
@@ -409,6 +411,7 @@ std::thread *graphicsLoadThread;
 
 // globals
 Path boot_filename;
+Path boot_mountIso;
 
 // This is called before NativeInit so we do a little bit of initialization here.
 void NativeGetAppInfo(std::string *app_dir_name, std::string *app_nice_name, bool *landscape, std::string *version) {
@@ -693,11 +696,13 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 
 	// Apply parsed command line options to config.
 	cmdLineOptions.ApplyToConfig();
+	g_cmdLineOptions = cmdLineOptions;
 
 	boot_filename.clear();
 	if (boot_filename.empty() && cmdLineOptions.bootVSH.value_or(false)) {
 		boot_filename = g_Config.nandRootDirectory / "flash0/vsh/module/vshmain.prx";
 	}
+	boot_mountIso = cmdLineOptions.mountIso.has_value() ? Path(cmdLineOptions.mountIso.value()) : Path();
 
 	if (cmdLineOptions.appendConfig.has_value()) {
 		g_Config.SetAppendedConfigIni(Path(cmdLineOptions.appendConfig.value()));
@@ -830,7 +835,7 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 		}
 	} else if (skipLogo && !boot_filename.empty()) {
 		INFO_LOG(Log::System, "Launching EmuScreen with boot filename '%s'", boot_filename.c_str());
-		g_screenManager->switchScreen(new EmuScreen(boot_filename));
+		g_screenManager->switchScreen(new EmuScreen(boot_filename, boot_mountIso));
 	} else {
 		g_screenManager->switchScreen(new LogoScreen(AfterLogoScreen::DEFAULT));
 	}
@@ -1435,6 +1440,8 @@ bool HandleGlobalMessage(UIMessage message, const std::string &value) {
 		INFO_LOG(Log::IO, "Reloading config after storage permission grant.");
 		g_Config.Reload();
 		PostLoadConfig();
+		// The reload reset what the command line set.
+		g_cmdLineOptions.ApplyToConfig();
 		g_Config.iGPUBackend = gpuBackend;
 		return true;
 	} else if (message == UIMessage::APP_RESUMED || message == UIMessage::GOT_FOCUS) {
@@ -1797,13 +1804,7 @@ void NativeMouseDelta(float dx, float dy) {
 	SendMouseDeltaAxis();
 }
 
-// TODO: Should include a device ID here, since accelerometers can be on pads for example (DualSense).
-void NativeAccelerometer(float tiltX, float tiltY, float tiltZ) {
-	if (g_Config.iTiltInputType == TILT_NULL) {
-		// if tilt events are disabled, don't do anything special.
-		return;
-	}
-
+static void ProcessTiltVector(float tiltX, float tiltY, float tiltZ) {
 	// create the base coordinate tilt system from the calibration data.
 	float tiltBaseAngleY = g_Config.fTiltBaseAngleY;
 
@@ -1824,10 +1825,35 @@ void NativeAccelerometer(float tiltX, float tiltY, float tiltZ) {
 	TiltEventProcessor::ProcessTilt(landscape, tiltBaseAngleY, tiltX, tiltY, tiltZ,
 		g_Config.bInvertTiltX, g_Config.bInvertTiltY,
 		xSensitivity, ySensitivity);
+}
+
+// TODO: Should include a device ID here, since accelerometers can be on pads for example (DualSense).
+void NativeAccelerometer(float tiltX, float tiltY, float tiltZ) {
+	if (g_Config.iTiltInputType == TILT_NULL) {
+		// if tilt events are disabled, don't do anything special.
+		return;
+	}
+
+	TiltEventProcessor::ProcessAccelerometerForFusion(tiltX, tiltY, tiltZ);
+	// When there's a gyro, its events drive tilt instead.
+	if (!g_Config.bTiltUseGyro || !TiltEventProcessor::GyroActive()) {
+		ProcessTiltVector(tiltX, tiltY, tiltZ);
+	}
 
 	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_ACCELEROMETER_X] = tiltX;
 	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_ACCELEROMETER_Y] = tiltY;
 	HLEPlugins::PluginDataAxis[JOYSTICK_AXIS_ACCELEROMETER_Z] = tiltZ;
+}
+
+void NativeGyroscope(float x, float y, float z, double timestamp) {
+	if (g_Config.iTiltInputType == TILT_NULL) {
+		return;
+	}
+
+	Lin::Vec3 gravity;
+	if (TiltEventProcessor::ProcessGyro(x, y, z, timestamp, &gravity) && g_Config.bTiltUseGyro) {
+		ProcessTiltVector(gravity.x, gravity.y, gravity.z);
+	}
 }
 
 void System_PostUIMessage(UIMessage message, std::string_view param) {

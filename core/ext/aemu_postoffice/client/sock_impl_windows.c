@@ -1,4 +1,5 @@
 #include <winsock2.h>
+#include <ws2ipdef.h>
 #include <windows.h>
 #include <profileapi.h>
 
@@ -9,19 +10,21 @@
 #include "sock_impl.h"
 #include "log_impl.h"
 
-void to_native_sock_addr(native_sock_addr *dst, const struct aemu_post_office_sock_addr *src){
+typedef struct sockaddr_in native_sock_addr;
+typedef struct sockaddr_in6 native_sock6_addr;
+
+static void to_native_sock_addr(native_sock_addr *dst, const struct aemu_postoffice_sock_addr *src){
+	memset(dst, 0, sizeof(native_sock_addr));
 	dst->sin_family = AF_INET;
 	dst->sin_addr.s_addr = src->addr;
 	dst->sin_port = src->port;
-	memset(dst->sin_zero, 0, sizeof(dst->sin_zero));
 }
 
-void to_native_sock6_addr(native_sock6_addr *dst, const struct aemu_post_office_sock6_addr *src){
+static void to_native_sock6_addr(native_sock6_addr *dst, const struct aemu_postoffice_sock6_addr *src){
+	memset(dst, 0, sizeof(native_sock6_addr));
 	dst->sin6_family = AF_INET6;
 	dst->sin6_port = src->port;
-	dst->sin6_flowinfo = 0;
 	memcpy(dst->sin6_addr.s6_addr, src->addr, 16);
-	dst->sin6_scope_id = 0;
 }
 
 static void init_winsock2(){
@@ -36,7 +39,7 @@ static void init_winsock2(){
 	}
 }
 
-static int connect_with_timeout(int sock, native_sock_addr *addr, int addrlen, int timeout_ms, int *error){
+static int connect_with_timeout(int sock, native_sock_addr *addr, int addrlen, int timeout_ms, int *error, bool (*abort_connection)(void *arg), void *abort_connection_arg){
 	u_long ioctlopt = 1;
 	ioctlsocket(sock, FIONBIO, &ioctlopt);
 
@@ -57,7 +60,7 @@ static int connect_with_timeout(int sock, native_sock_addr *addr, int addrlen, i
 			LARGE_INTEGER now = {0};
 			QueryPerformanceCounter(&now);
 			int ms_since_begin = (now.QuadPart - begin.QuadPart) * 1000 / ticks_per_seconds.QuadPart;
-			if (ms_since_begin > timeout_ms){
+			if (ms_since_begin > timeout_ms || (abort_connection != NULL && abort_connection(abort_connection_arg))){
 				*error = WSAETIMEDOUT;
 				ret = -1;
 				break;
@@ -87,23 +90,57 @@ static int connect_with_timeout(int sock, native_sock_addr *addr, int addrlen, i
 	return ret;
 }
 
-int native_connect_tcp_sock(void *addr, int addrlen){
+int native_connect_tcp_sock(const struct aemu_postoffice_sock_addr *addr4, const struct aemu_postoffice_sock_addr *bind_addr4, const struct aemu_postoffice_sock6_addr *addr6, const struct aemu_postoffice_sock6_addr *bind_addr6, bool (*abort_connection)(void *arg), void *abort_connection_arg){
 	init_winsock2();
 
-	native_sock_addr *native_addr = addr;
-	SOCKET win_sock = socket(native_addr->sin_family, SOCK_STREAM, 0);
+	native_sock_addr native_addr4;
+	native_sock6_addr native_addr6;
+	int addrlen = 0;
+	native_sock_addr *addr = NULL;
+	if (addr4 != NULL){
+		to_native_sock_addr(&native_addr4, addr4);
+		addr = &native_addr4;
+		addrlen = sizeof(native_addr4);
+	} else {
+		to_native_sock6_addr(&native_addr6, addr6);
+		addr = (native_sock_addr *)&native_addr6;
+		addrlen = sizeof(native_addr6);
+	}
+	SOCKET win_sock = socket(addr->sin_family, SOCK_STREAM, 0);
 	if (win_sock == INVALID_SOCKET){
 		LOG("%s: failed creating socket, %d\n", __func__, WSAGetLastError());
 		return AEMU_POSTOFFICE_CLIENT_SESSION_NETWORK;
 	}
 	int sock = win_sock;
 
+	if (bind_addr4 != NULL){
+		native_sock_addr bind_addr;
+		to_native_sock_addr(&bind_addr, bind_addr4);
+		int bind_result = bind(sock, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
+		if (bind_result == -1){
+			native_close_tcp_sock(sock);
+			LOG("%s: failed binding socket, %d\n", __func__, WSAGetLastError());
+			return AEMU_POSTOFFICE_CLIENT_SESSION_NETWORK;
+		}
+	}
+
+	if (bind_addr6 != NULL){
+		native_sock6_addr bind_addr;
+		to_native_sock6_addr(&bind_addr, bind_addr6);
+		int bind_result = bind(sock, (struct sockaddr*)&bind_addr, sizeof(bind_addr));
+		if (bind_result == -1){
+			native_close_tcp_sock(sock);
+			LOG("%s: failed binding socket, %d\n", __func__, WSAGetLastError());
+			return AEMU_POSTOFFICE_CLIENT_SESSION_NETWORK;
+		}
+	}
+
 	// XXX need to simulate timeout on windows, there's no sockopt for that
 	// this also restricts latency to 500ms, if a server is even further away, connection won't be possible
 
 	// Connect
 	int error = 0;
-	int connect_status = connect_with_timeout(sock, addr, addrlen, 5000, &error);
+	int connect_status = connect_with_timeout(sock, addr, addrlen, 5000, &error, abort_connection, abort_connection_arg);
 	if (connect_status == -1){
 		LOG("%s: failed connecting, %d\n", __func__, error);
 		closesocket(sock);
@@ -120,6 +157,7 @@ int native_connect_tcp_sock(void *addr, int addrlen){
 	setsockopt(sock, SOL_SOCKET, SO_SNDBUF, (char *)&sockopt, sizeof(sockopt));
 	setsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&sockopt, sizeof(sockopt));
 
+	#if 0
 	// Show some socket options
 	int opt_len = sizeof(sockopt);
 	sockopt = 0;
@@ -135,34 +173,22 @@ int native_connect_tcp_sock(void *addr, int addrlen){
 	sockopt = 0;
 	get_ret = getsockopt(sock, SOL_SOCKET, SO_RCVBUF, (char *)&sockopt, &opt_len);
 	LOG("%s: SO_RCVBUF is %d (0x%x)\n", __func__, sockopt, get_ret == -1 ? WSAGetLastError() : 0);
+	#endif
 
 	return sock;
 }
 
-int native_send_till_done(int fd, const char *buf, int len, bool non_block, bool *abort){
-	int write_offset = 0;
-	while(write_offset != len){
-		if (*abort){
-			return NATIVE_SOCK_ABORTED;
+int native_send(int fd, const char *buf, int len){
+	int write_status = send(fd, buf, len, 0);
+	if (write_status == -1){
+		int err = WSAGetLastError();
+		if (err == WSAEWOULDBLOCK || err == WSAEINPROGRESS){
+			return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
 		}
-		int write_status = send(fd, &buf[write_offset], len - write_offset, 0);
-		if (write_status == -1){
-			int err = WSAGetLastError();
-			if (err == WSAEWOULDBLOCK || err == WSAEINPROGRESS){
-				if (non_block && write_offset == 0){
-					return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
-				}
-				// Continue block sending, either in block mode or we already received part of the message
-				Sleep(0);
-				continue;
-			}
-			// Other errors
-			LOG("%s: failed sending, %d\n", __func__, err);
-			return write_status;
-		}
-		write_offset += write_status;
+		LOG("%s: failed sending, %d\n", __func__, err);
+		return write_status;
 	}
-	return write_offset;
+	return write_status;
 }
 
 int native_recv(int fd, char *buf, int len){
@@ -180,32 +206,6 @@ int native_recv(int fd, char *buf, int len){
 		return recv_status;
 	}
 	return recv_status;
-}
-
-int native_recv_till_done(int fd, char *buf, int len, bool non_block, bool *abort){
-	int read_offset = 0;
-	while(read_offset != len){
-		if (*abort){
-			return NATIVE_SOCK_ABORTED;
-		}
-		int recv_status = native_recv(fd, &buf[read_offset], len - read_offset);
-		if (recv_status == 0){
-			return recv_status;
-		}
-		if (recv_status < 0){
-			if (recv_status == AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK){
-				if (non_block && read_offset == 0){
-					return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
-				}
-				// Continue block receving, either in block mode or we already sent part of the message
-				Sleep(0);
-				continue;
-			}
-			return recv_status;
-		}
-		read_offset += recv_status;
-	}
-	return read_offset;
 }
 
 int native_close_tcp_sock(int sock){

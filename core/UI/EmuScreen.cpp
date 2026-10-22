@@ -161,8 +161,8 @@ void EmuScreen::SetPSPAnalog(int iInternalScreenRotation, int stick, float x, fl
 	__CtrlSetAnalogXY(stick, x, y);
 }
 
-EmuScreen::EmuScreen(const Path &filename)
-	: gamePath_(filename) {
+EmuScreen::EmuScreen(const Path &filename, const Path &mountIso)
+	: gamePath_(filename), mountIso_(mountIso) {
 	saveStateSlot_ = SaveState::GetCurrentSlot();
 	g_controlMapper.AddListener(this);
 
@@ -321,7 +321,7 @@ void EmuScreen::ProcessGameBoot(const Path &filename) {
 	coreParam.graphicsContext = PSP_CoreParameter().graphicsContext;
 	coreParam.enableSound = g_Config.bEnableSound;
 	coreParam.fileToStart = filename;
-	coreParam.mountIso.clear();
+	coreParam.mountIso = mountIso_;
 	coreParam.mountRoot = g_Config.mountRoot;
 	coreParam.startBreak = !g_Config.bAutoRun;
 	coreParam.headLess = false;
@@ -516,7 +516,7 @@ void EmuScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 	// DR_CANCEL/DR_BACK means clicked on "continue", DR_OK means clicked on "back to menu",
 	// DR_YES means a message sent to PauseMenu by System_PostUIMessage.
 	if ((result == DR_OK || quit_) && !bootPending_) {
-		screenManager()->switchScreen(new MainScreen());
+		leaveGame();
 		quit_ = false;
 	} else {
 		RecreateViews();
@@ -563,7 +563,7 @@ void EmuScreen::sendMessage(UIMessage message, const char *value) {
 			INFO_LOG(Log::Loader, "REQUEST_GAME_STOP: running exit callback before shutdown.");
 		} else {
 			// No callback (or already in flight, or core not running) - the destructor will take care of shutting down.
-			screenManager()->switchScreen(new MainScreen());
+			leaveGame();
 		}
 	} else if (message == UIMessage::REQUEST_GAME_RESET) {
 		if (bootPending_) {
@@ -619,6 +619,7 @@ void EmuScreen::sendMessage(UIMessage message, const char *value) {
 			bootPending_ = true;
 			bootIsReset_ = false;
 			gamePath_ = newGamePath;
+			mountIso_.clear();
 		}
 	} else if (message == UIMessage::CONFIG_LOADED) {
 		// In case we need to position touch controls differently.
@@ -782,7 +783,10 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 				// Reset whatever got tilted.
 				switch (g_Config.iTiltInputType) {
 				case TILT_ANALOG:
-					__CtrlSetAnalogXY(0, 0, 0);
+					__CtrlSetAnalogXY(CTRL_STICK_LEFT, 0, 0);
+					break;
+				case TILT_ANALOG_RIGHT:
+					__CtrlSetAnalogXY(CTRL_STICK_RIGHT, 0, 0);
 					break;
 				case TILT_ACTION_BUTTON:
 					__CtrlUpdateButtons(0, CTRL_CROSS | CTRL_CIRCLE | CTRL_SQUARE | CTRL_TRIANGLE);
@@ -1532,10 +1536,19 @@ bool EmuScreen::checkPowerDown() {
 	// Also for REQUEST_STOP.
 	if (coreState == CORE_POWERDOWN && PSP_GetBootState() == BootState::Complete && !bootPending_) {
 		INFO_LOG(Log::System, "SELF-POWERDOWN!");
-		screenManager()->switchScreen(new MainScreen());
+		leaveGame();
 		return true;
 	}
 	return false;
+}
+
+void EmuScreen::leaveGame() {
+	// Switch screens even when exiting, so the game gets shut down the usual way.
+	screenManager()->switchScreen(new MainScreen());
+	if (g_Config.bPauseMenuExitsEmulator) {
+		INFO_LOG(Log::System, "Game ended, exiting (--pause-menu-exit)");
+		System_ExitApp();
+	}
 }
 
 ScreenRenderRole EmuScreen::renderRole(bool isTop) const {
@@ -1621,6 +1634,12 @@ static bool GPUIsBuffered() {
 ScreenRenderFlags EmuScreen::PreRender(ScreenRenderMode mode) {
 	// If a boot is in progress, update it.
 	ProcessGameBoot(gamePath_);
+
+	if (PSP_IsInited() && !ShouldRunEmulation(mode) && !Achievements::IsBlockingExecution()) {
+		// Paused under a screen on top, like the pause menu. A state loaded from there should be in
+		// place before the game resumes, not a few frames into it, so savestate operations still run.
+		SaveState::Process(false);
+	}
 
 	using namespace Draw;
 	skipBufferEffects_ = g_Config.bSkipBufferEffects;
@@ -1766,6 +1785,25 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 		// We process savestates before running the frame.
 		SaveState::Process();
 
+		// A savestate that failed to load halfway leaves a reset as the only option. Do it before the frame
+		// draws anything: the GPU can't shut down while its pipelines are bound in the open backbuffer pass.
+		if (SaveState::PollRestartNeeded() && !bootPending_) {
+			Achievements::UnloadGame();
+			PSP_Shutdown(true);
+
+			// Restart the boot process
+			bootPending_ = true;
+			bootIsReset_ = true;
+			RecreateViews();
+			_dbg_assert_(coreState == CORE_POWERDOWN);
+			if (!PSP_InitStart(PSP_CoreParameter())) {
+				bootPending_ = false;
+				WARN_LOG(Log::Loader, "Error resetting");
+				screenManager()->switchScreen(new MainScreen());
+			}
+			return flags;
+		}
+
 		if (gpu) {
 			gpu->BeginHostFrame(displayLayoutConfig);
 		}
@@ -1777,6 +1815,10 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 		if (Achievements::HardcoreModeActive()) {
 			PSP_CoreParameter().freezeNext = false;
 			PSP_CoreParameter().frozen = false;
+		} else if (coreState == CORE_STEPPING_GE || coreState == CORE_RUNNING_GE) {
+			// A display list stopped in the GE debugger still belongs to the sceGe call that started
+			// it. Loading over that, or saving it mid-list, leaves them out of step. SaveState::Process()
+			// waits this out too.
 		} else if (PSP_CoreParameter().freezeNext) {
 			PSP_CoreParameter().frozen = true;
 			PSP_CoreParameter().freezeNext = false;
@@ -1837,22 +1879,6 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 			if (ScreenshotNotifyPostGameRender(draw) && skipBufferEffects) {
 				// Need to restore the backbuffer render pass, it probably got destroyed.
 				draw->BindFramebufferAsRenderTarget(nullptr, {RPAction::CLEAR, RPAction::CLEAR, RPAction::CLEAR}, "BackBuffer");
-			}
-		}
-
-		if (SaveState::PollRestartNeeded() && !bootPending_) {
-			Achievements::UnloadGame();
-			PSP_Shutdown(true);
-
-			// Restart the boot process
-			bootPending_ = true;
-			bootIsReset_ = true;
-			RecreateViews();
-			_dbg_assert_(coreState == CORE_POWERDOWN);
-			if (!PSP_InitStart(PSP_CoreParameter())) {
-				bootPending_ = false;
-				WARN_LOG(Log::Loader, "Error resetting");
-				screenManager()->switchScreen(new MainScreen());
 			}
 		}
 	}

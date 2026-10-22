@@ -439,17 +439,6 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	}
 
 	graphicsSettings->Add(new ItemHeader(gr->T("Frame Rate Control")));
-	static const char *frameSkip[] = {"Off", "1", "2", "3", "4", "5", "6", "7", "8"};
-	PopupMultiChoice *frameSkipping = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iFrameSkip, gr->T("Frame Skipping"), frameSkip, 0, ARRAY_SIZE(frameSkip), I18NCat::GRAPHICS, screenManager()));
-	frameSkipping->SetChoicesUntranslated(1, (int)ARRAY_SIZE(frameSkip) - 1);
-	frameSkipping->SetEnabledFunc([] {
-		return !g_Config.bAutoFrameSkip;
-	});
-
-	CheckBox *frameSkipAuto = graphicsSettings->Add(new CheckBox(&g_Config.bAutoFrameSkip, gr->T("Auto FrameSkip")));
-	frameSkipAuto->OnClick.Add([](UI::EventParams &e) {
-		g_Config.UpdateAfterSettingAutoFrameSkip();
-	});
 
 	PopupSliderChoice *altSpeed1 = graphicsSettings->Add(new PopupSliderChoice(&iAlternateSpeedPercent1_, 0, 1000, UI::NO_DEFAULT_INT, gr->T("Alternative Speed", "Alternative speed"), 5, screenManager(), gr->T("%, 0:unlimited")));
 	altSpeed1->SetFormat("%i%%");
@@ -467,6 +456,18 @@ void GameSettingsScreen::CreateGraphicsSettings(UI::ViewGroup *graphicsSettings)
 	}
 
 	graphicsSettings->Add(new ItemHeader(gr->T("Speed Hacks", "Speed Hacks (can cause rendering errors!)")));
+
+	static const char *frameSkip[] = {"Off", "1", "2", "3", "4"};
+	PopupMultiChoice *frameSkipping = graphicsSettings->Add(new PopupMultiChoice(&g_Config.iFrameSkip, gr->T("Frame Skipping"), frameSkip, 0, ARRAY_SIZE(frameSkip), I18NCat::GRAPHICS, screenManager()));
+	frameSkipping->SetChoicesUntranslated(1, (int)ARRAY_SIZE(frameSkip) - 1);
+	frameSkipping->SetEnabledFunc([] {
+		return !g_Config.bAutoFrameSkip;
+	});
+
+	CheckBox *frameSkipAuto = graphicsSettings->Add(new CheckBox(&g_Config.bAutoFrameSkip, gr->T("Auto FrameSkip")));
+	frameSkipAuto->OnClick.Add([](UI::EventParams &e) {
+		g_Config.UpdateAfterSettingAutoFrameSkip();
+	});
 
 	CheckBox *skipBufferEffects = graphicsSettings->Add(new CheckBox(&g_Config.bSkipBufferEffects, gr->T("Skip Buffer Effects")));
 	graphicsSettings->Add(new SettingHint(gr->T("RenderingMode NonBuffered Tip", "Faster, but graphics may be missing in some games"), skipBufferEffects));
@@ -1037,6 +1038,18 @@ void GameSettingsScreen::CreateNetworkingSettings(UI::ViewGroup *networkingSetti
 	networkingSettings->Add(new SettingHint(n->T("Try to pick a unique nickname for ad hoc play"), nullptr));
 
 	networkingSettings->Add(new CheckBox(&g_Config.bEnableAdhocServer, n->T("Enable built-in ad hoc server")))->OnClick.Add(requestLocalNetwork);
+
+	CheckBox *relay_mode_enet = networkingSettings->Add(new CheckBox(&g_Config.bAdhocUseUdp, n->T("Connect to adhoc server using UDP (ENet) instead of TCP")));
+	relay_mode_enet->SetEnabled(!PSP_IsInited());
+	relay_mode_enet->OnClick.Add([this](UI::EventParams &e) {
+		RecreateViews();
+	});
+	networkingSettings->Add(new SettingHint(n->T("Try switching between TCP/UDP if you suffer frequent adhoc server disconnects. Some network environments favor TCP and some UDP."), nullptr));
+
+	CheckBox *relay_mode_enet_pdp_reliable = networkingSettings->Add(new CheckBox(&g_Config.bAdhocRelayModeEnetPdpReliable, n->T("Reliable datagram packet delivery on packet relay in UDP mode")));
+	relay_mode_enet_pdp_reliable->SetEnabled(!PSP_IsInited() && g_Config.bAdhocUseUdp);
+	networkingSettings->Add(new SettingHint(n->T("When disabled, packet loss on datagram adhoc sockets will be exposed to game's netcode. Keep this enabled if you don't know what that means."), nullptr));
+
 
 	networkingSettings->Add(new ItemHeader(n->T("Infrastructure")));
 	if (g_Config.sInfrastructureUsername.empty()) {

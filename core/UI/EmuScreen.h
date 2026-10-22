@@ -40,7 +40,8 @@ struct ImGuiContext;
 
 class EmuScreen : public UIScreen, protected ControlListener {
 public:
-	EmuScreen(const Path &filename);
+	// mountIso, if set, is mounted on umd1: when filename is an ELF/PBP (like the VSH).
+	EmuScreen(const Path &filename, const Path &mountIso = Path());
 	~EmuScreen();
 
 	const char *tag() const override { return "Emu"; }
@@ -90,6 +91,7 @@ private:
 
 	void AutoLoadSaveState();
 	bool checkPowerDown();
+	void leaveGame();
 
 	void ProcessQueuedVKeys();
 	void ProcessVKey(VirtKey vkey, bool down);
@@ -100,6 +102,7 @@ private:
 	bool bootPending_ = true;
 	bool bootIsReset_ = false;
 	Path gamePath_;
+	Path mountIso_;
 
 	bool quit_ = false;
 	std::string errorMessage_;

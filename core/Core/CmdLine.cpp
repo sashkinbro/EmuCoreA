@@ -189,7 +189,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(fullscreen), CmdParamType::BoolInverse, "windowed", '\0', "Force windowed mode", CmdLineMode::Application},
 	{POFF(startScreen), CmdParamType::String, "start-screen", '\0', "Start on a specific screen (e.g. 'gamesettings', 'touchscreentest')", CmdLineMode::Application},
 	{POFF(escapeExit), CmdParamType::Bool, "escape-exit", '\0', "Escape key exits the application", CmdLineMode::Application},
-	{POFF(pauseMenuExit), CmdParamType::Bool, "pause-menu-exit", '\0', "Change \"Exit to menu\" in pause menu to \"Exit\"", CmdLineMode::Application},
+	{POFF(pauseMenuExit), CmdParamType::Bool, "pause-menu-exit", '\0', "Exit the application when the game ends, instead of returning to the menu", CmdLineMode::Application},
 	{POFF(appendConfig), CmdParamType::String, "appendconfig", '\0', "Merge config FILE into the current configuration"},
 	{POFF(root), CmdParamType::String, "root", 'r', "Mount directory as the root of host0:/."},
 	{POFF(memStick), CmdParamType::String, "memstick", '\0', "Memory stick root directory (contains PSP/GAME etc)"},
@@ -210,6 +210,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(dumpCompat), CmdParamType::Bool, "dump-compat", '\0', "Apply the game's compat.ini settings when replaying a GE frame dump (off by default)", CmdLineMode::Headless},
 	{POFF(hardwareTransform), CmdParamType::Bool, "hardware-transform", '\0', "Transform vertices on the GPU (default true); false transforms them on the CPU", CmdLineMode::Headless},
 	{POFF(vertexJit), CmdParamType::Bool, "vertex-jit", '\0', "Decode vertices with the JIT where the host can (default; =false for the C++ decoder)", CmdLineMode::Headless},
+	{POFF(emulateMediaEngine), CmdParamType::Bool, "me-core", '\0', "Emulate the Media Engine for homebrew that runs code on it (default false)"},
 	{POFF(shaderCache), CmdParamType::Bool, "shader-cache", '\0', "Load and save the per-game shader cache (default true); =false to time shader compiles like a first boot"},
 	{POFF(disableGPUFeatures), CmdParamType::String, "disable-gpu-features", '\0', "Act as if the GPU lacked these, to test the fallbacks: comma-separated clip-distance, cull-distance, depth-clamp, framebuffer-fetch, dual-source-blend", CmdLineMode::Headless},
 	{POFF(depthFilenameSave), CmdParamType::String, "depth-save", '\0', "Save the depth buffer to FILE along with the screenshot (u32 width, u32 height, u16 depths; float depths if FILE ends in .f32)", CmdLineMode::Headless},
@@ -217,13 +218,15 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(screenshotFilenameDiff), CmdParamType::String, "screenshot-diff", '\0', "Save a visual comparison image to FILE when comparing screenshots", CmdLineMode::Headless},
 	{POFF(screenshotSaveKeepAlpha), CmdParamType::Bool, "screenshot-keep-alpha", '\0', "Preserve the alpha channel when saving PNG screenshots (default: alpha is forced to 255)", CmdLineMode::Headless},
 	{POFF(dumpAudioFilename), CmdParamType::String, "dump-audio", '\0', "Record the mixed audio output to a WAV file", CmdLineMode::Headless},
+	{POFF(pressScript), CmdParamType::String, "press", '\0', "Hold buttons at emulated times: SECONDS:MASK[:DURATION],...", CmdLineMode::Headless},
+	{POFF(screenshotAt), CmdParamType::String, "screenshot-at", '\0', "Save screenshots at emulated times: SECONDS:FILE,...", CmdLineMode::Headless},
 	{POFF(timeoutWall), CmdParamType::Double, "timeout-wall", '\0', "Stop the run after this many real seconds", CmdLineMode::Headless},
 	{POFF(timeoutEmulated), CmdParamType::Double, "timeout-emulated", '\0', "Stop the run after this many emulated seconds", CmdLineMode::Headless},
 	// The old name for --timeout-wall, kept working because it's in a lot of scripts.
 	{POFF(timeoutWall), CmdParamType::Double, "timeout", '\0', "Alias for --timeout-wall", CmdLineMode::Headless},
 	{POFF(frameStats), CmdParamType::Bool, "frame-stats", '\0', "Print flips per emulated second at the end of the run, counted from --state's load", CmdLineMode::Headless},
 	{POFF(maxScreenshotError), CmdParamType::Double, "max-mse", '\0', "Maximum allowed MSE error for screenshot comparison", CmdLineMode::Headless},
-	{POFF(mountIso), CmdParamType::String, "mount", 'm', "Mount ISO/CSO on umd1:", CmdLineMode::Headless},
+	{POFF(mountIso), CmdParamType::String, "mount", 'm', "Mount ISO/CSO on umd1: when booting an ELF/PBP or --vsh"},
 	{POFF(unpackUpdater), CmdParamType::String, "unpack-updater", '\0', "Unpack the firmware in an updater EBOOT.PBP into DIR and exit", CmdLineMode::Headless},
 	{POFF(unpackUpdaterModel), CmdParamType::String, "unpack-updater-model", '\0', "PSP model to unpack for (01g..12g, default any)", CmdLineMode::Headless},
 	{POFF(unpackUpdaterFilter), CmdParamType::String, "unpack-updater-filter", '\0', "Only unpack entries under this path, e.g. flash0:/font/", CmdLineMode::Headless},
@@ -307,10 +310,6 @@ int CommandLineOptions::PrintUsage(const char *progname, const char *situationTe
 	PRINT_STDOUT("  --state=FILE          load state from FILE\n");
 
 	PRINT_STDOUT("  --cpu=CPU             use the specified CPU core (interpreter, ir, jit, jit-ir)\n");
-	PRINT_STDOUT("  -i                    use the interpreter\n");
-	PRINT_STDOUT("  -r                    use IR interpreter\n");
-	PRINT_STDOUT("  -j                    use JIT\n");
-	PRINT_STDOUT("  -J                    use IR JIT\n");
 
 	for (const auto &param : g_autoParams) {
 		if (param.mode != CmdLineMode::Both && param.mode != mode) {
@@ -399,19 +398,12 @@ CommandLineParseResult CommandLineOptions::Parse(int argc, const char *argv[], C
 			case 'h':
 				PrintUsage(argv[0], nullptr);
 				return CommandLineParseResult::Exit;
-			// Legacy cpucore options.
-			case 'j':
-				cpuCore = CPUCore::JIT;
-				break;
 			case 'i':
-				cpuCore = CPUCore::INTERPRETER;
-				break;
-			case 'r':
-				cpuCore = CPUCore::IR_INTERPRETER;
-				break;
+			case 'j':
 			case 'J':
-				cpuCore = CPUCore::JIT_IR;
-				break;
+				// Removed cpu core options. Fail rather than quietly run on the default core.
+				PRINT_STDERR("Error: %s was removed, use --cpu=interpreter, ir, jit or jit-ir.\n", argv[i]);
+				return CommandLineParseResult::Error;
 			}
 		}
 
@@ -449,12 +441,6 @@ CommandLineParseResult CommandLineOptions::Parse(int argc, const char *argv[], C
 			printf("%s\n", PPSSPP_GIT_VERSION);
 			return CommandLineParseResult::Exit;
 			// Commands with parameters. TODO: Should support both space and equals, like --config=foo.ini and --config foo.ini
-		} else if (equals(argv[i], "--jit-ir")) {
-			// Headless legacy
-			cpuCore = CPUCore::JIT_IR;
-		} else if (equals(argv[i], "--ir")) {
-			// Headless legacy
-			cpuCore = CPUCore::IR_INTERPRETER;
 		} else if (startsWith(argv[i], gpuBackendStr)) {
 			const std::string restOfOption = argv[i] + gpuBackendStr.size();
 			// Force software rendering off, as picking gles implies HW acceleration.
@@ -567,6 +553,10 @@ void CommandLineOptions::ApplyToConfig() const {
 	if (hardwareTransform.has_value()) {
 		g_Config.bHardwareTransform = hardwareTransform.value();
 		g_Config.DoNotSaveSetting(&g_Config.bHardwareTransform);
+	}
+	if (emulateMediaEngine.has_value()) {
+		g_Config.bEmulateMediaEngine = emulateMediaEngine.value();
+		g_Config.DoNotSaveSetting(&g_Config.bEmulateMediaEngine);
 	}
 	if (shaderCache.has_value()) {
 		g_Config.bShaderCache = shaderCache.value();

@@ -633,9 +633,13 @@ void __NetInit() {
 	minSocketTimeoutUS = g_Config.iMinTimeout * 1000UL;
 
 	// Init Default AdhocServer struct
+	g_adhocServerIPMutex.lock();
 	g_adhocServerIP.in.sin_family = AF_INET;
 	g_adhocServerIP.in.sin_port = htons(SERVER_PORT); //27312 // Maybe read this from config too
 	g_adhocServerIP.in.sin_addr.s_addr = INADDR_NONE;
+	g_adhocServerIPMutex.unlock();
+
+	clearLocalIpCache();
 
 	dummyPeekBuf64k = (char*)malloc(dummyPeekBuf64kSize);
 	InitLocalhostIP();
@@ -1002,7 +1006,7 @@ Parameters:
 	netintrprio	- Priority of the SceNetNetintr thread.
 	netintrstack	- Stack size of the SceNetNetintr thread (defaults to 4096 on non 1.5 firmware regardless of what value is passed).
 */
-static int sceNetInit(u32 poolSize, u32 calloutPri, u32 calloutStack, u32 netinitPri, u32 netinitStack)  {
+static int sceNetInit(MIPSState *mips, u32 poolSize, u32 calloutPri, u32 calloutStack, u32 netinitPri, u32 netinitStack)  {
 	// TODO: Create Network Threads using given priority & stack
 	// TODO: The correct behavior is actually to allocate more and leak the other threads/pool.
 	// But we reset here for historic reasons (GTA:VCS potentially triggers this.)
@@ -1040,7 +1044,7 @@ static int sceNetInit(u32 poolSize, u32 calloutPri, u32 calloutStack, u32 netini
 		return hleLogError(Log::sceNet, SCE_KERNEL_ERROR_NO_MEMORY, "unable to allocate pool");
 	}
 
-	INFO_LOG(Log::sceNet, "sceNetInit(poolsize=%d, calloutpri=%i, calloutstack=%d, netintrpri=%i, netintrstack=%d) at %08x", poolSize, calloutPri, calloutStack, netinitPri, netinitStack, currentMIPS->pc);
+	INFO_LOG(Log::sceNet, "sceNetInit(poolsize=%d, calloutpri=%i, calloutstack=%d, netintrpri=%i, netintrstack=%d) at %08x", poolSize, calloutPri, calloutStack, netinitPri, netinitStack, mips->pc);
 	
 	netMallocStat.pool = poolSize - 0x20; // On Vantage Master Portable this is slightly (32 bytes) smaller than the poolSize arg when tested with JPCSP + prx files
 	netMallocStat.maximum = 0x4050; // Dummy maximum foot print
@@ -1107,8 +1111,8 @@ static u32 sceWlanGetSwitchState() {
 }
 
 // Probably a void function, but often returns a useful value.
-static void sceNetEtherNtostr(u32 macPtr, u32 bufferPtr) {
-	DEBUG_LOG(Log::sceNet, "sceNetEtherNtostr(%08x, %08x) at %08x", macPtr, bufferPtr, currentMIPS->pc);
+static void sceNetEtherNtostr(MIPSState *mips, u32 macPtr, u32 bufferPtr) {
+	DEBUG_LOG(Log::sceNet, "sceNetEtherNtostr(%08x, %08x) at %08x", macPtr, bufferPtr, mips->pc);
 
 	if (Memory::IsValidAddress(bufferPtr) && Memory::IsValidAddress(macPtr)) {
 		char *buffer = (char *)Memory::GetPointerWriteUnchecked(bufferPtr);
@@ -1212,8 +1216,8 @@ void NetApctl_InitInfo(int confId) {
 	netApctlInfo.channel = g_Config.iWlanAdhocChannel;
 	if (netApctlInfo.channel == PSP_SYSTEMPARAM_ADHOC_CHANNEL_AUTOMATIC) netApctlInfo.channel = defaultWlanChannel;
 	// Get Local IP Address
-	sockaddr_in sockAddr;
-	getLocalIp(&sockAddr); // This will be valid IP, we probably not suppose to have a valid IP before connected to any AP, right?
+	sockaddr_in sockAddr{};
+	getHostLocalIp(&sockAddr); // This will be valid IP, we probably not suppose to have a valid IP before connected to any AP, right?
 	char ipstr[INET_ADDRSTRLEN] = "127.0.0.1"; // Patapon 3 seems to try to get current IP using ApctlGetInfo() right after ApctlInit(), what kind of IP should we use as default before ApctlConnect()? it shouldn't be a valid IP, right?
 	inet_ntop(AF_INET, &sockAddr.sin_addr, ipstr, sizeof(ipstr));
 	truncate_cpy(netApctlInfo.ip, sizeof(netApctlInfo.ip), ipstr);
@@ -1240,7 +1244,7 @@ void NetApctl_InitInfo(int confId) {
 	truncate_cpy(netApctlInfo.subNetMask, sizeof(netApctlInfo.subNetMask), "255.255.255.0");
 }
 
-static int sceNetApctlInit(int stackSize, int initPriority) {
+static int sceNetApctlInit(MIPSState *mips, int stackSize, int initPriority) {
 	if (g_netApctlInited) {
 		return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_ALREADY_INITIALIZED);
 	}
@@ -1275,7 +1279,7 @@ static int sceNetApctlInit(int stackSize, int initPriority) {
 
 	// Actually connect sceNetAdhocctl. TODO: Can we move this to sceNetApctlConnect? Would be good because a lot of games call Init but not Connect on startup.
 	if (g_infraDNSConfig.connectAdHocForGrouping) {
-		hleCall(sceNetAdhocctl, int, sceNetAdhocctlInit, stackSize, initPriority, apctlProdCodeAddr);
+		hleCall(sceNetAdhocctl, int, sceNetAdhocctlInit, mips, stackSize, initPriority, apctlProdCodeAddr);
 	}
 
 	g_netApctlInited = true;
@@ -1316,8 +1320,8 @@ static int sceNetApctlTerm() {
 	return hleLogInfo(Log::sceNet, retval);
 }
 
-static int sceNetApctlGetInfo(int code, u32 pInfoAddr) {
-	DEBUG_LOG(Log::sceNet, "sceNetApctlGetInfo(%i, %08x) at %08x", code, pInfoAddr, currentMIPS->pc);
+static int sceNetApctlGetInfo(MIPSState *mips, int code, u32 pInfoAddr) {
+	DEBUG_LOG(Log::sceNet, "sceNetApctlGetInfo(%i, %08x) at %08x", code, pInfoAddr, mips->pc);
 
 	switch (code) {
 	case PSP_NET_APCTL_INFO_PROFILE_NAME:
@@ -1509,7 +1513,7 @@ static int sceNetApctlDelHandler(u32 handlerID) {
 	return NetApctl_DelHandler(handlerID);
 }
 
-int sceNetApctlConnect(int confId) {
+int sceNetApctlConnect(MIPSState *mips, int confId) {
 	if (!g_Config.bEnableWlan)
 		return hleLogError(Log::sceNet, SCE_NET_APCTL_ERROR_WLAN_SWITCH_OFF);
 
@@ -1522,7 +1526,7 @@ int sceNetApctlConnect(int confId) {
 	// Note: We're borrowing AdhocServer for Grouping purpose, so we can simulate Broadcast over the internet just like Adhoc's pro-online implementation
 	int ret = 0;
 	if (g_infraDNSConfig.connectAdHocForGrouping) {
-		ret = hleCall(sceNetAdhocctl, int, sceNetAdhocctlConnect, "INFRA");
+		ret = hleCall(sceNetAdhocctl, int, sceNetAdhocctlConnect, mips, "INFRA");
 	}
 
 	if (netApctlState == PSP_NET_APCTL_STATE_DISCONNECTED) {
@@ -1722,8 +1726,8 @@ static int sceNetApctlGetBSSDescIDList2(u32 Arg1, u32 Arg2, u32 Arg3, u32 Arg4) 
 * Arg2 = input field type within the entry desc (ie. PSP_NET_APCTL_DESC_SSID_NAME ?)
 * Arg3 = output buffer for retrieved entry data? (max size = 32 bytes? ie. APCTL_SSID_MAXLEN ? or similar to SceNetApctlInfoInternal union ?)
 ***************/
-static int sceNetApctlGetBSSDescEntry2(int entryId, int infoId, u32 resultAddr) {
-	WARN_LOG(Log::sceNet, "UNTESTED %s(%i, %i, %08x) at %08x", __FUNCTION__, entryId, infoId, resultAddr, currentMIPS->pc);
+static int sceNetApctlGetBSSDescEntry2(MIPSState *mips, int entryId, int infoId, u32 resultAddr) {
+	WARN_LOG(Log::sceNet, "UNTESTED %s(%i, %i, %08x) at %08x", __FUNCTION__, entryId, infoId, resultAddr, mips->pc);
 	return NetApctl_GetBSSDescEntryUser(entryId, infoId, resultAddr);
 }
 
@@ -1757,10 +1761,10 @@ static int sceNetApctl_lib2_69745F0A(int handlerId) {
 	return hleLogError(Log::sceNet, 0, "unimplemented");
 }
 
-static int sceNetApctl_lib2_4C19731F(int code, u32 pInfoAddr) {
+static int sceNetApctl_lib2_4C19731F(MIPSState *mips, int code, u32 pInfoAddr) {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%i, %08x)", __FUNCTION__, code, pInfoAddr);
 	// Simple forward, don't need to use hleCall
-	return sceNetApctlGetInfo(code, pInfoAddr);
+	return sceNetApctlGetInfo(mips, code, pInfoAddr);
 }
 
 static int sceNetApctlScan() {
@@ -1777,10 +1781,10 @@ static int sceNetApctlGetBSSDescEntry(int entryId, int infoId, u32 resultAddr) {
 	return sceNetApctlGetBSSDescEntryUser(entryId, infoId, resultAddr);
 }
 
-static int sceNetApctl_lib2_C20A144C(int connIndex, u32 ps3MacAddressPtr) {
+static int sceNetApctl_lib2_C20A144C(MIPSState *mips, int connIndex, u32 ps3MacAddressPtr) {
 	ERROR_LOG(Log::sceNet, "UNIMPL %s(%i, %08x)", __FUNCTION__, connIndex, ps3MacAddressPtr);
 	// Simple forward, don't need to use hleCall
-	return sceNetApctlConnect(connIndex);
+	return sceNetApctlConnect(mips, connIndex);
 }
 
 static int sceNetUpnpInit(int unknown1,int unknown2) {
@@ -1855,6 +1859,16 @@ const HLEFunction sceNetApctl[] = {
 	{0X756E6F10, &WrapV_V<__NetApctlCallbacks>,                 "__NetApctlCallbacks",             'v', ""     },
 };
 
+// The same functions as pspnet_apctl.prx exports them to the VSH (its netconf plugin, which the
+// browser and the online manuals start with).
+const HLEFunction sceNetApctl_lib[] = {
+	{0X7CFAB990, &WrapI_UU<sceNetApctlAddInternalHandler>,      "sceNetApctlAddInternalHandler",   'i', "xx"   },
+	{0XE11BAFAB, &WrapI_U<sceNetApctlDelInternalHandler>,       "sceNetApctlDelInternalHandler",   'i', "x"    },
+	{0XB3CF6849, &WrapI_V<sceNetApctlScan>,                     "sceNetApctlScan",                 'i', ""     },
+	{0X0C7FFA5C, &WrapI_UU<sceNetApctlGetBSSDescIDList>,        "sceNetApctlGetBSSDescIDList",     'i', "xx"   },
+	{0X96BEB231, &WrapI_IIU<sceNetApctlGetBSSDescEntry>,        "sceNetApctlGetBSSDescEntry",      'i', "iix"  },
+};
+
 const HLEFunction sceWlanDrv[] = {
 	{0XD7763699, &WrapU_V<sceWlanGetSwitchState>,    "sceWlanGetSwitchState",           'x', ""     },
 	{0X0C622081, &WrapU_U<sceWlanGetEtherAddr>,      "sceWlanGetEtherAddr",             'x', "x"    },
@@ -1881,6 +1895,10 @@ void Register_sceNet() {
 
 void Register_sceNetApctl() {
 	RegisterHLEModule("sceNetApctl", ARRAY_SIZE(sceNetApctl), sceNetApctl);
+}
+
+void Register_sceNetApctl_lib() {
+	RegisterHLEModule("sceNetApctl_lib", ARRAY_SIZE(sceNetApctl_lib), sceNetApctl_lib);
 }
 
 void Register_sceWlanDrv() {

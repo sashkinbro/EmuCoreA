@@ -381,6 +381,13 @@ VirtualFramebuffer *FramebufferManagerCommon::DoSetRenderFrameBuffer(Framebuffer
 	// we need to infer the size of the current framebuffer somehow.
 	int drawing_width, drawing_height;
 	EstimateDrawingSize(params.fb_address, std::max(params.fb_stride, (u16)4), params.fb_format, params.viewportWidth, params.viewportHeight, params.regionWidth, params.regionHeight, params.scissorRight, params.scissorBottom, drawing_width, drawing_height);
+	// compat.ini's FixedFramebuffer: always this size, and read and written outside where it's drawn.
+	const CompatFramebuffer &fixed = PSP_CoreParameter().compat.flags().FixedFramebuffer;
+	const bool fixedFb = fixed.address != 0 && params.fb_address == fixed.address && params.fb_stride == fixed.width;
+	if (fixedFb) {
+		drawing_width = fixed.width;
+		drawing_height = fixed.height;
+	}
 
 	if (params.fb_address == params.z_address) {
 		// Most likely Z will not be used in this pass, as that would wreak havoc (undefined behavior for sure)
@@ -571,7 +578,8 @@ VirtualFramebuffer *FramebufferManagerCommon::DoSetRenderFrameBuffer(Framebuffer
 		currentRenderVfb_ = vfb;
 
 		// Assume that if we're clearing right when switching to a new framebuffer, we don't need to upload.
-		if (useBufferedRendering_ && params.isDrawing && vfb->fb_stride > 0) {
+		// A fixed framebuffer has data outside where this draw goes.
+		if (useBufferedRendering_ && (params.isDrawing || fixedFb) && vfb->fb_stride > 0) {
 			gpu->PerformWriteColorFromMemory(params.fb_address, colorByteSize);
 			// Alpha was already done by PerformWriteColorFromMemory.
 			PerformWriteStencilFromMemory(params.fb_address, colorByteSize, WriteStencil::STENCIL_IS_ZERO | WriteStencil::IGNORE_ALPHA);
@@ -1314,7 +1322,10 @@ void FramebufferManagerCommon::DrawPixels(VirtualFramebuffer *vfb, int dstX, int
 	if (useBufferedRendering_ && vfb) {
 		_dbg_assert_(vfb->fbo);
 		if (vfb->fbo) {
-			if (channel == RASTER_DEPTH || PSP_CoreParameter().compat.flags().NearestFilteringOnFramebufferCreate) {
+			// A fixed framebuffer holds data that's read back.
+			const u32 fixedAddress = PSP_CoreParameter().compat.flags().FixedFramebuffer.address;
+			const bool fixedFb = fixedAddress != 0 && vfb->fb_address == fixedAddress;
+			if (channel == RASTER_DEPTH || PSP_CoreParameter().compat.flags().NearestFilteringOnFramebufferCreate || fixedFb) {
 				flags = DRAWTEX_NEAREST;
 			} else {
 				flags = DRAWTEX_LINEAR;
@@ -1477,6 +1488,16 @@ void FramebufferManagerCommon::CopyFramebufferForColorTexture(VirtualFramebuffer
 		}
 		BlitFramebuffer(dst, x, y, src, x, y, w, h, 0, RASTER_COLOR, "CopyFBForColorTexture");
 	}
+}
+
+// Whether the 480x272 the display shows from addr is all in memory. The PSP takes strides that
+// aren't: negative ones (rows going up, which this doesn't handle), and larger than VRAM has room for.
+static bool IsValidDisplayRange(u32 addr, int stride, GEBufferFormat format) {
+	if (stride <= 0) {
+		return false;
+	}
+	const u32 bpp = BufferFormatBytesPerPixel(format);
+	return Memory::IsValidRange(addr, ((272 - 1) * (u32)stride + 480) * bpp);
 }
 
 Draw::Texture *FramebufferManagerCommon::MakePixelTexture(const u8 *srcPixels, GEBufferFormat srcPixelFormat, int srcStride, int width, int height) {
@@ -1755,8 +1776,10 @@ VirtualFramebuffer *FramebufferManagerCommon::FindDisplayVFB(u32 fbaddr, u32 *of
 		}
 	}
 
-	// Reject too-tiny framebuffers to display (Godfather, see issue #16915).
-	if (vfb && vfb->height < 64) {
+	// Reject too-tiny framebuffers to display (Godfather, see issue #16915). By the buffer's size: width
+	// and height only cover the latest draw, which can be small (the OoT PSP port ends its frames with
+	// a 51x51 one).
+	if (vfb && vfb->bufferHeight < 64) {
 		vfb = nullptr;
 	}
 	return vfb;
@@ -1787,7 +1810,7 @@ void FramebufferManagerCommon::PrepareCopyDisplayToOutput(const DisplayLayoutCon
 	VirtualFramebuffer *vfb = FindDisplayVFB(fbaddr, &offsetX, &offsetY);
 
 	if (!vfb) {
-		if (Memory::IsValidAddress(fbaddr)) {
+		if (IsValidDisplayRange(fbaddr, displayStride_, displayFormat_)) {
 			// The game is displaying something directly from RAM. In GTA, it's decoded video.
 			// If successful, this effectively calls presentation_->NotifyPresent();
 			if (!DrawFramebufferToOutput(config, Memory::GetPointerUnchecked(fbaddr), displayStride_, displayFormat_)) {
@@ -1970,6 +1993,11 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 		force1x = false;
 	}
 	if (PSP_CoreParameter().compat.flags().Force04154000Download && vfb->fb_address == 0x04154000) {
+		force1x = true;
+	}
+	// compat.ini's NativeResolutionFramebuffer, which holds data read back texel by texel.
+	const u32 nativeResAddress = PSP_CoreParameter().compat.flags().NativeResolutionFramebuffer;
+	if (nativeResAddress != 0 && vfb->fb_address == nativeResAddress) {
 		force1x = true;
 	}
 
@@ -3018,7 +3046,7 @@ void FramebufferManagerCommon::NotifyBlockTransferAfter(u32 dstBasePtr, int dstS
 	if (!useBufferedRendering_ && dstStride >= 480 && width >= 480 && height == 272) {
 		bool isPrevDisplayBuffer = PrevDisplayFramebufAddr() == dstBasePtr;
 		bool isDisplayBuffer = CurrentDisplayFramebufAddr() == dstBasePtr;
-		if (isPrevDisplayBuffer || isDisplayBuffer) {
+		if ((isPrevDisplayBuffer || isDisplayBuffer) && IsValidDisplayRange(dstBasePtr, dstStride, displayFormat_)) {
 			FlushBeforeCopy();
 			// HACK
 			DrawFramebufferToOutput(displayLayoutConfigCopy_, Memory::GetPointerUnchecked(dstBasePtr), dstStride, displayFormat_);
@@ -3122,6 +3150,9 @@ void FramebufferManagerCommon::NotifyConfigChanged() {
 void FramebufferManagerCommon::DestroyAllFBOs() {
 	DiscardFramebufferCopy();
 	currentRenderVfb_ = nullptr;
+	// Or a new framebuffer at the same address would skip its depth shift.
+	depthShiftedFor_ = 0;
+	lastRenderAddress_ = 0;
 	displayFramebuf_ = nullptr;
 	prevDisplayFramebuf_ = nullptr;
 	prevPrevDisplayFramebuf_ = nullptr;

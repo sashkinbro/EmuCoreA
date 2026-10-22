@@ -10,21 +10,31 @@
 #include "sock_impl.h"
 #include "log_impl.h"
 
-void to_native_sock_addr(native_sock_addr *dst, const struct aemu_post_office_sock_addr *src){
+typedef struct sockaddr_in native_sock_addr;
+
+#ifdef __PSP__
+typedef int native_sock6_addr;
+#else
+typedef struct sockaddr_in6 native_sock6_addr;
+#endif
+
+static void to_native_sock_addr(native_sock_addr *dst, const struct aemu_postoffice_sock_addr *src){
 	dst->sin_family = AF_INET;
 	dst->sin_addr.s_addr = src->addr;
 	dst->sin_port = src->port;
 }
 
-void to_native_sock6_addr(native_sock6_addr *dst, const struct aemu_post_office_sock6_addr *src){
-	// cannot do this on psp
-}
-
 int has_high_mem();
 
-int native_connect_tcp_sock(void *addr, int addrlen){
-	native_sock_addr *native_addr = addr;
-	int sock = sceNetInetSocket(native_addr->sin_family, SOCK_STREAM, 0);
+int native_connect_tcp_sock(const struct aemu_postoffice_sock_addr *addr4, const struct aemu_postoffice_sock_addr *bind_addr4, const struct aemu_postoffice_sock6_addr *addr6, const struct aemu_postoffice_sock6_addr *bind_addr6, bool (*abort_connection)(void *arg), void *abort_connection_arg){
+	// XXX note that binding is simply ignored on PSP
+	// XXX connection abort is currently ignored on PSP
+
+	int addrlen = sizeof(native_sock_addr);
+	native_sock_addr addr;
+	to_native_sock_addr(&addr, addr4);
+
+	int sock = sceNetInetSocket(addr.sin_family, SOCK_STREAM, 0);
 	if (sock == -1){
 		int err = sceNetInetGetErrno();
 		LOG("%s: failed creating socket, 0x%x\n", __func__, err);
@@ -46,7 +56,7 @@ int native_connect_tcp_sock(void *addr, int addrlen){
 	}
 
 	// Connect
-	int connect_status = sceNetInetConnect(sock, addr, addrlen);
+	int connect_status = sceNetInetConnect(sock, (struct sockaddr *)&addr, addrlen);
 	if (connect_status == -1){
 		int err = sceNetInetGetErrno();
 		LOG("%s: failed connecting, 0x%x\n", __func__, err);
@@ -57,31 +67,17 @@ int native_connect_tcp_sock(void *addr, int addrlen){
 	return sock;
 }
 
-int native_send_till_done(int fd, const char *buf, int len, bool non_block, bool *abort){
-	int write_offset = 0;
-	while(write_offset != len){
-		if (*abort){
-			return NATIVE_SOCK_ABORTED;
+int native_send(int fd, const char *buf, int len){
+	int write_status = sceNetInetSend(fd, buf, len, MSG_DONTWAIT);
+	if (write_status == -1){
+		int err = sceNetInetGetErrno();
+		if (err == EAGAIN || err == EWOULDBLOCK){
+			return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
 		}
-		int write_status = sceNetInetSend(fd, &buf[write_offset], len - write_offset, MSG_DONTWAIT);
-		if (write_status == -1){
-			int err = sceNetInetGetErrno();
-			if (err == EAGAIN || err == EWOULDBLOCK){
-				if (non_block && write_offset == 0){
-					sceKernelDelayThread(0);
-					return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
-				}
-				// Continue block sending, either in block mode or we already received part of the message
-				sceKernelDelayThread(0);
-				continue;
-			}
-			// Other errors
-			LOG("%s: failed sending, 0x%x\n", __func__, err);
-			return write_status;
-		}
-		write_offset += write_status;
+		LOG("%s: failed sending, 0x%x\n", __func__, err);
+		return write_status;
 	}
-	return write_offset;
+	return write_status;
 }
 
 int native_recv(int fd, char *buf, int len){
@@ -99,33 +95,6 @@ int native_recv(int fd, char *buf, int len){
 		return recv_status;
 	}
 	return recv_status;
-}
-
-int native_recv_till_done(int fd, char *buf, int len, bool non_block, bool *abort){
-	int read_offset = 0;
-	while(read_offset != len){
-		if (*abort){
-			return NATIVE_SOCK_ABORTED;
-		}
-		int recv_status = native_recv(fd, &buf[read_offset], len - read_offset);
-		if (recv_status == 0){
-			return recv_status;
-		}
-		if (recv_status < 0){
-			if (recv_status == AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK){
-				if (non_block && read_offset == 0){
-					sceKernelDelayThread(0);
-					return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
-				}
-				// Continue block receving, either in block mode or we already received part of the message
-				sceKernelDelayThread(0);
-				continue;
-			}
-			return recv_status;
-		}
-		read_offset += recv_status;
-	}
-	return read_offset;
 }
 
 int native_close_tcp_sock(int sock){

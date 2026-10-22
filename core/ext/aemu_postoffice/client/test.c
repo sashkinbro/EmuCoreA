@@ -5,18 +5,20 @@
 
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
 
 #include "postoffice_client.h"
+#include "../adhocctl/client/adhocctl.h"
 
 #define LOG(...) { \
 	fprintf(stderr, __VA_ARGS__); \
 }
 
+#define ADHOCCTL_PORT 27312
 #define SERVER_PORT 27313
 #define TARGET_INADDR (127 << 24 | 0 << 16 | 0 << 8 | 1)
 
-#ifndef htonl
-uint32_t htonl(uint32_t host){
+uint32_t _htonl(uint32_t host){
 	uint32_t ret;
 	uint8_t *_ret = (uint8_t *)&ret;
 	uint8_t *_host = (uint8_t *)&host;
@@ -28,10 +30,8 @@ uint32_t htonl(uint32_t host){
 
 	return ret;
 }
-#endif
 
-#ifndef htons
-uint16_t htons(uint16_t host){
+uint16_t _htons(uint16_t host){
 	uint16_t ret;
 	uint8_t *_ret = (uint8_t *)&ret;
 	uint8_t *_host = (uint8_t *)&host;
@@ -41,31 +41,79 @@ uint16_t htons(uint16_t host){
 
 	return ret;
 }
-#endif
 
-void test_pdp(){
-	struct aemu_post_office_sock_addr local_addr = {
-		.addr = htonl(TARGET_INADDR),
-		.port = htons(SERVER_PORT)
+void sleep_ms(int ms){
+	struct timespec sleep_time = {
+		.tv_sec = ms / 1000,
+		.tv_nsec = (ms % 1000) * 1000000,
 	};
-	static const char pdp_mac_a[6] = {0xaa, 0xbb, 0xcc, 0x11, 0x22, 0x33};
-	static const char pdp_mac_b[6] = {0xbb, 0xcc, 0xdd, 0x11, 0x22, 0x33};
-	static const char pdp_mac_c[6] = {0xcc, 0xdd, 0xee, 0x11, 0x22, 0x33};
+	nanosleep(&sleep_time, NULL);
+}
+
+void test_too_many_sessions(){
+	static const uint8_t mac[6] = {0xaa, 0xbb, 0xcc, 0x11, 0x22, 0x33};
+	struct aemu_postoffice_sock_addr local_addr = {
+		.addr = _htonl(TARGET_INADDR),
+		.port = _htons(SERVER_PORT)
+	};
+
+	void *pdp_handles[21];
+	for (int i = 0;i < 21;i++){
+		int state;
+		pdp_handles[i] = pdp_create_v4(&local_addr, (const char *)mac, i + 1, false, false, NULL, NULL, &state);
+		sleep_ms(60);
+	}
+
+	sleep_ms(100);
+
+	for (int i = 0;i < 20;i++){
+		if (pdp_is_dead(pdp_handles[i])){
+			LOG("%s: pdp handle %d died somehow\n", __func__, i);
+			exit(1);
+		}
+	}
+
+	if (!pdp_is_dead(pdp_handles[20])){
+		LOG("%s: pdp_handle %d is not dead somehow\n", __func__, 20);
+		exit(1);
+	}
+
+	for (int i = 0;i < 21;i++){
+		pdp_delete(pdp_handles[i]);
+	}
+}
+
+void test_pdp(bool enet, bool enet_reliable){
+	LOG("%s: testing with enet %s enet_reliable %s\n", __func__, enet ? "on" : "off", enet_reliable ? "on" : "off");
+
+	struct aemu_postoffice_sock_addr local_addr = {
+		.addr = _htonl(TARGET_INADDR),
+		.port = _htons(SERVER_PORT)
+	};
+	struct aemu_postoffice_sock6_addr local_addr6 = {0};
+	local_addr6.port = _htons(SERVER_PORT);
+	local_addr6.addr[10] = 0xff;
+	local_addr6.addr[11] = 0xff;
+	*(uint32_t *)&local_addr6.addr[12] = _htonl(TARGET_INADDR);
+
+	static const uint8_t pdp_mac_a[6] = {0xaa, 0xbb, 0xcc, 0x11, 0x22, 0x33};
+	static const uint8_t pdp_mac_b[6] = {0xbb, 0xcc, 0xdd, 0x11, 0x22, 0x33};
+	static const uint8_t pdp_mac_c[6] = {0xcc, 0xdd, 0xee, 0x11, 0x22, 0x33};
 	static const int port_a = 12345;
 	static const int port_b = 23456;
 	static const int port_c = 34567;
 
 	int state;
-	void *pdp_handle_a_replace = pdp_create_v4(&local_addr, pdp_mac_a, port_a, &state);
+	void *pdp_handle_a_replace = pdp_create_v6(&local_addr6, (const char *)pdp_mac_a, port_a, enet, enet_reliable, NULL, NULL, &state);
 	if (pdp_handle_a_replace == NULL){
 		LOG("%s: failed creating pdp socket\n", __func__);
 		exit(1);
 	}
 
 	// just so we know the last socket is the one gets replaced
-	sleep(1);
+	sleep_ms(1000);
 
-	void *pdp_handle_a = pdp_create_v4(&local_addr, pdp_mac_a, port_a, &state);
+	void *pdp_handle_a = pdp_create_v6(&local_addr6, (const char *)pdp_mac_a, port_a, enet, enet_reliable, NULL, NULL, &state);
 
 	if (pdp_handle_a == NULL){
 		LOG("%s: failed creating pdp socket\n", __func__);
@@ -82,7 +130,7 @@ void test_pdp(){
 		exit(1);
 	}
 
-	sleep(1);
+	sleep_ms(2000);
 	if (!pdp_is_dead(pdp_handle_a_replace)){
 		LOG("%s: pdp session is somehow not dead yet\n", __func__);
 		exit(1);
@@ -94,21 +142,21 @@ void test_pdp(){
 		exit(1);
 	}
 
-	sleep(1);
+	sleep_ms(100);
 	pdp_delete(pdp_handle_a_replace);
 
-	void *pdp_handle_b = pdp_create_v4(&local_addr, pdp_mac_b, port_b, &state);
+	void *pdp_handle_b = pdp_create_v4(&local_addr, (const char *)pdp_mac_b, port_b, enet, enet_reliable, NULL, NULL, &state);
 	if (pdp_handle_b == NULL){
 		LOG("%s: failed creating pdp socket\n", __func__);
 		exit(1);
 	}
-	void *pdp_handle_c = pdp_create_v4(&local_addr, pdp_mac_c, port_c, &state);
+	void *pdp_handle_c = pdp_create_v4(&local_addr, (const char *)pdp_mac_c, port_c, enet, enet_reliable, NULL, NULL, &state);
 	if (pdp_handle_c == NULL){
 		LOG("%s: failed creating pdp socket\n", __func__);
 		exit(1);
 	}
 
-	sleep(1);
+	sleep_ms(100);
 
 	for (int i = 0;i < 5;i++){
 		// make sure to test the ring buffers
@@ -118,20 +166,20 @@ void test_pdp(){
 		}
 		int send_status = 0;
 		for (int j = 0;j < 2;j++){
-			int send_status = pdp_send(pdp_handle_a, pdp_mac_b, port_b, test_data, sizeof(test_data), false);
+			int send_status = pdp_send(pdp_handle_a, (const char *)pdp_mac_b, port_b, test_data, sizeof(test_data), false);
 			if (send_status != 0){
 				LOG("%s: failed sending pdp packet from a to b, %d\n", __func__, send_status);
 				exit(1);
 			}
 		}
 
-		send_status = pdp_send(pdp_handle_b, pdp_mac_c, port_c, test_data, sizeof(test_data), false);
+		send_status = pdp_send(pdp_handle_b, (const char *)pdp_mac_c, port_c, test_data, sizeof(test_data), false);
 		if (send_status != 0){
 			LOG("%s: failed sending pdp packet from b to c, %d\n", __func__, send_status);
 			exit(1);
 		}
 
-		sleep(1);
+		sleep_ms(100);
 
 		int buffered_size = pdp_buffered_data_size(pdp_handle_b);
 		if (buffered_size != sizeof(test_data) * 2){
@@ -213,13 +261,13 @@ void test_pdp(){
 			exit(1);
 		}
 
-		sleep(1);
-
-		send_status = pdp_send(pdp_handle_a, pdp_mac_c, port_c, test_data, sizeof(test_data), false);
+		send_status = pdp_send(pdp_handle_a, (const char *)pdp_mac_c, port_c, test_data, sizeof(test_data), false);
 		if (send_status != 0){
 			LOG("%s: failed sending pdp packet from a to c, %d\n", __func__, send_status);
 			exit(1);
 		}
+
+		sleep_ms(100);
 
 		len = sizeof(recv_buf);
 		recv_status = pdp_recv(pdp_handle_c, incoming_mac, &incoming_port, recv_buf, &len, false);
@@ -259,13 +307,13 @@ void test_pdp(){
 			exit(1);
 		}
 
-		send_status = pdp_send(pdp_handle_c, pdp_mac_a, port_a, test_data, sizeof(test_data), true);
+		send_status = pdp_send(pdp_handle_c, (const char *)pdp_mac_a, port_a, test_data, sizeof(test_data), true);
 		if (send_status != 0){
 			LOG("%s: failed sending pdp packet from c to a, %d\n", __func__, send_status);
 			exit(1);
 		}
 
-		sleep(1);
+		sleep_ms(100);
 
 		len = sizeof(recv_buf);
 		recv_status = pdp_recv(pdp_handle_a, incoming_mac, &incoming_port, recv_buf, &len, true);
@@ -316,14 +364,20 @@ void *accept_ptp_connection(void *arg){
 	int port = 0;
 	char mac[6];
 
-	sleep(1);
-	int has_listen_request = ptp_listen_has_request(task->listen_handle);
+	int has_listen_request = 0;
+	for(int i = 0;i < 5;i++){
+		sleep_ms(100);
+		has_listen_request = ptp_listen_has_request(task->listen_handle);
+		if (has_listen_request == 1){
+			break;
+		}
+	}
 	if (has_listen_request == 0){
 		LOG("%s: listen request expceted but is not ready\n", __func__);
 		exit(1);
 	}
 
-	void *accept_handle = ptp_accept(task->listen_handle, mac, &port, false, &state);
+	void *accept_handle = ptp_accept(task->listen_handle, mac, &port, false, NULL, NULL, &state);
 
 	if (port != task->expected_port){
 		LOG("%s: got port %d, expected %d\n", __func__, port, task->expected_port);
@@ -338,18 +392,20 @@ void *accept_ptp_connection(void *arg){
 	return accept_handle;
 }
 
-void test_ptp(){
-	struct aemu_post_office_sock_addr local_addr = {
-		.addr = htonl(TARGET_INADDR),
-		.port = htons(SERVER_PORT)
+void test_ptp(bool enet){
+	LOG("%s: testing with enet %s\n", __func__, enet ? "on" : "off");
+
+	struct aemu_postoffice_sock_addr local_addr = {
+		.addr = _htonl(TARGET_INADDR),
+		.port = _htons(SERVER_PORT)
 	};
-	static const char ptp_mac_a[6] = {0xaa, 0xbb, 0xcc, 0x11, 0x22, 0x33};
-	static const char ptp_mac_b[6] = {0xbb, 0xcc, 0xdd, 0x11, 0x22, 0x33};
+	static const uint8_t ptp_mac_a[6] = {0xaa, 0xbb, 0xcc, 0x11, 0x22, 0x33};
+	static const uint8_t ptp_mac_b[6] = {0xbb, 0xcc, 0xdd, 0x11, 0x22, 0x33};
 	static const int port_a = 12345;
 	static const int port_b = 23456;
 
 	int state;
-	void *listen_handle_a = ptp_listen_v4(&local_addr, ptp_mac_a, port_a, &state);
+	void *listen_handle_a = ptp_listen_v4(&local_addr, (const char *)ptp_mac_a, port_a, enet, NULL, NULL, &state);
 	if (listen_handle_a == NULL){
 		LOG("%s: failed opening listen handle for a\n", __func__);
 		exit(1);
@@ -365,7 +421,7 @@ void test_ptp(){
 		exit(1);
 	}
 
-	void *listen_handle_b = ptp_listen_v4(&local_addr, ptp_mac_b, port_b, &state);
+	void *listen_handle_b = ptp_listen_v4(&local_addr, (const char *)ptp_mac_b, port_b, enet, NULL, NULL, &state);
 	if (listen_handle_b == NULL){
 		LOG("%s: failed opening listen handle for b\n", __func__);
 		exit(1);
@@ -373,7 +429,7 @@ void test_ptp(){
 
 	int port;
 	char mac[6];
-	ptp_accept(listen_handle_a, mac, &port, true, &state);
+	ptp_accept(listen_handle_a, mac, &port, true, NULL, NULL, &state);
 	if (state != AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK){
 		LOG("%s: unexpected state %d on non block accept\n", __func__, state);
 		exit(1);
@@ -385,7 +441,7 @@ void test_ptp(){
 		exit(1);
 	}
 
-	ptp_accept(listen_handle_b, mac, &port, true, &state);
+	ptp_accept(listen_handle_b, mac, &port, true, NULL, NULL, &state);
 	if (state != AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK){
 		LOG("%s: unexpected state %d on non block accept\n", __func__, state);
 		exit(1);
@@ -412,7 +468,7 @@ void test_ptp(){
 
 
 	pthread_create(&accept_thread_b, NULL, accept_ptp_connection, &task_b);
-	void *a_to_b = ptp_connect_v4(&local_addr, ptp_mac_a, port_a, ptp_mac_b, port_b, &state);
+	void *a_to_b = ptp_connect_v4(&local_addr, (const char *)ptp_mac_a, port_a, (const char *)ptp_mac_b, port_b, enet, NULL, NULL, &state);
 	if (state != AEMU_POSTOFFICE_CLIENT_OK){
 		LOG("%s: failed connecting from a to b\n", __func__);
 		exit(1);
@@ -424,7 +480,7 @@ void test_ptp(){
 	}
 
 	pthread_create(&accept_thread_a, NULL, accept_ptp_connection, &task_a);
-	void *b_to_a = ptp_connect_v4(&local_addr, ptp_mac_b, port_b, ptp_mac_a, port_a, &state);
+	void *b_to_a = ptp_connect_v4(&local_addr, (const char *)ptp_mac_b, port_b, (const char *)ptp_mac_a, port_a, enet, NULL, NULL, &state);
 	if (state != AEMU_POSTOFFICE_CLIENT_OK){
 		LOG("%s: failed connecting from b to a\n", __func__);
 		exit(1);
@@ -482,20 +538,23 @@ void test_ptp(){
 			exit(1);
 		}
 
+		sleep_ms(100);
+
 		recv_size = sizeof(recv_buf);
 		recv_status = ptp_recv(b_to_a, recv_buf, &recv_size, false);
 		if (recv_status != 0){
 			LOG("%s: failed receiving from a accept to b\n", __func__);
 			exit(1);
 		}
-		if (memcmp(recv_buf, test_data, sizeof(test_data)) != 0){
-			LOG("%s: receiving from a accept to b has bad data\n", __func__);
-			exit(1);
-		}
 		if (recv_size != sizeof(recv_buf)){
 			LOG("%s: receiving from a accept to b has bad data size\n", __func__);
 			exit(1);
 		}
+		if (memcmp(recv_buf, test_data, sizeof(test_data)) != 0){
+			LOG("%s: receiving from a accept to b has bad data\n", __func__);
+			exit(1);
+		}
+
 
 		send_status = ptp_send(b_to_a, test_data, sizeof(test_data), false);
 		if (send_status != 0){
@@ -503,8 +562,8 @@ void test_ptp(){
 			exit(1);
 		}
 
+		sleep_ms(100);
 
-		sleep(1);
 		int next_size = ptp_peek_next_size(accept_handle_a);
 		if (next_size != sizeof(recv_buf)){
 			LOG("%s: failed peeking ptp size, expected %lu, got %d\n", __func__, sizeof(recv_buf), next_size);
@@ -517,15 +576,14 @@ void test_ptp(){
 			LOG("%s: failed receiving from b connect to a\n", __func__);
 			exit(1);
 		}
-		if (memcmp(recv_buf, test_data, sizeof(test_data)) != 0){
-			LOG("%s: receiving from b connect to b has bad data\n", __func__);
-			exit(1);
-		}
 		if (recv_size != sizeof(recv_buf)){
 			LOG("%s: receiving from b connect to b has bad data size\n", __func__);
 			exit(1);
 		}
-
+		if (memcmp(recv_buf, test_data, sizeof(test_data)) != 0){
+			LOG("%s: receiving from b connect to b has bad data\n", __func__);
+			exit(1);
+		}
 
 		send_status = ptp_send(accept_handle_b, test_data, sizeof(test_data), false);
 		if (send_status != 0){
@@ -533,18 +591,20 @@ void test_ptp(){
 			exit(1);
 		}
 
+		sleep_ms(100);
+
 		recv_size = sizeof(recv_buf);
 		recv_status = ptp_recv(a_to_b, recv_buf, &recv_size, false);
 		if (recv_status != 0){
 			LOG("%s: failed receiving from a connect to b\n", __func__);
 			exit(1);
 		}
-		if (memcmp(recv_buf, test_data, sizeof(test_data)) != 0){
-			LOG("%s: receiving from a connect to b has bad data\n", __func__);
-			exit(1);
-		}
 		if (recv_size != sizeof(recv_buf)){
 			LOG("%s: receiving from a connect to b has bad data size\n", __func__);
+			exit(1);
+		}
+		if (memcmp(recv_buf, test_data, sizeof(test_data)) != 0){
+			LOG("%s: receiving from a connect to b has bad data\n", __func__);
 			exit(1);
 		}
 
@@ -554,11 +614,13 @@ void test_ptp(){
 			exit(1);
 		}
 
+		sleep_ms(100);
+
 		for (int j = 0;j < sizeof(recv_buf);j++){
 			recv_size = 1;
 			recv_status = ptp_recv(accept_handle_b, &recv_buf[j], &recv_size, false);
-			if (recv_status != 0 && recv_status != AEMU_POSTOFFICE_CLIENT_SESSION_DATA_TRUNC){
-				LOG("%s: failed receiving from a connect to b, byte %d\n", __func__, j);
+			if (recv_status < 0){
+				LOG("%s: failed receiving from a connect to b, byte %d, %d\n", __func__, j, recv_status);
 				exit(1);
 			}
 			if (recv_size != 1){
@@ -583,7 +645,8 @@ void test_ptp(){
 			exit(1);
 		}
 
-		sleep(1);
+		sleep_ms(100);
+
 		next_size = ptp_peek_next_size(accept_handle_b);
 		if (next_size != sizeof(test_data) * 2){
 			LOG("%s: failed peeking ptp size during stream test, expected %lu, got %d\n", __func__, sizeof(test_data) * 2, next_size);
@@ -613,7 +676,7 @@ void test_ptp(){
 	ptp_close(a_to_b);
 	ptp_close(b_to_a);
 
-	sleep(2);
+	sleep_ms(100);
 
 	ptp_close(accept_handle_a);
 	ptp_close(accept_handle_b);
@@ -622,11 +685,200 @@ void test_ptp(){
 	ptp_listen_close(listen_handle_b);
 };
 
-int main(){
-	aemu_post_office_init();
+void *adhocctl_handle_a = NULL;
+void *adhocctl_handle_b = NULL;
+void *adhocctl_handle_c = NULL;
+void adhocctl_init(){
+	struct aemu_postoffice_sock_addr local_addr = {
+		.addr = _htonl(TARGET_INADDR),
+		.port = _htons(SERVER_PORT)
+	};
 
-	test_pdp();
-	test_ptp();
+	// check if pdp and ptp_listen are blocked
+	static const uint8_t mac_a[6] = {0xaa, 0xbb, 0xcc, 0x11, 0x22, 0x33};
+	static const uint8_t mac_b[6] = {0xbb, 0xcc, 0xdd, 0x11, 0x22, 0x33};
+	static const uint8_t mac_c[6] = {0xcc, 0xdd, 0xee, 0x11, 0x22, 0x33};
+	uint16_t port_a = 12345;
+	uint16_t port_b = 23456;
+	uint16_t port_c = 34567;
+	int state = 0;
+	void *pdp_handle = pdp_create_v4(&local_addr, (const char *)mac_a, port_a, false, false, NULL, NULL, &state);
+	if (pdp_handle == NULL){
+		LOG("%s: failed creating test pdp handle\n", __func__);
+		exit(1);
+	}
+	void *ptp_listen_handle = ptp_listen_v4(&local_addr, (const char *)mac_a, port_a, false, NULL, NULL, &state);
+	if (ptp_listen_handle == NULL){
+		LOG("%s: failed creating test ptp listen handle\n", __func__);
+		exit(1);
+	}
+	sleep_ms(6000);
+	if (!pdp_is_dead(pdp_handle)){
+		LOG("%s: pdp session is somehow still alive\n", __func__);
+		exit(1);
+	}
+	if (!ptp_listen_is_dead(ptp_listen_handle)){
+		LOG("%s: ptp listen session is somehow still alive\n", __func__);
+		exit(1);
+	}
+	pdp_delete(pdp_handle);
+	ptp_listen_close(ptp_listen_handle);
+
+	// check of ptp_connect is blocked
+	struct adhocctl_addr_v4 adhocctl_addr = {
+		.ip = local_addr.addr,
+		.port = _htons(ADHOCCTL_PORT)
+	};
+
+	struct adhocctl_addr_v4 adhocctl_bind_addr = {
+		.ip = local_addr.addr,
+		.port = 0
+	};
+
+	char nickname_a[128] = "a";
+	char nickname_b[128] = "b";
+	char nickname_c[128] = "c";
+	// these are expected to be cross linked
+	char gamecode[] = "UCUS98632";
+	char gamecode_2[] = "UCES01245";
+	char group[8] = "abcd1234";
+	int channel = 1;
+
+	adhocctl_handle_a = create_adhocctl_v1_session_v4(&adhocctl_addr, &adhocctl_bind_addr, gamecode, nickname_a, (const char *)mac_a, false, NULL, NULL);
+	if (adhocctl_handle_a == NULL){
+		LOG("%s: failed creating adhocctl session for a\n", __func__);
+		exit(1);
+	}
+	adhocctl_connect(adhocctl_handle_a, group);
+	sleep_ms(100);
+
+	void *ptp_listen_handle_a = ptp_listen_v4(&local_addr, (const char *)mac_a, port_a, false, NULL, NULL, &state);
+	if (ptp_listen_handle_a == NULL){
+		LOG("%s: failed creating ptp listen handle for a\n", __func__);
+		exit(1);
+	}
+
+	adhocctl_handle_b = create_adhocctl_v1_session_v4(&adhocctl_addr, &adhocctl_bind_addr, gamecode_2, nickname_b, (const char *)mac_b, false, NULL, NULL);
+	if (adhocctl_handle_b == NULL){
+		LOG("%s: failed creating adhocctl session for b\n", __func__);
+		exit(1);
+	}
+
+	void *ptp_connect_b_to_a_handle = ptp_connect_v4(&local_addr, (const char *)mac_b, port_b, (const char *)mac_a, port_a, false, NULL, NULL, &state);
+	if (ptp_connect_b_to_a_handle != NULL){
+		LOG("%s: ptp connected unexpected, strict mode might not be enabled\n", __func__);
+		exit(1);
+	}
+
+	ptp_listen_close(ptp_listen_handle_a);
+
+	// create the rest of adhocctl sessions, the success case will be tested later
+	adhocctl_connect(adhocctl_handle_b, group);
+
+	adhocctl_handle_c = create_adhocctl_v1_session_v4(&adhocctl_addr, &adhocctl_bind_addr, gamecode_2, nickname_c, (const char *)mac_c, false, NULL, NULL);
+	if (adhocctl_handle_c == NULL){
+		LOG("%s: failed creating adhocctl session for c\n", __func__);
+		exit(1);
+	}
+	adhocctl_connect(adhocctl_handle_c, group);
+
+	sleep_ms(200);
+}
+
+void adhocctl_destroy(){
+	destroy_adhocctl_session(adhocctl_handle_a);
+	destroy_adhocctl_session(adhocctl_handle_b);
+	destroy_adhocctl_session(adhocctl_handle_c);
+}
+
+bool stop_enet_pumping = false;
+void *enet_pump_func(void *arg){
+	while(!stop_enet_pumping){
+		const static int target_frametime = 1000 / 60;
+		int final_frametime = 0;
+		struct timespec begin;
+		clock_gettime(CLOCK_MONOTONIC, &begin);
+		int pump_status = pump_enet_aemu_postoffice();
+		if (pump_status == 1){
+			final_frametime = target_frametime;
+		}
+		struct timespec end;
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		int timespent_ms = (end.tv_sec - begin.tv_sec) * 1000 + (end.tv_nsec - begin.tv_nsec) / 1000000;
+		if (final_frametime > timespent_ms){
+			sleep_ms(final_frametime - timespent_ms);
+		}
+	}
+}
+
+bool stop_adhocctl_pinging = false;
+void *adhocctl_ping_func(void *arg){
+	struct adhocctl_event event;
+	while(!stop_adhocctl_pinging){
+		#define drain_events(handle) { \
+			while (true){ \
+				adhocctl_get_event(handle, &event); \
+				if (event.type == ADHOCCTL_CLIENT_EVENT_WOULD_BLOCK){ \
+					break; \
+				} \
+				if (event.type == ADHOCCTL_CLIENT_EVENT_ERROR){ \
+					LOG("%s: adhocctl event fetch error\n", __func__); \
+					exit(1); \
+				} \
+			} \
+		}
+		drain_events(adhocctl_handle_a);
+		drain_events(adhocctl_handle_b);
+		drain_events(adhocctl_handle_c);
+		#undef drain_events
+		#define ping(handle) { \
+			int status = adhocctl_ping(handle); \
+			if (status != ADHOCCTL_CALL_SUCCESS){ \
+				LOG("%s: adhocctl ping error\n", __func__); \
+				exit(1); \
+			} \
+		}
+		ping(adhocctl_handle_a);
+		ping(adhocctl_handle_b);
+		ping(adhocctl_handle_c);
+		#undef ping
+
+		sleep_ms(500);
+	}
+}
+
+int main(){
+	init_aemu_postoffice(true);
+	pthread_t enet_pump_thread;
+	pthread_create(&enet_pump_thread, NULL, enet_pump_func, NULL);
+
+	adhocctl_init();
+
+	pthread_t adhocctl_ping_thread;
+	pthread_create(&adhocctl_ping_thread, NULL, adhocctl_ping_func, NULL);
+
+	#if 1
+	test_too_many_sessions();
+	test_pdp(false, false);
+	test_ptp(false);
+	#endif
+
+	#if 1
+	test_pdp(true, true);
+	test_pdp(true, false);
+	test_ptp(true);
+	#endif
+
 	LOG("%s: test ok\n", __func__);
+
+	stop_enet_pumping = true;
+	pthread_join(enet_pump_thread, NULL);
+
+	stop_adhocctl_pinging = true;
+	pthread_join(adhocctl_ping_thread, NULL);
+
+	adhocctl_destroy();
+	deinit_aemu_postoffice();
+
 	return 0;
 }

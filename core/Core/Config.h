@@ -233,6 +233,8 @@ public:
 
 	bool bFastMemory;
 	int iCpuCore;
+	// Run homebrew's Media Engine code (Core/MIPS/MeCore.h). Global for now, in developer settings.
+	bool bEmulateMediaEngine;
 	bool bCheckForNewVersion;
 	bool bWow64WarningDismissed;
 	bool bForceLagSync;
@@ -471,6 +473,7 @@ public:
 	// 0 - no tilt, 1 - analog stick, 2 - D-Pad, 3 - Action Buttons (Tri, Cross, Square, Circle)
 	int iTiltInputType;
 	bool bTiltInputEnabled;
+	bool bTiltUseGyro;
 
 	// The four tabs (including Remote last). Values from GameBrowserViewMode.
 	int iGameBrowserView1;
@@ -591,11 +594,15 @@ public:
 	int iButtonPreference;
 	int iLockParentalLevel;
 	bool bEncryptSave;
+	// /CONFIG/SYSTEM/umd_autoboot: whether the VSH starts an inserted disc by itself.
+	bool bVshUmdAutoboot;
 
 	// Networking
 	bool bEnableAdhocServer;
 	std::string sProAdhocServer;
 	int iAdhocServerRelayMode;
+	bool bAdhocUseUdp;
+	bool bAdhocRelayModeEnetPdpReliable;
 	bool bAdhocServerShowPlayerPorts;
 	std::string sInfrastructureDNSServer;
 	std::string sInfrastructureUsername;  // Username used for Infrastructure play. Different restrictions.

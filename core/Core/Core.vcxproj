@@ -474,8 +474,10 @@
     <ClCompile Include="HLE\AtracCtx.cpp" />
     <ClCompile Include="HLE\AtracCtx2.cpp" />
     <ClCompile Include="HLE\KUBridge.cpp" />
+    <ClCompile Include="HLE\sceSysreg.cpp" />
     <ClCompile Include="HLE\NetInetConstants.cpp" />
     <ClCompile Include="HLE\Plugins.cpp" />
+    <ClCompile Include="HLE\PopsBoot.cpp" />
     <ClCompile Include="HLE\sceAac.cpp" />
     <ClCompile Include="HLE\sceChkreg.cpp" />
     <ClCompile Include="HLE\sceKernelHeap.cpp" />
@@ -493,6 +495,9 @@
     <ClCompile Include="HW\Camera.cpp" />
     <ClCompile Include="HW\Display.cpp" />
     <ClCompile Include="HW\GpioMMIO.cpp" />
+    <ClCompile Include="HW\MMIO.cpp" />
+    <ClCompile Include="HW\MeMMIO.cpp" />
+    <ClCompile Include="HW\PopsMMIO.cpp" />
     <ClCompile Include="HW\GranularMixer.cpp" />
     <ClCompile Include="Instance.cpp" />
     <ClCompile Include="KeyMap.cpp" />
@@ -605,6 +610,7 @@
     <ClCompile Include="HLE\proAdhocServer.cpp" />
     <ClCompile Include="HLE\ReplaceTables.cpp" />
     <ClCompile Include="HLE\sceAdler.cpp" />
+    <ClCompile Include="HLE\sceAmctrl.cpp" />
     <ClCompile Include="HLE\sceAtrac.cpp" />
     <ClCompile Include="HLE\sceAudio.cpp" />
     <ClCompile Include="HLE\sceAudiocodec.cpp" />
@@ -717,6 +723,7 @@
     <ClCompile Include="MIPS\MIPSTables.cpp" />
     <ClCompile Include="MIPS\MIPSVFPUUtils.cpp" />
     <ClCompile Include="MIPS\MIPSTracer.cpp" />
+    <ClCompile Include="MIPS\MeCore.cpp" />
     <ClCompile Include="PSPLoaders.cpp" />
     <ClCompile Include="Reporting.cpp" />
     <ClCompile Include="RetroAchievements.cpp" />
@@ -845,8 +852,10 @@
     <ClInclude Include="HLE\HLEUtil.h" />
     <ClInclude Include="HLE\KernelThreadDebugInterface.h" />
     <ClInclude Include="HLE\KUBridge.h" />
+    <ClInclude Include="HLE\sceSysreg.h" />
     <ClInclude Include="HLE\NetInetConstants.h" />
     <ClInclude Include="HLE\Plugins.h" />
+    <ClInclude Include="HLE\PopsBoot.h" />
     <ClInclude Include="HLE\PSPThreadContext.h" />
     <ClInclude Include="HLE\sceAac.h" />
     <ClInclude Include="HLE\sceChkreg.h" />
@@ -864,6 +873,9 @@
     <ClInclude Include="HW\Camera.h" />
     <ClInclude Include="HW\Display.h" />
     <ClInclude Include="HW\GpioMMIO.h" />
+    <ClInclude Include="HW\MMIO.h" />
+    <ClInclude Include="HW\MeMMIO.h" />
+    <ClInclude Include="HW\PopsMMIO.h" />
     <ClInclude Include="HW\GranularMixer.h" />
     <ClInclude Include="Instance.h" />
     <ClInclude Include="KeyMap.h" />
@@ -939,6 +951,7 @@
     <ClInclude Include="HLE\proAdhocServer.h" />
     <ClInclude Include="HLE\ReplaceTables.h" />
     <ClInclude Include="HLE\sceAdler.h" />
+    <ClInclude Include="HLE\sceAmctrl.h" />
     <ClInclude Include="HLE\sceAtrac.h" />
     <ClInclude Include="HLE\sceAudio.h" />
     <ClInclude Include="HLE\sceAudiocodec.h" />
@@ -1041,6 +1054,7 @@
     <ClInclude Include="MIPS\MIPSTables.h" />
     <ClInclude Include="MIPS\MIPSVFPUUtils.h" />
     <ClInclude Include="MIPS\MIPSTracer.h" />
+    <ClInclude Include="MIPS\MeCore.h" />
     <ClInclude Include="Opcode.h" />
     <ClInclude Include="PSPLoaders.h" />
     <ClInclude Include="Reporting.h" />

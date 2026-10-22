@@ -179,10 +179,13 @@
     <ClInclude Include="..\..\Core\HLE\HLETables.h" />
     <ClInclude Include="..\..\Core\HLE\KernelWaitHelpers.h" />
     <ClInclude Include="..\..\Core\HLE\KUBridge.h" />
+    <ClInclude Include="..\..\Core\HLE\sceSysreg.h" />
+    <ClInclude Include="..\..\Core\HLE\PopsBoot.h" />
     <ClInclude Include="..\..\Core\HLE\proAdhoc.h" />
     <ClInclude Include="..\..\Core\HLE\proAdhocServer.h" />
     <ClInclude Include="..\..\Core\HLE\ReplaceTables.h" />
     <ClInclude Include="..\..\Core\HLE\sceAdler.h" />
+    <ClInclude Include="..\..\Core\HLE\sceAmctrl.h" />
     <ClInclude Include="..\..\Core\HLE\sceAtrac.h" />
     <ClInclude Include="..\..\Core\HLE\sceAudio.h" />
     <ClInclude Include="..\..\Core\HLE\sceAudiocodec.h" />
@@ -261,6 +264,9 @@
     <ClInclude Include="..\..\Core\HW\Camera.h" />
     <ClInclude Include="..\..\Core\HW\Display.h" />
     <ClInclude Include="..\..\Core\HW\GpioMMIO.h" />
+    <ClInclude Include="..\..\Core\HW\PopsMMIO.h" />
+    <ClInclude Include="..\..\Core\HW\MMIO.h" />
+    <ClInclude Include="..\..\Core\HW\MeMMIO.h" />
     <ClInclude Include="..\..\Core\HW\AvcDecoder.h" />
     <ClInclude Include="..\..\Core\HW\MediaEngine.h" />
     <ClInclude Include="..\..\Core\HW\MemoryStick.h" />
@@ -309,6 +315,7 @@
     <ClInclude Include="..\..\Core\MIPS\MIPSTables.h" />
     <ClInclude Include="..\..\Core\MIPS\MIPSVFPUUtils.h" />
     <ClInclude Include="..\..\Core\MIPS\MIPSTracer.h" />
+    <ClInclude Include="..\..\Core\MIPS\MeCore.h" />
     <ClInclude Include="..\..\Core\MIPS\x86\X64IRJit.h" />
     <ClInclude Include="..\..\Core\MIPS\x86\X64IRRegCache.h" />
     <ClInclude Include="..\..\Core\MIPS\x86\X64VfpuDot.h" />
@@ -475,10 +482,13 @@
     <ClCompile Include="..\..\Core\HLE\HLEHelperThread.cpp" />
     <ClCompile Include="..\..\Core\HLE\HLETables.cpp" />
     <ClCompile Include="..\..\Core\HLE\KUBridge.cpp" />
+    <ClCompile Include="..\..\Core\HLE\sceSysreg.cpp" />
+    <ClCompile Include="..\..\Core\HLE\PopsBoot.cpp" />
     <ClCompile Include="..\..\Core\HLE\proAdhoc.cpp" />
     <ClCompile Include="..\..\Core\HLE\proAdhocServer.cpp" />
     <ClCompile Include="..\..\Core\HLE\ReplaceTables.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceAdler.cpp" />
+    <ClCompile Include="..\..\Core\HLE\sceAmctrl.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceAtrac.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceAudio.cpp" />
     <ClCompile Include="..\..\Core\HLE\sceAudiocodec.cpp" />
@@ -556,6 +566,9 @@
     <ClCompile Include="..\..\Core\HW\Camera.cpp" />
     <ClCompile Include="..\..\Core\HW\Display.cpp" />
     <ClCompile Include="..\..\Core\HW\GpioMMIO.cpp" />
+    <ClCompile Include="..\..\Core\HW\PopsMMIO.cpp" />
+    <ClCompile Include="..\..\Core\HW\MMIO.cpp" />
+    <ClCompile Include="..\..\Core\HW\MeMMIO.cpp" />
     <ClCompile Include="..\..\Core\HW\AvcDecoder.cpp" />
     <ClCompile Include="..\..\Core\HW\MediaEngine.cpp" />
     <ClCompile Include="..\..\Core\HW\MemoryStick.cpp" />
@@ -620,6 +633,7 @@
     <ClCompile Include="..\..\Core\MIPS\MIPSTables.cpp" />
     <ClCompile Include="..\..\Core\MIPS\MIPSVFPUUtils.cpp" />
     <ClCompile Include="..\..\Core\MIPS\MIPSTracer.cpp" />
+    <ClCompile Include="..\..\Core\MIPS\MeCore.cpp" />
     <ClCompile Include="..\..\Core\MIPS\x86\X64IRAsm.cpp" />
     <ClCompile Include="..\..\Core\MIPS\x86\X64IRCompALU.cpp" />
     <ClCompile Include="..\..\Core\MIPS\x86\X64IRCompBranch.cpp" />

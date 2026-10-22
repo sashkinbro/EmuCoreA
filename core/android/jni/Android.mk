@@ -568,6 +568,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/MIPS/MIPSCodeUtils.cpp.arm \
   $(SRC)/Core/MIPS/MIPSDebugInterface.cpp \
   $(SRC)/Core/MIPS/MIPSTracer.cpp \
+  $(SRC)/Core/MIPS/MeCore.cpp \
   $(SRC)/Core/MIPS/IR/IRAnalysis.cpp \
   $(SRC)/Core/MIPS/IR/IRFrontend.cpp \
   $(SRC)/Core/MIPS/IR/IRJit.cpp \
@@ -655,6 +656,9 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/HW/Camera.cpp \
   $(SRC)/Core/HW/Display.cpp \
   $(SRC)/Core/HW/GpioMMIO.cpp \
+  $(SRC)/Core/HW/MMIO.cpp \
+  $(SRC)/Core/HW/MeMMIO.cpp \
+  $(SRC)/Core/HW/PopsMMIO.cpp \
   $(SRC)/Core/HW/MemoryStick.cpp \
   $(SRC)/Core/HW/MpegDemux.cpp.arm \
   $(SRC)/Core/HW/AvcDecoder.cpp.arm \
@@ -745,10 +749,13 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/HLE/ReplaceTables.cpp \
   $(SRC)/Core/HLE/HLE.cpp \
   $(SRC)/Core/HLE/KUBridge.cpp \
+  $(SRC)/Core/HLE/sceSysreg.cpp \
   $(SRC)/Core/HLE/NetInetConstants.cpp \
   $(SRC)/Core/HLE/SocketManager.cpp \
   $(SRC)/Core/HLE/Plugins.cpp \
+  $(SRC)/Core/HLE/PopsBoot.cpp \
   $(SRC)/Core/HLE/sceAdler.cpp \
+  $(SRC)/Core/HLE/sceAmctrl.cpp \
   $(SRC)/Core/HLE/sceAtrac.cpp \
   $(SRC)/Core/HLE/AtracCtx.cpp \
   $(SRC)/Core/HLE/AtracCtx2.cpp \
@@ -805,6 +812,10 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/ext/aemu_postoffice/client/mutex_impl_cpp.cpp \
   $(SRC)/ext/aemu_postoffice/client/delay_impl_cpp.cpp \
   $(SRC)/ext/aemu_postoffice/client/log_impl_ppsspp.cpp \
+  $(SRC)/ext/aemu_postoffice/client/list.c \
+  $(SRC)/ext/aemu_postoffice/client/enet.c \
+  $(SRC)/ext/aemu_postoffice/adhocctl/client/adhocctl.c \
+  $(SRC)/ext/aemu_postoffice/adhocctl/client/adhocctl_mem.c \
   $(SRC)/Core/HLE/sceNetAdhocMatching.cpp \
   $(SRC)/Core/HLE/sceNetApctl.cpp \
   $(SRC)/Core/HLE/sceNetInet.cpp \

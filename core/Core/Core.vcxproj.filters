@@ -129,6 +129,9 @@
     <ClCompile Include="MIPS\MIPSTracer.cpp">
       <Filter>MIPS</Filter>
     </ClCompile>
+    <ClCompile Include="MIPS\MeCore.cpp">
+      <Filter>MIPS</Filter>
+    </ClCompile>
     <ClCompile Include="MIPS\MIPSAnalyst.cpp">
       <Filter>MIPS</Filter>
     </ClCompile>
@@ -193,6 +196,9 @@
       <Filter>HLE\Kernel</Filter>
     </ClCompile>
     <ClCompile Include="HLE\sceAdler.cpp">
+      <Filter>HLE\Libraries</Filter>
+    </ClCompile>
+    <ClCompile Include="HLE\sceAmctrl.cpp">
       <Filter>HLE\Libraries</Filter>
     </ClCompile>
     <ClCompile Include="HLE\sceAtrac.cpp">
@@ -670,6 +676,9 @@
     <ClCompile Include="HLE\KUBridge.cpp">
       <Filter>HLE\Libraries</Filter>
     </ClCompile>
+    <ClCompile Include="HLE\sceSysreg.cpp">
+      <Filter>HLE\Libraries</Filter>
+    </ClCompile>
     <ClCompile Include="FileSystems\BlobFileSystem.cpp">
       <Filter>FileSystems</Filter>
     </ClCompile>
@@ -761,6 +770,9 @@
       <Filter>HW</Filter>
     </ClCompile>
     <ClCompile Include="HLE\Plugins.cpp">
+      <Filter>HLE</Filter>
+    </ClCompile>
+    <ClCompile Include="HLE\PopsBoot.cpp">
       <Filter>HLE</Filter>
     </ClCompile>
     <ClCompile Include="..\ext\snappy\snappy-stubs-internal.cpp">
@@ -1171,6 +1183,13 @@
     <ClCompile Include="HW\GpioMMIO.cpp">
       <Filter>HW</Filter>
     </ClCompile>
+    <ClCompile Include="HW\MMIO.cpp">
+      <Filter>HW</Filter>
+    </ClCompile>
+    <ClCompile Include="HW\MeMMIO.cpp">
+    <ClCompile Include="HW\PopsMMIO.cpp">
+      <Filter>HW</Filter>
+    </ClCompile>
     <ClCompile Include="HLE\sceNp2.cpp">
       <Filter>HLE\Libraries</Filter>
     </ClCompile>
@@ -1419,6 +1438,9 @@
     <ClInclude Include="MIPS\MIPSTracer.h">
       <Filter>MIPS</Filter>
     </ClInclude>
+    <ClInclude Include="MIPS\MeCore.h">
+      <Filter>MIPS</Filter>
+    </ClInclude>
     <ClInclude Include="MIPS\MIPSAnalyst.h">
       <Filter>MIPS</Filter>
     </ClInclude>
@@ -1486,6 +1508,9 @@
       <Filter>HLE\Kernel</Filter>
     </ClInclude>
     <ClInclude Include="HLE\sceAdler.h">
+      <Filter>HLE\Libraries</Filter>
+    </ClInclude>
+    <ClInclude Include="HLE\sceAmctrl.h">
       <Filter>HLE\Libraries</Filter>
     </ClInclude>
     <ClInclude Include="HLE\sceAtrac.h">
@@ -1998,6 +2023,9 @@
     <ClInclude Include="HLE\KUBridge.h">
       <Filter>HLE\Libraries</Filter>
     </ClInclude>
+    <ClInclude Include="HLE\sceSysreg.h">
+      <Filter>HLE\Libraries</Filter>
+    </ClInclude>
     <ClInclude Include="FileSystems\BlobFileSystem.h">
       <Filter>FileSystems</Filter>
     </ClInclude>
@@ -2094,6 +2122,9 @@
     <ClInclude Include="HLE\Plugins.h">
       <Filter>HLE</Filter>
     </ClInclude>
+    <ClInclude Include="HLE\PopsBoot.h">
+      <Filter>HLE</Filter>
+    </ClInclude>
     <ClInclude Include="..\ext\gason\gason.h">
       <Filter>Ext\gason</Filter>
     </ClInclude>
@@ -2170,6 +2201,13 @@
       <Filter>HW</Filter>
     </ClInclude>
     <ClInclude Include="HW\GpioMMIO.h">
+      <Filter>HW</Filter>
+    </ClInclude>
+    <ClInclude Include="HW\MMIO.h">
+      <Filter>HW</Filter>
+    </ClInclude>
+    <ClInclude Include="HW\MeMMIO.h">
+    <ClInclude Include="HW\PopsMMIO.h">
       <Filter>HW</Filter>
     </ClInclude>
     <ClInclude Include="HLE\sceNp2.h">

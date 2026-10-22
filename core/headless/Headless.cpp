@@ -61,6 +61,7 @@
 #include "Core/EmuThread.h"
 #include "Core/HLE/HLE.h"
 #include "Core/HLE/__sceAudio.h"
+#include "Core/HLE/sceCtrl.h"
 #include "Core/MIPS/MIPSTables.h"
 #include "Core/System.h"
 #include "Core/Util/PSARUnpack.h"
@@ -179,7 +180,6 @@ std::string NativeLoadSecret(std::string_view nameOfSecret) {
 
 int printUsage(const CommandLineOptions &options, const char *progname, const char *reason) {
 	options.PrintUsage(progname, reason);
-	fprintf(stderr, "  --ir                  use ir interpreter\n");
 	fprintf(stderr, "  --flash0=DIR          use DIR as flash0: instead of the bundled assets (e.g. a real dump)\n");
 	return 1;
 }
@@ -281,6 +281,35 @@ static void SaveDepthBuffer(const GPUDebugBuffer &depth, const Path &path) {
 	fclose(f);
 }
 
+// At the render scale. pixels is the 1x readback, used when there's no scaling.
+static bool SaveDisplayScreenshot(const Path &path, const std::vector<u32> &pixels) {
+	const static u32 FRAME_STRIDE = 512;
+	const static u32 FRAME_WIDTH = 480;
+	const static u32 FRAME_HEIGHT = 272;
+	const GPUDebugFramebufferType type = g_screenshotRenderTarget ? GPU_DBG_FRAMEBUF_RENDER : GPU_DBG_FRAMEBUF_DISPLAY;
+	GPUDebugBuffer full;
+	const int scale = gpu->GetCurrentFramebuffer(full, type, -1) ? std::max(full.GetScaleFactor(), 1) : 1;
+	const u32 w = FRAME_WIDTH * scale;
+	const u32 h = FRAME_HEIGHT * scale;
+	const std::vector<u32> fullPixels = scale > 1 ? TranslateDebugBufferToCompare(&full, w, h) : pixels;
+	ScreenshotComparer saver(fullPixels, scale > 1 ? w : FRAME_STRIDE, w, h);
+	bool saved = path.GetFileExtension() == ".png" ? saver.SaveActualPNG(path, g_screenshotSaveKeepAlpha) : saver.SaveActualBitmap(path);
+	if (saved) {
+		SendAndCollectOutput("Screenshot saved to: " + path.ToVisualString() + "\n");
+	}
+	return saved;
+}
+
+static void SaveScreenshotNow(const Path &path) {
+	if (!gpu) {
+		return;
+	}
+	const GPUDebugFramebufferType type = g_screenshotRenderTarget ? GPU_DBG_FRAMEBUF_RENDER : GPU_DBG_FRAMEBUF_DISPLAY;
+	GPUDebugBuffer buffer;
+	gpu->GetCurrentFramebuffer(buffer, type, 1);
+	SaveDisplayScreenshot(path, TranslateDebugBufferToCompare(&buffer, 512, 272));
+}
+
 void SendDebugScreenshot(const DebugScreenshotDesc &desc) {
 	const u8 *pixbuf = (const u8 *)desc.data;
 	u32 w = desc.stride;
@@ -300,16 +329,8 @@ void SendDebugScreenshot(const DebugScreenshotDesc &desc) {
 
 	// If a screenshot save path is set, save unconditionally, at the render scale.
 	if (!g_screenshotSavePath.empty()) {
-		GPUDebugBuffer full;
-		const int scale = gpu->GetCurrentFramebuffer(full, type, -1) ? std::max(full.GetScaleFactor(), 1) : 1;
-		const u32 w = FRAME_WIDTH * scale;
-		const u32 h = FRAME_HEIGHT * scale;
-		const std::vector<u32> fullPixels = scale > 1 ? TranslateDebugBufferToCompare(&full, w, h) : pixels;
-		ScreenshotComparer saver(fullPixels, scale > 1 ? w : FRAME_STRIDE, w, h);
-		bool saved = g_screenshotSavePath.GetFileExtension() == ".png" ? saver.SaveActualPNG(g_screenshotSavePath, g_screenshotSaveKeepAlpha) : saver.SaveActualBitmap(g_screenshotSavePath);
+		bool saved = SaveDisplayScreenshot(g_screenshotSavePath, pixels);
 		g_screenshotSaved = g_screenshotSaved || saved;
-		if (saved)
-			SendAndCollectOutput("Screenshot saved to: " + g_screenshotSavePath.ToVisualString() + "\n");
 	}
 
 	if (!g_depthSavePath.empty()) {
@@ -416,6 +437,14 @@ struct AutoTestOptions {
 	int requiredDisableHLE;
 	// The WebSocket debugger is on (--debugger or --debugger-run), so a stop is its to resume.
 	bool debugger;
+	// --press, in emulated seconds.
+	struct Press {
+		double start;
+		double duration;
+		u32 buttons;
+	};
+	std::vector<Press> presses;
+	std::vector<std::pair<double, Path>> screenshotsAt;
 };
 
 // Ends a frame of the draw context the way the app does, presenting it. Unpresented frames never
@@ -528,6 +557,7 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 	std::vector<int> flipsPerSecond;
 	double statsStart = -1.0;
 	int statsLastFlips = 0;
+	std::vector<std::pair<double, Path>> screenshotsAt = opt.screenshotsAt;
 	coreState = coreParameter.startBreak ? CORE_STEPPING_CPU : CORE_RUNNING_CPU;
 	while (coreState == CORE_RUNNING_CPU || coreState == CORE_STEPPING_CPU) {
 		// Savestate loads/saves are queued and applied here, same as EmuScreen::render does in the
@@ -547,7 +577,9 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 		const double emulatedNow = CoreTiming::GetGlobalTimeUs() / 1000000.0;
 		const double emulatedStep = emulatedNow - lastEmulatedTime;
 		lastEmulatedTime = emulatedNow;
-		if (emulatedStep > 0.0 && emulatedStep < emulatedStepLimit) {
+		// With --state, count from when the state lands. Until then the game boots, for however long
+		// reading and decompressing the state takes on the host, which made runs end on different frames.
+		if (emulatedStep > 0.0 && emulatedStep < emulatedStepLimit && !g_stateLoadPending) {
 			emulatedElapsed += emulatedStep;
 		}
 
@@ -559,7 +591,27 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 			});
 		}
 
-		int blockTicks = (int)usToCycles(1000000 / 10);
+		// Overlapping presses don't release each other's buttons.
+		if (!opt.presses.empty()) {
+			u32 held = 0, released = 0;
+			for (const auto &press : opt.presses) {
+				if (emulatedElapsed >= press.start && emulatedElapsed < press.start + press.duration) {
+					held |= press.buttons;
+				} else {
+					released |= press.buttons;
+				}
+			}
+			__CtrlUpdateButtons(held, released & ~held);
+		}
+		for (auto &shot : screenshotsAt) {
+			if (!shot.second.empty() && emulatedElapsed >= shot.first) {
+				SaveScreenshotNow(shot.second);
+				shot.second.clear();
+			}
+		}
+
+		// Finer steps when input is scripted, so short presses land.
+		int blockTicks = (int)usToCycles(1000000 / (opt.presses.empty() ? 10 : 60));
 		PSP_RunLoopFor(blockTicks);
 
 		// If we were rendering, this might be a nice time to do something about it.
@@ -840,11 +892,9 @@ int main(int argc, const char* argv[]) {
 		return 0;
 	}
 
-	// Needed before any sockets can be used (WSAStartup on Windows) - without this, the
-	// WebSocket debugger silently fails to listen. Only done when requested since headless
-	// otherwise has no use for networking.
-	if (cmdLineOptions.DebuggerPort().has_value())
-		net::Init();
+	// Needed before any sockets can be used (WSAStartup on Windows), by the WebSocket debugger
+	// and by tests and games that use sceNetInet.
+	net::Init();
 
 	AutoTestOptions testOptions{};
 	testOptions.compare = cmdLineOptions.compare.value_or(false);
@@ -854,6 +904,30 @@ int main(int argc, const char* argv[]) {
 	testOptions.verbose = cmdLineOptions.verbose.value_or(false);
 	testOptions.printEqualLines = cmdLineOptions.printEqualLines.value_or(false);
 	testOptions.frameStats = cmdLineOptions.frameStats.value_or(false);
+	// BUTTONS is a sceCtrl mask (hex with 0x), DURATION defaults to 0.15s.
+	if (cmdLineOptions.pressScript.has_value()) {
+		std::vector<std::string> items;
+		SplitString(cmdLineOptions.pressScript.value(), ',', items);
+		for (const std::string &item : items) {
+			std::vector<std::string> parts;
+			SplitString(item, ':', parts);
+			if (parts.size() < 2) {
+				continue;
+			}
+			AutoTestOptions::Press press{ atof(parts[0].c_str()), parts.size() > 2 ? atof(parts[2].c_str()) : 0.15, (u32)strtoul(parts[1].c_str(), nullptr, 0) };
+			testOptions.presses.push_back(press);
+		}
+	}
+	if (cmdLineOptions.screenshotAt.has_value()) {
+		std::vector<std::string> items;
+		SplitString(cmdLineOptions.screenshotAt.value(), ',', items);
+		for (const std::string &item : items) {
+			const size_t colon = item.find(':');
+			if (colon != std::string::npos) {
+				testOptions.screenshotsAt.emplace_back(atof(item.substr(0, colon).c_str()), Path(item.substr(colon + 1)));
+			}
+		}
+	}
 	testOptions.maxScreenshotError = cmdLineOptions.maxScreenshotError.value_or(0.0);
 	testOptions.requiredDisableHLE = cmdLineOptions.disableHLE.value_or(0);
 	testOptions.debugger = cmdLineOptions.DebuggerPort().has_value();
@@ -1062,7 +1136,10 @@ int main(int argc, const char* argv[]) {
 	// headless has to as well or it isn't testing what ships.
 	const bool bootIsDisc = testFilenames.size() == 1 &&
 		!BootTargetIsHomebrewExecutable(testFilenames[0]);
-	if (!bootIsDisc) {
+	// The VSH is firmware, and runs the firmware's modules like the app does (its video player needs the
+	// real sceMpeg from mpeg_vsh.prx).
+	const bool bootIsVSH = cmdLineOptions.bootVSH.value_or(false);
+	if (!bootIsDisc && !bootIsVSH) {
 		g_Config.iForceEnableHLE = 0xFFFFFFFF & ~g_Config.iDisableHLE;
 	}
 
@@ -1447,9 +1524,7 @@ int main(int argc, const char* argv[]) {
 
 	g_VFS.Clear();
 	g_logManager.Shutdown();
-	if (cmdLineOptions.DebuggerPort().has_value()) {
-		net::Shutdown();
-	}
+	net::Shutdown();
 	TimeShutdown();
 
 	g_threadManager.Teardown();

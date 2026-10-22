@@ -43,6 +43,28 @@ bool native_error_is_emfile(int error){
 	return error == EMFILE;
 }
 
+AddrFamily get_addr_family(std::string ip){
+	int family = AF_INET6;
+	struct in6_addr addr6;
+	struct in_addr addr4;
+	if (inet_pton(AF_INET6, ip.c_str(), (void *)&addr6) == 1){
+		return AddrFamily::IPV6;
+	}
+	if (inet_pton(AF_INET, ip.c_str(), (void *)&addr4) == 1){
+		return AddrFamily::IPV4;
+	}
+	return AddrFamily::UNKNOWN;
+}
+
+uint32_t native_parse_ipv4(std::string ip){
+	struct in_addr addr4;
+	int parse_result = inet_pton(AF_INET, ip.c_str(), (void *)&addr4);
+	if (parse_result != 1){
+		return 0xffffffff;
+	}
+	return addr4.s_addr;
+}
+
 int native_tcp_listen(std::string ip, uint16_t port){
 	struct sockaddr_in6 addr6 = {0};
 	struct sockaddr_in addr4 = {0};
@@ -79,13 +101,13 @@ int native_tcp_listen(std::string ip, uint16_t port){
 	int addr_len = family == AF_INET6 ? sizeof(addr6) : sizeof(addr4);
 	int bind_result = bind(sock_fd, (const sockaddr *)addr, addr_len);
 	if (bind_result == -1){
-		LOG("%s: bind failed, 0x%x\n", __func__, errno);
+		LOG_TS("%s: bind failed, 0x%x\n", __func__, errno);
 		return -1;
 	}
 
 	int listen_result = listen(sock_fd, 1000);
 	if (listen_result == -1){
-		LOG("%s: listen failed, 0x%x\n", __func__, errno);
+		LOG_TS("%s: listen failed, 0x%x\n", __func__, errno);
 		return -1;
 	}
 

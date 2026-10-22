@@ -1,0 +1,281 @@
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include <unistd.h>
+#include <time.h>
+#include <pthread.h>
+
+#include "adhocctl.h"
+
+#include "../../client/enet.h"
+
+void sleep_ms(int ms){
+	struct timespec sleep_time = {
+		.tv_sec = ms / 1000,
+		.tv_nsec = (ms % 1000) * 1000000,
+	};
+	nanosleep(&sleep_time, NULL);
+}
+
+void test_too_many_sessions(){
+	struct adhocctl_addr_v4 addr = {
+		.ip = 0x0100007f,
+		.port = 0xb06a,
+	};
+
+	char game_code[] = "ABCD12345";
+	char nickname[128] = {0};
+
+	void *handles[17] = {0};
+	for (int i = 0;i < 17;i++){
+		char mac[6] = {0};
+		*(int *)&mac[1] = i + 1;
+		snprintf(nickname, sizeof(nickname), "%d", i);
+		handles[i] = create_adhocctl_v1_session_v4(&addr, NULL, game_code, nickname, mac, false, NULL, NULL);
+		sleep_ms(120);
+	}
+
+	for (int i = 0;i < 16;i++){
+		struct adhocctl_event event = {0};
+		adhocctl_get_event(handles[i], &event);
+		if (event.type == ADHOCCTL_CLIENT_EVENT_ERROR){
+			printf("%s: session %d is somehow dead\n", __func__, i);
+			exit(1);
+		}
+	}
+
+	struct adhocctl_event event = {0};
+	adhocctl_get_event(handles[16], &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_ERROR){
+		printf("%s: session %d is somehow not dead\n", __func__, 16);
+		exit(1);
+	}
+
+	for (int i = 0;i < 17;i++){
+		destroy_adhocctl_session(handles[i]);
+	}
+
+	sleep_ms(120);
+}
+
+void test_protocol(bool enet){
+	printf("%s: testing with enet %s\n", __func__, enet ? "on" : "off");
+
+	struct adhocctl_addr_v4 addr = {
+		.ip = 0x0100007f,
+		.port = 0xb06a,
+	};
+
+	struct adhocctl_addr_v6 addr6 = {0};
+	addr6.ip[10] = 0xff;
+	addr6.ip[11] = 0xff;
+	*(uint32_t *)&addr6.ip[12] = addr.ip;
+	addr6.port = addr.port;
+
+	char game_code[] = "ABCD12345";
+
+	char nickname_a[128] = {0};
+	snprintf(nickname_a, sizeof(nickname_a), "nickname a");
+	char mac_a[6];
+	memset(mac_a, 0xa, 6);
+	void *session_a = create_adhocctl_v1_session_v4(&addr, NULL, game_code, nickname_a, mac_a, enet, NULL, NULL);
+	if (session_a == NULL){
+		printf("%s: cannot create session a\n", __func__);
+		exit(1);
+	}
+
+	char nickname_b[128] = {0};
+	snprintf(nickname_b, sizeof(nickname_b), "nickname b");
+	char mac_b[6];
+	memset(mac_b, 0xb, 6);
+	void *session_b = create_adhocctl_v1_session_v6(&addr6, NULL, game_code, nickname_b, mac_b, enet, NULL, NULL);
+	if (session_b == NULL){
+		printf("%s: cannot create session b\n", __func__);
+		exit(1);
+	}
+
+	sleep_ms(600);
+
+	char group_name[] = "abcd1234";
+	enum adhocctl_call_status call_status = adhocctl_connect(session_a, group_name);
+	if (call_status != ADHOCCTL_CALL_SUCCESS){
+		printf("%s: adhocctl_connect failed\n", __func__);
+		exit(1);
+	}
+
+	sleep_ms(100);
+
+	struct adhocctl_event event = {0};
+	adhocctl_get_event(session_a, &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_LEADER_MAC){
+		printf("%s: expected event ADHOCCTL_CLIENT_EVENT_LEADER_MAC, got %d\n", __func__, event.type);
+		exit(1);
+	}
+	if (memcmp(event.leader_mac.mac, mac_a, 6) != 0){
+		printf("%s: bad leader mac during a joining\n", __func__);
+		exit(1);
+	}
+
+	sleep_ms(100);
+
+	call_status = adhocctl_scan(session_b);
+	if (call_status != ADHOCCTL_CALL_SUCCESS){
+		printf("%s: adhocctl_scan failed\n", __func__);
+		exit(1);
+	}
+
+	sleep_ms(100);
+
+	adhocctl_get_event(session_b, &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_SCAN){
+		printf("%s: expected event ADHOCCTL_CLIENT_EVENT_SCAN, got %d\n", __func__, event.type);
+		exit(1);
+	}
+	if (memcmp(event.scan.leader_mac, mac_a, 6) != 0){
+		printf("%s: bad leader mac during scan\n", __func__);
+		exit(1);
+	}
+	if (memcmp(event.scan.group_name, group_name, 8) != 0){
+		printf("%s: bad group name during scan\n", __func__);
+		exit(1);
+	}
+
+	adhocctl_get_event(session_b, &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_SCAN_COMPLETE){
+		printf("%s: expected event ADHOCCTL_CLIENT_EVENT_SCAN_COMPLETE, got %d\n", __func__, event.type);
+		exit(1);
+	}
+
+	call_status = adhocctl_connect(session_b, group_name);
+	if (call_status != ADHOCCTL_CALL_SUCCESS){
+		printf("%s: adhocctl_connect failed\n", __func__);
+		exit(1);
+	}
+
+	sleep_ms(100);
+
+	adhocctl_get_event(session_a, &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_CONNECT){
+		printf("%s: expected event ADHOCCTL_CLIENT_EVENT_CONNECT, got %d\n", __func__, event.type);
+		exit(1);
+	}
+	if (memcmp(event.connect.nickname, nickname_b, 128) != 0){
+		printf("%s: bad nickname on b joining notification\n", __func__);
+		exit(1);
+	}
+	if (memcmp(event.connect.mac, mac_b, 6) != 0){
+		printf("%s: bad mac on b joining notification\n", __func__);
+		exit(1);
+	}
+
+	adhocctl_get_event(session_b, &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_CONNECT){
+		printf("%s: expected event ADHOCCTL_CLIENT_EVENT_CONNECT, got %d\n", __func__, event.type);
+		exit(1);
+	}
+	if (memcmp(event.connect.nickname, nickname_a, 128) != 0){
+		printf("%s: bad nickname on a already in group notification\n", __func__);
+		exit(1);
+	}
+	if (memcmp(event.connect.mac, mac_a, 6) != 0){
+		printf("%s: bad mac on a already in group notification\n", __func__);
+		exit(1);
+	}
+
+	adhocctl_get_event(session_b, &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_LEADER_MAC){
+		printf("%s: expected event ADHOCCTL_CLIENT_EVENT_LEADER_MAC, got %d\n", __func__, event.type);
+		exit(1);
+	}
+	if (memcmp(event.leader_mac.mac, mac_a, 6) != 0){
+		printf("%s: bad leader mac during b joining\n", __func__);
+		exit(1);
+	}
+
+	char message_a[] = "hello from a";
+	char message_b[] = "hello from b";
+
+	call_status = adhocctl_chat(session_a, message_a);
+	call_status = adhocctl_chat(session_b, message_b);
+
+	sleep_ms(100);
+
+	adhocctl_get_event(session_a, &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_CHAT){
+		printf("%s: expected event ADHOCCTL_CLIENT_EVENT_CHAT, got %d\n", __func__, event.type);
+		exit(1);
+	}
+	if (memcmp(event.chat.nickname, nickname_b, 128) != 0){
+		printf("%s: bad nickname on message from b\n", __func__);
+		exit(1);
+	}
+	if (strcmp(event.chat.message, message_b) != 0){
+		printf("%s: bad message from b\n", __func__);
+		exit(1);
+	}
+
+	adhocctl_get_event(session_b, &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_CHAT){
+		printf("%s: expected event ADHOCCTL_CLIENT_EVENT_CHAT, got %d\n", __func__, event.type);
+		exit(1);
+	}
+	if (memcmp(event.chat.nickname, nickname_a, 128) != 0){
+		printf("%s: bad nickname on message from a\n", __func__);
+		exit(1);
+	}
+	if (strcmp(event.chat.message, message_a) != 0){
+		printf("%s: bad message from a\n", __func__);
+		exit(1);
+	}
+
+	adhocctl_disconnect(session_a);
+
+	sleep_ms(100);
+	adhocctl_get_event(session_b, &event);
+	if (event.type != ADHOCCTL_CLIENT_EVENT_DISCONNECT){
+		printf("%s: expected event ADHOCCTL_CLIENT_EVENT_DISCONNECT, got %d\n", __func__, event.type);
+		exit(1);
+	}
+
+	destroy_adhocctl_session(session_a);
+	destroy_adhocctl_session(session_b);
+}
+
+bool stop_enet_pumping = false;
+void *enet_pump_func(void *arg){
+	while(!stop_enet_pumping){
+		const static int target_frametime = 1000 / 60;
+		int final_frametime = 0;
+		struct timespec begin;
+		clock_gettime(CLOCK_MONOTONIC, &begin);
+		int pump_status = pump_enet();
+		if (pump_status == 1){
+			final_frametime = target_frametime;
+		}
+		struct timespec end;
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		int timespent_ms = (end.tv_sec - begin.tv_sec) * 1000 + (end.tv_nsec - begin.tv_nsec) / 1000000;
+		if (final_frametime > timespent_ms){
+			sleep_ms(final_frametime - timespent_ms);
+		}
+	}
+}
+
+int main(){
+	init_enet();
+
+	pthread_t enet_pump_thread;
+	pthread_create(&enet_pump_thread, NULL, enet_pump_func, NULL);
+
+	test_too_many_sessions();
+	test_protocol(false);
+	test_protocol(true);
+
+	stop_enet_pumping = true;
+	pthread_join(enet_pump_thread, NULL);
+
+	deinit_enet();
+
+	printf("%s: test ok\n", __func__);
+}

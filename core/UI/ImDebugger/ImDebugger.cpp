@@ -555,7 +555,7 @@ void DrawThreadView(ImConfig &cfg, ImControl &control) {
 				}
 				if (ImGui::MenuItem("Kill thread")) {
 					// Dangerous!
-					sceKernelTerminateThread(thread.id);
+					sceKernelTerminateThread(&mipsr4k, thread.id);
 				}
 				if (thread.status == THREADSTATUS_WAIT) {
 					if (ImGui::MenuItem("Force run now")) {
@@ -922,8 +922,8 @@ static void DrawInternals(ImConfig &cfg) {
 	if (ImGui::CollapsingHeader("Memory")) {
 		ImGui::Text("Base pointer: %p", Memory::base);
 		ImGui::Text("Main memory size: %08x", Memory::g_MemorySize);
-		if (MIPSComp::jit) {
-			ImGui::Text("JIT code cache: %p", MIPSComp::jit->GetCodeBase());
+		if (mipsr4k.jit) {
+			ImGui::Text("JIT code cache: %p", mipsr4k.jit->GetCodeBase());
 			ImGui::Text("MIPS state: %p", currentMIPS);
 		}
 		if (ImGui::Button("Copy to clipboard")) {

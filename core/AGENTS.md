@@ -27,6 +27,7 @@ for it:
 | [docs/command-line.md](docs/command-line.md) | Adding a command-line option - the `g_autoParams` table, per-mode options, `ApplyToConfig()` |
 | [docs/patching-files.md](docs/patching-files.md) | Editing files from a script without wrecking the diff: line endings, and heredoc backslash escaping |
 | [docs/VSHBootInvestigation.md](docs/VSHBootInvestigation.md) | Booting the PSP's Visual Shell with `--vsh` against a real firmware dump |
+| [docs/POPS.md](docs/POPS.md) | PS1 EBOOTs: how the firmware's POPS manager and emulator are booted, and what's patched in them |
 | [docs/PsarFileFormat.md](docs/PsarFileFormat.md) | The PSAR archive inside a firmware updater - the format `Core/Util/PSARUnpack.cpp` walks |
 | [docs/pkg_notes.md](docs/pkg_notes.md) | The NPDRM `.pkg` format PSP game updates ship in, and how PPSSPP installs them |
 | [docs/cpu-equivalence.md](docs/cpu-equivalence.md) | Making the CPU cores agree bit for bit on every host: the `CPUEquivalence` fuzzer, what it found, and the differences still open (several waiting on a hardware test) |
@@ -287,7 +288,7 @@ state, input injection, log tailing), served at `/debugger` on the Remote ISO po
 Read [docs/WebSocketDebugger.md](docs/WebSocketDebugger.md) before changing the interface, and update
 it when you add a command.
 
-- Breakpoints are most reliable on the interpreter (`-i`): under the JITs, memory breakpoints only work
+- Breakpoints are most reliable on the interpreter (`--cpu=interpreter`): under the JITs, memory breakpoints only work
   for constant addresses and register breakpoints never trip at all.
 - **Debugger code that runs off the CPU thread has a lock order that has deadlocked for real** -
   `Core_RunOnCPUThread()` for mutations, `g_frameMutex` for hot reads. Read
