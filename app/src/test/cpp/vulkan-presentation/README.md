@@ -11,3 +11,5 @@ From the repository root on Windows:
 ```
 
 Pass `-Cxx` or `-LibrashaderIncludeDirectory` to override discovery. These tests verify host synchronization and API contracts; device rendering/color correctness remains covered by the separate GPU probes and Android instrumentation tests.
+
+`./app/src/test/cpp/vulkan-presentation/run-backbuffer-lifecycle.ps1` checks teardown before the first frame finishes, repeated recreation, pending uploads, and repeated teardown after a failed recreation. It compiles `DestroyBackbuffers()` extracted from the production source against a small resource-lifetime model. This checks the teardown ordering; it does not execute the full render manager or a real Vulkan driver.

@@ -524,6 +524,15 @@ void VulkanRenderManager::StopThreads() {
 
 void VulkanRenderManager::DestroyBackbuffers() {
 	StopThreads();
+
+	// A resize or presentation change can happen before Finish() records the
+	// initialization barriers. Submit them while the old depth image is still
+	// alive, preserving any texture uploads in the same init command buffer.
+	FrameData &frameData = frameData_[vulkan_->GetCurFrame()];
+	if (!postInitBarrier_.empty()) {
+		postInitBarrier_.Flush(frameData.GetInitCmd(vulkan_));
+	}
+	frameData.Submit(vulkan_, FrameSubmitType::Pending, frameDataShared_);
 	vulkan_->WaitUntilQueueIdle();
 
 	for (auto &image : frameDataShared_.swapchainImages_) {

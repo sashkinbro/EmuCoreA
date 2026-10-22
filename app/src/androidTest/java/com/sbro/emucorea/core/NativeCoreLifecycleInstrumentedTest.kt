@@ -601,6 +601,32 @@ class NativeCoreLifecycleInstrumentedTest {
         }
     }
 
+    @Test(timeout = 90_000)
+    fun vulkanShaderPresentationBeforeFirstFramePreservesInitialization() {
+        val displayGuest = File(root, "early-shader-display.elf").apply { writeBytes(displayPspElf()) }
+        val identity = writeIdentityPreset()
+        initialize(1)
+        onFrame {
+            // Installing the presentation replaces backbuffers before Finish()
+            // has flushed their initial depth image barrier.
+            NativePpsspp.nativeSetShaderPreset(identity.path)
+            assertTrue(NativePpsspp.nativeBoot(displayGuest.path))
+        }
+        awaitBoot()
+        onFrame {
+            repeat(60) { NativePpsspp.nativeRunFrame() }
+            assertFrameProgress()
+            assertTrue(NativePpsspp.nativeGetRuntimeError().isEmpty())
+        }
+        val bitmap = copySurface(checkNotNull(publishedSurface))
+        val center = bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)
+        bitmap.recycle()
+        assertTrue("Shader presentation must display the guest after early backbuffer replacement",
+            kotlin.math.abs(((center ushr 16) and 255) - 0xCC) <= 8 &&
+                kotlin.math.abs(((center ushr 8) and 255) - 0x66) <= 8 &&
+                kotlin.math.abs((center and 255) - 0x33) <= 8)
+    }
+
     @Test(timeout = 120_000)
     fun generatedDisplayGuestPresentsKnownPixelsAcrossEveryRenderer() {
         val displayGuest = File(root, "display.elf").apply { writeBytes(displayPspElf()) }
