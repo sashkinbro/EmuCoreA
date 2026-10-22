@@ -5,7 +5,14 @@ import com.sbro.emucorea.core.NativeApp
 import java.io.File
 
 /** Core-owned directories that are rebuilt on demand and never contain user data. */
-internal val REGENERABLE_CORE_DIRECTORIES = listOf("inis", "cache")
+internal val REGENERABLE_CORE_DIRECTORIES = listOf(
+    "inis",
+    "cache",
+    // PPSSPP's compiled shader and pipeline caches. A core update can change
+    // the GPU key layout, and a cache from the previous core then makes both
+    // hardware backends crash while the software renderer keeps working.
+    "PSP/SYSTEM/CACHE",
+)
 
 /** Deletes regenerable core files, keeping the directories and every user file untouched. */
 internal fun clearRegenerableCoreState(dataRoot: File): Int {
