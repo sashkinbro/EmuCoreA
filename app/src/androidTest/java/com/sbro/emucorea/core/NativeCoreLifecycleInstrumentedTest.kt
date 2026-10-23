@@ -654,6 +654,35 @@ class NativeCoreLifecycleInstrumentedTest {
         }
     }
 
+    @Test(timeout = 90_000)
+    fun vulkanBufferEffectsCanChangeDuringPlayWithoutSamplingTheRenderTarget() {
+        val geGuest = File(root, "live-buffer-mode.elf").apply { writeBytes(PspGeDisplayFixture.elf()) }
+        initialize(1)
+        onFrame {
+            NativePpsspp.nativeSetConfig("fps_limit", "60")
+            assertTrue(NativePpsspp.nativeBoot(geGuest.path))
+        }
+        awaitBoot()
+        onFrame { repeat(30) { NativePpsspp.nativeRunFrame() } }
+        // Do not resize or restart: changing this setting alone must update the
+        // core's framebuffer mode before the frontend copies the next frame.
+        for (direct in listOf(true, false, true, false)) {
+            onFrame {
+                NativePpsspp.nativeSetConfig("ppsspp_skip_buffer_effects", if (direct) "enabled" else "disabled")
+                repeat(30) { NativePpsspp.nativeRunFrame() }
+                assertFrameProgress()
+                assertTrue(NativePpsspp.nativeGetRuntimeError().isEmpty())
+            }
+            val bitmap = copyCompositedSurface()
+            val center = bitmap.getPixel(bitmap.width / 2, bitmap.height / 2)
+            bitmap.recycle()
+            assertTrue("Live framebuffer mode direct=$direct must preserve guest pixels: ${Integer.toHexString(center)}",
+                kotlin.math.abs(((center ushr 16) and 255) - 0xCC) <= 8 &&
+                    kotlin.math.abs(((center ushr 8) and 255) - 0x66) <= 8 &&
+                    kotlin.math.abs((center and 255) - 0x33) <= 8)
+        }
+    }
+
     @Test(timeout = 120_000)
     fun generatedGeGuestPresentsInBufferedAndDirectHardwareModes() {
         val geGuest = File(root, "ge-display.elf").apply { writeBytes(PspGeDisplayFixture.elf()) }
