@@ -1388,8 +1388,13 @@ bool BootGame(const std::string &gamePath, FileLoader *preOpenedLoader) {
 // context alive until it has finished before replacing an Android surface.
 void FinishBootBeforeSurfaceChange() {
     if (!g_pendingBoot) return;
-    while (PollBootState() == BootState::Booting) sleep_ms(5, "surface-wait-loader");
-    const BootState state = PSP_InitUpdate(&g_bootError);
+    // PSP_InitUpdate is what joins the loader thread and moves the boot state
+    // past Booting. Polling PollBootState here would wait forever.
+    BootState state = BootState::Booting;
+    while (state == BootState::Booting) {
+        state = PSP_InitUpdate(&g_bootError);
+        if (state == BootState::Booting) sleep_ms(5, "surface-wait-loader");
+    }
     g_pendingBoot = false;
     if (state == BootState::Complete) {
         g_booted = true;
@@ -1914,13 +1919,11 @@ void ShutdownCore() {
         // pre-opened FileLoader, then tear the half-booted core down. Without
         // this the SAF descriptor's duplicate would stay open for the life of
         // the process.
-        BootState state = PollBootState();
+        BootState state = BootState::Booting;
         while (state == BootState::Booting) {
-            sleep_ms(5, "emucorea-shutdown-wait");
-            state = PollBootState();
+            state = PSP_InitUpdate(&g_bootError);
+            if (state == BootState::Booting) sleep_ms(5, "emucorea-shutdown-wait");
         }
-        std::string bootError;
-        PSP_InitUpdate(&bootError);
         g_pendingBoot = false;
         if (state == BootState::Complete) {
             PSP_Shutdown(true);

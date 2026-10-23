@@ -95,6 +95,7 @@ object PpssppCoreOptionLocalization {
         val alias = aliases[option.key] ?: englishLabel
         val labelCatalog = if (normalizedLanguage == "hi") Catalog(emptyMap()) else catalog
         val label = (if (option.key == "ppsspp_memstick_size") memoryStickSizeLabels[normalizedLanguage] else null)
+            ?: customOptionLabels[option.key]?.get(normalizedLanguage)
             ?: specialLabels[normalizedLanguage]?.get(option.key)
             ?: labelCatalog.lookup(alias)?.takeUnless { it == option.label && !isTechnical(option.label) }
             ?: fallbackLabel(normalizedLanguage, labelCatalog, option)
@@ -176,6 +177,7 @@ object PpssppCoreOptionLocalization {
     private fun isTechnical(value: String): Boolean =
         value.matches(Regex("^(?:[A-Z0-9][A-Za-z0-9+._:/()%-]*|[0-9]+(?:\\.[0-9]+)?%?|[xX][0-9]+)$")) ||
             value.matches(Regex("^[0-9]+x \\([0-9]+x[0-9]+\\)$")) ||
+            value.matches(Regex("^[0-9]+\\s*dp$")) ||
             value.matches(Regex("^[a-f]$")) ||
             value.matches(Regex("^(?:[a-z0-9-]+\\.)+[a-z]{2,}$")) ||
             value == "localhost" || value == "xBRZ" ||
@@ -245,6 +247,28 @@ object PpssppCoreOptionLocalization {
         "ja" to "メモリースティックの容量", "ko" to "메모리 스틱 용량", "pl" to "Pojemność Memory Stick",
         "pt" to "Capacidade do Memory Stick", "ru" to "Ёмкость карты памяти", "tr" to "Memory Stick kapasitesi",
         "uk" to "Обсяг карти пам’яті", "zh" to "記憶棒容量",
+    )
+
+    private val customOptionLabels = mapOf(
+        "ppsspp_display_crop" to mapOf(
+            "ar" to "قص حافة الشاشة",
+            "cs" to "Oříznutí okraje obrazovky",
+            "de" to "Bildschirmrand zuschneiden",
+            "es" to "Recortar borde de pantalla",
+            "fa" to "برش لبه صفحه",
+            "fr" to "Rogner le bord de l'écran",
+            "hi" to "स्क्रीन किनारा क्रॉप",
+            "in" to "Pangkas tepi layar",
+            "it" to "Ritaglia bordo schermo",
+            "ja" to "画面端の切り抜き",
+            "ko" to "화면 가장자리 자르기",
+            "pl" to "Przytnij krawędź ekranu",
+            "pt" to "Cortar borda da tela",
+            "ru" to "Обрезка краёв экрана",
+            "tr" to "Ekran kenarını kırp",
+            "uk" to "Обрізання країв екрана",
+            "zh" to "裁剪屏幕边缘",
+        ),
     )
 
     private val specialLabels = mapOf(
