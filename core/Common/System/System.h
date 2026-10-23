@@ -137,6 +137,8 @@ enum SystemKeyboardLayout {
 
 enum SystemProperty {
 	SYSPROP_NAME,
+	SYSPROP_DEVICE_NAME,  // The name the user gave the device, like "Henrik's iPhone". Empty if we can't get it.
+	SYSPROP_DEVICE_MODEL,  // What kind of device it is, like "iPhone" or "Mac". Empty if unknown.
 	SYSPROP_SYSTEMBUILD,
 	SYSPROP_LANGREGION,
 	SYSPROP_CPUINFO,
@@ -278,6 +280,7 @@ enum class SystemNotification {
 	CONFIG_LOADED,
 	BEFORE_CONFIG_SAVE_ON_EXIT,
 	TOP_LEVEL_CHANGED,  // NativeIsAtTopLevel() changed. From the render thread.
+	EXTERNAL_DISPLAY_CHANGED,  // g_Config.iExternalDisplay changed.
 };
 
 // I guess it's not super great architecturally to centralize this, since it's not general - but same with a lot of

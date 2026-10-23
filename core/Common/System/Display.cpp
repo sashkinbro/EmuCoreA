@@ -130,7 +130,7 @@ void DisplayProperties::Print() {
 }
 
 // Y-flip compensation is done elsewhere now.
-Lin::Matrix4x4 ComputeOrthoMatrix(float xres, float yres, CoordConvention coordConvention) {
+Lin::Matrix4x4 ComputeOrthoMatrix(float xres, float yres, CoordConvention coordConvention, bool rotateToDisplay) {
 	using namespace Lin;
 	Matrix4x4 ortho;
 	switch (coordConvention) {
@@ -144,7 +144,7 @@ Lin::Matrix4x4 ComputeOrthoMatrix(float xres, float yres, CoordConvention coordC
 		break;
 	}
 	// Compensate for rotated display if needed.
-	if (g_display.rotation != DisplayRotation::ROTATE_0) {
+	if (rotateToDisplay && g_display.rotation != DisplayRotation::ROTATE_0) {
 		ortho = ortho * g_display.rot_matrix;
 	}
 	return ortho;

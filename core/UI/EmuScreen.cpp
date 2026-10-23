@@ -697,14 +697,14 @@ void EmuScreen::sendMessage(UIMessage message, const char *value) {
 
 // TODO: We should replace the "fpsLimit" system with a speed factor.
 static void ShowFpsLimitNotice() {
-	int fpsLimit = 60;
+	int percent = 100;
 
 	switch (PSP_CoreParameter().fpsLimit) {
 	case FPSLimit::CUSTOM1:
-		fpsLimit = g_Config.iFpsLimit1;
+		percent = g_Config.iAltSpeedPercent1;
 		break;
 	case FPSLimit::CUSTOM2:
-		fpsLimit = g_Config.iFpsLimit2;
+		percent = g_Config.iAltSpeedPercent2;
 		break;
 	default:
 		break;
@@ -713,7 +713,7 @@ static void ShowFpsLimitNotice() {
 	// Now display it.
 
 	char temp[51];
-	snprintf(temp, sizeof(temp), "%d%%", (int)((float)fpsLimit / 60.0f * 100.0f));
+	snprintf(temp, sizeof(temp), "%d%%", percent);
 	g_OSD.Show(OSDType::STATUS_ICON, temp, "", "I_FAST_FORWARD", 1.5f, "altspeed");
 	g_OSD.SetFlags("altspeed", OSDMessageFlags::Transparent);
 }
@@ -861,27 +861,28 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 		}
 		break;
 
+	// These change the layout the game is shown with, which on a TV isn't the device orientation's.
 	case VIRTKEY_SCREEN_ROTATION_VERTICAL:
 		if (down) {
-			DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(GetDeviceOrientation());
+			DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(GameLayoutOrientation());
 			config.iInternalScreenRotation = ROTATION_LOCKED_VERTICAL;
 		}
 		break;
 	case VIRTKEY_SCREEN_ROTATION_VERTICAL180:
 		if (down) {
-			DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(GetDeviceOrientation());
+			DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(GameLayoutOrientation());
 			config.iInternalScreenRotation = ROTATION_LOCKED_VERTICAL180;
 		}
 		break;
 	case VIRTKEY_SCREEN_ROTATION_HORIZONTAL:
 		if (down) {
-			DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(GetDeviceOrientation());
+			DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(GameLayoutOrientation());
 			config.iInternalScreenRotation = ROTATION_LOCKED_HORIZONTAL;
 		}
 		break;
 	case VIRTKEY_SCREEN_ROTATION_HORIZONTAL180:
 		if (down) {
-			DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(GetDeviceOrientation());
+			DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(GameLayoutOrientation());
 			config.iInternalScreenRotation = ROTATION_LOCKED_HORIZONTAL180;
 		}
 		break;
@@ -994,9 +995,9 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 		if (down) {
 			if (!NetworkWarnUserIfOnlineAndCantSpeed()) {
 				// Cycle through enabled speeds.
-				if (PSP_CoreParameter().fpsLimit == FPSLimit::NORMAL && g_Config.iFpsLimit1 >= 0) {
+				if (PSP_CoreParameter().fpsLimit == FPSLimit::NORMAL && g_Config.iAltSpeedPercent1 >= 0) {
 					PSP_CoreParameter().fpsLimit = FPSLimit::CUSTOM1;
-				} else if (PSP_CoreParameter().fpsLimit == FPSLimit::CUSTOM1 && g_Config.iFpsLimit2 >= 0) {
+				} else if (PSP_CoreParameter().fpsLimit == FPSLimit::CUSTOM1 && g_Config.iAltSpeedPercent2 >= 0) {
 					PSP_CoreParameter().fpsLimit = FPSLimit::CUSTOM2;
 				} else if (PSP_CoreParameter().fpsLimit == FPSLimit::CUSTOM1 || PSP_CoreParameter().fpsLimit == FPSLimit::CUSTOM2) {
 					PSP_CoreParameter().fpsLimit = FPSLimit::NORMAL;
@@ -1145,7 +1146,7 @@ void EmuScreen::OnVKeyAnalog(VirtKey virtualKeyCode, float value) {
 	if (limitMode != FPSLimit::NORMAL && limitMode != FPSLimit::ANALOG)
 		return;
 	// Don't even try if the limit is invalid.
-	if (g_Config.iAnalogFpsLimit <= 0)
+	if (g_Config.iAnalogAltSpeedPercent <= 0)
 		return;
 
 	// Apply a small deadzone (against the resting position.)
@@ -1153,7 +1154,7 @@ void EmuScreen::OnVKeyAnalog(VirtKey virtualKeyCode, float value) {
 
 	// If target is above 60, value is how much to speed up over 60.  Otherwise, it's how much slower.
 	// So normalize the target.
-	int target = g_Config.iAnalogFpsLimit - 60;
+	int target = AltSpeedPercentToFps(g_Config.iAnalogAltSpeedPercent) - 60;
 	PSP_CoreParameter().analogFpsLimit = 60 + (int)(target * value);
 
 	// If we've reset back to normal, turn it off.
@@ -1577,6 +1578,16 @@ ScreenRenderRole EmuScreen::renderRole(bool isTop) const {
 	return role;
 }
 
+// In place of the game, while it's on another output.
+void EmuScreen::drawGameOnOutputMessage() {
+	UIContext &dc = *screenManager()->getUIContext();
+	auto di = GetI18NCategory(I18NCat::DIALOG);
+	const Bounds &bounds = dc.GetBounds();
+	dc.Begin();
+	dc.DrawText(di->T("Playing on TV"), bounds.centerX(), bounds.centerY(), 0xFF505050, ALIGN_CENTER);
+	dc.Flush();
+}
+
 void EmuScreen::darken() {
 	if (screenManager()->topScreen()->wantBrightBackground()) {
 		return;
@@ -1643,14 +1654,14 @@ ScreenRenderFlags EmuScreen::PreRender(ScreenRenderMode mode) {
 
 	using namespace Draw;
 	skipBufferEffects_ = g_Config.bSkipBufferEffects;
+	UpdateGameOutput();
 	if (!skipBufferEffects_ && PSP_IsInited()) {
 		if (ShouldRunEmulation(mode)) {
 			// We need to run emulation here, and perform all the normal render passes.
 			return RunEmulation(false);
 		} else if (gpu && GPUIsBuffered()) {
 			// Need to check for gpu here, we might be in reset.
-			const DeviceOrientation orientation = GetDeviceOrientation();
-			const DisplayLayoutConfig &displayLayoutConfig = g_Config.GetDisplayLayoutConfig(orientation);
+			const DisplayLayoutConfig &displayLayoutConfig = GameLayoutConfig();
 			// We run just the post shaders.
 			gpu->PrepareCopyDisplayToOutput(displayLayoutConfig);
 			// Screens on top like reporting might want to take screenshots of existing framebuffers.
@@ -1658,6 +1669,56 @@ ScreenRenderFlags EmuScreen::PreRender(ScreenRenderMode mode) {
 		}
 	}
 	return ScreenRenderFlags::NONE;
+}
+
+// Sends the game to a Game output, if there is one. Not in non-buffered mode, which draws straight
+// into the backbuffer during emulation.
+static DeviceOrientation OutputOrientation(int width, int height) {
+	return height > width * 1.1f ? DeviceOrientation::Portrait : DeviceOrientation::Landscape;
+}
+
+bool GetGameOutputOrientation(ScreenManager *screenManager, DeviceOrientation *orientation) {
+	const OutputDisplay *output = screenManager->FindOutput(OutputRole::Game);
+	if (!output || !output->swapchain) {
+		return false;
+	}
+	int width, height;
+	screenManager->getDrawContext()->GetFramebufferDimensions(output->swapchain, &width, &height);
+	*orientation = OutputOrientation(width, height);
+	return true;
+}
+
+void EmuScreen::UpdateGameOutput() {
+	const OutputDisplay *output = screenManager()->FindOutput(OutputRole::Game);
+	gameOnOutput_ = output && gpu && !skipBufferEffects_ && GPUIsBuffered();
+	if (!gpu) {
+		return;
+	}
+	if (!gameOnOutput_) {
+		gpu->SetPresentationOutput(nullptr);
+		return;
+	}
+	OutputParams params;
+	screenManager()->getDrawContext()->GetFramebufferDimensions(output->swapchain, &params.pixelWidth, &params.pixelHeight);
+	params.orientation = OutputOrientation(params.pixelWidth, params.pixelHeight);
+	gameOutputOrientation_ = params.orientation;
+	gpu->SetPresentationOutput(&params);
+}
+
+DeviceOrientation EmuScreen::GameLayoutOrientation() const {
+	return gameOnOutput_ ? gameOutputOrientation_ : GetDeviceOrientation();
+}
+
+const DisplayLayoutConfig &EmuScreen::GameLayoutConfig() const {
+	return g_Config.GetDisplayLayoutConfig(GameLayoutOrientation());
+}
+
+bool EmuScreen::renderOutput(const OutputDisplay &output) {
+	if (output.role != OutputRole::Game || !gameOnOutput_ || !PSP_IsInited()) {
+		return false;
+	}
+	gpu->CopyDisplayToOutput(GameLayoutConfig());
+	return true;
 }
 
 ScreenRenderFlags EmuScreen::render(ScreenRenderMode mode) {
@@ -1677,13 +1738,14 @@ ScreenRenderFlags EmuScreen::render(ScreenRenderMode mode) {
 		System_Notify(SystemNotification::KEEP_SCREEN_AWAKE);
 	}
 
-	const DeviceOrientation orientation = GetDeviceOrientation();
-	const DisplayLayoutConfig &displayLayoutConfig = g_Config.GetDisplayLayoutConfig(orientation);
+	const DisplayLayoutConfig &displayLayoutConfig = GameLayoutConfig();
 	// We might have a bad viewport after RunEmulation, reset.
 	Viewport viewport{0.0f, 0.0f, (float)g_display.pixel_xres, (float)g_display.pixel_yres, 0.0f, 1.0f};
 
 	if (!skipBufferEffects_ && !ShouldRunEmulation(mode)) {
-		if (gpu) {
+		if (gameOnOutput_) {
+			drawGameOnOutputMessage();
+		} else if (gpu) {
 			gpu->CopyDisplayToOutput(displayLayoutConfig);
 		}
 		draw->SetViewport(viewport);
@@ -1716,7 +1778,9 @@ ScreenRenderFlags EmuScreen::render(ScreenRenderMode mode) {
 	const bool skipBufferEffects = skipBufferEffects_;
 
 	// Gotta copy the output at some point. Also this is where we take the screenshot if needed.
-	if (gpu) {
+	if (gameOnOutput_) {
+		drawGameOnOutputMessage();
+	} else if (gpu) {
 		gpu->CopyDisplayToOutput(displayLayoutConfig);
 	}
 
@@ -1771,8 +1835,7 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 
 	g_OSD.NudgeIngameNotifications();
 
-	const DeviceOrientation orientation = GetDeviceOrientation();
-	const DisplayLayoutConfig &displayLayoutConfig = g_Config.GetDisplayLayoutConfig(orientation);
+	const DisplayLayoutConfig &displayLayoutConfig = GameLayoutConfig();
 	__DisplaySetDisplayLayoutConfig(displayLayoutConfig);
 
 	DrawContext *draw = screenManager()->getDrawContext();
@@ -1878,7 +1941,7 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 			// The right time to run this
 			if (ScreenshotNotifyPostGameRender(draw) && skipBufferEffects) {
 				// Need to restore the backbuffer render pass, it probably got destroyed.
-				draw->BindFramebufferAsRenderTarget(nullptr, {RPAction::CLEAR, RPAction::CLEAR, RPAction::CLEAR}, "BackBuffer");
+				draw->BindFramebufferAsRenderTarget(draw->GetPrimarySwapchain(), {RPAction::CLEAR, RPAction::CLEAR, RPAction::CLEAR}, "BackBuffer");
 			}
 		}
 	}

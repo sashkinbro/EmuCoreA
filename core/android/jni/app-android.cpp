@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstdint>
 
+#include <map>
 #include <sstream>
 #include <queue>
 #include <mutex>
@@ -69,6 +70,7 @@ struct JNIEnv {};
 #include "Common/GPU/OpenGL/GLFeatures.h"
 
 #include "Common/System/Display.h"
+#include "Common/GPU/thin3d.h"
 #include "Common/System/NativeApp.h"
 #include "Common/System/System.h"
 #include "Common/System/OSD.h"
@@ -89,6 +91,7 @@ struct JNIEnv {};
 #include "Common/VR/PPSSPPVR.h"
 #include "Common/GPU/Vulkan/VulkanLoader.h"
 #include "Common/GPU/GraphicsContext.h"
+#include "Common/GPU/Vulkan/VulkanContext.h"
 #include "Common/GPU/Vulkan/VulkanGraphicsContext.h"
 #include "android/jni/AndroidEGLGraphicsContext.h"
 #include "Common/StringUtils.h"
@@ -125,6 +128,9 @@ static std::vector<FrameCommand> g_frameCommands;
 static std::string systemName;
 static std::string langRegion;
 static std::string boardName;
+// The name the user gave the device (like "Galaxy S26"). Set from the UI thread.
+static std::mutex g_deviceNameLock;
+static std::string g_deviceName;
 
 std::string g_externalDir;  // Original external dir (root of Android storage).
 std::string g_extFilesDir;  // App private external dir.
@@ -201,6 +207,10 @@ static void SetPermissionStatusFromJava(std::string_view name, PermissionStatus 
 }
 
 static GraphicsContext *graphicsContext;
+
+// The latest surface size from backbufferResize, width in the high half, for Vulkan to check the surface's extent
+// against. Atomic rather than under g_pendingResizeLock (below), since a resize applied directly can recreate the swapchain.
+static std::atomic<uint64_t> g_surfaceSize;
 
 #if PPSSPP_ARCH(ARMV7)
 // Old Android workaround
@@ -324,6 +334,11 @@ std::string System_GetProperty(SystemProperty prop) {
 		return langRegion;
 	case SYSPROP_BOARDNAME:
 		return boardName;
+	case SYSPROP_DEVICE_NAME:
+	{
+		std::lock_guard<std::mutex> guard(g_deviceNameLock);
+		return g_deviceName;
+	}
 	case SYSPROP_BUILD_VERSION:
 		return PPSSPP_GIT_VERSION;
 	case SYSPROP_INSTALLER_NAME:
@@ -577,6 +592,10 @@ static std::string QueryConfig(std::string_view query) {
 		return g_Config.bSustainedPerformanceMode ? "1" : "0";
 	} else if (query == "audioMixWithOthers") {
 		return g_Config.bAudioMixWithOthers ? "1" : "0";
+	} else if (query == "externalDisplayOutput") {
+		// Whether the game goes to a second display, see ExternalDisplayPresentation.java. The running backend: the
+		// setting is already the new one while the restart prompt for a change is up.
+		return GetGPUBackend() == GPUBackend::VULKAN && g_Config.iExternalDisplay == (int)ExternalDisplayMode::SHOW_GAME ? "1" : "0";
 	} else {
 		return "";
 	}
@@ -730,6 +749,10 @@ retry:
 			delete ctx;
 			goto retry;
 		}
+		((VulkanContext *)ctx->GetAPIContext())->SetCbGetDrawSize([]() {
+			const uint64_t size = g_surfaceSize;
+			return VkExtent2D{ (uint32_t)(size >> 32), (uint32_t)size };
+		});
 		graphicsContext = ctx;
 		// Now, we wait until we get a surface to continue initializing Vulkan.
 		break;
@@ -899,6 +922,58 @@ static void ApplyPendingResize() {
 	}
 }
 
+extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_setDeviceName(JNIEnv *env, jclass, jstring jname) {
+	std::string name = jname ? GetJavaString(env, jname) : "";
+	std::lock_guard<std::mutex> guard(g_deviceNameLock);
+	g_deviceName = name;
+}
+
+// Secondary outputs (a TV on HDMI, for one). The surface's window is kept until the output is removed.
+static std::mutex g_outputWindowsLock;
+static std::map<int, ANativeWindow *> g_outputWindows;
+
+extern "C" jint JNICALL Java_org_ppsspp_ppsspp_NativeApp_addOutput(JNIEnv *env, jclass, jobject surface, jint width, jint height) {
+	ANativeWindow *wnd = surface ? ANativeWindow_fromSurface(env, surface) : nullptr;
+	if (!wnd) {
+		ERROR_LOG(Log::G3D, "addOutput: no window for the surface");
+		return 0;
+	}
+	Draw::SwapchainDesc desc{};
+	desc.winsys = WINDOWSYSTEM_ANDROID;
+	desc.data1 = wnd;
+	desc.width = width;
+	desc.height = height;
+	desc.tag = "ExternalDisplay";
+	const int id = Native_AddOutput(OutputRole::Game, desc);
+	INFO_LOG(Log::G3D, "addOutput: %dx%d, output %d", width, height, id);
+	std::lock_guard<std::mutex> guard(g_outputWindowsLock);
+	g_outputWindows[id] = wnd;
+	return id;
+}
+
+extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_resizeOutput(JNIEnv *, jclass, jint id, jint width, jint height) {
+	INFO_LOG(Log::G3D, "resizeOutput: output %d, %dx%d", id, width, height);
+	Native_ResizeOutput(id, width, height);
+}
+
+// Returns once the render thread is done with the surface, as surfaceDestroyed requires.
+extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_removeOutput(JNIEnv *, jclass, jint id) {
+	INFO_LOG(Log::G3D, "removeOutput: output %d", id);
+	Native_RemoveOutputAndWait(id);
+	ANativeWindow *wnd = nullptr;
+	{
+		std::lock_guard<std::mutex> guard(g_outputWindowsLock);
+		auto iter = g_outputWindows.find(id);
+		if (iter != g_outputWindows.end()) {
+			wnd = iter->second;
+			g_outputWindows.erase(iter);
+		}
+	}
+	if (wnd) {
+		ANativeWindow_release(wnd);
+	}
+}
+
 extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_backbufferResize(JNIEnv *, jclass, jint pixel_xres, jint pixel_yres, jint rotation) {
 	INFO_LOG(Log::System, "NativeApp.backbufferResize(%d x %d, rotation %d)", pixel_xres, pixel_yres, rotation);
 
@@ -907,6 +982,8 @@ extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_backbufferResize(JNIEnv
 	static int lastRotation = -1;
 	const bool rotated = lastRotation != -1 && rotation != lastRotation;
 	lastRotation = rotation;
+
+	g_surfaceSize = ((uint64_t)(uint32_t)pixel_xres << 32) | (uint32_t)pixel_yres;
 
 	// pixel_*res is the backbuffer resolution.
 	if (IsVREnabled()) {
@@ -955,6 +1032,9 @@ void System_Notify(SystemNotification notification) {
 		break;
 	case SystemNotification::SUSTAINED_PERF_CHANGE:
 		PushCommand("sustainedPerfMode", "");
+		break;
+	case SystemNotification::EXTERNAL_DISPLAY_CHANGED:
+		PushCommand("externalDisplay", "");
 		break;
 	case SystemNotification::TEST_JAVA_EXCEPTION:
 		PushCommand("testException", "This is a test exception");

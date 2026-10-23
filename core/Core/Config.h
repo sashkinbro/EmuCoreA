@@ -85,6 +85,7 @@ struct DisplayLayoutConfig : public ConfigBlock {
 	int iInternalScreenRotation = ROTATION_LOCKED_HORIZONTAL;  // The internal screen rotation angle. Useful for vertical SHMUPs and similar.
 	bool bRotateControlsWithScreen = true;  // Rotate gamepad controls along with the internal screen rotation.
 	bool bIgnoreScreenInsets = true;  // Android: Center screen disregarding insets if this is enabled.
+	std::string sOverlay;  // Overlay (bezel) image id, see GPU/Common/Overlay.h. Empty means off.
 
 	// Deprecated
 	bool bEnableCardboardVR = false; // Cardboard Master Switch
@@ -287,6 +288,7 @@ public:
 
 	// GFX
 	int iGPUBackend;
+	int iExternalDisplay;  // ExternalDisplayMode
 	std::string sCustomDriver;
 	std::string sFailedGPUBackends;  // NOT stored in ppsspp.ini anymore!
 	std::string sDisabledGPUBackends;
@@ -360,9 +362,14 @@ public:
 	int iTexScalingType; // 0 = xBRZ, 1 = Hybrid
 	bool bTexDeposterize;
 	bool bTexHardwareScaling;
-	int iFpsLimit1;
-	int iFpsLimit2;
-	int iAnalogFpsLimit;
+	// In percent of normal speed. 0 means unlimited, and negative (not for analog) disabled.
+	int iAltSpeedPercent1;
+	int iAltSpeedPercent2;
+	int iAnalogAltSpeedPercent;
+	// The old frame rate based settings. Only read, to migrate them.
+	int iLegacyFpsLimit1;
+	int iLegacyFpsLimit2;
+	int iLegacyAnalogFpsLimit;
 	int iMaxRecent;
 	int iCurrentStateSlot;
 	int iRewindSnapshotInterval;
@@ -835,6 +842,15 @@ private:
 
 std::string CreateRandMAC();
 std::string DefaultProAdhocServer();
+
+// The frame rate limit for an alternative speed. Unlimited (0) and disabled (negative) stay as they are.
+inline int AltSpeedPercentToFps(int percent) {
+	if (percent <= 0) {
+		return percent;
+	}
+	int fps = (percent * 60 + 50) / 100;
+	return fps < 1 ? 1 : fps;
+}
 
 // TODO: Find a better place for this.
 extern http::RequestManager g_DownloadManager;

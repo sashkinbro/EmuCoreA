@@ -28,6 +28,7 @@ SDLJoystick *joystick = NULL;
 #include "Common/System/System.h"
 #include "Common/System/Request.h"
 #include "Common/System/NativeApp.h"
+#include "Common/GPU/thin3d.h"
 #include "Common/Audio/AudioBackend.h"
 #include "Core/CmdLine.h"
 #include "Core/EmuThread.h"
@@ -1116,6 +1117,10 @@ void System_LaunchUrl(LaunchUrlType urlType, std::string_view url) {
 
 std::string System_GetProperty(SystemProperty prop) {
 	switch (prop) {
+#if PPSSPP_PLATFORM(MAC)
+	case SYSPROP_DEVICE_MODEL:
+		return "Mac";
+#endif
 	case SYSPROP_NAME:
 #ifdef _WIN32
 		return "SDL:Windows";
@@ -1437,7 +1442,78 @@ void UpdateCursor() {
 	SDL_SetCursor(g_builtinCursors[(int)curCursor]);
 }
 
+// --game-window: a second window showing just the game. For now it's only a way to test multiple outputs on
+// the desktop, standing in for a TV over AirPlay. Later, real multi-window support (like ImGui's multi-viewports)
+// will take this over.
+static SDL_Window *g_gameWindow = nullptr;
+static int g_gameOutputId = 0;
+
+static void CreateGameWindow() {
+	Draw::SwapchainDesc desc{};
+	desc.tag = "GameWindow";
+	const GPUBackend backend = (GPUBackend)g_Config.iGPUBackend;
+	if (backend == GPUBackend::VULKAN) {
+		g_gameWindow = SDL_CreateWindow("PPSSPP game", 960, 544, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+		WindowDesc windowDesc{};
+		std::string error;
+		if (g_gameWindow && !DetermineVulkanWindowSystem(g_gameWindow, &windowDesc, &error)) {
+			fprintf(stderr, "Can't use the game window: %s\n", error.c_str());
+			SDL_DestroyWindow(g_gameWindow);
+			g_gameWindow = nullptr;
+			return;
+		}
+		desc.winsys = windowDesc.winsys;
+		desc.data1 = windowDesc.data1;
+		desc.data2 = windowDesc.data2;
+#if PPSSPP_PLATFORM(MAC)
+	} else if (backend == GPUBackend::METAL) {
+		g_gameWindow = SDL_CreateWindow("PPSSPP game", 960, 544, SDL_WINDOW_METAL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+		if (g_gameWindow) {
+			desc.winsys = WINDOWSYSTEM_METAL_EXT;
+			desc.data1 = SDL_Metal_GetLayer(SDL_Metal_CreateView(g_gameWindow));
+		}
+#endif
+	} else {
+		// TODO: Windows (D3D11) and OpenGL.
+		fprintf(stderr, "--game-window needs Vulkan, or Metal on Mac\n");
+		return;
+	}
+	if (!g_gameWindow) {
+		fprintf(stderr, "Error creating the game window: %s\n", SDL_GetError());
+		return;
+	}
+	SDL_GetWindowSizeInPixels(g_gameWindow, &desc.width, &desc.height);
+	g_gameOutputId = Native_AddOutput(OutputRole::Game, desc);
+}
+
+// Returns true if the event was for the game window, and has been handled. Keys still go to the emulator.
+static bool ProcessGameWindowEvent(const SDL_Event &event) {
+	if (!g_gameWindow || SDL_GetWindowFromEvent(&event) != g_gameWindow) {
+		return false;
+	}
+	switch (event.type) {
+	case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
+		Native_ResizeOutput(g_gameOutputId, event.window.data1, event.window.data2);
+		return true;
+	case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+		// The layer has to outlive the swapchain, so the window stays until we quit.
+		Native_RemoveOutput(g_gameOutputId);
+		SDL_HideWindow(g_gameWindow);
+		return true;
+	case SDL_EVENT_KEY_DOWN:
+	case SDL_EVENT_KEY_UP:
+	case SDL_EVENT_TEXT_INPUT:
+		return false;
+	default:
+		// Window events, and the mouse, which the UI in the main window would get the coordinates wrong for.
+		return true;
+	}
+}
+
 static void ProcessSDLEvent(SDL_Window *window, const SDL_Event &event, InputStateTracker *inputTracker) {
+	if (ProcessGameWindowEvent(event)) {
+		return;
+	}
 	// SDL input uses window coordinates; convert to pixels before applying the UI scale.
 	float inputPixelDensity = SDL_GetWindowPixelDensity(window);
 	if (inputPixelDensity <= 0.0f) {
@@ -1446,6 +1522,13 @@ static void ProcessSDLEvent(SDL_Window *window, const SDL_Event &event, InputSta
 	switch (event.type) {
 	case SDL_EVENT_QUIT:
 		g_QuitRequested = 1;
+		break;
+
+	case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
+		// SDL only sends a quit when the last window closes, and --game-window's may still be open.
+		if (SDL_GetWindowFromEvent(&event) == window) {
+			g_QuitRequested = 1;
+		}
 		break;
 
 	#if !defined(MOBILE_DEVICE)
@@ -2288,6 +2371,10 @@ int main(int argc, char *argv[]) {
 	Native_UpdateScreenScale(initialPixelWidth, initialPixelHeight, UIScaleFactorToMultiplier(g_Config.iUIScaleFactor));
 
 	SDL_SetWindowTitle(window, (app_name_nice + " " + PPSSPP_GIT_VERSION).c_str());
+
+	if (cmdLineOptions.gameWindow.value_or(false)) {
+		CreateGameWindow();
+	}
 
 	char iconPath[PATH_MAX];
 #if defined(ASSETS_DIR)

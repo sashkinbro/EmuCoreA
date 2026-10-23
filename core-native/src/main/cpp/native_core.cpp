@@ -2112,7 +2112,8 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
         // 0 = unlimited; a positive value clamps the frame rate
         // (the app's "Frame limit / target FPS" setting).
         if (ParseIntInRange(value, 0, 1000, &number)) {
-            g_Config.iFpsLimit1 = number;
+            // The core stores alternative speeds as a percentage of 60 fps.
+            g_Config.iAltSpeedPercent1 = number <= 0 ? 0 : (number * 100 + 30) / 60;
             // PPSSPP interprets a custom limit of zero as unlimited. NORMAL
             // would re-enable the limiter when the frontend disables it.
             g_requestedFpsLimit = FPSLimit::CUSTOM1;
@@ -2993,7 +2994,7 @@ Java_com_sbro_emucorea_core_NativeCoreDiagnostics_nativeGetRuntimeState(JNIEnv *
     std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
     const jint values[] = {
         g_booted, g_audioStarted, static_cast<jint>(PSP_CoreParameter().cpuCore),
-        static_cast<jint>(PSP_CoreParameter().fpsLimit), g_Config.iFpsLimit1,
+        static_cast<jint>(PSP_CoreParameter().fpsLimit), AltSpeedPercentToFps(g_Config.iAltSpeedPercent1),
         g_Config.bSoftwareRendering, g_Config.bReplaceTextures,
         g_display.pixel_xres, g_display.pixel_yres,
     };

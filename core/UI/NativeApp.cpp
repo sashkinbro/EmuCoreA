@@ -34,6 +34,7 @@
 #include <clocale>
 #include <algorithm>
 #include <atomic>
+#include <condition_variable>
 #include <cstdlib>
 #include <memory>
 #include <mutex>
@@ -189,6 +190,63 @@ std::string config_filename;
 // Set from any thread (on Android, the Java UI thread right after it writes g_display). Atomic, so the frame
 // that consumes it also sees those writes - with a plain bool it could see the flag first and keep stale bounds.
 static std::atomic<bool> resized{false};
+
+// Secondary outputs are added, resized and removed through their own queue, not pendingMessages or
+// g_pendingClosures. Those run mid-frame, after BeginFrame, but creating or destroying a Vulkan swapchain
+// stops the render threads, so this runs before BeginFrame. It also runs in NativeInitGraphics before
+// deviceRestored, so a removal queued while the graphics were down lands before swapchains are recreated
+// (on a surface that may be gone). And it tracks completion for Native_RemoveOutputAndWait.
+struct OutputRequest {
+	enum class Type {
+		ADD,
+		RESIZE,
+		REMOVE,
+	};
+	Type type;
+	int id;
+	OutputRole role;
+	Draw::SwapchainDesc desc;
+	int width;
+	int height;
+};
+static std::mutex g_outputRequestLock;
+static std::condition_variable g_outputRequestsDoneCond;
+static std::vector<OutputRequest> g_outputRequests;
+// Counts requests queued and handled, for Native_RemoveOutputAndWait. Under g_outputRequestLock.
+static uint64_t g_outputRequestsQueued = 0;
+static uint64_t g_outputRequestsDone = 0;
+// Whether the outputs have swapchains, between NativeInitGraphics and NativeShutdownGraphics.
+static bool g_outputsLive = false;
+// The thread that handles the requests, which mustn't wait for them.
+static std::thread::id g_outputRequestThread;
+static std::atomic<int> g_nextOutputId{1};
+
+static void ProcessOutputRequests() {
+	std::vector<OutputRequest> requests;
+	uint64_t queued;
+	{
+		std::lock_guard<std::mutex> guard(g_outputRequestLock);
+		requests.swap(g_outputRequests);
+		queued = g_outputRequestsQueued;
+	}
+	for (const OutputRequest &request : requests) {
+		switch (request.type) {
+		case OutputRequest::Type::ADD: g_screenManager->AddOutput(request.id, request.role, request.desc); break;
+		case OutputRequest::Type::RESIZE: g_screenManager->ResizeOutput(request.id, request.width, request.height); break;
+		case OutputRequest::Type::REMOVE: g_screenManager->RemoveOutput(request.id); break;
+		}
+	}
+	std::lock_guard<std::mutex> guard(g_outputRequestLock);
+	g_outputRequestsDone = queued;
+	g_outputRequestThread = std::this_thread::get_id();
+	g_outputRequestsDoneCond.notify_all();
+}
+
+static void SetOutputsLive(bool live) {
+	std::lock_guard<std::mutex> guard(g_outputRequestLock);
+	g_outputsLive = live;
+	g_outputRequestsDoneCond.notify_all();
+}
 
 static int renderCounter = 0;
 
@@ -940,6 +998,11 @@ bool NativeInitGraphics(GraphicsContext *graphicsContext) {
 
 	g_screenManager->setUIContext(uiContext);
 	g_screenManager->setPostRenderCallback(&CallbackPostRender, nullptr);
+	// Live before the queue is processed: a removal that comes in while the outputs' swapchains are being
+	// recreated has to wait for the next frame, as its surface may be gone once it returns.
+	SetOutputsLive(true);
+	// An output removed while there was no device can't be recreated, its surface may be gone.
+	ProcessOutputRequests();
 	g_screenManager->deviceRestored(g_draw);
 
 	g_audioBackend = System_CreateAudioBackend();
@@ -1058,6 +1121,7 @@ void NativeShutdownGraphics(GraphicsContext *graphicsContext) {
 	if (g_screenManager) {
 		g_screenManager->deviceLost();
 	}
+	SetOutputsLive(false);
 	g_iconCache.ClearTextures();
 
 	if (gpu) {
@@ -1192,6 +1256,8 @@ void NativeFrame(GraphicsContext *graphicsContext) {
 		System_PostUIMessage(UIMessage::GPU_DISPLAY_RESIZED);
 #endif
 	}
+
+	ProcessOutputRequests();
 
 	// NOTE: We must begin the frame before update, so we can do texture size queries and stuff in Measure etc.
 	Draw::DebugFlags debugFlags = Draw::DebugFlags::NONE;
@@ -1637,12 +1703,21 @@ bool NativeKey(const KeyInput &key) {
 		g_controlMapper.Key(key);
 	}
 
-	// Ignore volume keys and stuff here - though we do send them through to the control mapper, so they can be mapped to PSP buttons.
+	// Leave volume keys to the OS, unless they're mapped (to L/R for example). Then they also reach the menus,
+	// and in game we consume them, repeats included, so the OS doesn't change the volume as well.
+	// The key mapping dialog gets them all (to be able to map them), and consumes them too.
+	bool volumeKey = false;
+	bool consumeVolumeKey = false;
 	switch (key.keyCode) {
 	case NKCODE_VOLUME_DOWN:
 	case NKCODE_VOLUME_UP:
 	case NKCODE_VOLUME_MUTE:
-		return false;
+		if (!(inputMode & InputMode::AllKeys) && !KeyMap::InputMappingToPspButton(InputMapping(key.deviceId, key.keyCode), nullptr)) {
+			return false;
+		}
+		volumeKey = true;
+		consumeVolumeKey = inputMode & (InputMode::Other | InputMode::AllKeys);
+		break;
 	default:
 		break;
 	}
@@ -1713,7 +1788,7 @@ bool NativeKey(const KeyInput &key) {
 		retval = false;
 		break;
 	case UI::KeyEventResult::IGNORE_KEY:
-		return false;
+		return consumeVolumeKey;
 	}
 
 	// Queue up the key event for synchronous processing in the UI.
@@ -1729,6 +1804,9 @@ bool NativeKey(const KeyInput &key) {
 	if (key.keyCode == NKCODE_BUTTON_MODE) {
 		// Tell the caller that we handled the key.
 		retval = true;
+	}
+	if (volumeKey) {
+		retval = consumeVolumeKey;
 	}
 
 	return retval;
@@ -1986,6 +2064,53 @@ static bool IsWindowSmall(int pixelWidth, int pixelHeight) {
 	int h = (int)(pixelHeight * g_display.dpi_scale_real_y);
 	DisplayLayoutConfig &config = g_Config.GetDisplayLayoutConfig(g_display.GetDeviceOrientation());
 	return config.InternalRotationIsPortrait() ? (h < 480 + 80) : (w < 480 + 80);
+}
+
+int Native_AddOutput(OutputRole role, const Draw::SwapchainDesc &desc) {
+	OutputRequest request{};
+	request.type = OutputRequest::Type::ADD;
+	request.id = g_nextOutputId++;
+	request.role = role;
+	request.desc = desc;
+	std::lock_guard<std::mutex> guard(g_outputRequestLock);
+	g_outputRequests.push_back(request);
+	g_outputRequestsQueued++;
+	return request.id;
+}
+
+void Native_ResizeOutput(int id, int width, int height) {
+	OutputRequest request{};
+	request.type = OutputRequest::Type::RESIZE;
+	request.id = id;
+	request.width = width;
+	request.height = height;
+	std::lock_guard<std::mutex> guard(g_outputRequestLock);
+	g_outputRequests.push_back(request);
+	g_outputRequestsQueued++;
+}
+
+void Native_RemoveOutput(int id) {
+	OutputRequest request{};
+	request.type = OutputRequest::Type::REMOVE;
+	request.id = id;
+	std::lock_guard<std::mutex> guard(g_outputRequestLock);
+	g_outputRequests.push_back(request);
+	g_outputRequestsQueued++;
+}
+
+bool Native_RemoveOutputAndWait(int id) {
+	Native_RemoveOutput(id);
+	std::unique_lock<std::mutex> lock(g_outputRequestLock);
+	_dbg_assert_msg_(std::this_thread::get_id() != g_outputRequestThread, "Waiting for output requests on the thread that handles them");
+	const uint64_t queued = g_outputRequestsQueued;
+	// Without a device, the outputs have no swapchains to let go of.
+	const bool done = g_outputRequestsDoneCond.wait_for(lock, std::chrono::seconds(3), [=] {
+		return !g_outputsLive || g_outputRequestsDone >= queued;
+	});
+	if (!done) {
+		ERROR_LOG(Log::G3D, "Timed out waiting for output %d to be removed", id);
+	}
+	return done;
 }
 
 bool Native_UpdateScreenScale(int pixel_width, int pixel_height, float customScale) {

@@ -30,10 +30,15 @@
 #include "Common/System/NativeApp.h"
 #include "Common/VR/PPSSPPVR.h"
 #include "Common/StringUtils.h"
+#include "Common/File/FileUtil.h"
+#include "Common/System/OSD.h"
+#include "Common/System/Request.h"
+#include "Core/Util/PathUtil.h"
 
 #include "Common/Data/Color/RGBAUtil.h"
 #include "Common/Data/Text/I18n.h"
 #include "UI/DisplayLayoutScreen.h"
+#include "UI/EmuScreen.h"
 #include "UI/Background.h"
 #include "UI/MiscViews.h"
 #include "Core/Config.h"
@@ -41,6 +46,7 @@
 #include "Core/System.h"
 #include "GPU/GPUCommon.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
+#include "GPU/Common/Overlay.h"
 #include "GPU/Common/PresentationCommon.h"
 
 static const int leftColumnWidth = 200;
@@ -195,6 +201,21 @@ void DisplayLayoutScreen::sendMessage(UIMessage message, const char *value) {
 	}
 }
 
+// Disables every control in the group, except keep.
+static void DisableControls(UI::ViewGroup *group, const UI::View *keep) {
+	for (int i = 0; i < group->GetNumSubviews(); i++) {
+		UI::View *view = group->GetViewByIndex(i);
+		if (view == keep) {
+			continue;
+		}
+		if (view->IsViewGroup()) {
+			DisableControls((UI::ViewGroup *)view, keep);
+		} else {
+			view->SetEnabled(false);
+		}
+	}
+}
+
 void DisplayLayoutScreen::CreateViews() {
 	const Bounds &bounds = screenManager()->getUIContext()->GetBounds();
 
@@ -268,7 +289,7 @@ void DisplayLayoutScreen::CreateViews() {
 
 		PopupSliderChoiceFloat *aspectRatio = new PopupSliderChoiceFloat(&config.fDisplayAspectRatio, 0.1f, 2.0f, 1.0f, gr->T("Aspect Ratio"), screenManager());
 		rightColumn->Add(aspectRatio);
-		aspectRatio->SetEnabledFunc([config]() {
+		aspectRatio->SetEnabledFunc([&config]() {
 			return !config.bDisplayStretch && !config.bDisplayIntegerScale;
 		});
 		aspectRatio->SetHasDropShadow(false);
@@ -322,9 +343,14 @@ void DisplayLayoutScreen::CreateViews() {
 		rightColumn->Add(new Spacer(12.0f));
 
 		Choice *center = new Choice(di->T("Reset"));
-		center->OnClick.Add([&config, portrait](UI::EventParams &) {
+		center->OnClick.Add([this, &config, portrait](UI::EventParams &) {
 			// Hm, not really ideal to have to use strings here.
+			// The overlay is a choice of its own, not part of the size/position, so keep it.
+			const std::string overlay = config.sOverlay;
 			config.ResetToDefault(portrait ? "DisplayLayout.Portrait" : "DisplayLayout.Landscape");
+			config.sOverlay = overlay;
+			// Which checkboxes are shown depends on the rotation.
+			RecreateViews();
 		});
 		rightColumn->Add(center);
 
@@ -333,6 +359,8 @@ void DisplayLayoutScreen::CreateViews() {
 		mode_->AddChoice(ImageID("I_MOVE"));
 		mode_->AddChoice(ImageID("I_RESIZE"));
 		mode_->SetSelection(0, false);
+		// The game goes to another output, like a TV, which doesn't use this layout.
+		mode_->SetEnabled(screenManager()->FindOutput(OutputRole::Game) == nullptr);
 		bottomControls->Add(mode_);
 	}
 
@@ -343,6 +371,58 @@ void DisplayLayoutScreen::CreateViews() {
 	if (!IsVREnabled()) {
 		static const char *bufFilters[] = { "Linear", "Nearest", };
 		leftColumn->Add(new PopupMultiChoice(&config.iDisplayFilter, gr->T("Screen Scaling Filter"), bufFilters, 1, ARRAY_SIZE(bufFilters), I18NCat::GRAPHICS, screenManager()));
+
+		// Overlays (bezels), from PSP/OVERLAYS. Rescanned each time, so new files show up without a restart.
+		ReloadAllOverlayInfo();
+		const std::vector<OverlayInfo> overlays = GetAllOverlayInfo();
+		std::vector<std::string> overlayNames{ std::string(sy->T("Off")) };
+		std::vector<std::string> overlayIds{ "" };
+		bool selectedFound = config.sOverlay.empty();
+		for (const auto &overlay : overlays) {
+			overlayNames.push_back(overlay.name);
+			overlayIds.push_back(overlay.id);
+			if (overlay.id == config.sOverlay)
+				selectedFound = true;
+		}
+		if (!selectedFound) {
+			// Keep showing a selected overlay whose files went missing, so it can be turned off.
+			overlayNames.push_back(config.sOverlay);
+			overlayIds.push_back(config.sOverlay);
+		}
+		if (overlayIds.size() > 1) {
+			auto overlayChoice = leftColumn->Add(new PopupMultiChoiceDynamic(&config.sOverlay, gr->T("Overlay"), overlayNames, I18NCat::NONE, screenManager(), &overlayIds));
+			overlayChoice->OnChoice.Add([](UI::EventParams &e) {
+				// e.b is set if the value actually changed. Re-picking the current one shouldn't
+				// cause a reload, since that glitches the audio of a game running in the background.
+				if (!e.b)
+					return;
+				// The game rect may have moved, which matters for post shaders that run at output resolution.
+				NotifyPostChanges();
+			});
+		}
+
+		// Just pick any PNG: it's copied into the overlays folder and everything is auto-detected.
+		Choice *browseOverlay = leftColumn->Add(new Choice(gr->T("Load overlay image...")));
+		const DeviceOrientation orientation = GetDeviceOrientation();
+		browseOverlay->OnClick.Add([this, orientation](UI::EventParams &) {
+			auto gr = GetI18NCategory(I18NCat::GRAPHICS);
+			const Path savePath = GetSysDirectory(DIRECTORY_CUSTOM_OVERLAYS) / "imported.png";
+			System_BrowseForImage(GetRequesterToken(), gr->T("Load overlay image..."), savePath, [this, orientation, savePath](std::string_view value, int converted) {
+				// If the platform converted the image, it's been saved to savePath already.
+				const Path source = converted == 1 ? savePath : Path(value);
+				std::string id;
+				if (!source.empty() && ImportOverlayImage(source, &id)) {
+					if (converted == 1)
+						File::Delete(savePath);
+					g_Config.GetDisplayLayoutConfig(orientation).sOverlay = id;
+					NotifyPostChanges();
+					RecreateViews();
+				} else if (!value.empty() || converted == 1) {
+					auto gr = GetI18NCategory(I18NCat::GRAPHICS);
+					g_OSD.Show(OSDType::MESSAGE_ERROR, gr->T("Overlay images must be PNG files"));
+				}
+			});
+		});
 	}
 
 	Draw::DrawContext *draw = screenManager()->getDrawContext();
@@ -504,6 +584,12 @@ void DisplayLayoutScreen::CreateViews() {
 		}
 	}
 
+	// With the game on a TV and the device held the other way, these would edit a layout that isn't shown.
+	DeviceOrientation gameOrientation;
+	if (GetGameOutputOrientation(screenManager(), &gameOrientation) && gameOrientation != GetDeviceOrientation()) {
+		DisableControls(root_, back);
+	}
+
 	root_->Add(new DisplayLayoutBackground(mode_, GetDeviceOrientation(), new AnchorLayoutParams(FILL_PARENT, FILL_PARENT, 0.0f, 0.0f, 0.0f, 0.0f)));
 }
 
@@ -514,6 +600,7 @@ void PostProcScreen::CreateViews() {
 	std::vector<std::string> items;
 	int selected = -1;
 	const std::string selectedName = id_ >= (int)g_Config.vPostShaderNames.size() ? "Off" : g_Config.vPostShaderNames[id_];
+	indexTranslation_.clear();
 
 	for (int i = 0; i < (int)shaders_.size(); i++) {
 		if (!shaders_[i].visible)

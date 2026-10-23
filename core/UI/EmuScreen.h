@@ -31,6 +31,7 @@
 #include "UI/ImDebugger/ImCommand.h"
 
 struct AxisInput;
+struct DisplayLayoutConfig;
 
 class AsyncImageFileView;
 class ChatMenu;
@@ -64,8 +65,10 @@ public:
 
 protected:
 	void darken();
+	void drawGameOnOutputMessage();
 	void focusChanged(ScreenFocusChange focusChange) override;
 	ScreenRenderFlags PreRender(ScreenRenderMode mode) override;
+	bool renderOutput(const OutputDisplay &output) override;
 
 	// ControlListener implementations
 	void OnVKey(VirtKey virtualKeyCode, bool down) override;
@@ -79,6 +82,9 @@ protected:
 private:
 	void CreateViews() override;
 	ScreenRenderFlags RunEmulation(bool skipBufferEffects);
+	void UpdateGameOutput();
+	DeviceOrientation GameLayoutOrientation() const;
+	const DisplayLayoutConfig &GameLayoutConfig() const;
 	void OnDevTools(UI::EventParams &params);
 	void OpenChat(bool focus);
 
@@ -153,9 +159,14 @@ private:
 	bool autoLoadFailed_ = false;  // to prevent repeat reloads
 	bool readyToFinishBoot_ = false;
 	bool skipBufferEffects_ = false;  // cached state, fetched once per frame.
+	// The game goes to a secondary output (OutputRole::Game) instead of the backbuffer. Per frame too.
+	bool gameOnOutput_ = false;
+	DeviceOrientation gameOutputOrientation_ = DeviceOrientation::Landscape;
 
 	uint32_t clearColor_ = 0;
 };
 
 bool MustRunBehind();
 bool ShouldRunBehind();
+// The orientation of the output the game goes to (like a TV), if there's one. Its display layout is the one for that.
+bool GetGameOutputOrientation(ScreenManager *screenManager, DeviceOrientation *orientation);
