@@ -134,7 +134,6 @@ struct CompatFlags {
 	bool DepthCLUTIntoHalves;
 	bool AccurateSplines;
 	bool ReadbackShadow;
-	bool DisableReadbackShadow;
 	bool ColorPickingDrawSyncReadback;
 	bool SeparateLogicOpDraws;
 	bool SnapHalfPixelSprites;

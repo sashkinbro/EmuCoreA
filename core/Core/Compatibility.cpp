@@ -168,7 +168,6 @@ void Compatibility::CheckSettings(IniFile &iniFile, const std::string &gameID) {
 	CheckSetting(iniFile, gameID, "DepthCLUTIntoHalves", &flags_.DepthCLUTIntoHalves);
 	CheckSetting(iniFile, gameID, "AccurateSplines", &flags_.AccurateSplines);
 	CheckSetting(iniFile, gameID, "ReadbackShadow", &flags_.ReadbackShadow);
-	CheckSetting(iniFile, gameID, "DisableReadbackShadow", &flags_.DisableReadbackShadow);
 	CheckSetting(iniFile, gameID, "ColorPickingDrawSyncReadback", &flags_.ColorPickingDrawSyncReadback);
 	CheckSetting(iniFile, gameID, "SeparateLogicOpDraws", &flags_.SeparateLogicOpDraws);
 	CheckSetting(iniFile, gameID, "SnapHalfPixelSprites", &flags_.SnapHalfPixelSprites);

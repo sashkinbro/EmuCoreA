@@ -3649,8 +3649,7 @@ void FramebufferManagerCommon::ReadFramebufferToMemory(VirtualFramebuffer *vfb, 
 	// and each blocking readback waits for the GPU. With ReadbackShadow, read the whole buffer once, and
 	// copy the pieces from that. Only the pieces asked for reach PSP memory: the rest of the buffer's range
 	// can hold live data, like the texture heap right after Everybody's Golf 2's depth buffer.
-	const bool useShadow = !whole && channel == RASTER_COLOR && mode == Draw::ReadbackMode::BLOCK &&
-		PSP_CoreParameter().compat.flags().ReadbackShadow && !PSP_CoreParameter().compat.flags().DisableReadbackShadow;
+	const bool useShadow = !whole && channel == RASTER_COLOR && mode == Draw::ReadbackMode::BLOCK && PSP_CoreParameter().compat.flags().ReadbackShadow;
 	if (useShadow && vfb->readbackShadowValid && ReadFromShadow(vfb, x, y, w, h)) {
 		return;
 	}
