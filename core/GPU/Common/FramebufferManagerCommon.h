@@ -567,7 +567,7 @@ protected:
 	void EstimateDrawingSize(u32 fb_address, int fb_stride, GEBufferFormat fb_format, int viewport_width, int viewport_height, int region_width, int region_height, int scissor_width, int scissor_height, int &drawing_width, int &drawing_height);
 
 	void NotifyRenderFramebufferCreated(VirtualFramebuffer *vfb);
-	static void NotifyRenderFramebufferUpdated(VirtualFramebuffer *vfb);
+	void NotifyRenderFramebufferUpdated(VirtualFramebuffer *vfb);
 	void NotifyRenderFramebufferSwitched(VirtualFramebuffer *prevVfb, VirtualFramebuffer *vfb, bool isClearingDepth);
 
 	void BlitFramebufferDepth(VirtualFramebuffer *src, VirtualFramebuffer *dst, bool allowSizeMismatch = false);
@@ -576,7 +576,7 @@ protected:
 	void EnsureStencilWritePipeline(bool useExportShader);
 	void DrawStencilWritePasses(GEBufferFormat format, int values, u8 usedBits, bool useExportShader);
 
-	void ResizeFramebufFBO(VirtualFramebuffer *vfb, int w, int h, bool force = false, bool skipCopy = false);
+	bool ResizeFramebufFBO(VirtualFramebuffer *vfb, int w, int h, bool force = false, bool skipCopy = false);
 
 	static bool ShouldDownloadFramebufferColor(const VirtualFramebuffer *vfb);
 	static bool ShouldDownloadFramebufferDepth(const VirtualFramebuffer *vfb);

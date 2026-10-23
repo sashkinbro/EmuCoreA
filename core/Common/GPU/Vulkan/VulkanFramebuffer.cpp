@@ -61,23 +61,44 @@ VKRFramebuffer::VKRFramebuffer(VulkanContext *vk, VulkanBarrierBatch *barriers, 
 
 	_dbg_assert_(tag);
 
-	CreateImage(vulkan_, barriers, color, width, height, numLayers, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, true, tag);
+	if (!CreateImage(vulkan_, color, width, height, numLayers, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, true, tag)) {
+		return;
+	}
 	if (createDepthStencilBuffer) {
-		CreateImage(vulkan_, barriers, depth, width, height, numLayers, VK_SAMPLE_COUNT_1_BIT, vulkan_->GetDeviceInfo().preferredDepthStencilFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, false, tag);
+		if (!CreateImage(vulkan_, depth, width, height, numLayers, VK_SAMPLE_COUNT_1_BIT, vulkan_->GetDeviceInfo().preferredDepthStencilFormat, false, tag)) {
+			return;
+		}
 	}
 
 	if (_multiSampleLevel > 0) {
 		sampleCount = MultiSampleLevelToFlagBits(_multiSampleLevel);
 
 		// TODO: Create a different tag for these?
-		CreateImage(vulkan_, barriers, msaaColor, width, height, numLayers, sampleCount, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, true, tag);
+		if (!CreateImage(vulkan_, msaaColor, width, height, numLayers, sampleCount, VK_FORMAT_R8G8B8A8_UNORM, true, tag)) {
+			return;
+		}
 		if (createDepthStencilBuffer) {
-			CreateImage(vulkan_, barriers, msaaDepth, width, height, numLayers, sampleCount, vulkan_->GetDeviceInfo().preferredDepthStencilFormat, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL, false, tag);
+			if (!CreateImage(vulkan_, msaaDepth, width, height, numLayers, sampleCount, vulkan_->GetDeviceInfo().preferredDepthStencilFormat, false, tag)) {
+				return;
+			}
 		}
 	} else {
 		sampleCount = VK_SAMPLE_COUNT_1_BIT;
 	}
 
+	// Publish transitions only after every attachment and view was created.
+	// Otherwise a later allocation failure would leave barriers for deleted images.
+	barriers->TransitionColorImageAuto(&color, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	if (depth.image) {
+		barriers->TransitionDepthStencilImageAuto(&depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+	}
+	if (msaaColor.image) {
+		barriers->TransitionColorImageAuto(&msaaColor, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+	}
+	if (msaaDepth.image) {
+		barriers->TransitionDepthStencilImageAuto(&msaaDepth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+	}
+	valid_ = true;
 	UpdateTag(tag);
 
 	// We create the actual framebuffer objects on demand, because some combinations might not make sense.
@@ -162,10 +183,15 @@ VKRFramebuffer::~VKRFramebuffer() {
 
 // NOTE: If numLayers > 1, it will create an array texture, rather than a normal 2D texture.
 // This requires a different sampling path!
-void VKRFramebuffer::CreateImage(VulkanContext *vulkan, VulkanBarrierBatch *barriers, VKRImage &img, int width, int height, int numLayers, VkSampleCountFlagBits sampleCount, VkFormat format, VkImageLayout initialLayout, bool color, const char *tag) {
+bool VKRFramebuffer::CreateImage(VulkanContext *vulkan, VKRImage &img, int width, int height, int numLayers, VkSampleCountFlagBits sampleCount, VkFormat format, bool color, const char *tag) {
 	// We don't support more exotic layer setups for now. Mono or stereo.
 	_dbg_assert_(numLayers == 1 || numLayers == 2);
 	_dbg_assert_(format != VK_FORMAT_UNDEFINED);
+	const int maxDimension = vulkan->GetPhysicalDeviceProperties().properties.limits.maxImageDimension2D;
+	if (width <= 0 || height <= 0 || width > maxDimension || height > maxDimension || numLayers < 1 || numLayers > 2) {
+		ERROR_LOG(Log::G3D, "Invalid framebuffer image size: %dx%dx%d (tag: '%s')", width, height, numLayers, tag);
+		return false;
+	}
 	VkImageCreateInfo ici{ VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO };
 	ici.arrayLayers = numLayers;
 	ici.mipLevels = 1;
@@ -193,7 +219,12 @@ void VKRFramebuffer::CreateImage(VulkanContext *vulkan, VulkanBarrierBatch *barr
 	VmaAllocationInfo allocInfo{};
 
 	VkResult res = vmaCreateImage(vulkan->Allocator(), &ici, &allocCreateInfo, &img.image, &img.alloc, &allocInfo);
-	_dbg_assert_(res == VK_SUCCESS);
+	if (res != VK_SUCCESS) {
+		ERROR_LOG(Log::G3D, "Framebuffer image allocation failed: %s (tag: '%s')", VulkanResultToString(res), tag);
+		img.image = VK_NULL_HANDLE;
+		img.alloc = nullptr;
+		return false;
+	}
 
 	vulkan->SetDebugName(img.image, VK_OBJECT_TYPE_IMAGE, tag);
 
@@ -208,8 +239,12 @@ void VKRFramebuffer::CreateImage(VulkanContext *vulkan, VulkanBarrierBatch *barr
 	ivci.subresourceRange.layerCount = numLayers;
 	ivci.subresourceRange.levelCount = 1;
 	res = vkCreateImageView(vulkan->GetDevice(), &ivci, nullptr, &img.rtView);
+	if (res != VK_SUCCESS) {
+		ERROR_LOG(Log::G3D, "Framebuffer render view creation failed: %s (tag: '%s')", VulkanResultToString(res), tag);
+		img.rtView = VK_NULL_HANDLE;
+		return false;
+	}
 	vulkan->SetDebugName(img.rtView, VK_OBJECT_TYPE_IMAGE_VIEW, tag);
-	_dbg_assert_(res == VK_SUCCESS);
 
 	// Separate view for texture sampling all layers together.
 	if (!color) {
@@ -218,7 +253,11 @@ void VKRFramebuffer::CreateImage(VulkanContext *vulkan, VulkanBarrierBatch *barr
 
 	ivci.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;  // layered for consistency, even if single image.
 	res = vkCreateImageView(vulkan->GetDevice(), &ivci, nullptr, &img.texAllLayersView);
-	_dbg_assert_(res == VK_SUCCESS);
+	if (res != VK_SUCCESS) {
+		ERROR_LOG(Log::G3D, "Framebuffer texture view creation failed: %s (tag: '%s')", VulkanResultToString(res), tag);
+		img.texAllLayersView = VK_NULL_HANDLE;
+		return false;
+	}
 	vulkan->SetDebugName(img.texAllLayersView, VK_OBJECT_TYPE_IMAGE_VIEW, tag);
 
 	// Create 2D views for both layers.
@@ -228,47 +267,24 @@ void VKRFramebuffer::CreateImage(VulkanContext *vulkan, VulkanBarrierBatch *barr
 		ivci.subresourceRange.layerCount = 1;
 		ivci.subresourceRange.baseArrayLayer = i;
 		res = vkCreateImageView(vulkan->GetDevice(), &ivci, nullptr, &img.texLayerViews[i]);
+		if (res != VK_SUCCESS) {
+			ERROR_LOG(Log::G3D, "Framebuffer layer view creation failed: %s (tag: '%s')", VulkanResultToString(res), tag);
+			img.texLayerViews[i] = VK_NULL_HANDLE;
+			return false;
+		}
 		if (vulkan->DebugLayerEnabled()) {
 			char temp[128];
 			snprintf(temp, sizeof(temp), "%s_layer%d", tag, i);
 			vulkan->SetDebugName(img.texLayerViews[i], VK_OBJECT_TYPE_IMAGE_VIEW, temp);
 		}
-		_dbg_assert_(res == VK_SUCCESS);
 	}
 
-	VkPipelineStageFlags dstStage;
-	VkAccessFlagBits dstAccessMask;
-	switch (initialLayout) {
-	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-		dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		dstStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-		break;
-	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-		dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		break;
-	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-		dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		dstStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-		break;
-	default:
-		Crash();
-		return;
-	}
-
-	VkImageMemoryBarrier *barrier = barriers->Add(img.image, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, dstStage, 0);
-	barrier->subresourceRange.layerCount = numLayers;
-	barrier->subresourceRange.aspectMask = aspects;
-	barrier->oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	barrier->newLayout = initialLayout;
-	barrier->srcAccessMask = 0;
-	barrier->dstAccessMask = dstAccessMask;
-
-	img.layout = initialLayout;
+	img.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 	img.format = format;
 	img.sampleCount = sampleCount;
 	img.tag = tag ? tag : "N/A";
 	img.numLayers = numLayers;
+	return true;
 }
 
 static VkAttachmentLoadOp ConvertLoadAction(VKRRenderPassLoadAction action) {

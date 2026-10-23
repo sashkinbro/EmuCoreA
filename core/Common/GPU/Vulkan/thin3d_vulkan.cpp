@@ -1865,6 +1865,10 @@ Framebuffer *VKContext::CreateFramebuffer(const FramebufferDesc &desc) {
 	_assert_(desc.height > 0);
 
 	VKRFramebuffer *vkrfb = new VKRFramebuffer(vulkan_, &renderManager_.PostInitBarrier(), desc.width, desc.height, desc.numLayers, desc.multiSampleLevel, desc.z_stencil, desc.tag);
+	if (!vkrfb->IsValid()) {
+		delete vkrfb;
+		return nullptr;
+	}
 	return new VKFramebuffer(vkrfb, desc.multiSampleLevel);
 }
 

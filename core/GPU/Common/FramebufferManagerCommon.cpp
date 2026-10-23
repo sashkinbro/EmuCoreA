@@ -523,8 +523,9 @@ VirtualFramebuffer *FramebufferManagerCommon::DoSetRenderFrameBuffer(Framebuffer
 		if (!resized && renderScaleFactor_ != 1 && vfb->renderScaleFactor == 1 && !ShouldDownloadFramebufferColor(vfb)) {
 			// Might be time to change this framebuffer - have we used depth?
 			if ((vfb->usageFlags & FB_USAGE_COLOR_MIXED_DEPTH) && !PSP_CoreParameter().compat.flags().ForceLowerResolutionForEffectsOn) {
-				ResizeFramebufFBO(vfb, vfb->width, vfb->height, true);
-				_assert_(vfb->renderScaleFactor != 1);
+				if (ResizeFramebufFBO(vfb, vfb->width, vfb->height, true)) {
+					_assert_(vfb->renderScaleFactor != 1);
+				}
 			}
 		}
 	}
@@ -1110,6 +1111,13 @@ void FramebufferManagerCommon::NotifyRenderFramebufferCreated(VirtualFramebuffer
 }
 
 void FramebufferManagerCommon::NotifyRenderFramebufferUpdated(VirtualFramebuffer *vfb) {
+	if (useBufferedRendering_) {
+		if (vfb->fbo) {
+			gstate_c.skipDrawReason &= ~SKIPDRAW_NON_DISPLAYED_FB;
+		} else {
+			gstate_c.skipDrawReason |= SKIPDRAW_NON_DISPLAYED_FB;
+		}
+	}
 	if (gstate_c.curRTWidth != vfb->bufferWidth || gstate_c.curRTHeight != vfb->bufferHeight) {
 		gstate_c.Dirty(DIRTY_FRAMEBUFFER_DIM | DIRTY_VIEWPORTSCISSOR_STATE);
 	}
@@ -1955,7 +1963,7 @@ void FramebufferManagerCommon::DecimateFBOs() {
 }
 
 // Requires width/height to be set already.
-void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w, int h, bool force, bool skipCopy) {
+bool FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w, int h, bool force, bool skipCopy) {
 	_dbg_assert_(w > 0);
 	_dbg_assert_(h > 0);
 	VirtualFramebuffer old = *vfb;
@@ -1968,7 +1976,7 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 		vfb->bufferHeight = h;
 	} else {
 		if (vfb->bufferWidth >= w && vfb->bufferHeight >= h) {
-			return;
+			return vfb->fbo != nullptr;
 		}
 
 		// In case it gets thin and wide, don't resize down either side.
@@ -2030,11 +2038,11 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 			vfb->fbo->Release();
 			vfb->fbo = nullptr;
 		}
-		return;
+		return true;
 	}
 	if (!old.fbo && vfb->last_frame_failed != 0 && gpuStats.totals.numFlips - vfb->last_frame_failed < 63) {
 		// Don't constantly retry FBOs which failed to create.
-		return;
+		return false;
 	}
 
 	// Probably redundant
@@ -2046,6 +2054,13 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 	gpuStats.perFrame.numFBOsCreated++;
 
 	vfb->fbo = draw_->CreateFramebuffer({ vfb->renderWidth, vfb->renderHeight, 1, GetFramebufferLayers(), vfb->multisampled ? msaaLevel_ : 0, true, tag });
+	if (!vfb->fbo) {
+		ERROR_LOG(Log::FrameBuf, "Error creating FBO during resize! %dx%d", vfb->renderWidth, vfb->renderHeight);
+		// Preserve the old target and its dimensions when a replacement cannot be allocated.
+		*vfb = old;
+		vfb->last_frame_failed = gpuStats.totals.numFlips;
+		return false;
+	}
 	if (Memory::IsVRAMAddress(vfb->fb_address) && vfb->fb_stride != 0) {
 		NotifyMemInfo(MemBlockFlags::ALLOC, vfb->fb_address, vfb->BufferByteSize(RASTER_COLOR), tag, len);
 	}
@@ -2085,10 +2100,7 @@ void FramebufferManagerCommon::ResizeFramebufFBO(VirtualFramebuffer *vfb, int w,
 	DiscardFramebufferCopy();
 	currentRenderVfb_ = vfb;
 
-	if (!vfb->fbo) {
-		ERROR_LOG(Log::FrameBuf, "Error creating FBO during resize! %dx%d", vfb->renderWidth, vfb->renderHeight);
-		vfb->last_frame_failed = gpuStats.totals.numFlips;
-	}
+	return true;
 }
 
 struct CopyCandidate {
@@ -3964,6 +3976,9 @@ void FramebufferManagerCommon::BlitFramebuffer(VirtualFramebuffer *dst, int dstX
 		Draw::Framebuffer *srcFBO = src->fbo;
 		if (src == dst) {
 			Draw::Framebuffer *tempFBO = GetTempFBO(TempFBO::BLIT, src->renderWidth, src->renderHeight);
+			if (!tempFBO) {
+				return;
+			}
 			// We need to copy to the temp using only the source coordinates, since those are the ones we read in the next blit.
 			BlitUsingRaster(src->fbo, srcX1, srcY1, srcX2, srcY2, tempFBO, srcX1, srcY1, srcX2, srcY2, false, dst->renderScaleFactor, pipeline, tag);
 			srcFBO = tempFBO;
