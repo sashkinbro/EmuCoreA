@@ -722,6 +722,40 @@ class NativeCoreLifecycleInstrumentedTest {
         assertTrue("GE framebuffer must present expected RGB CC6633: ${missingOutput.joinToString()}", missingOutput.isEmpty())
     }
 
+    @Test(timeout = 90_000)
+    fun openGlUploadsTightlyPacked16BitTextureRows() {
+        val textureGuest = File(root, "ge-narrow-texture.elf").apply {
+            writeBytes(PspGeDisplayFixture.elf(narrowTexture = true))
+        }
+        // Recreate the EGL context too: unpack state must be initialized each time.
+        repeat(2) { cycle ->
+            initialize(2)
+            onFrame {
+                NativePpsspp.nativeSetConfig("fps_limit", "60")
+                NativePpsspp.nativeSetConfig("ppsspp_texture_scaling_level", "disabled")
+                NativePpsspp.nativeSetConfig("ppsspp_texture_replacement", "disabled")
+                assertTrue(NativePpsspp.nativeBoot(textureGuest.path))
+            }
+            awaitBoot()
+            onFrame {
+                repeat(30) { NativePpsspp.nativeRunFrame() }
+                assertTrue(NativePpsspp.nativeGetRuntimeError().isEmpty())
+            }
+            val image = copySurface(checkNotNull(publishedSurface))
+            image.setPremultiplied(false)
+            try {
+                for (row in listOf(1, 3, 5, 7)) {
+                    val pixel = image.getPixel(image.width / 2, image.height * (row * 2 + 1) / 16)
+                    val expected = if (row < 4) 0xFF0000 else 0x00FF00
+                    assertEquals("1x8 RGB565 upload row=$row context=$cycle", expected, pixel and 0xFFFFFF)
+                }
+            } finally {
+                image.recycle()
+            }
+            onFrame { NativePpsspp.nativeShutdown() }
+        }
+    }
+
     /** Opt-in real content smoke: adb am instrument -e game <path-or-document-URI>. */
     @Test(timeout = 300_000)
     fun optionalRealGameBootsAndPresentsAcrossEveryRenderer() {

@@ -6,7 +6,7 @@ import java.nio.ByteOrder
 /** A real GE-drawn PSP8888 frame: no CPU writes to VRAM or host graphics hooks. */
 internal object PspGeDisplayFixture {
     /** Continuously draws RGB CC6633 through sceGe and presents it at vblank. */
-    fun elf(): ByteArray {
+    fun elf(narrowTexture: Boolean = false): ByteArray {
         val entry = 0x08804000
         val loadOffset = 0x100
         val moduleOffset = 0x300
@@ -19,6 +19,7 @@ internal object PspGeDisplayFixture {
         val geStubsOffset = 0x400
         val listOffset = 0x480
         val verticesOffset = 0x580
+        val textureOffset = 0x600
         val stringsOffset = 0x800
         val sectionsOffset = 0x900
         val bytes = ByteArray(sectionsOffset + 4 * 40)
@@ -36,7 +37,7 @@ internal object PspGeDisplayFixture {
         half(40, 52); half(42, 32); half(44, 1); half(46, 40); half(48, 4); half(50, 3)
         word(52, 1); word(56, loadOffset); word(60, entry)
         word(64, moduleOffset) // PSP module-info file offset, as in the existing guest fixture.
-        word(68, 0x500); word(72, 0x1000); word(76, 7); word(80, 0x100)
+        word(68, 0x600); word(72, 0x1000); word(76, 7); word(80, 0x100)
 
         val code = mutableListOf<Int>()
         fun emit(vararg instructions: Int) { code.addAll(instructions.toList()) }
@@ -85,7 +86,7 @@ internal object PspGeDisplayFixture {
         val bottomRight = (271 shl 10) or 479
         val vertexAddress = address(verticesOffset)
         // Commands and vertex flags verified against GPU/ge_constants.h.
-        val list = intArrayOf(
+        val list = mutableListOf(
             ge(0x10, (vertexAddress ushr 8) and 0x000F0000), // BASE high address bits.
             ge(0x13), ge(0x01, vertexAddress), // OFFSETADDR=0, VADDR low 24 bits.
             ge(0x12, (1 shl 23) or (3 shl 7) or (7 shl 2)), // THROUGH, XYZ float, RGBA8888.
@@ -98,13 +99,30 @@ internal object PspGeDisplayFixture {
             ge(0x21), ge(0x22), ge(0x23), ge(0x24), ge(0x25), ge(0x27), ge(0x28),
             ge(0xD3), ge(0xE7, 1), ge(0xE8), ge(0xE9), // Normal draw, no depth writes, all color channels.
             ge(0x50, 1), // Gouraud: both vertices have the same color.
-            ge(0x04, (6 shl 16) or 2), // GE_PRIM_RECTANGLES, two vertices.
-            ge(0x0F), ge(0x0C) // FINISH, END.
         )
+        if (narrowTexture) {
+            val textureAddress = address(textureOffset)
+            list += listOf(
+                ge(0x12, (1 shl 23) or (3 shl 7) or (7 shl 2) or 3), // Add float UVs.
+                ge(0x1E, 1), ge(0xC0), // Enable texture, use UV coordinates.
+                ge(0xA0, textureAddress), ge(0xA8, ((textureAddress ushr 8) and 0x000F0000) or 8),
+                ge(0xB8, 3 shl 8), // 1x8 texels, two bytes per tightly packed row.
+                ge(0xC2), ge(0xC3), // Unswizzled, one mip, RGB565.
+                ge(0xC6), ge(0xC7, 0x101), ge(0xC9, 3), ge(0xCB) // Nearest, clamp, replace.
+            )
+            // PSP source rows are 16-byte aligned; the decoder packs each host row to two bytes.
+            for (row in 0 until 8) half(textureOffset + row * 16, if (row < 4) 0x001F else 0x07E0)
+        }
+        list += listOf(ge(0x04, (6 shl 16) or 2), ge(0x0F), ge(0x0C)) // RECTANGLES, FINISH, END.
         check(listOffset + list.size * 4 <= verticesOffset)
         list.forEachIndexed { index, command -> word(listOffset + index * 4, command) }
         for ((index, position) in listOf(0f to 0f, 480f to 272f).withIndex()) {
-            val offset = verticesOffset + index * 16
+            var offset = verticesOffset + index * (if (narrowTexture) 24 else 16)
+            if (narrowTexture) {
+                data.putFloat(offset, index.toFloat())
+                data.putFloat(offset + 4, index * 8f)
+                offset += 8
+            }
             word(offset, 0xFF3366CC.toInt()) // PSP ABGR8888 storage -> RGB CC6633.
             data.putFloat(offset + 4, position.first)
             data.putFloat(offset + 8, position.second)
