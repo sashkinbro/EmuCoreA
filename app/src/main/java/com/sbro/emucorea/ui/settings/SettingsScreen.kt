@@ -1,5 +1,7 @@
 package com.sbro.emucorea.ui.settings
 
+import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.layout.FlowRow
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
@@ -206,6 +208,7 @@ import com.sbro.emucorea.data.PerformanceOverlayMetrics
 import com.sbro.emucorea.data.RetroArchShaderPreset
 import com.sbro.emucorea.data.SettingsBackupRepository
 import com.sbro.emucorea.data.SettingsSnapshot
+import com.sbro.emucorea.data.ShaderPackInstallProgress
 import com.sbro.emucorea.data.ShaderPackInstallStage
 import com.sbro.emucorea.data.TouchControlPressEffect
 import com.sbro.emucorea.data.TouchControlVisualStyle
@@ -1991,27 +1994,14 @@ private fun SettingsContent(
                             presets = uiState.shaderPresets,
                             selectedPath = uiState.shaderChainPreset,
                             onSelect = viewModel::setShaderChainPreset,
+                            onRemove = viewModel::removeShaderPresets,
                             helpText = stringResource(R.string.settings_help_shader_preset)
                         )
-                        SettingsItem(
-                            icon = if (uiState.isShaderPackInstalled) {
-                                Icons.Rounded.CheckCircle
-                            } else {
-                                Icons.Rounded.SystemUpdateAlt
-                            },
-                            label = stringResource(R.string.settings_shader_pack_download),
-                            value = when {
-                                uiState.isShaderPackBusy &&
-                                    uiState.shaderPackProgress?.stage == ShaderPackInstallStage.DOWNLOADING ->
-                                    stringResource(R.string.texture_download_status_downloading)
-                                uiState.isShaderPackBusy -> stringResource(R.string.settings_shader_pack_working)
-                                uiState.isShaderPackInstalled -> stringResource(R.string.settings_shader_pack_installed)
-                                else -> stringResource(R.string.settings_shader_pack_download_desc)
-                            },
-                            onClick = viewModel::downloadOfficialShaderPack,
-                            enabled = !uiState.isShaderPackBusy && !uiState.isShaderPackInstalled,
-                            progressVisible = uiState.isShaderPackBusy,
-                            progress = uiState.shaderPackProgress?.fraction
+                        ShaderPackDownloadItem(
+                            installed = uiState.isShaderPackInstalled,
+                            busy = uiState.isShaderPackBusy,
+                            progress = uiState.shaderPackProgress,
+                            onClick = viewModel::downloadOfficialShaderPack
                         )
                         SettingsItem(
                             icon = Icons.Rounded.FolderOpen,
@@ -4436,6 +4426,36 @@ private fun SliderItem(
 }
 
 @Composable
+internal fun ShaderPackDownloadItem(
+    installed: Boolean,
+    busy: Boolean,
+    progress: ShaderPackInstallProgress?,
+    onClick: () -> Unit
+) {
+    SettingsItem(
+        icon = if (installed) {
+            Icons.Rounded.CheckCircle
+        } else {
+            Icons.Rounded.SystemUpdateAlt
+        },
+        label = stringResource(R.string.settings_shader_pack_download),
+        value = when {
+            busy &&
+                progress?.stage == ShaderPackInstallStage.DOWNLOADING ->
+                stringResource(R.string.texture_download_status_downloading)
+            busy -> stringResource(R.string.settings_shader_pack_working)
+            installed -> stringResource(R.string.settings_shader_pack_installed)
+            else -> stringResource(R.string.settings_shader_pack_download_desc)
+        },
+        onClick = onClick,
+        enabled = !busy,
+        progressVisible = busy,
+        progress = progress?.fraction
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
 internal fun ShaderPresetSelector(
     title: String,
     presets: List<RetroArchShaderPreset>,
@@ -4444,12 +4464,22 @@ internal fun ShaderPresetSelector(
     helpText: String,
     leadingOptions: List<Pair<String, String>> = emptyList(),
     cardHorizontalPadding: Dp = 16.dp,
+    onRemove: (suspend (Set<String>) -> Boolean)? = null,
     enabled: Boolean = true
 ) {
     var showDialog by rememberSaveable { mutableStateOf(false) }
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var expandedCategoryKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var manageMode by remember { mutableStateOf(false) }
+    var removalSelection by remember { mutableStateOf(emptySet<String>()) }
+    var confirmRemoval by remember { mutableStateOf(false) }
+    var removing by remember { mutableStateOf(false) }
+    val removalScope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val removalFailed = stringResource(R.string.settings_shader_presets_remove_failed)
+    val removablePaths = remember(presets) { presets.map { it.absolutePath }.toSet() }
+    LaunchedEffect(removablePaths) { removalSelection = removalSelection.intersect(removablePaths) }
     val categoryListState = rememberLazyListState()
     val noneLabel = stringResource(R.string.settings_shader_preset_none)
     val selectedLabel = leadingOptions.firstOrNull { (path, _) -> path == selectedPath }?.second
@@ -4467,6 +4497,8 @@ internal fun ShaderPresetSelector(
             query = ""
             searchExpanded = false
             expandedCategoryKey = null
+            manageMode = false
+            removalSelection = emptySet()
             showDialog = true
         },
         helpText = helpText,
@@ -4497,7 +4529,7 @@ internal fun ShaderPresetSelector(
         }
 
         Dialog(
-            onDismissRequest = { showDialog = false },
+            onDismissRequest = { if (!removing) showDialog = false },
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
                 decorFitsSystemWindows = false
@@ -4661,9 +4693,17 @@ internal fun ShaderPresetSelector(
                                         group = expandedGroup,
                                         selectedPath = selectedPath,
                                         onCloseCategory = { expandedCategoryKey = null },
+                                        removalSelection = if (manageMode) removalSelection else null,
+                                        removablePaths = removablePaths,
                                         onSelect = { path ->
-                                            onSelect(path)
-                                            showDialog = false
+                                            if (manageMode) {
+                                                if (path in removablePaths && !removing) {
+                                                    removalSelection = if (path in removalSelection) removalSelection - path else removalSelection + path
+                                                }
+                                            } else {
+                                                onSelect(path)
+                                                showDialog = false
+                                            }
                                         }
                                     )
                                 }
@@ -4673,13 +4713,23 @@ internal fun ShaderPresetSelector(
                         HorizontalDivider(
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
                         )
-                        Row(
+                        FlowRow(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 14.dp, vertical = 8.dp),
                             horizontalArrangement = Arrangement.End
                         ) {
-                            TextButton(onClick = { showDialog = false }) {
+                            if (onRemove != null) {
+                                TextButton(enabled = !removing, onClick = {
+                                    manageMode = !manageMode
+                                    removalSelection = emptySet()
+                                }) { Text(stringResource(R.string.settings_shader_presets_manage)) }
+                                if (manageMode) {
+                                    TextButton(enabled = removalSelection.isNotEmpty() && !removing,
+                                        onClick = { confirmRemoval = true }) { Text(stringResource(R.string.delete)) }
+                                }
+                            }
+                            TextButton(enabled = !removing, onClick = { showDialog = false }) {
                                 Text(stringResource(R.string.close))
                             }
                         }
@@ -4688,6 +4738,33 @@ internal fun ShaderPresetSelector(
             }
         }
     }
+    if (confirmRemoval) {
+        AlertDialog(
+            onDismissRequest = { confirmRemoval = false },
+            title = { Text(stringResource(R.string.settings_shader_presets_remove_title)) },
+            text = { Text(stringResource(R.string.settings_shader_presets_remove_body, removalSelection.size)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val paths = removalSelection.intersect(removablePaths)
+                    confirmRemoval = false
+                    removing = true
+                    removalScope.launch {
+                        try {
+                            if (paths.isNotEmpty() && onRemove?.invoke(paths) == true) {
+                                removalSelection = emptySet()
+                            } else Toast.makeText(context, removalFailed, Toast.LENGTH_SHORT).show()
+                        } catch (error: kotlinx.coroutines.CancellationException) {
+                            throw error
+                        } catch (_: Exception) {
+                            Toast.makeText(context, removalFailed, Toast.LENGTH_SHORT).show()
+                        } finally { removing = false }
+                    }
+                }) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemoval = false }) { Text(stringResource(R.string.cancel)) } }
+        )
+    }
+
 }
 
 internal data class ShaderPresetDialogGroup(
@@ -4788,7 +4865,9 @@ private fun ShaderPresetCategoryOptions(
     group: ShaderPresetDialogGroup,
     selectedPath: String,
     onCloseCategory: () -> Unit,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
+    removalSelection: Set<String>? = null,
+    removablePaths: Set<String> = emptySet()
 ) {
     val listState = rememberLazyListState()
     LaunchedEffect(group.key, selectedPath) {
@@ -4822,6 +4901,8 @@ private fun ShaderPresetCategoryOptions(
                 ShaderPresetDialogOption(
                     label = if (group.stripsCategoryPrefix) label.substringAfter('/') else label,
                     selected = path == selectedPath,
+                    managementChecked = removalSelection?.let { path in it },
+                    enabled = removalSelection == null || path in removablePaths,
                     onClick = { onSelect(path) }
                 )
             }
@@ -4906,12 +4987,15 @@ private fun ShaderPresetCategoryCard(
 private fun ShaderPresetDialogOption(
     label: String,
     selected: Boolean,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    managementChecked: Boolean? = null,
+    enabled: Boolean = true
 ) {
     val shape = neonShape(16.dp)
     val interactionSource = remember { MutableInteractionSource() }
     Surface(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .fillMaxWidth()
             .tvGamepadFocusableCard(
@@ -4948,7 +5032,9 @@ private fun ShaderPresetDialogOption(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
-            if (selected) {
+            if (managementChecked != null) {
+                Checkbox(checked = managementChecked, onCheckedChange = null, enabled = enabled)
+            } else if (selected) {
                 Icon(
                     imageVector = Icons.Rounded.CheckCircle,
                     contentDescription = null,

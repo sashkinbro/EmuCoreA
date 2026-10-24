@@ -564,6 +564,44 @@ fun PerGameSettingsManagerScreen(
                         selectedTab = selectedTab,
                         maxUpscaleMultiplier = maxUpscaleMultiplier,
                         shaderPresets = shaderPresets,
+                        onRemoveShaderPresets = { paths ->
+                            var removalCommitted = false
+                            val removed = com.sbro.emucorea.data.RemovedShaderPresetPaths(paths)
+                            try {
+                                profileMutationMutex.withLock {
+                                    withContext(Dispatchers.IO) {
+                                        shaderRepository.removePresets(paths).getOrThrow()
+                                        removalCommitted = true
+                                        com.sbro.emucorea.data.ShaderPresetSelectionCleanup.clearRemovedSelections(
+                                            preferences, repository, paths
+                                        )
+                                    }
+                                }
+                                true
+                            } catch (error: kotlinx.coroutines.CancellationException) { throw error }
+                            catch (_: Exception) { false }
+                            finally {
+                                if (removalCommitted) withContext(kotlinx.coroutines.NonCancellable) {
+                                    if (removed.contains(draft.shaderChainPreset)) draft = draft.copy(
+                                        shaderChainOverrideEnabled = draft.shaderChainOverrideEnabled?.let { false },
+                                        shaderChainPreset = ""
+                                    )
+                                    val runtimePreset = withContext(Dispatchers.IO) {
+                                        EmulatorBridge.getSetting("EmuCoreA/GS", "ShaderChainPreset", "string")
+                                    }
+                                    if (removed.contains(runtimePreset)) runCatching {
+                                        EmulatorBridge.setSetting("EmuCoreA/GS", "ShaderChainEnabled", "bool", "false")
+                                        EmulatorBridge.setSetting("EmuCoreA/GS", "ShaderChainPreset", "string", "")
+                                    }
+                                    shaderPresets = runCatching {
+                                        withContext(Dispatchers.IO) { shaderRepository.listPresets() }
+                                    }.getOrElse { shaderPresets.filterNot { removed.contains(it.absolutePath) } }
+                                    profiles = runCatching {
+                                        profileMutationMutex.withLock { withContext(Dispatchers.IO) { repository.getAll() } }
+                                    }.getOrDefault(profiles)
+                                }
+                            }
+                        },
                         onOpenControlsLayoutEditor = {
                             if (isOpeningControlsEditor) return@GameSettingsManagerEditorPanel
                             isOpeningControlsEditor = true
@@ -815,6 +853,7 @@ private fun GameSettingsManagerEditorPanel(
     selectedTab: GameSettingsManagerTab,
     maxUpscaleMultiplier: Int,
     shaderPresets: List<RetroArchShaderPreset>,
+    onRemoveShaderPresets: suspend (Set<String>) -> Boolean,
     onOpenControlsLayoutEditor: () -> Unit,
     onDraftChange: (PerGameSettings) -> Unit
 ) {
@@ -863,6 +902,7 @@ private fun GameSettingsManagerEditorPanel(
             selectedTab = selectedTab,
             maxUpscaleMultiplier = maxUpscaleMultiplier,
             shaderPresets = shaderPresets,
+            onRemoveShaderPresets = onRemoveShaderPresets,
             onDraftChange = onDraftChange
         )
     }
@@ -875,6 +915,7 @@ private fun GameSettingsTabContent(
     selectedTab: GameSettingsManagerTab,
     maxUpscaleMultiplier: Int,
     shaderPresets: List<RetroArchShaderPreset>,
+    onRemoveShaderPresets: suspend (Set<String>) -> Boolean,
     onDraftChange: (PerGameSettings) -> Unit
 ) {
     val nativeUpscaleLabel = stringResource(R.string.settings_upscale_native)
@@ -956,6 +997,7 @@ private fun GameSettingsTabContent(
                     ShaderPresetSelector(
                         title = stringResource(R.string.settings_shader_preset),
                         presets = shaderPresets,
+                        onRemove = onRemoveShaderPresets,
                         selectedPath = when (draft.shaderChainOverrideEnabled) {
                             null -> SHADER_PRESET_USE_GLOBAL
                             false -> ""
