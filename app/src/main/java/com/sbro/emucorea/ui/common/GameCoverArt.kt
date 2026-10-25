@@ -67,8 +67,23 @@ fun gameCoverContentScale(coverPath: String?, defaultScale: ContentScale): Conte
     if (isGenerated3dCover(coverPath)) ContentScale.Fit else defaultScale
 
 private val imageLoadingSemaphore = Semaphore(4)
+private val imagePrefetchSemaphore = Semaphore(1)
 private const val DEFAULT_COVER_DECODE_WIDTH = 720
 private const val DEFAULT_COVER_DECODE_HEIGHT = 1080
+
+/** Speculation uses the same key, size and cache as a visible library cover. */
+internal suspend fun prefetchGameCoverArt(context: android.content.Context, coverPath: String) {
+    val key = "$coverPath@${DEFAULT_COVER_DECODE_WIDTH}x$DEFAULT_COVER_DECODE_HEIGHT"
+    if (getCachedBitmap(key) != null) return
+    imagePrefetchSemaphore.withPermit {
+        val bitmap = withContext(Dispatchers.IO) {
+            imageLoadingSemaphore.withPermit {
+                getCachedBitmap(key) ?: loadBitmap(context, coverPath)
+            }
+        }
+        if (bitmap != null) putCachedBitmap(key, bitmap)
+    }
+}
 
 @Composable
 fun GameCoverArt(
@@ -133,7 +148,7 @@ fun GameCoverArt(
         for (candidate in candidates) {
             val candidateBitmap = withContext(Dispatchers.IO) {
                 imageLoadingSemaphore.withPermit {
-                    loadBitmap(context, candidate, decodeWidth, decodeHeight)
+                    getCachedBitmap(cacheKey(candidate)) ?: loadBitmap(context, candidate, decodeWidth, decodeHeight)
                 }
             }
             if (candidateBitmap != null) {
