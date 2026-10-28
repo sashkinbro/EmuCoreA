@@ -422,6 +422,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Common/Render/ManagedTexture.cpp \
   $(SRC)/Common/Render/DrawBuffer.cpp \
   $(SRC)/Common/Render/AtlasGen.cpp \
+  $(SRC)/Common/Render/DropShadow.cpp \
   $(SRC)/Common/Render/TextureAtlas.cpp \
   $(SRC)/Common/Render/Text/draw_text.cpp \
   $(SRC)/Common/Render/Text/draw_text_android.cpp \
@@ -689,6 +690,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/FileLoaders/DiskCachingFileLoader.cpp \
   $(SRC)/Core/FileLoaders/HTTPFileLoader.cpp \
   $(SRC)/Core/FileLoaders/LocalFileLoader.cpp \
+  $(SRC)/Core/FileLoaders/PS1EbootFileLoader.cpp \
   $(SRC)/Core/FileLoaders/RamCachingFileLoader.cpp \
   $(SRC)/Core/FileLoaders/RetryingFileLoader.cpp \
   $(SRC)/Core/FileLoaders/ZipFileLoader.cpp \
@@ -991,6 +993,39 @@ LOCAL_MODULE := libzstd
 LOCAL_SRC_FILES := $(LIBZSTD_FILES)
 include $(BUILD_STATIC_LIBRARY)
 
+# The bundled zlib, rather than the NDK's, which is too old for some of what we use (uncompress2).
+include $(CLEAR_VARS)
+LOCAL_MODULE := libzlib
+LOCAL_SRC_FILES := \
+  $(SRC)/ext/zlib/adler32.c \
+  $(SRC)/ext/zlib/compress.c \
+  $(SRC)/ext/zlib/crc32.c \
+  $(SRC)/ext/zlib/deflate.c \
+  $(SRC)/ext/zlib/gzclose.c \
+  $(SRC)/ext/zlib/gzlib.c \
+  $(SRC)/ext/zlib/gzread.c \
+  $(SRC)/ext/zlib/gzwrite.c \
+  $(SRC)/ext/zlib/infback.c \
+  $(SRC)/ext/zlib/inffast.c \
+  $(SRC)/ext/zlib/inflate.c \
+  $(SRC)/ext/zlib/inftrees.c \
+  $(SRC)/ext/zlib/trees.c \
+  $(SRC)/ext/zlib/uncompr.c \
+  $(SRC)/ext/zlib/zutil.c
+LOCAL_CFLAGS := -O3
+LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/zlib
+include $(BUILD_STATIC_LIBRARY)
+
+# FFmpeg, from the sources in ext/ffmpeg. See its README.md.
+include $(CLEAR_VARS)
+include $(LOCAL_PATH)/$(SRC)/ext/ffmpeg-build/sources.mk
+LOCAL_MODULE := libffmpeg
+LOCAL_SRC_FILES := $(addprefix $(SRC)/ext/ffmpeg/,$(FFMPEG_SOURCES))
+LOCAL_CFLAGS := -O3 -DHAVE_AV_CONFIG_H -D_ISOC99_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -w -Werror=implicit-function-declaration
+LOCAL_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/ffmpeg-build $(LOCAL_PATH)/$(SRC)/ext/ffmpeg
+LOCAL_EXPORT_C_INCLUDES := $(LOCAL_PATH)/$(SRC)/ext/ffmpeg
+include $(BUILD_STATIC_LIBRARY)
+
 include $(CLEAR_VARS)
 include $(LOCAL_PATH)/Locals.mk
 LOCAL_STATIC_LIBRARIES += ppsspp_common ppsspp_core libarmips libzstd oboe
@@ -1019,9 +1054,20 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/DriverManagerScreen.cpp \
   $(SRC)/UI/DisplayLayoutScreen.cpp \
   $(SRC)/UI/EmuScreen.cpp \
+  $(SRC)/UI/ImposeHome.cpp \
   $(SRC)/UI/GameBrowser.cpp \
   $(SRC)/UI/MainScreen.cpp \
   $(SRC)/UI/TabbedDialogScreen.cpp \
+  $(SRC)/UI/SettingsPage.cpp \
+  $(SRC)/UI/Settings/GraphicsPage.cpp \
+  $(SRC)/UI/Settings/ControlsPage.cpp \
+  $(SRC)/UI/Settings/AudioPage.cpp \
+  $(SRC)/UI/Settings/NetworkingPage.cpp \
+  $(SRC)/UI/Settings/GeneralPage.cpp \
+  $(SRC)/UI/Settings/SystemPage.cpp \
+  $(SRC)/UI/Settings/ToolsPage.cpp \
+  $(SRC)/UI/Settings/VRPage.cpp \
+  $(SRC)/UI/SettingsPagesDialogScreen.cpp \
   $(SRC)/UI/AdhocServerScreen.cpp \
   $(SRC)/UI/SimpleDialogScreen.cpp \
   $(SRC)/UI/MemStickScreen.cpp \
@@ -1044,7 +1090,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/UploadScreen.cpp \
   $(SRC)/UI/ControlMappingScreen.cpp \
   $(SRC)/UI/GameSettingsScreen.cpp \
-  $(SRC)/UI/DeveloperToolsScreen.cpp \
+  $(SRC)/UI/DeveloperSettingsPages.cpp \
   $(SRC)/UI/GPUDriverTestScreen.cpp \
   $(SRC)/UI/TiltAnalogSettingsScreen.cpp \
   $(SRC)/UI/TouchControlLayoutScreen.cpp \
@@ -1130,6 +1176,7 @@ ifeq ($(UNITTEST),1)
     $(SRC)/unittest/TestSplineTessellation.cpp \
     $(SRC)/unittest/TestGEMath.cpp \
     $(SRC)/unittest/TestZipSlip.cpp \
+    $(SRC)/unittest/TestPS1Eboot.cpp \
     $(SRC)/unittest/UnitTest.cpp
 
   include $(BUILD_EXECUTABLE)

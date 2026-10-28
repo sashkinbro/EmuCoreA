@@ -619,6 +619,9 @@
     <ClCompile Include="FileLoaders\LocalFileLoader.cpp">
       <Filter>FileLoaders</Filter>
     </ClCompile>
+    <ClCompile Include="FileLoaders\PS1EbootFileLoader.cpp">
+      <Filter>FileLoaders</Filter>
+    </ClCompile>
     <ClCompile Include="FileLoaders\HTTPFileLoader.cpp">
       <Filter>FileLoaders</Filter>
     </ClCompile>
@@ -1187,6 +1190,8 @@
       <Filter>HW</Filter>
     </ClCompile>
     <ClCompile Include="HW\MeMMIO.cpp">
+      <Filter>HW</Filter>
+    </ClCompile>
     <ClCompile Include="HW\PopsMMIO.cpp">
       <Filter>HW</Filter>
     </ClCompile>
@@ -1678,6 +1683,9 @@
     <ClInclude Include="Util\PPGeDraw.h">
       <Filter>Util</Filter>
     </ClInclude>
+    <ClInclude Include="Util\KL4E.h">
+      <Filter>Util</Filter>
+    </ClInclude>
     <ClInclude Include="Util\PSARUnpack.h">
       <Filter>Util</Filter>
     </ClInclude>
@@ -1978,6 +1986,9 @@
     <ClInclude Include="FileLoaders\LocalFileLoader.h">
       <Filter>FileLoaders</Filter>
     </ClInclude>
+    <ClInclude Include="FileLoaders\PS1EbootFileLoader.h">
+      <Filter>FileLoaders</Filter>
+    </ClInclude>
     <ClInclude Include="FileLoaders\HTTPFileLoader.h">
       <Filter>FileLoaders</Filter>
     </ClInclude>
@@ -2207,6 +2218,8 @@
       <Filter>HW</Filter>
     </ClInclude>
     <ClInclude Include="HW\MeMMIO.h">
+      <Filter>HW</Filter>
+    </ClInclude>
     <ClInclude Include="HW\PopsMMIO.h">
       <Filter>HW</Filter>
     </ClInclude>

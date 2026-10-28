@@ -55,6 +55,7 @@
 #include "Core/CmdLine.h"
 #include "Common/Net/HTTPRequest.h"
 #include "Core/Config.h"
+#include "Core/Instance.h"
 #include "Core/ConfigValues.h"
 #include "Core/Core.h"
 #include "Core/CoreTiming.h"
@@ -69,6 +70,7 @@
 #include "headless/ReverseEngineer.h"
 #include "Core/WebServer.h"
 #include "Core/HLE/sceUtility.h"
+#include "Core/Instance.h"
 #include "Core/SaveState.h"
 #include "GPU/GPUCommon.h"
 #include "GPU/Common/FramebufferManagerCommon.h"
@@ -431,6 +433,8 @@ struct AutoTestOptions {
 	bool bench;
 	bool printEqualLines;
 	bool frameStats;
+	// Keep emulated time from running ahead of the wall clock (--realtime).
+	bool realtime;
 	// What --disable-hle asked for, or 0 if it was not passed. Only an explicit request binds:
 	// sceMpeg and sceMp4 run the firmware module by default now and fall back to the HLE wherever
 	// none is installed, which must not fail every run on such a machine.
@@ -559,7 +563,51 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 	int statsLastFlips = 0;
 	std::vector<std::pair<double, Path>> screenshotsAt = opt.screenshotsAt;
 	coreState = coreParameter.startBreak ? CORE_STEPPING_CPU : CORE_RUNNING_CPU;
-	while (coreState == CORE_RUNNING_CPU || coreState == CORE_STEPPING_CPU) {
+
+	// The XMB starting a game, or a game going back to it: boot that, the way the app does, and keep
+	// going on the same clocks. False if nothing asked for it, or the boot failed.
+	bool rebootFailed = false;
+	auto rebootIfRequested = [&]() -> bool {
+		BootRequest request;
+		if (coreState != CORE_POWERDOWN || !PSP_TakeBootRequest(&request)) {
+			return false;
+		}
+		if (gpu) {
+			gpu->EndHostFrame();
+		}
+		if (draw) {
+			EndDrawFrame(draw);
+		}
+		PSP_Shutdown(true);
+		request.ApplyTo(&coreParameter);
+		std::string error;
+		if (PSP_InitStart(coreParameter)) {
+			while (PSP_InitUpdate(&error) == BootState::Booting) {
+				sleep_ms(1, "auto-test");
+			}
+		}
+		if (!PSP_IsInited()) {
+			fprintf(stderr, "Failed to boot '%s': %s\n", coreParameter.fileToStart.c_str(), error.c_str());
+			g_bootFailed = true;
+			rebootFailed = true;
+			return false;
+		}
+		System_Notify(SystemNotification::BOOT_DONE);
+		draw = coreParameter.graphicsContext ? coreParameter.graphicsContext->GetDrawContext() : nullptr;
+		if (draw) {
+			draw->BeginFrame(Draw::DebugFlags::NONE);
+		}
+		if (gpu) {
+			gpu->BeginHostFrame(g_Config.GetDisplayLayoutConfig(DeviceOrientation::Landscape));
+		}
+		lastEmulatedTime = CoreTiming::GetGlobalTimeUs() / 1000000.0;
+		// Like the first boot. A debugger script's pending stop didn't survive the reboot, so it
+		// gets a fresh one here.
+		coreState = coreParameter.startBreak ? CORE_STEPPING_CPU : CORE_RUNNING_CPU;
+		return true;
+	};
+
+	while (coreState == CORE_RUNNING_CPU || coreState == CORE_STEPPING_CPU || rebootIfRequested()) {
 		// Savestate loads/saves are queued and applied here, same as EmuScreen::render does in the
 		// app. Without this, --state silently did nothing at all.
 		SaveState::Process();
@@ -612,6 +660,15 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 
 		// Finer steps when input is scripted, so short presses land.
 		int blockTicks = (int)usToCycles(1000000 / (opt.presses.empty() ? 10 : 60));
+		if (opt.realtime) {
+			// Display flips are the only thing that paces headless otherwise, and a test that doesn't
+			// draw never flips, so the emulated clock would race ahead of instances it talks to.
+			blockTicks = (int)usToCycles(1000);
+			const double ahead = emulatedElapsed - (time_now_d() - startTime);
+			if (ahead > 0.001) {
+				sleep_ms((int)(std::min(ahead, 0.05) * 1000.0), "realtime");
+			}
+		}
 		PSP_RunLoopFor(blockTicks);
 
 		// If we were rendering, this might be a nice time to do something about it.
@@ -665,6 +722,10 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 			passed = false;
 			Core_Stop();
 		}
+	}
+
+	if (rebootFailed) {
+		return false;
 	}
 	if (gpu) {
 		gpu->EndHostFrame();
@@ -904,6 +965,7 @@ int main(int argc, const char* argv[]) {
 	testOptions.verbose = cmdLineOptions.verbose.value_or(false);
 	testOptions.printEqualLines = cmdLineOptions.printEqualLines.value_or(false);
 	testOptions.frameStats = cmdLineOptions.frameStats.value_or(false);
+	testOptions.realtime = cmdLineOptions.realtime.value_or(false);
 	// BUTTONS is a sceCtrl mask (hex with 0x), DURATION defaults to 0.15s.
 	if (cmdLineOptions.pressScript.has_value()) {
 		std::vector<std::string> items;
@@ -1012,7 +1074,8 @@ int main(int argc, const char* argv[]) {
 			stats.compressionCounts[(int)PSARCompression::KL3E],
 			stats.compressionCounts[(int)PSARCompression::LZR],
 			stats.compressionCounts[(int)PSARCompression::Unknown]);
-		return ok ? 0 : 1;
+		// A walk that got to the end can still have failed on every file, so count those too.
+		return ok && stats.failed == 0 ? 0 : 1;
 	}
 
 	// Same deal for installing a game update package.
@@ -1104,6 +1167,9 @@ int main(int argc, const char* argv[]) {
 	g_Config.bEnableWlan = true;
 	// The net tests want WLAN on, but a test run shouldn't depend on reaching a real adhoc server.
 	g_Config.sProAdhocServer = "localhost";
+	// Headless doesn't join the app's instance counter (InitInstanceCounter), but behaves as the only
+	// instance: with the default 0, the localhost IP derived from it is 127.0.0.0, which macOS won't bind.
+	PPSSPP_ID = 1;
 	g_Config.sMACAddress = "12:34:56:78:9A:BC";
 	g_Config.iFirmwareVersion = PSP_DEFAULT_FIRMWARE;
 	g_Config.iPSPModel = PSP_MODEL_SLIM;
@@ -1129,6 +1195,9 @@ int main(int argc, const char* argv[]) {
 	// ApplyToConfig() has the final say, applied after RestoreDefaults() and the headless
 	// overrides above, so a matching command line flag always wins.
 	cmdLineOptions.ApplyToConfig();
+	// Instances talking to each other over ad hoc need their own 127.0.0.N address and MAC, which come
+	// from PPSSPP_ID. Headless doesn't run the instance counter the app uses to pick one.
+	PPSSPP_ID = (uint8_t)cmdLineOptions.instance.value_or(1);
 
 	// pspautotests is plain homebrew PRXes so do not ship user libraries that a retail disc may carry. 
 	// So we must use HLE, unless we install firmware.
@@ -1271,7 +1340,8 @@ int main(int argc, const char* argv[]) {
 	coreParameter.renderHeight = 272 * coreParameter.renderScaleFactor;
 	coreParameter.pixelWidth = 480 * coreParameter.renderScaleFactor;
 	coreParameter.pixelHeight = 272 * coreParameter.renderScaleFactor;
-	coreParameter.fastForward = true;
+	// Ad hoc tests between instances wait for each other over the real network, so they need PSP speed.
+	coreParameter.fastForward = !cmdLineOptions.realtime.value_or(false);
 
 #if PPSSPP_PLATFORM(IOS)
 	// GetExeDirectory() knows nothing on iOS, but argv[0] is the executable inside the .app,

@@ -1,6 +1,6 @@
 HAVE_LIBRETRO_VFS ?= 1
 
-FFMPEGDIR		= $(CORE_DIR)/ffmpeg
+FFMPEGDIR		= $(CORE_DIR)/ext/ffmpeg
 LIBRETRODIR		= $(CORE_DIR)/libretro
 COREDIR			= $(CORE_DIR)/Core
 COMMONDIR		= $(CORE_DIR)/Common
@@ -30,7 +30,6 @@ INCFLAGS += \
 	-I$(ZSTDDIR) \
 	-I$(EXTDIR)/snappy \
 	-I$(FFMPEGDIR) \
-	$(FFMPEGINCFLAGS) \
 	-I$(EXTDIR)/cityhash \
 	-I$(EXTDIR)/armips \
 	-I$(EXTDIR)/armips/ext/filesystem/include \
@@ -511,6 +510,7 @@ SOURCES_CXX += \
 	$(COMMONDIR)/Net/WebsocketServer.cpp \
 	$(COMMONDIR)/Render/ManagedTexture.cpp \
 	$(COMMONDIR)/Render/DrawBuffer.cpp \
+	$(COMMONDIR)/Render/DropShadow.cpp \
 	$(COMMONDIR)/Render/TextureAtlas.cpp \
 	$(COMMONDIR)/Serialize/Serializer.cpp \
 	$(COMMONDIR)/Thread/ThreadUtil.cpp \
@@ -723,6 +723,7 @@ SOURCES_CXX += \
 	       $(COREDIR)/FileLoaders/RetryingFileLoader.cpp \
 	       $(COREDIR)/FileLoaders/RamCachingFileLoader.cpp \
 	       $(COREDIR)/FileLoaders/LocalFileLoader.cpp \
+	       $(COREDIR)/FileLoaders/PS1EbootFileLoader.cpp \
 	       $(COREDIR)/FileLoaders/ZipFileLoader.cpp \
 	       $(COREDIR)/CoreTiming.cpp \
 	       $(COREDIR)/CwCheat.cpp \
@@ -1127,6 +1128,7 @@ SOURCES_C += $(LIBRETROCOMMONDIR)/compat/compat_posix_string.c \
              $(LIBRETROCOMMONDIR)/file/retro_dirent.c \
              $(LIBRETROCOMMONDIR)/streams/file_stream.c \
              $(LIBRETROCOMMONDIR)/streams/file_stream_transforms.c \
+			 $(LIBRETROCOMMONDIR)/string/rstrtod.c \
              $(LIBRETROCOMMONDIR)/string/stdstring.c \
              $(LIBRETROCOMMONDIR)/time/rtime.c \
              $(LIBRETROCOMMONDIR)/vfs/vfs_implementation.c

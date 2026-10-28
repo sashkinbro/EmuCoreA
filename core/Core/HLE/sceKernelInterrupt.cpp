@@ -734,8 +734,7 @@ struct PspIntrHandlerOptionParam {
 	u32 max_clock_hi;      //+34
 };  //=38
 
-static int QueryIntrHandlerInfo()
-{
+static int QueryIntrHandlerInfo() {
 	ERROR_LOG_REPORT(Log::sceIntc, "QueryIntrHandlerInfo()");
 	return 0;
 }
@@ -979,7 +978,8 @@ static u32 sysclib_strncpy(u32 dest, u32 src, u32 size) {
 
 	// This is just regular strncpy, but being explicit to avoid warnings/safety fixes on missing null.
 	u32 i = 0;
-	u32 srcSize = Memory::ClampValidSizeAt(src, size);
+	const u32 destSize = Memory::ClampValidSizeAt(dest, size);
+	const u32 srcSize = std::min(Memory::ClampValidSizeAt(src, size), destSize);
 	const u8 *srcp = Memory::GetPointerUnchecked(src);
 	u8 *destp = Memory::GetPointerWriteUnchecked(dest);
 	for (i = 0; i < srcSize; ++i) {
@@ -989,7 +989,6 @@ static u32 sysclib_strncpy(u32 dest, u32 src, u32 size) {
 		*destp++ = c;
 	}
 
-	u32 destSize = Memory::ClampValidSizeAt(dest, size);
 	for (; i < destSize; ++i) {
 		*destp++ = 0;
 	}
@@ -1014,7 +1013,10 @@ static u32 sysclib_strchr(u32 src, int c) {
 		return hleLogError(Log::sceKernel, 0, "invalid address");
 	}
 	const std::string str = Memory::GetCharPointer(src);
-	size_t cpos = str.find(str, c);
+	if ((char)c == 0) {
+		return hleLogVerbose(Log::sceKernel, src + (u32)str.size());
+	}
+	size_t cpos = str.find((char)c);
 	if (cpos == std::string::npos) {
 		return hleLogVerbose(Log::sceKernel, 0);
 	}
@@ -1026,7 +1028,10 @@ static u32 sysclib_strrchr(u32 src, int c) {
 		return hleLogError(Log::sceKernel, 0, "invalid address");
 	}
 	const std::string str = Memory::GetCharPointer(src);
-	size_t cpos = str.rfind(str, c);
+	if ((char)c == 0) {
+		return hleLogVerbose(Log::sceKernel, src + (u32)str.size());
+	}
+	size_t cpos = str.rfind((char)c);
 	if (cpos == std::string::npos) {
 		return hleLogVerbose(Log::sceKernel, 0);
 	}

@@ -105,6 +105,8 @@ enum class SystemRequestType {
 	IAP_MAKE_PURCHASE,
 
 	OPEN_DISPLAY_SETTINGS,
+
+	SET_SOFT_KEYBOARD_FORCED,
 };
 
 // Run a closure on the main thread. Used to safely implement UI that runs on another thread.
@@ -121,6 +123,7 @@ PermissionStatus System_GetPermissionStatus(SystemPermission permission);
 void System_AskForPermission(SystemPermission permission);
 
 // This will get muddy with multi-screen support :/ But this will always be the type of the main device.
+// Actually we now have multi-screen and we consider the second screen a TV. Doesn't really change things.
 // These are the return values from System_GetPropertyInt(SYSPROP_DEVICE_TYPE).
 enum SystemDeviceType {
 	DEVICE_TYPE_MOBILE = 0,  // phones and pads
@@ -194,6 +197,8 @@ enum SystemProperty {
 	SYSPROP_DISPLAY_SAFE_INSET_RIGHT,
 	SYSPROP_DISPLAY_SAFE_INSET_TOP,
 	SYSPROP_DISPLAY_SAFE_INSET_BOTTOM,
+	// How far down the screen the side insets are needed (they're for something in a top corner), or -1.
+	SYSPROP_DISPLAY_SIDE_INSETS_BOTTOM,
 	SYSPROP_DISPLAY_HAS_CAMERA_CUTOUT,
 
 	SYSPROP_DEVICE_TYPE,
@@ -315,12 +320,13 @@ enum class UIMessage {
 	POSTSHADER_UPDATED,
 	ACHIEVEMENT_LOGIN_STATE_CHANGE,
 	SAVESTATE_DISPLAY_SLOT,
-	GAMESETTINGS_SEARCH,
 	SAVEDATA_SEARCH,
 	RESTART_GRAPHICS,
 	RECENT_FILES_CHANGED,
 	SAVE_FRAME_DUMP,
 	ADHOC_SERVER_LIST_CHANGED,
+	SAVESTATE_SLOT_SAVED,  // A slot's save state file was written.
+	SOFT_KEYBOARD_HIDDEN,  // The platform closed a soft keyboard forced by System_SetSoftKeyboardForced.
 };
 
 std::string System_GetProperty(SystemProperty prop);

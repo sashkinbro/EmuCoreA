@@ -512,6 +512,10 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		NativeApp.audioConfig(optimalFramesPerBuffer, optimalSampleRate);
 		NativeApp.init(model, deviceType, languageRegion, apkFilePath, dataDir, extStorageDir, externalFilesDir, nativeLibDir, additionalStorageDirs, cacheDir, shortcut, installerName, Build.VERSION.SDK_INT, Build.BOARD);
 
+		// Both need the config.
+		ContentUri.flushShortcutUris(this);
+		ContentUri.manageUriGrants(this);
+
 		sendInitialGrants();
 
 		// OK, config should be initialized, we can query for screen rotation.
@@ -743,6 +747,8 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 			Log.i(TAG, "Found Shortcut Parameter in data, passing on: " + shortcutParam);
 			setShortcutParam(shortcutParam);
 		}
+		// So its file grant is kept (see ContentUri.manageUriGrants).
+		ContentUri.queueShortcutUri(this, getIntent().getStringExtra(SHORTCUT_EXTRA_KEY));
 
 		String achievementsHostOverride = AchievementsHostOverrideReceiver.getAchievementsHostOverride(this);
 		if (achievementsHostOverride != null && !achievementsHostOverride.isEmpty()) {
@@ -1204,6 +1210,10 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		mSensorManager.unregisterListener(this);
 		loseAudioFocus(this.audioManager, this.audioFocusChangeListener);
 
+		if (mSurfaceView != null) {
+			mSurfaceView.onActivityStopped();
+		}
+
 		// After a finish() and a quick relaunch, this comes after the new activity's onStart, and the audio and
 		// the location updates are its now.
 		if (checkCurrent("pausing audio and location in onStop")) {
@@ -1624,7 +1634,8 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		} else {
 			input.setInputType(InputType.TYPE_CLASS_TEXT);
 		}
-		input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+		// In landscape, keyboards otherwise go fullscreen with an edit box of their own, covering the dialog.
+		input.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_EXTRACT_UI | EditorInfo.IME_FLAG_NO_FULLSCREEN);
 		input.setText(defaultText);
 		input.setFocusableInTouchMode(true);
 		input.requestFocus();
@@ -1674,7 +1685,8 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		dlg.setCancelable(true);
 		Window wnd = dlg.getWindow();
 		if (wnd != null) {
-			wnd.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+			// Moves the dialog up out of the keyboard's way.
+			wnd.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 		}
 		try {
 			dlg.show();
@@ -1835,6 +1847,11 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		} else if (command.equals("hideKeyboard") && surfView != null) {
 			InputMethodManager inputMethodManager = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
 			inputMethodManager.hideSoftInputFromWindow(surfView.getWindowToken(), 0);
+			return true;
+		} else if (command.equals("forceKeyboard") && mSurfaceView != null) {
+			// "on" = keep the soft keyboard up (and let it type into the game), "persist" = also bring it back after
+			// an app switch, "off" = hide it again.
+			mSurfaceView.setKeyboardForced(!params.equals("off"), params.equals("persist"));
 			return true;
 		} else if (command.equals("inputbox")) {
 			String title = "Input";
@@ -2164,6 +2181,7 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		} else {
 			// Someone launched a shortcut while we were running....
 			setIntent(intent);
+			ContentUri.queueShortcutUri(this, intent.getStringExtra(SHORTCUT_EXTRA_KEY));
 			String value = parseIntent(intent);
 			if (value != null) {
 				// TODO: Actually send a command to the native code to launch the new game.

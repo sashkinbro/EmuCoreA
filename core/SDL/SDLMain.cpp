@@ -129,7 +129,8 @@ struct WindowState {
 static WindowState g_windowState;
 
 #if !PPSSPP_PLATFORM(MAC)
-static int g_batteryPercent = 0;
+// -1 until polled, or without a battery.
+static int g_batteryPercent = -1;
 #endif
 
 #if PPSSPP_PLATFORM(MAC)
@@ -743,8 +744,8 @@ AudioBackend *System_CreateAudioBackend() {
 static void InitializeFilters(std::vector<std::string> &filters, BrowseFileType type) {
 	switch (type) {
 	case BrowseFileType::BOOTABLE:
-		filters.push_back("All supported file types (*.iso *.cso *.chd *.pbp *.elf *.prx *.zip *.ppdmp)");
-		filters.push_back("*.pbp *.elf *.iso *.cso *.chd *.prx *.zip *.ppdmp");
+		filters.push_back("All supported file types (*.iso *.cso *.chd *.pbp *.elf *.prx *.zip *.ppdmp *.cue *.ccd *.mds *.mdf *.bin *.img)");
+		filters.push_back("*.pbp *.elf *.iso *.cso *.chd *.prx *.zip *.ppdmp *.cue *.ccd *.mds *.mdf *.bin *.img");
 		break;
 	case BrowseFileType::SAVE_STATE:
 		filters.push_back("Save state files (*.ppst)");
@@ -2456,10 +2457,8 @@ int main(int argc, char *argv[]) {
 		}
 	});
 
+	// Always polled: the status overlay shows it, and so does the HOME screen.
 	auto kick_battery_poll_thread = [&last_battery_poll, &battery_poll_thread_sema] {
-		if (!(g_Config.iShowStatusFlags & (int)ShowStatusFlags::BATTERY_PERCENT)) {
-			return;
-		}
 		double now = time_now_d();
 		if (now - last_battery_poll >= 5.0) {
 			last_battery_poll = now;

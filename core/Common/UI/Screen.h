@@ -37,7 +37,7 @@ struct OutputDisplay {
 	Draw::Swapchain *swapchain;  // nullptr while there's no draw context.
 };
 
-enum DialogResult {
+enum DialogResult : u8 {
 	DR_NONE,
 	DR_OK,
 	DR_CANCEL,
@@ -74,6 +74,7 @@ enum class ViewLayoutMode {
 	ApplyInsets = 0,   // For gameplay, option #1
 	IgnoreInsets,  // For gameplay, option #2
 	IgnoreBottomInset,
+	IgnoreSideInsets,
 };
 
 enum class QueuedEventType : u8 {

@@ -940,6 +940,10 @@ void InitPadLayout(TouchControlConfig *config, DeviceOrientation orientation, fl
 		int fast_forward_key_X = halfW;
 		int fast_forward_key_Y = screenBottom - bottom_button_Y * scale - 100;
 		initTouchPos(&config->touchFastForwardKey, fast_forward_key_X, fast_forward_key_Y);
+
+		int home_key_X = halfW;
+		int home_key_Y = screenBottom - bottom_button_Y * scale - 150;
+		initTouchPos(&config->touchHomeKey, home_key_X, home_key_Y);
 	} else {
 		int start_key_X = halfW + bottom_key_spacing * scale;
 		int start_key_Y = screenBottom - bottom_button_Y * scale;
@@ -948,6 +952,11 @@ void InitPadLayout(TouchControlConfig *config, DeviceOrientation orientation, fl
 		int select_key_X = halfW;
 		int select_key_Y = screenBottom - bottom_button_Y * scale;
 		initTouchPos(&config->touchSelectKey, select_key_X, select_key_Y);
+
+		// Above select.
+		int home_key_X = halfW;
+		int home_key_Y = select_key_Y - 50;
+		initTouchPos(&config->touchHomeKey, home_key_X, home_key_Y);
 
 		int fast_forward_key_X = halfW - bottom_key_spacing * scale;
 		int fast_forward_key_Y = screenBottom - bottom_button_Y * scale;
@@ -987,6 +996,15 @@ void InitPadLayout(TouchControlConfig *config, DeviceOrientation orientation, fl
 
 		initTouchPos(&config->touchCustom[i], combo_key_X, combo_key_Y);
 	}
+}
+
+ViewLayoutMode TouchControlsLayoutMode() {
+	// The only control the defaults put in the top third is the centered menu button.
+	const float sideInsetsBottom = System_GetPropertyFloat(SYSPROP_DISPLAY_SIDE_INSETS_BOTTOM);
+	if (sideInsetsBottom >= 0.0f && sideInsetsBottom < g_display.dp_yres / 3.0f) {
+		return ViewLayoutMode::IgnoreSideInsets;
+	}
+	return ViewLayoutMode::ApplyInsets;
 }
 
 UI::ViewGroup *CreatePadLayout(const TouchControlConfig &config, float xres, float yres, bool *pause, ControlMapper *controlMapper) {
@@ -1076,6 +1094,7 @@ GamepadEmuView::GamepadEmuView(const TouchControlConfig &config, float xres, flo
 
 	addPSPButton(CTRL_START, "Start button", rectImage, ImageID("I_RECT"), ImageID("I_START"), config.touchStartKey);
 	addPSPButton(CTRL_SELECT, "Select button", rectImage, ImageID("I_RECT"), ImageID("I_SELECT"), config.touchSelectKey);
+	addPSPButton(CTRL_HOME, "Home button", rectImage, ImageID("I_RECT"), ImageID("I_HOME"), config.touchHomeKey);
 
 	BoolButton *fastForward = addBoolButton(&PSP_CoreParameter().fastForward, "Fast-forward button", rectImage, ImageID("I_RECT"), ImageID("I_FAST_FORWARD_LINE"), config.touchFastForwardKey);
 	if (fastForward) {

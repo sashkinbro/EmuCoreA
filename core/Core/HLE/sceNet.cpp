@@ -659,6 +659,7 @@ void __NetInit() {
 
 	__ResetInitNetLib();
 	__NetApctlInit();
+	__NetInetInit();
 	__NetCallbackInit();
 }
 
@@ -712,7 +713,7 @@ void netValidateLoopMemory() {
 
 // This feels like a dubious proposition, mostly...
 void __NetDoState(PointerWrap &p) {
-	auto s = p.Section("sceNet", 1, 7);
+	auto s = p.Section("sceNet", 1, 8);
 	if (!s)
 		return;
 
@@ -780,6 +781,7 @@ void __NetDoState(PointerWrap &p) {
 		apctlEvents.clear();
 		apctlProdCodeAddr = 0;
 	}
+	__NetInetDoState(p, s >= 8);
 
 	if (p.mode == p.MODE_READ) {
 		// Let's not change "Inited" value when Loading SaveState in the middle of multiplayer to prevent memory & port leaks
@@ -812,7 +814,8 @@ void __NetApctlCallbacks()
 
 	// How AP works probably like this: Game use sceNetApctl function -> sceNetApctl let the hardware know and do their's thing and have a new State -> Let the game know the resulting State through Event on their handler
 	if (!apctlEvents.empty()) {
-		auto& args = apctlEvents.front();
+		// Copy it, the pop below destroys the element.
+		auto args = apctlEvents.front();
 		auto& oldState = args.data[0];
 		auto& newState = args.data[1];
 		auto& event = args.data[2];

@@ -18,6 +18,7 @@
 #pragma once
 
 #include <list>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -29,12 +30,14 @@
 #include "Common/UI/Tween.h"
 #include "Core/KeyMap.h"
 #include "Core/ControlMapper.h"
+#include "Core/CoreParameter.h"
 #include "UI/ImDebugger/ImCommand.h"
 
 struct AxisInput;
 struct DisplayLayoutConfig;
 
 class AsyncImageFileView;
+class ImposeHomeScreen;
 class ChatMenu;
 class ImDebugger;
 struct ImCommand;
@@ -112,6 +115,9 @@ private:
 	Path gamePath_;
 	Path mountIso_;
 	std::optional<bool> umdAutoboot_;
+	// The rest of a BootRequest from the emulated system (see PSP_RequestBoot).
+	std::optional<VSHLaunch> launchedFromVSH_;
+	std::vector<u8> vshmainArgs_;
 
 	bool quit_ = false;
 	std::string errorMessage_;
@@ -167,6 +173,9 @@ private:
 	DeviceOrientation gameOutputOrientation_ = DeviceOrientation::Landscape;
 
 	uint32_t clearColor_ = 0;
+
+	// The HOME button's quit screen (as impose draws it on a PSP).
+	std::unique_ptr<ImposeHomeScreen> imposeHome_;
 };
 
 bool MustRunBehind();

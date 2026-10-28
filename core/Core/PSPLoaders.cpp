@@ -35,6 +35,7 @@
 #include "Core/ELF/ParamSFO.h"
 #include "Core/ELF/PBPReader.h"
 #include "Core/ELF/PrxDecrypter.h"
+#include "Core/FileLoaders/PS1EbootFileLoader.h"
 
 #include "Core/FileSystems/BlockDevices.h"
 #include "Core/FileSystems/BlobFileSystem.h"
@@ -732,7 +733,9 @@ bool Load_PSP_ELF_PBP(FileLoader *fileLoader, std::string_view discId, bool load
 		g_Config.LoadGameConfig(discID);
 	}
 
-	return __KernelLoadExec(currentMIPS, finalName.c_str(), 0, error_string);
+	// The XMB coming back from a game it launched gets the args it launched it with.
+	const std::vector<u8> &vshmainArgs = PSP_CoreParameter().vshmainArgs;
+	return __KernelLoadExec(currentMIPS, finalName.c_str(), 0, error_string, vshmainArgs.empty() ? nullptr : &vshmainArgs);
 }
 
 // A PS1 EBOOT, run by the firmware's POPS manager, which loads its PS1 emulator for the game.
@@ -744,14 +747,20 @@ bool Load_PSP_POPS(FileLoader *fileLoader, std::string *error_string) {
 		return false;
 	}
 
-	// Its directory as host0:, as for a homebrew EBOOT.
+	// Its directory as host0:, as for a homebrew EBOOT. An EBOOT made from a disc image is the only file there.
 	const Path fullPath = fileLoader->GetPath();
-	auto fs = std::make_shared<DirectoryFileSystem>(&pspFileSystem, fullPath.NavigateUp(), FileSystemFlags::SIMULATE_FAT32 | FileSystemFlags::CARD);
-	pspFileSystem.Mount("host0:", fs);
+	std::string gamePath;
+	if (dynamic_cast<PS1EbootFileLoader *>(fileLoader)) {
+		pspFileSystem.Mount("host0:", std::make_shared<BlobFileSystem>(&pspFileSystem, fileLoader, "EBOOT.PBP"));
+		gamePath = "host0:/EBOOT.PBP";
+	} else {
+		auto fs = std::make_shared<DirectoryFileSystem>(&pspFileSystem, fullPath.NavigateUp(), FileSystemFlags::SIMULATE_FAT32 | FileSystemFlags::CARD);
+		pspFileSystem.Mount("host0:", fs);
+		gamePath = "host0:/" + fullPath.GetFilename();
+	}
 	pspFileSystem.SetStartingDirectory("host0:/");
 
 	__PopsBootInit();
-	const std::string gamePath = "host0:/" + fullPath.GetFilename();
 	INFO_LOG(Log::Loader, "POPS: booting %s through %s", gamePath.c_str(), popsmanPath);
 	if (!__KernelLoadExec(currentMIPS, popsmanPath, 0, error_string)) {
 		return false;
@@ -760,6 +769,8 @@ bool Load_PSP_POPS(FileLoader *fileLoader, std::string *error_string) {
 	if (!__PopsBootStartInit(fileLoader, gamePath, error_string)) {
 		return false;
 	}
+	auto sy = GetI18NCategory(I18NCat::SYSTEM);
+	g_OSD.Show(OSDType::MESSAGE_WARNING, sy->T("PS1 support is still experimental. The game might not work, or there may be glitches."), 6.0f);
 	return true;
 }
 

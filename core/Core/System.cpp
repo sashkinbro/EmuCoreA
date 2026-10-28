@@ -92,6 +92,9 @@ enum CPUThreadState {
 MetaFileSystem pspFileSystem;
 ParamSFOData g_paramSFO;
 ParamSFOData g_paramSFORaw;
+
+static std::mutex g_bootRequestLock;
+static std::optional<BootRequest> g_bootRequest;
 static GlobalUIState globalUIState;
 CoreParameter g_CoreParameter;
 static FileLoader *g_loadedFile;
@@ -285,7 +288,12 @@ static void GetBootError(IdentifiedFileType type, std::string *errorString) {
 
 	case IdentifiedFileType::ARCHIVE_7Z: *errorString = "7z file detected (Require 7-Zip)"; break;
 	case IdentifiedFileType::PSP_PKG: *errorString = "PKG game updates need to be installed, not booted."; break;
-	case IdentifiedFileType::PSX_ISO:  *errorString = "PSX game image detected."; break;
+	case IdentifiedFileType::PSX_ISO:
+		// It only gets here if it couldn't be made into an EBOOT, which says why.
+		if (errorString->empty()) {
+			*errorString = "PSX game image detected.";
+		}
+		break;
 	case IdentifiedFileType::PS2_ISO:  *errorString = "PS2 game image detected."; break;
 	case IdentifiedFileType::PS3_ISO:  *errorString = "PS2 game image detected."; break;
 	case IdentifiedFileType::NORMAL_DIRECTORY: *errorString = "Just a directory."; break;
@@ -308,14 +316,14 @@ static void ShowCompatWarnings(const Compatibility &compat) {
 	// UI changes are best done after PSP_InitStart.
 	if (compat.flags().RequireBufferedRendering && g_Config.bSkipBufferEffects && !g_Config.bSoftwareRendering) {
 		auto gr = GetI18NCategory(I18NCat::GRAPHICS);
-		g_OSD.Show(OSDType::MESSAGE_WARNING, gr->T("BufferedRenderingRequired", "Warning: This game requires Rendering Mode to be set to Buffered."), 10.0f, "bufreq");
+		g_OSD.Show(OSDType::MESSAGE_WARNING, gr->T("BufferedRenderingRequired", "Warning: This game is not compatible with \"Skip buffer effects\""), 10.0f, "bufreq");
 	} else {
 		g_OSD.CancelById("bufreq");
 	}
 
 	if (compat.flags().RequireBlockTransfer && g_Config.iSkipGPUReadbackMode != (int)SkipGPUReadbackMode::NO_SKIP && !PSP_CoreParameter().compat.flags().ForceEnableGPUReadback) {
 		auto gr = GetI18NCategory(I18NCat::GRAPHICS);
-		g_OSD.Show(OSDType::MESSAGE_WARNING, gr->T("BlockTransferRequired", "Warning: This game requires Skip GPU Readbacks be set to No."), 10.0f, "blockxfer");
+		g_OSD.Show(OSDType::MESSAGE_WARNING, gr->T("BlockTransferRequired", "Warning: This game requires Skip GPU Readbacks to be set to No."), 10.0f, "blockxfer");
 	} else {
 		g_OSD.CancelById("blockxfer");
 	}
@@ -448,12 +456,19 @@ static bool CPU_Init(FileLoader *fileLoader, IdentifiedFileType type, std::strin
 		break;
 	}
 	case IdentifiedFileType::PSP_ELF:
+	{
 		homebrew = true;
 		if (Memory::g_PSPModel != PSP_MODEL_FAT) {
 			INFO_LOG(Log::Loader, "ELF, using full PSP-2000 memory access");
 			Memory::g_MemorySize = Memory::RAM_DOUBLE_SIZE;
 		}
+		// The XMB is an ELF too, with no title of its own.
+		const std::string vshTitle = GetVSHTitle(fileLoader->GetPath());
+		if (!vshTitle.empty()) {
+			gameTitle = vshTitle;
+		}
 		break;
+	}
 	case IdentifiedFileType::PPSSPP_GE_DUMP:
 		// Try to grab the disc ID from the filename or GE dump.
 		if (DiscIDFromGEDumpPath(g_CoreParameter.fileToStart, fileLoader, &geDumpDiscID)) {
@@ -796,6 +811,12 @@ bool PSP_InitStart(const CoreParameter &coreParam) {
 
 	IncrementDebugCounter(DebugCounter::GAME_BOOT);
 
+	{
+		// One the frontend didn't act on (the user stopped the game instead) is stale now.
+		std::lock_guard<std::mutex> guard(g_bootRequestLock);
+		g_bootRequest.reset();
+	}
+
 	g_bootState = BootState::Booting;
 	g_loaderDone = false;
 	g_loaderFailed = false;
@@ -944,6 +965,38 @@ BootState PSP_Init(const CoreParameter &coreParam, std::string *error_string) {
 
 BootState PollBootState() {
 	return g_bootState;
+}
+
+void BootRequest::ApplyTo(CoreParameter *coreParam) const {
+	coreParam->fileToStart = fileToStart;
+	coreParam->mountIso = mountIso;
+	coreParam->launchedFromVSH = launchedFromVSH;
+	coreParam->vshmainArgs = vshmainArgs;
+	coreParam->umdAutoboot.reset();
+}
+
+void PSP_RequestBoot(const BootRequest &request) {
+	INFO_LOG(Log::Loader, "Rebooting into %s (disc: %s)", request.fileToStart.c_str(), request.mountIso.c_str());
+	{
+		std::lock_guard<std::mutex> guard(g_bootRequestLock);
+		g_bootRequest = request;
+	}
+	Core_Stop();
+}
+
+bool PSP_HasBootRequest() {
+	std::lock_guard<std::mutex> guard(g_bootRequestLock);
+	return g_bootRequest.has_value();
+}
+
+bool PSP_TakeBootRequest(BootRequest *request) {
+	std::lock_guard<std::mutex> guard(g_bootRequestLock);
+	if (!g_bootRequest) {
+		return false;
+	}
+	*request = std::move(*g_bootRequest);
+	g_bootRequest.reset();
+	return true;
 }
 
 void PSP_Shutdown(bool success) {

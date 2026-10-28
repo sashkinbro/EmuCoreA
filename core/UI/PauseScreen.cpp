@@ -305,6 +305,7 @@ SaveSlotView::SaveSlotView(std::string_view saveStatePrefix, int slot, UI::Layou
 
 	saveStateButton_ = buttons->Add(new Button(pa->T("Save State"), new LinearLayoutParams(0.0, Gravity::G_VCENTER)));
 	saveStateButton_->OnClick.Handle(this, &SaveSlotView::OnSaveState);
+	saveStateButton_->SetRoundCorners();
 	fv->OnClick.Add([this](UI::EventParams &e) {
 		e.v = this;
 		OnScreenshotClicked.Trigger(e);
@@ -314,6 +315,7 @@ SaveSlotView::SaveSlotView(std::string_view saveStatePrefix, int slot, UI::Layou
 		if (!Achievements::HardcoreModeActive()) {
 			loadStateButton_ = buttons->Add(new Button(pa->T("Load State"), new LinearLayoutParams(0.0, Gravity::G_VCENTER)));
 			loadStateButton_->OnClick.Handle(this, &SaveSlotView::OnLoadState);
+			loadStateButton_->SetRoundCorners();
 		}
 
 		std::string nameStr = SaveState::GetSlotCustomName(saveStatePrefix_, slot_);
@@ -409,6 +411,14 @@ void GamePauseScreen::update() {
 	}
 
 	SetVRAppMode(VRAppMode::VR_MENU_MODE);
+}
+
+void GamePauseScreen::sendMessage(UIMessage message, const char *value) {
+	UIBaseDialogScreen::sendMessage(message, value);
+	if (message == UIMessage::SAVESTATE_SLOT_SAVED) {
+		// A save started before the screen opened has finished writing, so its slot needs updating.
+		RecreateViews();
+	}
 }
 
 GamePauseScreen::GamePauseScreen(const Path &filename, bool bootPending)
@@ -516,6 +526,7 @@ void GamePauseScreen::CreateSavestateControls(UI::LinearLayout *leftColumnItems,
 	if (buttonRow->GetNumSubviews() == 0) {
 		delete buttonRow;
 	} else {
+		buttonRow->ApplyRoundCorners();
 		*extraRow = buttonRow;
 	}
 }
@@ -613,11 +624,13 @@ void GamePauseScreen::CreateViews() {
 				networkInfo->Add(new TextView(std::string(nw->T("Infrastructure server provided by:"))));
 				networkInfo->Add(new TextView(dnsConfig.revivalTeam));
 				if (!dnsConfig.revivalTeamURL.empty()) {
-					networkInfo->Add(new Button(dnsConfig.revivalTeamURL))->OnClick.Add([&dnsConfig](UI::EventParams &e) {
+					Button *visitUrl = networkInfo->Add(new Button(dnsConfig.revivalTeamURL));
+					visitUrl->OnClick.Add([&dnsConfig](UI::EventParams &e) {
 						if (!dnsConfig.revivalTeamURL.empty()) {
 							System_LaunchUrl(LaunchUrlType::BROWSER_URL, dnsConfig.revivalTeamURL.c_str());
 						}
 					});
+					visitUrl->SetRoundCorners();
 				}
 			}
 		} else if (NetAdhocctl_GetState() >= ADHOCCTL_STATE_CONNECTED) {
@@ -712,66 +725,72 @@ void GamePauseScreen::CreateViews() {
 	}
 
 	LinearLayout *rightColumnItems = new LinearLayout(ORIENT_VERTICAL);
+	rightColumnItems->SetSpacing(12.0f);
+
 	buttonColumn->Add(rightColumnItems);
 
-	rightColumnItems->SetSpacing(0.0f);
+	ChoiceGroup *topGroup = rightColumnItems->Add(new ChoiceGroup());
 	if (__KernelIsRunningVSH()) {
 		// The XMB notices discs coming and going by itself, like a PSP's.
 		if (__UmdIsInserted()) {
-			rightColumnItems->Add(new Choice(pa->T("Eject UMD"), ImageID("I_UMD")))->OnClick.Add([this](UI::EventParams &) {
+			topGroup->Add(new Choice(pa->T("Eject UMD"), ImageID("I_UMD")))->OnClick.Add([this](UI::EventParams &) {
 				__UmdEject();
 				RecreateViews();
 			});
 		} else {
-			rightColumnItems->Add(new Choice(pa->T("Insert UMD"), ImageID("I_UMD")))->OnClick.Add([this](UI::EventParams &) {
+			topGroup->Add(new Choice(pa->T("Insert UMD"), ImageID("I_UMD")))->OnClick.Add([this](UI::EventParams &) {
 				screenManager()->push(new UmdReplaceScreen(true));
 			});
 		}
 	} else if (getUMDReplacePermit()) {
-		rightColumnItems->Add(new Choice(pa->T("Switch UMD"), ImageID("I_UMD")))->OnClick.Add([this](UI::EventParams &) {
+		topGroup->Add(new Choice(pa->T("Switch UMD"), ImageID("I_UMD")))->OnClick.Add([this](UI::EventParams &) {
 			screenManager()->push(new UmdReplaceScreen());
 		});
 	}
 
 	if (!portrait) {
-		Choice *continueChoice = rightColumnItems->Add(new Choice(pa->T("Continue"), ImageID("I_PLAY")));
+		Choice *continueChoice = topGroup->Add(new Choice(pa->T("Continue"), ImageID("I_PLAY")));
 		root_->SetDefaultFocusView(continueChoice);
 		continueChoice->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
-		rightColumnItems->Add(new Spacer(20.0));
 	}
 
+	if (topGroup->GetNumSubviews() == 0) {
+		topGroup->SetVisibility(V_GONE);
+	}
+
+	ChoiceGroup *mainGroup = rightColumnItems->Add(new ChoiceGroup());
 	if (g_paramSFO.IsValid() && g_Config.HasGameConfig(g_paramSFO.GetDiscID())) {
-		rightColumnItems->Add(new Choice(pa->T("Game Settings"), ImageID("I_GEAR")))->OnClick.Handle(this, &GamePauseScreen::OnGameSettings);
+		mainGroup->Add(new Choice(pa->T("Game Settings"), ImageID("I_GEAR")))->OnClick.Handle(this, &GamePauseScreen::OnGameSettings);
 		auto pa = GetI18NCategory(I18NCat::PAUSE);
 		if (g_Config.HasGameConfig(g_paramSFO.GetValueString("DISC_ID"))) {
-			Choice *delGameConfig = rightColumnItems->Add(new Choice(pa->T("Delete Game Config"), ImageID("I_TRASHCAN")));
+			Choice *delGameConfig = mainGroup->Add(new Choice(pa->T("Delete Game Config"), ImageID("I_TRASHCAN")));
 			delGameConfig->OnClick.Handle(this, &GamePauseScreen::OnDeleteConfig);
 			delGameConfig->SetEnabled(!bootPending_);
 		}
 	} else if (PSP_CoreParameter().fileType != IdentifiedFileType::PPSSPP_GE_DUMP) {
-		rightColumnItems->Add(new Choice(pa->T("Settings"), ImageID("I_GEAR")))->OnClick.Handle(this, &GamePauseScreen::OnGameSettings);
-		Choice *createGameConfig = rightColumnItems->Add(new Choice(pa->T("Create Game Config"), ImageID("I_GEAR_STAR")));
+		mainGroup->Add(new Choice(pa->T("Settings"), ImageID("I_GEAR")))->OnClick.Handle(this, &GamePauseScreen::OnGameSettings);
+		Choice *createGameConfig = mainGroup->Add(new Choice(pa->T("Create Game Config"), ImageID("I_GEAR_STAR")));
 		createGameConfig->OnClick.Handle(this, &GamePauseScreen::OnCreateConfig);
 		createGameConfig->SetEnabled(!bootPending_);
 	}
 
 	if (g_Config.bAchievementsEnable && Achievements::HasAchievementsOrLeaderboards()) {
-		rightColumnItems->Add(new Choice(ac->T("Achievements"), ImageID("I_ACHIEVEMENT")))->OnClick.Add([this](UI::EventParams &e) {
+		mainGroup->Add(new Choice(ac->T("Achievements"), ImageID("I_ACHIEVEMENT")))->OnClick.Add([this](UI::EventParams &e) {
 			screenManager()->push(new RetroAchievementsListScreen(gamePath_));
 		});
 	}
 
-	rightColumnItems->Add(new Choice(gr->T("Display layout & effects"), ImageID("I_DISPLAY")))->OnClick.Add([this](UI::EventParams &) -> void {
+	mainGroup->Add(new Choice(gr->T("Display layout & effects"), ImageID("I_DISPLAY")))->OnClick.Add([this](UI::EventParams &) -> void {
 		screenManager()->push(new DisplayLayoutScreen(gamePath_));
 	});
 	if (g_Config.bShowTouchControls) {
-		rightColumnItems->Add(new Choice(co->T("Edit touch control layout"), ImageID("I_CONTROLLER")))->OnClick.Add([this](UI::EventParams &) -> void {
+		mainGroup->Add(new Choice(co->T("Edit touch control layout"), ImageID("I_CONTROLLER")))->OnClick.Add([this](UI::EventParams &) -> void {
 			screenManager()->push(new TouchControlLayoutScreen(gamePath_));
 		});
 	}
 
 	if (g_Config.bEnableCheats && PSP_CoreParameter().fileType != IdentifiedFileType::PPSSPP_GE_DUMP) {
-		rightColumnItems->Add(new Choice(pa->T("Cheats"), ImageID("I_CHEAT")))->OnClick.Add([this](UI::EventParams &e) {
+		mainGroup->Add(new Choice(pa->T("Cheats"), ImageID("I_CHEAT")))->OnClick.Add([this](UI::EventParams &e) {
 			screenManager()->push(new CwCheatScreen(gamePath_));
 		});
 	}
@@ -779,9 +798,8 @@ void GamePauseScreen::CreateViews() {
 	// TODO, also might be nice to show overall compat rating here?
 	// Based on their platform or even cpu/gpu/config.  Would add an API for it.
 	if (!portrait) {
-		AddExtraOptions(rightColumnItems);
+		AddExtraOptions(mainGroup);
 	}
-	rightColumnItems->Add(new Spacer(20.0));
 	Choice *exit;
 	if (g_Config.bPauseMenuExitsEmulator) {
 		auto di = GetI18NCategory(I18NCat::DIALOG);
@@ -789,6 +807,7 @@ void GamePauseScreen::CreateViews() {
 	} else {
 		exit = new Choice(pa->T("Exit to menu"), ImageID("I_EXIT"));
 	}
+	exit->SetRoundCorners();
 
 	if (portrait) {
 		UI::LinearLayout *exitRow = new UI::LinearLayout(ORIENT_HORIZONTAL, new UI::LinearLayoutParams(FILL_PARENT, WRAP_CONTENT, Margins(0, 0, 0, 0)));
@@ -797,35 +816,38 @@ void GamePauseScreen::CreateViews() {
 		exit->ReplaceLayoutParams(new UI::LinearLayoutParams(1.0f, Gravity::G_VCENTER));
 		Choice *continueChoice = new Choice(pa->T("Continue"), ImageID("I_PLAY"));
 		continueChoice->OnClick.Handle<UIScreen>(this, &UIScreen::OnBack);
+		continueChoice->SetRoundCorners();
 		root_->SetDefaultFocusView(continueChoice);
 		exitRow->Add(continueChoice);
 		continueChoice->ReplaceLayoutParams(new UI::LinearLayoutParams(1.0f, Gravity::G_VCENTER));
 	} else {
-		rightColumnItems->Add(exit);
+		rightColumnItems->Add(new ChoiceGroup())->Add(exit);
 	}
 
 	exit->OnClick.Handle(this, &GamePauseScreen::OnExit);
 	exit->SetEnabled(!bootPending_);
 
 	if (middleColumn) {
-		middleColumn->SetSpacing(portrait ? 8.0f : 0.0f);
+		middleColumn->SetSpacing(portrait ? 12.0f : 0.0f);
 		playButton_ = middleColumn->Add(new Choice(g_Config.bRunBehindPauseMenu ? ImageID("I_PAUSE_LINE") : ImageID("I_PLAY_LINE"), new LinearLayoutParams(64, 64)));
 		playButton_->OnClick.Add([this](UI::EventParams &e) {
 			g_Config.bRunBehindPauseMenu = !g_Config.bRunBehindPauseMenu;
 			playButton_->SetIconLeft(g_Config.bRunBehindPauseMenu ? ImageID("I_PAUSE_LINE") : ImageID("I_PLAY_LINE"));
 		});
+		playButton_->SetRoundCorners();
 
 		bool mustRunBehind = MustRunBehind();
 		playButton_->SetEnabled(!mustRunBehind);
 
 		if (!portrait) {
-			middleColumn->Add(new Spacer(20.0f));
+			middleColumn->Add(new Spacer(12.0f));
 		}
 
 		Choice *infoButton = middleColumn->Add(new Choice(ImageID("I_INFO"), new LinearLayoutParams(64, 64)));
 		infoButton->OnClick.Add([this](UI::EventParams &e) {
 			screenManager()->push(new GameScreen(gamePath_, true));
 		});
+		infoButton->SetRoundCorners();
 
 		if (System_GetPropertyBool(SYSPROP_CAN_RESTRICT_ORIENTATION)) {
 			AddRotationPicker(screenManager(), middleColumn, false);
@@ -836,6 +858,7 @@ void GamePauseScreen::CreateViews() {
 			menuButton->OnClick.Add([this, menuButton, portrait](UI::EventParams &e) {
 				ShowContextMenu(menuButton, portrait);
 			});
+			menuButton->SetRoundCorners();
 		}
 	} else {
 		playButton_ = nullptr;

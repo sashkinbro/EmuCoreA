@@ -9,6 +9,7 @@
 #include "Common/UI/Context.h"
 #include "Common/Data/Format/PNGLoad.h"
 #include "Common/Render/AtlasGen.h"
+#include "Common/Render/DrawBuffer.h"
 #include "Common/Render/ManagedTexture.h"
 #include "Common/Common.h"
 #include "Common/Thread/ParallelLoop.h"
@@ -40,6 +41,9 @@ Atlas *GetUIAtlas() {
 struct ImageMeta {
 	std::string_view id;
 	bool addShadow = false;
+	// If set, the image is a generated round rect corner (see DrawBuffer::DrawRoundRect). In UI units.
+	float cornerRadius = 0.0f;
+	float cornerThickness = 0.0f;  // 0 = filled
 };
 
 // We add shadows to all line-art images that are used for buttons, to improve visibility.
@@ -53,6 +57,7 @@ static const ImageMeta g_uiImageIDs[] = {
 	{"I_TRIANGLE", true},
 	{"I_SELECT", true},
 	{"I_START", true},
+	{"I_HOME", true},
 	{"I_ARROW", false},
 	{"I_ROUND", false},
 	{"I_ROUND_LINE", true},
@@ -101,7 +106,7 @@ static const ImageMeta g_uiImageIDs[] = {
 	{"I_FULLSCREEN", false},
 	{"I_RESTORE", false},
 	{"I_SDCARD", false},
-	{"I_HOME", false},
+	{"I_HOME_ICON", false},
 	{"I_A", true},
 	{"I_B", true},
 	{"I_C", true},
@@ -119,6 +124,8 @@ static const ImageMeta g_uiImageIDs[] = {
 	{"I_ARROW_RIGHT", true},
 	{"I_ARROW_UP", true},
 	{"I_ARROW_DOWN", true},
+	{"I_CHEVRON_LEFT", false},
+	{"I_CHEVRON_RIGHT", false},
 	{"I_SLIDERS", false},
 	{"I_THREE_DOTS", true},
 	{"I_INFO", false},
@@ -199,6 +206,8 @@ static const ImageMeta g_uiImageIDs[] = {
 	{"I_ARCHIVE_7Z", false},
 	{"I_ARCHIVE_RAR", false},
 	{"I_DOWNLOAD", false},
+	{"I_NETWORK", false},
+	{"I_LANGUAGE", false},
 };
 
 static std::string PNGNameFromID(std::string_view id) {
@@ -375,6 +384,28 @@ static bool RasterizeSVG(std::string_view filename, float dpiScale, int maxTextu
 	return true;
 }
 
+// White, premultiplied, antialiased by distance to the edge.
+static void GenerateRoundRectCorner(Image &img, float radius, float thickness, float dpiScale) {
+	const float r = radius * dpiScale;
+	const float t = thickness * dpiScale;
+	const int center = RoundRectCornerCenter(r);
+	img.resize(center + 1, center + 1);
+	img.scale = dpiScale;
+	for (int y = 0; y <= center; y++) {
+		const float dy = std::max((float)center - (y + 0.5f), 0.0f);
+		for (int x = 0; x <= center; x++) {
+			const float dx = std::max((float)center - (x + 0.5f), 0.0f);
+			const float d = sqrtf(dx * dx + dy * dy);
+			float coverage = std::clamp(r - d + 0.5f, 0.0f, 1.0f);
+			if (t > 0.0f) {
+				coverage -= std::clamp(r - t - d + 0.5f, 0.0f, 1.0f);
+			}
+			const u32 a = (u32)(coverage * 255.0f + 0.5f);
+			img.set1(x, y, a * 0x01010101);
+		}
+	}
+}
+
 static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int maxTextureSize, const ImageMeta *imageIDs, size_t imageCount) {
 	Bucket bucket;
 
@@ -411,7 +442,7 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 			if (!images[i].IsEmpty()) {
 				if (imageIDs[i].addShadow) {
 					// DEBUG_LOG(Log::G3D, "Adding drop shadow to %.*s", STR_VIEW(imageIDs[i].id));
-					AddDropShadow(images[i], 3, 0.66f);
+					AddDropShadow(images[i], UIDropShadowParams(images[i].scale));
 				} else {
 					// Make sure there are transparent pixels to filter from.
 					Add1PxTransparentBorder(images[i]);
@@ -445,6 +476,8 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 		} else if (equals(imageIDs[i].id, "I_EMPTY")) {
 			img.resize(16, 16);
 			img.fill(0);
+		} else if (imageIDs[i].cornerRadius > 0.0f) {
+			GenerateRoundRectCorner(img, imageIDs[i].cornerRadius, imageIDs[i].cornerThickness, dpiScale);
 		} else {
 			std::string name = "ui_images/";
 			std::string pngName = PNGNameFromID(imageIDs[i].id);
@@ -491,6 +524,7 @@ static bool GenerateUIAtlasImage(Atlas *atlas, float dpiScale, Image *dest, int 
 	atlas->images = new AtlasImage[genAtlasImages.size()];
 	std::copy(genAtlasImages.begin(), genAtlasImages.end(), atlas->images);
 	atlas->num_images = (int)genAtlasImages.size();
+	atlas->dpiScale = dpiScale;
 
 	// For debug, write out the atlas.
 	if (SAVE_DEBUG_ATLAS) {
@@ -510,8 +544,15 @@ Draw::Texture *GenerateUIAtlas(Draw::DrawContext *draw, Atlas *atlas, float dpiS
 		INFO_LOG(Log::G3D, "Regenerating atlas (empty: %s). Dpi scale (changed: %s): %0.2f (invalidate=%d)",
 			g_cachedUIAtlasImage.IsEmpty() ? "true" : "false", dpiScale != g_cachedDpiScale ? "true" : "false", dpiScale, invalidate);
 
+		std::vector<ImageMeta> imageIDs(std::begin(g_uiImageIDs), std::end(g_uiImageIDs));
+		for (int r = 0; r < ROUND_RECT_RADIUS_COUNT; r++) {
+			for (int style = 0; style < (int)RoundRectStyle::COUNT; style++) {
+				imageIDs.push_back({ RoundRectCornerImageName(r, (RoundRectStyle)style), false, ROUND_RECT_RADII[r], ROUND_RECT_THICKNESS[style] });
+			}
+		}
+
 		g_cachedUIAtlasImage.clear();
-		if (!GenerateUIAtlasImage(atlas, dpiScale, &g_cachedUIAtlasImage, draw->GetDeviceCaps().maxTextureSize, g_uiImageIDs, ARRAY_SIZE(g_uiImageIDs))) {
+		if (!GenerateUIAtlasImage(atlas, dpiScale, &g_cachedUIAtlasImage, draw->GetDeviceCaps().maxTextureSize, imageIDs.data(), imageIDs.size())) {
 			ERROR_LOG(Log::G3D, "Failed to generate UI atlas!");
 			return nullptr;
 		}
