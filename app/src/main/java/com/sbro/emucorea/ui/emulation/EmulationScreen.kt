@@ -372,17 +372,10 @@ fun EmulationScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showGpuDriverManager by remember { mutableStateOf(false) }
     if (showGpuDriverManager) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showGpuDriverManager = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize()) {
-                com.sbro.emucorea.ui.settings.GpuDriverScreen(
-                    onBackClick = { showGpuDriverManager = false },
-                    rendererOverride = uiState.renderer
-                )
-            }
-        }
+        com.sbro.emucorea.ui.settings.GpuDriverDialog(
+            onDismiss = { showGpuDriverManager = false },
+            rendererOverride = uiState.renderer
+        )
     }
 
     val presentationSurfaceGeneration by EmulatorBridge.presentationSurfaceGeneration.collectAsState()

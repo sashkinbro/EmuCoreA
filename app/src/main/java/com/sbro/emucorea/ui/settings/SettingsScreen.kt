@@ -276,21 +276,10 @@ fun SettingsScreen(
     onOpenControlsLayoutEditor: (() -> Unit)? = null,
     onOpenThemeManager: (() -> Unit)? = null,
     onOpenTouchControlCreator: (() -> Unit)? = null,
+    onOpenGpuDriverManager: () -> Unit = {},
     viewModel: SettingsViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    var showGpuDriverManager by remember { mutableStateOf(false) }
-    if (showGpuDriverManager) {
-        androidx.compose.ui.window.Dialog(
-            onDismissRequest = { showGpuDriverManager = false },
-            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize()) {
-                GpuDriverScreen(onBackClick = { showGpuDriverManager = false }, viewModel = viewModel)
-            }
-        }
-    }
-
     val gamepadDeviceAssignments by GamepadManager.gamepadDeviceAssignmentsState.collectAsState()
     val ignoredGamepadDevices by GamepadManager.ignoredGamepadDevicesState.collectAsState()
     val context = LocalContext.current
@@ -601,7 +590,7 @@ fun SettingsScreen(
                 onOpenControlsLayoutEditor = onOpenControlsLayoutEditor,
                 onOpenThemeManager = onOpenThemeManager,
                 onOpenTouchControlCreator = onOpenTouchControlCreator,
-                onOpenGpuDriverManager = { showGpuDriverManager = true },
+                onOpenGpuDriverManager = onOpenGpuDriverManager,
                 viewModel = viewModel,
                 topInset = 0.dp,
                 modifier = Modifier

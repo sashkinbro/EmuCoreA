@@ -27,7 +27,9 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -68,11 +70,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sbro.emucorea.R
 import com.sbro.emucorea.core.AdrenoFamily
@@ -98,6 +104,23 @@ import com.sbro.emucorea.ui.theme.neon.neonShape
 import com.sbro.emucorea.ui.theme.neon.neonChipShape
 import com.sbro.emucorea.ui.theme.neon.neonButtonShape
 
+/** Keeps the emulation surface alive while presenting the manager edge to edge. */
+@Composable
+fun GpuDriverDialog(
+    onDismiss: () -> Unit,
+    rendererOverride: Int? = null,
+    viewModel: SettingsViewModel = viewModel()
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            GpuDriverScreen(onBackClick = onDismiss, rendererOverride = rendererOverride, viewModel = viewModel)
+        }
+    }
+}
+
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
 fun GpuDriverScreen(
@@ -122,6 +145,8 @@ fun GpuDriverScreen(
         uiState.installedGpuDrivers.firstOrNull { it.mainLibraryPath == activeDriverPath }
     }
     val topInset = appScreenTopPadding()
+    val safeInsets = WindowInsets.safeDrawing.asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
     val installFailedMessage = stringResource(R.string.settings_gpu_driver_install_failed)
     val installSuccessTemplate = stringResource(R.string.settings_gpu_driver_install_success, "%s")
     val backClick = rememberDebouncedClick(onClick = onBackClick)
@@ -202,12 +227,12 @@ fun GpuDriverScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .navigationBarsPadding(),
+            .testTag("gpu_driver_list"),
         contentPadding = PaddingValues(
-            start = ScreenHorizontalPadding,
+            start = ScreenHorizontalPadding + safeInsets.calculateStartPadding(layoutDirection),
             top = topInset,
-            end = ScreenHorizontalPadding,
-            bottom = 40.dp
+            end = ScreenHorizontalPadding + safeInsets.calculateEndPadding(layoutDirection),
+            bottom = 40.dp + safeInsets.calculateBottomPadding()
         ),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
@@ -473,6 +498,7 @@ private fun GpuDriverHeader(
     onFiltersClick: () -> Unit
 ) {
     ScreenTopBar(
+        modifier = Modifier.testTag("gpu_driver_header"),
         title = title,
         onBackClick = onBackClick,
         backContentColor = MaterialTheme.colorScheme.onSurface,

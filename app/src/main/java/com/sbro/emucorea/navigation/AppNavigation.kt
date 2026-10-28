@@ -118,6 +118,9 @@ internal fun EmulationRoute.isMeaningfulReviewSession(): Boolean =
 data class SettingsRoute(val tab: String = "general")
 
 @Serializable
+object GpuDriverSettingsRoute
+
+@Serializable
 object LanguageSettingsRoute
 
 @Serializable
@@ -815,9 +818,21 @@ fun AppNavigation(
                                 launchSingleTop = true
                             }
                         },
+                        onOpenGpuDriverManager = {
+                            navController.navigate(GpuDriverSettingsRoute) {
+                                launchSingleTop = true
+                            }
+                        },
                         viewModel = settingsViewModel
                     )
                 }
+            }
+
+            composable<GpuDriverSettingsRoute> {
+                com.sbro.emucorea.ui.settings.GpuDriverScreen(
+                    onBackClick = { navController.popBackStack() },
+                    viewModel = settingsViewModel
+                )
             }
 
             composable<LanguageSettingsRoute> {
