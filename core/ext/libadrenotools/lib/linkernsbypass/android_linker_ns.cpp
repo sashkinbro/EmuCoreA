@@ -26,7 +26,7 @@ bool linkernsbypass_load_status() {
     return lib_loaded;
 }
 
-struct android_namespace_t *android_create_namespace(const char *name,
+struct android_namespace_t *linkernsbypass_create_namespace(const char *name,
                                                      const char *ld_library_path,
                                                      const char *default_library_path,
                                                      uint64_t type,
@@ -48,11 +48,11 @@ struct android_namespace_t *android_create_namespace_escape(const char *name,
                                            permitted_when_isolated_path, parent_namespace, caller);
 }
 
-android_get_exported_namespace_t android_get_exported_namespace;
+android_get_exported_namespace_t linkernsbypass_get_exported_namespace;
 
 android_link_namespaces_all_libs_t android_link_namespaces_all_libs;
 
-android_link_namespaces_t android_link_namespaces;
+android_link_namespaces_t linkernsbypass_link_namespaces;
 
 bool linkernsbypass_link_namespace_to_default_all_libs(android_namespace_t *to) {
     // Creating a shared namespace with the default parent will give a copy of the default namespace that we can actually access
@@ -171,8 +171,8 @@ __attribute__((constructor)) static void resolve_linker_symbols() {
     if (!android_link_namespaces_all_libs)
         return;
 
-    android_link_namespaces = reinterpret_cast<android_link_namespaces_t>(dlsym(ldHandle, "__loader_android_link_namespaces"));
-    if (!android_link_namespaces)
+    linkernsbypass_link_namespaces = reinterpret_cast<android_link_namespaces_t>(dlsym(ldHandle, "__loader_android_link_namespaces"));
+    if (!linkernsbypass_link_namespaces)
         return;
 
     auto libdlAndroidHandle{loader_dlopen("libdl_android.so", RTLD_LAZY, reinterpret_cast<void *>(&dlopen))};
@@ -183,8 +183,8 @@ __attribute__((constructor)) static void resolve_linker_symbols() {
     if (!loader_android_create_namespace)
         return;
 
-    android_get_exported_namespace = reinterpret_cast<android_get_exported_namespace_t>(dlsym(libdlAndroidHandle, "__loader_android_get_exported_namespace"));
-    if (!android_get_exported_namespace)
+    linkernsbypass_get_exported_namespace = reinterpret_cast<android_get_exported_namespace_t>(dlsym(libdlAndroidHandle, "__loader_android_get_exported_namespace"));
+    if (!linkernsbypass_get_exported_namespace)
         return;
 
     // Lib is now safe to use

@@ -221,6 +221,10 @@ internal object CoreRuntime {
         // CheckJNI with an invalid class reference).
         runCatching { NativePpsspp.nativeSetAppContext(appContext) }
             .onFailure { Log.w(TAG, "Unable to set the native app context", it) }
+        NativePpsspp.nativeSetCustomDriver(
+            settings["EmuCoreA/GPU:CustomDriverPath"].orEmpty(),
+            appContext.applicationInfo.nativeLibraryDir.orEmpty()
+        )
         // The context is created inside nativeInit, so the renderer must be
         // pushed first. This is a no-op for the Vulkan default.
         runCatching {
@@ -1053,6 +1057,14 @@ internal object CoreRuntime {
             "renderer=${RendererDefaults.coreRendererName(activeCoreRenderer())}"
 
     fun updateSetting(section: String, key: String, value: String): Boolean {
+        if (section == "EmuCoreA/GPU" && key == "CustomDriverPath") {
+            settings["$section:$key"] = value
+            val appContext = context
+            if (appContext != null && NativePpsspp.ensureLoaded()) {
+                NativePpsspp.nativeSetCustomDriver(value, appContext.applicationInfo.nativeLibraryDir.orEmpty())
+            }
+            return true
+        }
         if ((section == "EmuCoreA" || section == "EmuCoreA/GS") && key == "Renderer") {
             val renderer = value.toIntOrNull() ?: return false
             requestedRenderer = RendererDefaults.normalizeAndroidRenderer(renderer)

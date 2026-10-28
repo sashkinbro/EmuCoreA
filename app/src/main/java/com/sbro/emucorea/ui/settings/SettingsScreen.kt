@@ -54,6 +54,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.automirrored.rounded.VolumeOff
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
@@ -278,6 +279,18 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showGpuDriverManager by remember { mutableStateOf(false) }
+    if (showGpuDriverManager) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showGpuDriverManager = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize()) {
+                GpuDriverScreen(onBackClick = { showGpuDriverManager = false }, viewModel = viewModel)
+            }
+        }
+    }
+
     val gamepadDeviceAssignments by GamepadManager.gamepadDeviceAssignmentsState.collectAsState()
     val ignoredGamepadDevices by GamepadManager.ignoredGamepadDevicesState.collectAsState()
     val context = LocalContext.current
@@ -588,6 +601,7 @@ fun SettingsScreen(
                 onOpenControlsLayoutEditor = onOpenControlsLayoutEditor,
                 onOpenThemeManager = onOpenThemeManager,
                 onOpenTouchControlCreator = onOpenTouchControlCreator,
+                onOpenGpuDriverManager = { showGpuDriverManager = true },
                 viewModel = viewModel,
                 topInset = 0.dp,
                 modifier = Modifier
@@ -1087,7 +1101,8 @@ private fun SettingsContent(
     modifier: Modifier = Modifier,
     onOpenControlsLayoutEditor: (() -> Unit)? = null,
     onOpenThemeManager: (() -> Unit)? = null,
-    onOpenTouchControlCreator: (() -> Unit)? = null
+    onOpenTouchControlCreator: (() -> Unit)? = null,
+    onOpenGpuDriverManager: () -> Unit
 ) {
     val gamepadActions = remember { GamepadManager.mappableButtonActions() }
     val gamepadDeviceAssignments by GamepadManager.gamepadDeviceAssignmentsState.collectAsState()
@@ -1933,6 +1948,14 @@ private fun SettingsContent(
 
                 SettingsTab.Graphics -> {
                     SettingsSection(title = stringResource(R.string.settings_graphics_tab)) {
+                        if (com.sbro.emucorea.core.GpuDriverCompatibility.supportsCustomDrivers()) {
+                            SettingsItem(
+                                icon = Icons.Rounded.Settings,
+                                label = stringResource(R.string.settings_gpu_driver_manager_title),
+                                value = stringResource(R.string.settings_gpu_driver_manage),
+                                onClick = onOpenGpuDriverManager
+                            )
+                        }
                         ChoiceSection(
                             title = stringResource(R.string.settings_renderer),
                             options = listOf(

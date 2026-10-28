@@ -27,7 +27,7 @@ enum {
 bool linkernsbypass_load_status();
 
 // https://cs.android.com/android/platform/superproject/+/0a492a4685377d41fef2b12e9af4ebfa6feef9c2:art/libnativeloader/include/nativeloader/dlext_namespaces.h;l=86;bpv=1;bpt=1
-struct android_namespace_t *android_create_namespace(const char *name,
+struct android_namespace_t *linkernsbypass_create_namespace(const char *name,
                                                      const char *ld_library_path,
                                                      const char *default_library_path,
                                                      uint64_t type,
@@ -43,7 +43,7 @@ struct android_namespace_t *android_create_namespace_escape(const char *name,
 
 // https://cs.android.com/android/platform/superproject/+/dcb01ef31026b3b8aeb72dada3370af63fe66bbd:bionic/linker/linker.cpp;l=3554
 typedef struct android_namespace_t *(*android_get_exported_namespace_t)(const char *);
-extern android_get_exported_namespace_t android_get_exported_namespace;
+extern android_get_exported_namespace_t linkernsbypass_get_exported_namespace;
 
 // https://cs.android.com/android/platform/superproject/+/dcb01ef31026b3b8aeb72dada3370af63fe66bbd:bionic/linker/linker.cpp;l=2499
 typedef bool (*android_link_namespaces_all_libs_t)(struct android_namespace_t *, struct android_namespace_t *);
@@ -51,7 +51,7 @@ extern android_link_namespaces_all_libs_t android_link_namespaces_all_libs;
 
 // https://cs.android.com/android/platform/superproject/+/dcb01ef31026b3b8aeb72dada3370af63fe66bbd:bionic/linker/linker.cpp;l=2473
 typedef bool (*android_link_namespaces_t)(struct android_namespace_t *, struct android_namespace_t *, const char *);
-extern android_link_namespaces_t android_link_namespaces;
+extern android_link_namespaces_t linkernsbypass_link_namespaces;
 
 /**
  * @brief Like android_link_namespaces_all_libs but links from the default namespace

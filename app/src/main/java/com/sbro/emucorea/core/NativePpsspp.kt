@@ -40,6 +40,9 @@ object NativePpsspp {
      */
     external fun nativeSetAppContext(context: Context)
 
+    external fun nativeSetCustomDriver(path: String, nativeLibDir: String)
+    external fun nativeIsCustomDriverLoaded(): Boolean
+
     external fun nativeInit(
         apkPath: String,
         dataDir: String,

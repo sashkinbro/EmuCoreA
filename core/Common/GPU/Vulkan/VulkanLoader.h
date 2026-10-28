@@ -291,6 +291,8 @@ void VulkanApplyCustomDriverEnvVars(AdrenoEnvVar envVars);
 
 // Way to do a quick check before even attempting to load.
 void VulkanSetNativeLibDir(std::string_view nativeLibDir);
+void VulkanSetCustomDriverPath(std::string_view path);
+bool VulkanCustomDriverLibraryLoaded();
 bool VulkanMayBeAvailable();
 void VulkanSetAvailable(bool available);
 

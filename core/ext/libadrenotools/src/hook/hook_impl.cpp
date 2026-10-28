@@ -53,7 +53,7 @@ __attribute__((visibility("default"))) void *hook_android_dlopen_ext(const char 
     }
 
     // customDriverDir will be empty if ADRENOTOOLS_DRIVER_CUSTOM isn't set therefore it's fine to have either way
-    auto driverNs{android_create_namespace(filename, hook_params->customDriverDir.c_str(),
+    auto driverNs{linkernsbypass_create_namespace(filename, hook_params->customDriverDir.c_str(),
                                            hook_params->hookLibDir.c_str(), ANDROID_NAMESPACE_TYPE_SHARED,
                                            nullptr, extinfo->library_namespace)};
     if (!driverNs) {
@@ -62,7 +62,7 @@ __attribute__((visibility("default"))) void *hook_android_dlopen_ext(const char 
     }
 
     // We depend on libandroid which is unlikely to be in the supplied driver namespace so we have to link it over
-    android_link_namespaces(driverNs, nullptr, "libandroid.so");
+    linkernsbypass_link_namespaces(driverNs, nullptr, "libandroid.so");
 
     // Preload ourself, a new instance will be created since we have different linker ancestory
     // If we don't preload we get a weird issue where despite being in NEEDED of the hook lib the hook's symbols will overwrite ours and cause an infinite loop
@@ -132,6 +132,9 @@ __attribute__((visibility("default"))) void *hook_android_dlopen_ext(const char 
             return fallback();
         }
 
+        if (hook_params->customDriverLoaded)
+            *hook_params->customDriverLoaded = true;
+
         return handle;
     } else {
         LOGI("hook_android_dlopen_ext: loading default driver: %s", filename);
@@ -144,7 +147,7 @@ __attribute__((visibility("default"))) void *hook_android_load_sphal_library(con
 
     // https://android.googlesource.com/platform/system/core/+/master/libvndksupport/linker.cpp
     for (const char *name : {"sphal", "vendor", "default"}) {
-        if (auto vendorNs{android_get_exported_namespace(name)}) {
+        if (auto vendorNs{linkernsbypass_get_exported_namespace(name)}) {
             android_dlextinfo dlextinfo{
                 .flags = ANDROID_DLEXT_USE_NAMESPACE,
                 .library_namespace = vendorNs,

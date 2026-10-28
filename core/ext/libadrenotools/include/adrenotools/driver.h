@@ -66,6 +66,14 @@ bool adrenotools_validate_gpu_mapping(void *handle);
  */
 void adrenotools_set_turbo(bool turbo);
 
+/**
+ * @brief Whether the last adrenotools_open_libvulkan call actually loaded the
+ * requested custom driver. Returns false when the hook fell back to the system
+ * loader after a failed custom driver dlopen, and when no custom driver was
+ * requested at all.
+ */
+bool adrenotools_custom_driver_library_loaded(void);
+
 #ifdef __cplusplus
 }
 #endif

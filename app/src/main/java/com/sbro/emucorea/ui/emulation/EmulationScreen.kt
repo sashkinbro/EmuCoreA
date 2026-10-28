@@ -64,6 +64,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
@@ -369,6 +370,21 @@ fun EmulationScreen(
     viewModel: EmulationViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showGpuDriverManager by remember { mutableStateOf(false) }
+    if (showGpuDriverManager) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showGpuDriverManager = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            androidx.compose.material3.Surface(modifier = Modifier.fillMaxSize()) {
+                com.sbro.emucorea.ui.settings.GpuDriverScreen(
+                    onBackClick = { showGpuDriverManager = false },
+                    rendererOverride = uiState.renderer
+                )
+            }
+        }
+    }
+
     val presentationSurfaceGeneration by EmulatorBridge.presentationSurfaceGeneration.collectAsState()
     val context = LocalContext.current
     val activity = context as? android.app.Activity
@@ -1606,6 +1622,7 @@ fun EmulationScreen(
                     onOpenControlsEditor = { showControlsEditor = true },
                     onOpenGamepadMapping = { showGamepadMappingDialog = true },
                     onOpenKeyboardMouseSettings = { showKeyboardMouseSettingsDialog = true },
+                    onOpenGpuDriverManager = { showGpuDriverManager = true },
                     onSetRenderer = { viewModel.setRenderer(it) },
                     onSetUpscale = { viewModel.setUpscale(it) },
                     onSetAspectRatio = { viewModel.setAspectRatio(it) },
@@ -2897,6 +2914,7 @@ private fun EmulationSidebarMenu(
     onOpenControlsEditor: () -> Unit,
     onOpenGamepadMapping: () -> Unit,
     onOpenKeyboardMouseSettings: () -> Unit,
+    onOpenGpuDriverManager: () -> Unit,
     onSetRenderer: (Int) -> Unit,
     onSetUpscale: (Float) -> Unit,
     onSetAspectRatio: (Int) -> Unit,
@@ -3889,6 +3907,14 @@ private fun EmulationSidebarMenu(
                             .forEach { section ->
                                 when (section) {
                                     GameMenuSectionId.GRAPHICS_DISPLAY -> {
+                        if (com.sbro.emucorea.core.GpuDriverCompatibility.supportsCustomDrivers()) {
+                            MenuButton(
+                                icon = Icons.Rounded.Settings,
+                                text = stringResource(R.string.settings_gpu_driver_manager_title),
+                                onClick = onOpenGpuDriverManager,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f)
+                            )
+                        }
                         SidebarSectionTitle(
                             text = stringResource(R.string.settings_graphics_tab).uppercase(),
                             color = sectionTitleColor,

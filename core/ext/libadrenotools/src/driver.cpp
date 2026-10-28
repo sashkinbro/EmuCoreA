@@ -16,7 +16,18 @@
 #include <adrenotools/driver.h>
 #include <unistd.h>
 
+/// True only when the hook managed to dlopen the requested custom driver.
+/// The hook silently falls back to the system loader when that dlopen fails,
+/// so this is the only reliable way to tell the two apart.
+static bool s_custom_driver_loaded = false;
+
+bool adrenotools_custom_driver_library_loaded(void) {
+    return s_custom_driver_loaded;
+}
+
 void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) {
+    s_custom_driver_loaded = false;
+
     // Bail out if linkernsbypass failed to load, this probably means we're on api < 28
     if (!linkernsbypass_load_status())
         return nullptr;
@@ -56,7 +67,7 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
     }
 
     // Create a namespace that can isolate our hook from the classloader namespace
-    auto hookNs{android_create_namespace("adrenotools-libvulkan", hookLibDir, nullptr, ANDROID_NAMESPACE_TYPE_SHARED, nullptr, nullptr)};
+    auto hookNs{linkernsbypass_create_namespace("adrenotools-libvulkan", hookLibDir, nullptr, ANDROID_NAMESPACE_TYPE_SHARED, nullptr, nullptr)};
 
     // Link it to the default namespace so the hook can use libandroid etc
     if (!linkernsbypass_link_namespace_to_default_all_libs(hookNs))
@@ -84,7 +95,7 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
         }
     }()};
 
-    initHookParam(new HookImplParams(featureFlags, tmpLibDir, hookLibDir, customDriverDir, customDriverName, fileRedirectDir, importMapping));
+    initHookParam(new HookImplParams(featureFlags, tmpLibDir, hookLibDir, customDriverDir, customDriverName, fileRedirectDir, importMapping, &s_custom_driver_loaded));
 
     // Load the libvulkan hook into the isolated namespace
     if (!linkernsbypass_namespace_dlopen("libmain_hook.so", RTLD_GLOBAL, hookNs))

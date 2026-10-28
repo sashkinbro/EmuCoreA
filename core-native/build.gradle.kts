@@ -29,7 +29,7 @@ android {
                     "-DEMUCOREA_NATIVE_DIR=$emucoreaNativeDir",
                     "-DANDROID_STL=c++_shared"
                 )
-                targets += "emucorea_core"
+                targets += listOf("emucorea_core", "main_hook", "hook_impl", "file_redirect_hook")
             }
         }
     }

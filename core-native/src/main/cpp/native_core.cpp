@@ -42,6 +42,7 @@
 #include "Common/GPU/thin3d.h"
 #include "Common/GPU/OpenGL/OpenGLGraphicsContext.h"
 #include "Common/GPU/Vulkan/VulkanContext.h"
+#include "Common/GPU/Vulkan/VulkanLoader.h"
 #include "Common/GPU/Vulkan/VulkanGraphicsContext.h"
 #include "Common/Render/Text/draw_text_android.h"
 #include "Common/Log.h"
@@ -192,6 +193,7 @@ constexpr int kRendererSoftware = 0;
 constexpr int kRendererVulkan = 1;
 constexpr int kRendererOpenGL = 2;
 std::atomic<int> g_requestedRenderer{kRendererVulkan};
+std::string g_requestedCustomDriverPath;
 int g_activeRenderer = kRendererVulkan;
 std::string g_bootError;
 int g_displayWidth = 1080;
@@ -2650,6 +2652,10 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeInit(JNIEnv *env, jclass, jstring
     }
     NLOGI("nativeInit apk=%s data=%s external=%s", apk.c_str(), data.c_str(), external.c_str());
     CreateGraphicsContext();
+    if (!g_requestedCustomDriverPath.empty() && g_activeRenderer == kRendererVulkan) {
+        if (VulkanCustomDriverLibraryLoaded()) NLOGI("Custom Vulkan driver loaded");
+        else NLOGE("Custom Vulkan driver did not load; using the system driver");
+    }
 }
 
 JNIEXPORT jboolean JNICALL
@@ -2874,6 +2880,45 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetRenderer(JNIEnv *, jclass, jin
     if (hadSurface && g_surfaceWindow != nullptr) {
         AttachSurface(g_surfaceWindow, g_surfaceWidth, g_surfaceHeight);
     }
+}
+
+// The selected library is stored for the next context while a game is running.
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCustomDriver(JNIEnv *env, jclass, jstring path, jstring nativeLibDir) {
+    const std::string nextPath = ToString(env, path);
+    const std::string nativeDir = ToString(env, nativeLibDir);
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    VulkanSetNativeLibDir(nativeDir);
+    if (nextPath == g_requestedCustomDriverPath) return;
+    g_requestedCustomDriverPath = nextPath;
+    VulkanSetCustomDriverPath(nextPath);
+    if (!g_graphicsContext || g_booted || g_pendingBoot || g_bootRequested || g_activeRenderer == kRendererOpenGL) return;
+    const bool hadSurface = g_renderReady;
+    if (hadSurface) {
+        g_graphicsContext->ShutdownSurface();
+        g_renderReady = false;
+    }
+    g_graphicsContext->ShutdownAPI();
+    delete g_graphicsContext;
+    g_graphicsContext = nullptr;
+    Core_SetGraphicsContext(nullptr);
+    CreateGraphicsContext();
+    if (!g_requestedCustomDriverPath.empty()) {
+        if (VulkanCustomDriverLibraryLoaded()) {
+            NLOGI("Custom Vulkan driver loaded");
+        } else {
+            NLOGE("Custom Vulkan driver did not load; using the system driver");
+        }
+    }
+    if (hadSurface && g_surfaceWindow != nullptr) {
+        AttachSurface(g_surfaceWindow, g_surfaceWidth, g_surfaceHeight);
+    }
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeIsCustomDriverLoaded(JNIEnv *, jclass) {
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    return VulkanCustomDriverLibraryLoaded() ? JNI_TRUE : JNI_FALSE;
 }
 
 // Reports the renderer the core actually initialized (0 = software,

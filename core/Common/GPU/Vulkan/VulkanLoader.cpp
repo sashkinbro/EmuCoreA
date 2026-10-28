@@ -360,6 +360,8 @@ static const char * const so_names[] = {
 };
 #endif
 
+static std::string g_customDriverPath;
+
 #if !PPSSPP_VK_STATIC
 static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 #if PPSSPP_PLATFORM(SWITCH)
@@ -373,7 +375,26 @@ static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 	void *lib = nullptr;
 
 #if PPSSPP_PLATFORM(ANDROID) && PPSSPP_ARCH(ARM64)
-	if (!g_Config.sCustomDriver.empty() && g_Config.sCustomDriver != "Default") {
+	if (!g_customDriverPath.empty() && !g_nativeLibDir.empty()) {
+		const size_t slash = g_customDriverPath.find_last_of('/');
+		if (slash != std::string::npos && slash + 1 < g_customDriverPath.size()) {
+			const std::string driverDir = g_customDriverPath.substr(0, slash + 1);
+			const std::string driverName = g_customDriverPath.substr(slash + 1);
+			const Path tempDir = g_Config.internalDataDirectory / "temp";
+			const Path redirectDir = g_Config.internalDataDirectory / "vk_file_redirect";
+			File::CreateDir(tempDir);
+			File::CreateDir(redirectDir);
+			lib = adrenotools_open_libvulkan(
+				RTLD_NOW | RTLD_LOCAL, ADRENOTOOLS_DRIVER_FILE_REDIRECT | ADRENOTOOLS_DRIVER_CUSTOM,
+				(std::string(tempDir.c_str()) + "/").c_str(), g_nativeLibDir.c_str(),
+				driverDir.c_str(), driverName.c_str(),
+				(std::string(redirectDir.c_str()) + "/").c_str(), nullptr);
+			if (!lib) {
+				ERROR_LOG(Log::G3D, "Failed to load selected Vulkan driver: %s", driverName.c_str());
+			}
+		}
+	}
+	if (!lib && g_customDriverPath.empty() && !g_Config.sCustomDriver.empty() && g_Config.sCustomDriver != "Default") {
 		const Path driverPath = g_Config.internalDataDirectory / "drivers" / g_Config.sCustomDriver;
 
 		json::JsonReader meta = json::JsonReader((driverPath / "meta.json").c_str());
@@ -439,6 +460,18 @@ void VulkanSetAvailable(bool available) {
 	INFO_LOG(Log::G3D, "Setting Vulkan availability to true");
 	g_vulkanAvailabilityChecked = true;
 	g_vulkanMayBeAvailable = available;
+}
+
+bool VulkanCustomDriverLibraryLoaded() {
+#if PPSSPP_PLATFORM(ANDROID) && PPSSPP_ARCH(ARM64)
+	return !g_customDriverPath.empty() && adrenotools_custom_driver_library_loaded();
+#else
+	return false;
+#endif
+}
+
+void VulkanSetCustomDriverPath(std::string_view path) {
+	g_customDriverPath = path;
 }
 
 void VulkanSetNativeLibDir(std::string_view nativeLibDir) {

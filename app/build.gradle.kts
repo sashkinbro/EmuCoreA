@@ -116,7 +116,7 @@ android {
     }
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            useLegacyPackaging = true
             discordSdkDirectory?.let { pickFirsts += "**/libdiscord_partner_sdk.so" }
         }
     }

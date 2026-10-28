@@ -364,8 +364,9 @@ object EmulatorBridge {
 
         val normalizedGpuHardwareProfile = GpuHardwareProfiles.normalize(gpuHardwareProfile)
         val gpuHardwareProfileOverride = GpuHardwareProfiles.coreOverrideFor(normalizedGpuHardwareProfile)
-        // This frontend uses the system EGL/OpenGL driver for PPSSPP.
-        val customDriverSupported = false
+        val customDriverSupported = resolvedRenderer == RendererDefaults.VULKAN &&
+            GpuDriverCompatibility.supportsCustomDrivers() &&
+            customDriverPath?.let { GpuDriverManager(context).isVendorCompatible(it) } == true
         val effectiveGpuDriverType = if (gpuDriverType == 1 && customDriverSupported) 1 else 0
         val effectiveMediatekAngleOpenGl = shouldUseMediatekAngleOpenGl(
             requested = mediatekAngleOpenGl,
@@ -903,9 +904,8 @@ object EmulatorBridge {
     }
 
     suspend fun setCustomDriverPath(path: String) {
-        // The current PPSSPP frontend uses the system EGL/OpenGL driver.
-        settingsCache["EmuCoreA/GS:CustomDriverPath"] = ""
-        performRuntimeOps(listOf(customDriverOp("")))
+        settingsCache["EmuCoreA/GS:CustomDriverPath"] = path
+        performRuntimeOps(listOf(customDriverOp(prepareCustomDriverLibrary(path))))
     }
 
     suspend fun setFrameLimitEnabled(enabled: Boolean) {
