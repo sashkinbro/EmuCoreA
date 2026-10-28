@@ -132,8 +132,17 @@ object DocumentPathResolver {
         return uri.toString()
     }
 
-    fun prepareGameLaunchPath(context: Context, rawPath: String): String? {
+    fun prepareGameLaunchPath(context: Context, rawPath: String, pinArchive: Boolean = false): String? {
+        if (ArchiveGamePath.parse(rawPath) != null) return ArchiveGameReader.prepare(context, rawPath, pinArchive)
         if (rawPath.isBlank()) return null
+        if (ArchiveGamePath.isArchiveName(getDisplayName(context, rawPath))) {
+            val members = ArchiveGameReader.list(context, rawPath)
+            val legacyIndex = if (getDisplayName(context, rawPath).endsWith(".zip", true)) {
+                ArchiveGamePath.legacyZipMemberIndex(members.map { it.name })
+            } else -1
+            val member = members.getOrNull(legacyIndex) ?: members.firstOrNull() ?: return null
+            return ArchiveGameReader.prepare(context, ArchiveGamePath.create(rawPath, member.name, member.index), pinArchive)
+        }
         if (!rawPath.startsWith("content://")) {
             val direct = File(rawPath)
             if (direct.isFile && direct.canRead()) return direct.absolutePath

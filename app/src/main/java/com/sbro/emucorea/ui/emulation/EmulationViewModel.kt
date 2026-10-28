@@ -354,6 +354,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     private var currentGameTitle: String = ""
     @Volatile
     private var currentGamePath: String? = null
+    private var pinnedArchiveLaunchPath: String? = null
     @Volatile
     private var currentGameSerial: String = ""
     @Volatile
@@ -971,6 +972,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             )
 
         viewModelScope.launch(Dispatchers.IO) {
+            var attemptPinnedPath: String? = null
+            try {
             _uiState.value = _uiState.value.copy(
                 statusMessage = "status_preparing"
             )
@@ -1035,7 +1038,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     path.startsWith("content://") && DocumentPathResolver.getDisplayName(getApplication(), path)
                         .substringAfterLast('.', "").equals("elf", ignoreCase = true) ->
                             DocumentPathResolver.prepareElfLaunchPath(getApplication(), path)
-                    else -> DocumentPathResolver.prepareGameLaunchPath(getApplication(), path)
+                    else -> DocumentPathResolver.prepareGameLaunchPath(getApplication(), path, pinArchive = true)
                 }
 
                 if (launchPath.isNullOrBlank()) {
@@ -1050,6 +1053,10 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 finalLaunchPath = launchPath
+                if (launchPath.contains("/cache/archive-games/")) {
+                    pinnedArchiveLaunchPath = launchPath
+                    attemptPinnedPath = launchPath
+                }
                 Log.i(TAG, "Prepared launch path=$launchPath originalPath=$path")
                 if (autotestMode) {
                     val safePath = path.orEmpty()
@@ -1076,8 +1083,19 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     val existingProfile = currentGamePath?.let(perGameSettingsRepository::get)
                     currentTouchControlsLayoutProfile = existingProfile?.touchControlsLayout
                     currentCustomTouchControlsProfile = existingProfile?.customTouchControls
-                    val metadata = EmulatorBridge.getGameMetadata(safePath)
-                    currentGameTitle = EmulatorBridge.cleanGameDisplayTitle(metadata.title, safePath)
+                    val archiveMember = com.sbro.emucorea.core.ArchiveGamePath.parse(safePath)
+                    val archiveName = archiveMember?.name ?: if (com.sbro.emucorea.core.ArchiveGamePath.isArchiveName(
+                            DocumentPathResolver.getDisplayName(getApplication(), safePath))) {
+                        val members = com.sbro.emucorea.core.ArchiveGameReader.list(getApplication(), safePath)
+                        val index = com.sbro.emucorea.core.ArchiveGamePath.legacyZipMemberIndex(members.map { it.name })
+                        (members.getOrNull(index) ?: members.firstOrNull())?.name
+                    } else null
+                    val metadata = if (archiveName != null) {
+                        val fallback = EmulatorBridge.getGameMetadata(archiveName.substringAfterLast('/'), readDiscMetadata = false)
+                        val disc = com.sbro.emucorea.core.PspGameMetadataReader.read(getApplication(), launchPath)
+                        fallback.copy(title = disc?.title ?: fallback.title, serial = disc?.serial ?: fallback.serial)
+                    } else EmulatorBridge.getGameMetadata(safePath)
+                    currentGameTitle = EmulatorBridge.cleanGameDisplayTitle(metadata.title, archiveName ?: safePath)
                     currentGameSerial = metadata.serial?.takeIf { it.isNotBlank() }
                         ?.let(::formatDiscSerial).orEmpty()
                     currentGameRegionLabel = resolveRegionLabel(currentGameSerial, safePath)
@@ -1086,7 +1104,9 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                         context = getApplication(),
                         serial = currentGameSerial.takeIf { it.isNotBlank() },
                         title = currentGameTitle
-                    )
+                    ) ?: if (archiveName != null) {
+                        com.sbro.emucorea.core.PspGameMetadataReader.extractIcon0(getApplication(), launchPath)
+                    } else null
                     shouldTrackCurrentProfilePlayTime = !bootSmokeProbe
                     shouldCountCurrentProfileSession = shouldTrackCurrentProfilePlayTime
                     currentGameCrc = metadata.serialWithCrc.extractCrc().orEmpty()
@@ -1304,6 +1324,10 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 launchPath = path
             )
 
+            if (!started && !EmulatorBridge.isVmActive()) {
+                com.sbro.emucorea.core.ArchiveGameReader.release(pinnedArchiveLaunchPath)
+                pinnedArchiveLaunchPath = null
+            }
             if (!started &&
                 !_uiState.value.isPaused &&
                 !cancelPendingStart &&
@@ -1316,6 +1340,12 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 delay(2500.milliseconds)
                 _uiState.value = _uiState.value.copy(toastMessage = null)
+            }
+            } finally {
+                if (!EmulatorBridge.isVmActive() && attemptPinnedPath != null) {
+                    com.sbro.emucorea.core.ArchiveGameReader.release(attemptPinnedPath)
+                    if (pinnedArchiveLaunchPath == attemptPinnedPath) pinnedArchiveLaunchPath = null
+                }
             }
         }
     }
@@ -3103,6 +3133,10 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 syncNativePerformanceOverlayState(_uiState.value)
                 clearCrashContext()
                 RetroAchievementsRepository.get(getApplication()).onGameStopped()
+                if (!EmulatorBridge.isVmActive()) {
+                    com.sbro.emucorea.core.ArchiveGameReader.release(pinnedArchiveLaunchPath)
+                    pinnedArchiveLaunchPath = null
+                }
             } finally {
                 isShuttingDown = false
             }

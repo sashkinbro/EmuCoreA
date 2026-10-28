@@ -80,7 +80,8 @@ class GameLibraryCacheRepository(context: Context) {
                                 coverArtPath = game.optString("cover_art_path").takeIf { it.isNotBlank() }
                                     ?.takeUnless(customCovers::isMissingCustomCover),
                                 serial = serial,
-                                isDlc = game.optBoolean("is_dlc", false)
+                                isDlc = game.optBoolean("is_dlc", false),
+                                archiveMetadataRead = game.optBoolean("archive_metadata_read", false)
                             )
                         )
                     }
@@ -132,6 +133,7 @@ class GameLibraryCacheRepository(context: Context) {
                                             put("cover_art_path", game.coverArtPath ?: "")
                                             put("serial", game.serial ?: "")
                                             put("is_dlc", game.isDlc)
+                                            put("archive_metadata_read", game.archiveMetadataRead)
                                         }
                                     )
                                 }

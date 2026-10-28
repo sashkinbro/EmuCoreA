@@ -27,8 +27,10 @@ browser = "1.10.0"
 credentials = "1.6.0"
 googleId = "1.2.1"
 googleAuth = "22.0.0"
+libarchive = "1.1.7"
 
 [libraries]
+libarchive = { group = "me.zhanghai.android.libarchive", name = "library", version.ref = "libarchive" }
 androidx-credentials = { group = "androidx.credentials", name = "credentials", version.ref = "credentials" }
 androidx-credentials-play-services = { group = "androidx.credentials", name = "credentials-play-services-auth", version.ref = "credentials" }
 google-identity = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleId" }

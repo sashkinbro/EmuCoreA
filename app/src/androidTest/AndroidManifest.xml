@@ -18,5 +18,9 @@
             android:authorities="com.sbro.emucorea.test.documents"
             android:exported="true"
             android:grantUriPermissions="true" />
+        <provider
+            android:name="com.sbro.emucorea.core.TestArchiveStreamProvider"
+            android:authorities="com.sbro.emucorea.test.archive"
+            android:exported="true" />
     </application>
 </manifest>

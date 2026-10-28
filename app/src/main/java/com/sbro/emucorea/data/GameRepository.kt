@@ -6,6 +6,8 @@ import android.provider.DocumentsContract
 import android.util.Log
 import androidx.core.net.toUri
 import androidx.documentfile.provider.DocumentFile
+import com.sbro.emucorea.core.ArchiveGamePath
+import com.sbro.emucorea.core.ArchiveGameReader
 import com.sbro.emucorea.core.BiosValidator
 import com.sbro.emucorea.core.DocumentPathResolver
 import com.sbro.emucorea.core.EmulatorBridge
@@ -22,7 +24,8 @@ data class GameItem(
     val lastModified: Long,
     val coverArtPath: String? = null,
     val serial: String? = null,
-    val isDlc: Boolean = false
+    val isDlc: Boolean = false,
+    val archiveMetadataRead: Boolean = false
 )
 
 class GameRepository {
@@ -35,6 +38,7 @@ class GameRepository {
         private const val MAX_DOCUMENT_SCAN_DEPTH = 32
         private const val MAX_DOCUMENT_SCAN_ENTRIES = 20_000
         internal fun libraryIdentity(path: String): String {
+            ArchiveGamePath.parse(path)?.let { return ArchiveGamePath.create(libraryIdentity(it.source), it.name, it.index) }
             if (!path.startsWith("content://")) {
                 return runCatching { File(path).canonicalPath }
                     .getOrDefault(File(path).absolutePath)
@@ -155,6 +159,27 @@ class GameRepository {
         serial: String? = null,
         title: String? = null
     ): String? {
+        val archive = ArchiveGamePath.parse(path)
+        if (archive != null || ArchiveGamePath.isArchiveName(DocumentPathResolver.getDisplayName(context, path))) {
+            CustomGameCoverRepository(context).findCustomCoverPath(path)?.let { return it }
+            val source = archive?.source ?: path
+            val memberName = archive?.name?.replace('\\', '/')?.substringAfterLast('/')
+                ?: DocumentPathResolver.getDisplayName(context, source)
+            val candidate = if (source.startsWith("content://")) {
+                runCatching {
+                    val parent = findDocumentParent(context, source.toUri()) ?: return@runCatching null
+                    val covers = buildDocumentCoverCandidates(parent.listFiles())
+                    covers[normalizeBaseName(memberName.substringBeforeLast('.'))]?.uri?.toString()
+                        ?: covers[normalizeBaseName(cleanGameName(title.orEmpty()))]?.uri?.toString()
+                }.getOrNull()
+            } else {
+                val parent = File(source).parentFile
+                val covers = buildLocalCoverCandidates(parent?.listFiles().orEmpty())
+                covers[normalizeBaseName(memberName.substringBeforeLast('.'))]?.absolutePath
+                    ?: covers[normalizeBaseName(cleanGameName(title.orEmpty()))]?.absolutePath
+            }
+            return CoverArtRepository(context).displayCoverPath(serial, title, candidate)
+        }
         val candidate = if (path.startsWith("content://")) {
             runCatching { findDocumentCover(path, context, serial, title) }
                 .onFailure { error -> Log.w(TAG, "Unable to find cover for document URI: $path", error) }
@@ -174,7 +199,7 @@ class GameRepository {
         if (covers.hasCoverSource(game.serial, game.title)) return downloaded
         return downloaded
             ?: game.coverArtPath?.takeIf { File(it).isFile }
-            ?: PspGameMetadataReader.extractIcon0(context, game.path)
+            ?: game.path.takeUnless { ArchiveGamePath.parse(it) != null || ArchiveGamePath.isArchiveName(DocumentPathResolver.getDisplayName(context, it)) }?.let { PspGameMetadataReader.extractIcon0(context, it) }
     }
 
     private fun scanLocalDirectory(
@@ -207,7 +232,13 @@ class GameRepository {
                 }
 
                 file.isFile && com.sbro.emucorea.core.PspGameFormats.isSupportedName(file.name) -> {
-                    if (file.extension.equals("zip", true) && PspGameMetadataReader.read(context, file.absolutePath) == null) return@forEach
+                    if (ArchiveGamePath.isArchiveName(file.name)) {
+                        items += scanArchive(context, file.absolutePath, file.length(), file.lastModified(), cachedGamesByPath, shouldAbort, file.extension.equals("zip", true), preferEnglishTitles) { name, title ->
+                            coverCandidates[normalizeBaseName(name.substringBeforeLast('.'))]?.absolutePath
+                                ?: coverCandidates[normalizeBaseName(cleanGameName(title))]?.absolutePath
+                        }
+                        return@forEach
+                    }
                     val entrySize = file.length()
                     val cachedGame = cachedGamesByPath[file.absolutePath]
                     val canReuseCachedMetadata = cachedGame != null &&
@@ -309,7 +340,14 @@ class GameRepository {
                 SetupValidator.DocumentEntryKind.GAME_FILE -> {
                     val uriPath = file.uri.toString()
                     val fileSize = runCatching { file.length() }.getOrDefault(0L)
-                    if (name.endsWith(".zip", true) && PspGameMetadataReader.read(context, uriPath) == null) continue
+                    if (ArchiveGamePath.isArchiveName(name)) {
+                        val modified = runCatching { file.lastModified() }.getOrDefault(0L)
+                        items += scanArchive(context, uriPath, fileSize, modified, cachedGamesByPath, shouldAbort, name.endsWith(".zip", true), preferEnglishTitles) { memberName, title ->
+                            coverCandidates[normalizeBaseName(memberName.substringBeforeLast('.'))]?.uri?.toString()
+                                ?: coverCandidates[normalizeBaseName(cleanGameName(title))]?.uri?.toString()
+                        }
+                        continue
+                    }
                     val entrySize = fileSize
                     val lastModified = runCatching { file.lastModified() }.getOrDefault(0L)
 
@@ -370,6 +408,46 @@ class GameRepository {
         }
 
         return items
+    }
+
+    private fun scanArchive(
+        context: Context,
+        source: String,
+        size: Long,
+        modified: Long,
+        cachedGamesByPath: Map<String, GameItem>,
+        shouldAbort: () -> Boolean,
+        legacyZip: Boolean,
+        preferEnglishTitles: Boolean,
+        siblingCover: (String, String) -> String?
+    ): List<GameItem> {
+        val covers = CoverArtRepository(context)
+        val customCovers = CustomGameCoverRepository(context)
+        val titleIndex = PspTitleIndexRepository(context)
+        val members = ArchiveGameReader.list(context, source, shouldAbort)
+        val legacyIndex = if (legacyZip) ArchiveGamePath.legacyZipMemberIndex(members.map { it.name }) else -1
+        return members.mapIndexedNotNull { position, member ->
+            val path = if (position == legacyIndex) source else ArchiveGamePath.create(source, member.name, member.index)
+            val name = member.name.replace('\\', '/').substringAfterLast('/')
+            val cached = cachedGamesByPath[path]?.takeIf { it.fileSize == size && it.lastModified == modified }
+            val inferred = EmulatorBridge.getGameMetadata(name, readDiscMetadata = false)
+            val identity = ArchiveGamePath.create(source, member.name, member.index)
+            val inspected = if (cached?.archiveMetadataRead != true && !shouldAbort()) ArchiveGameReader.inspect(context, identity, shouldAbort) else null
+            val serial = inspected?.metadata?.serial ?: cached?.serial ?: inferred.serial
+            val cleanTitle = EmulatorBridge.cleanGameDisplayTitle(inspected?.metadata?.title ?: cached?.title ?: inferred.title, name)
+            val title = if (preferEnglishTitles) titleIndex.titleForSerial(serial) ?: cleanTitle else cleanTitle
+            if (BiosValidator.isLikelyBiosLibraryEntry(name, title, serial)) return@mapIndexedNotNull null
+            GameItem(
+                title = title, path = path, fileName = name, fileSize = size, lastModified = modified,
+                coverArtPath = customCovers.findCustomCoverPath(path)
+                    ?: covers.findCachedCoverPath(serial, title = title)
+                    ?: inspected?.iconPath
+                    ?: cached?.coverArtPath
+                    ?: siblingCover(name, title),
+                serial = serial, isDlc = if (inspected != null) isDlcMetadata(inspected.metadata?.category, title, name) else cached?.isDlc ?: isDlcMetadata(null, title, name),
+                archiveMetadataRead = inspected != null || cached?.archiveMetadataRead == true
+            )
+        }
     }
 
     private fun findLocalCover(path: String, context: Context, serial: String?, title: String?): String? {

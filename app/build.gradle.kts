@@ -52,7 +52,9 @@ val releaseSigningConfigured = listOf(
 android {
     namespace = "com.sbro.emucorea"
     compileSdk {
-        version = release(37)
+        version = release(37) {
+            minorApiLevel = 2
+        }
     }
     ndkVersion = "29.0.14206865"
 
@@ -138,6 +140,7 @@ android {
 
 dependencies {
     implementation(project(":core-native"))
+    implementation(libs.libarchive)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)
     implementation(libs.google.identity)
