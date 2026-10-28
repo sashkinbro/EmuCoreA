@@ -622,7 +622,7 @@ private fun DriverStatusText(
         selectedDriver == null -> stringResource(R.string.settings_gpu_driver_status_system_desc)
         !selectedDriver.isUsable -> stringResource(R.string.settings_gpu_driver_status_broken_desc)
         !isActive -> stringResource(R.string.settings_gpu_driver_status_renderer_desc)
-        else -> stringResource(R.string.settings_gpu_driver_status_renderer_desc)
+        else -> stringResource(R.string.settings_gpu_driver_status_active_desc)
     }
     Text(
         text = text,
