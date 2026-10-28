@@ -219,8 +219,11 @@ fun AppNavigation(
                 SetupValidator.isAnyGameFolderPresentForStartup(context, gamePaths)
             }
             // PPSSPP boots without a firmware dump, so only a game folder is
-            // required before the home screen opens.
-            val shouldOpenHome = onboardingCompleted && hasGameFolder
+            // required before the home screen opens. Completed setups always
+            // land on Home: removable/FUSE storage can be briefly unavailable
+            // while the device is still booting, and relaunching onboarding in
+            // that window makes a configured library look lost.
+            val shouldOpenHome = onboardingCompleted
             Log.i(
                 TAG,
                 "Startup destination onboarding=$onboardingCompleted gameFolder=$hasGameFolder launch=${launchRequest != null}"
