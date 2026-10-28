@@ -4,7 +4,7 @@ import java.util.Locale
 
 /** File candidates accepted by Core/Loaders.cpp; ZIP contents are checked by the core. */
 object PspGameFormats {
-    private val extensions = setOf("iso", "cso", "chd", "pbp", "elf", "prx", "plf", "zip")
+    val extensions = setOf("iso", "cso", "chd", "pbp", "elf", "prx", "plf", "zip")
 
     fun isSupportedName(name: String): Boolean {
         val fileName = name.substringAfterLast('/').lowercase(Locale.ROOT)
