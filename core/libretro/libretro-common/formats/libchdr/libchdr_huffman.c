@@ -254,6 +254,8 @@ enum huffman_error huffman_import_tree_huffman(struct huffman_decoder* decoder, 
 	enum huffman_error error;
 	/* start by parsing the lengths for the small tree */
 	struct huffman_decoder* smallhuff = create_huffman_decoder(24, 6);
+	if (smallhuff == NULL)
+		return HUFFERR_INTERNAL_INCONSISTENCY;
 	smallhuff->huffnode[0].numbits = bitstream_read(bitbuf, 3);
 	start = bitstream_read(bitbuf, 3) + 1;
 	for (index = 1; index < 24; index++)
@@ -270,13 +272,24 @@ enum huffman_error huffman_import_tree_huffman(struct huffman_decoder* decoder, 
 	/* then regenerate the tree */
 	error = huffman_assign_canonical_codes(smallhuff);
 	if (error != HUFFERR_NONE)
+	{
+		/* smallhuff is local to this function and the only other exit
+		 * that reaches it frees it; returning straight out here leaked
+		 * the decoder and both of its arrays. This is the path a
+		 * malformed huffman-compressed hunk takes, so it leaked once per
+		 * hunk read rather than once per image. */
+		delete_huffman_decoder(smallhuff);
 		return error;
+	}
 	huffman_build_lookup_table(smallhuff);
 
 	/* determine the maximum length of an RLE count */
 	temp = decoder->numcodes - 9;
 	while (temp != 0)
-		temp >>= 1, rlefullbits++;
+	{
+		temp >>= 1;
+		rlefullbits++;
+	}
 
 	/* now process the rest of the data */
 	for (curcode = 0; curcode < decoder->numcodes; )
@@ -400,7 +413,7 @@ int huffman_build_tree(struct huffman_decoder* decoder, uint32_t totaldata, uint
 			decoder->huffnode[curcode].bits = curcode;
 
 			/* scale the weight by the current effective length, ensuring we don't go to 0 */
-			decoder->huffnode[curcode].weight = ((uint64_t)decoder->datahisto[curcode]) * ((uint64_t)totalweight) / ((uint64_t)totaldata);
+			decoder->huffnode[curcode].weight = (uint32_t)(((uint64_t)decoder->datahisto[curcode]) * ((uint64_t)totalweight) / ((uint64_t)totaldata));
 			if (decoder->huffnode[curcode].weight == 0)
 				decoder->huffnode[curcode].weight = 1;
 		}
@@ -496,7 +509,13 @@ enum huffman_error huffman_assign_canonical_codes(struct huffman_decoder* decode
 	{
 		struct node_t* node = &decoder->huffnode[curcode];
 		if (node->numbits > 0)
+		{
+			/* An oversubscribed tree assigns codes outside the space for
+			 * this length, which would index past the lookup table. */
+			if (bithisto[node->numbits] >= (1U << node->numbits))
+				return HUFFERR_INVALID_DATA;
 			node->bits = bithisto[node->numbits]++;
+		}
 	}
 	return HUFFERR_NONE;
 }
