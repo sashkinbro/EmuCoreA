@@ -1937,14 +1937,6 @@ private fun SettingsContent(
 
                 SettingsTab.Graphics -> {
                     SettingsSection(title = stringResource(R.string.settings_graphics_tab)) {
-                        if (com.sbro.emucorea.core.GpuDriverCompatibility.supportsCustomDrivers()) {
-                            SettingsItem(
-                                icon = Icons.Rounded.Settings,
-                                label = stringResource(R.string.settings_gpu_driver_manager_title),
-                                value = stringResource(R.string.settings_gpu_driver_manage),
-                                onClick = onOpenGpuDriverManager
-                            )
-                        }
                         ChoiceSection(
                             title = stringResource(R.string.settings_renderer),
                             options = listOf(
@@ -1957,6 +1949,19 @@ private fun SettingsContent(
                             helpText = stringResource(R.string.settings_help_renderer),
                             onResetToDefault = { viewModel.setRenderer(defaults.renderer) }
                         )
+                        if (com.sbro.emucorea.core.GpuDriverCompatibility.supportsCustomDrivers()) {
+                            val driverState by viewModel.driverUiState.collectAsState()
+                            val activeDriverName = driverState.customDriverPath
+                                ?.takeIf { driverState.gpuDriverType == 1 }
+                                ?.let { java.io.File(it).parentFile?.name ?: java.io.File(it).name }
+                            SettingsItem(
+                                icon = Icons.Rounded.Tune,
+                                label = stringResource(R.string.settings_gpu_driver_manager_title),
+                                value = activeDriverName ?: stringResource(R.string.settings_gpu_driver_system),
+                                onClick = onOpenGpuDriverManager,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                            )
+                        }
                         ChoiceSection(
                             title = stringResource(R.string.settings_aspect_ratio),
                             options = listOf(

@@ -8,16 +8,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
@@ -79,6 +75,10 @@ import com.sbro.emucorea.ui.profile.ProfileScreen
 import com.sbro.emucorea.ui.settings.SettingsViewModel
 import com.sbro.emucorea.ui.textures.TextureManagerScreen
 import com.sbro.emucorea.ui.theme.ThemeManagerScreen
+import com.sbro.emucorea.ui.common.appScreenEnterTransition
+import com.sbro.emucorea.ui.common.appScreenExitTransition
+import com.sbro.emucorea.ui.common.appScreenPopEnterTransition
+import com.sbro.emucorea.ui.common.appScreenPopExitTransition
 import com.sbro.emucorea.ui.common.EmuCoreALoadingAnimation
 import com.sbro.emucorea.ui.common.ProvideGamepadUiNavigation
 import androidx.compose.foundation.layout.Arrangement
@@ -187,20 +187,6 @@ internal enum class StartupDestination {
 internal fun shouldReleaseStartupSplash(destination: StartupDestination?): Boolean = destination != null
 
 private const val TAG = "AppNavigation"
-
-private fun appScreenEnterTransition(): EnterTransition = appScreenPopEnterTransition()
-
-private fun appScreenExitTransition(): ExitTransition = ExitTransition.None
-
-private fun appScreenPopEnterTransition(): EnterTransition {
-    return fadeIn(animationSpec = tween(durationMillis = 260, delayMillis = 70, easing = EaseOut)) +
-        scaleIn(initialScale = 0.96f, animationSpec = tween(260, delayMillis = 70, easing = EaseOut))
-}
-
-private fun appScreenPopExitTransition(): ExitTransition {
-    return fadeOut(animationSpec = tween(durationMillis = 110, easing = EaseIn)) +
-        scaleOut(targetScale = 1.0f, animationSpec = tween(110, easing = EaseIn))
-}
 
 @Composable
 fun AppNavigation(

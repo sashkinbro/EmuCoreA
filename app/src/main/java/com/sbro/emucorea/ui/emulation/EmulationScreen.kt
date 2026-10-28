@@ -64,6 +64,7 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
@@ -3900,14 +3901,6 @@ private fun EmulationSidebarMenu(
                             .forEach { section ->
                                 when (section) {
                                     GameMenuSectionId.GRAPHICS_DISPLAY -> {
-                        if (com.sbro.emucorea.core.GpuDriverCompatibility.supportsCustomDrivers()) {
-                            MenuButton(
-                                icon = Icons.Rounded.Settings,
-                                text = stringResource(R.string.settings_gpu_driver_manager_title),
-                                onClick = onOpenGpuDriverManager,
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f)
-                            )
-                        }
                         SidebarSectionTitle(
                             text = stringResource(R.string.settings_graphics_tab).uppercase(),
                             color = sectionTitleColor,
@@ -3928,6 +3921,15 @@ private fun EmulationSidebarMenu(
                             helpText = stringResource(R.string.settings_help_renderer),
                             onResetToDefault = { onSetRenderer(globalDefaults.renderer) }
                         )
+                        if (com.sbro.emucorea.core.GpuDriverCompatibility.supportsCustomDrivers()) {
+                            MenuButton(
+                                icon = Icons.Rounded.Tune,
+                                text = stringResource(R.string.settings_gpu_driver_manager_title),
+                                onClick = onOpenGpuDriverManager,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.40f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                            )
+                        }
 
                         // Internal resolution belongs to the app-level per-game
                         // upscale setting (uiState.upscale). Binding this row to
@@ -5693,7 +5695,8 @@ private fun MenuButton(
     gradientColors: List<Color>? = null,
     enabled: Boolean = true,
     showProgress: Boolean = false,
-    containerColor: Color? = null
+    containerColor: Color? = null,
+    border: BorderStroke? = null
 ) {
     val shape = neonShape(16.dp)
     val interactionSource = remember { MutableInteractionSource() }
@@ -5719,7 +5722,7 @@ private fun MenuButton(
             isDestructive -> MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
             else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
         },
-        border = if (gradientColors == null) BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)) else null
+        border = if (gradientColors == null) border ?: BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)) else null
     ) {
         Row(
             modifier = Modifier

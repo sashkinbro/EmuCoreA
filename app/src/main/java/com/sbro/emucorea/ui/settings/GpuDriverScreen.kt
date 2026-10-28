@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -93,6 +94,8 @@ import com.sbro.emucorea.core.SocGpuCatalog
 import com.sbro.emucorea.core.SnapdragonGpuProfile
 import com.sbro.emucorea.core.vendor
 import com.sbro.emucorea.ui.common.ScreenTopBar
+import com.sbro.emucorea.ui.common.appScreenEnterTransition
+import com.sbro.emucorea.ui.common.appScreenPopExitTransition
 import com.sbro.emucorea.ui.common.appScreenTopPadding
 import com.sbro.emucorea.ui.common.premiumFilterChipColors
 import com.sbro.emucorea.ui.common.rememberDebouncedClick
@@ -111,12 +114,23 @@ fun GpuDriverDialog(
     rendererOverride: Int? = null,
     viewModel: SettingsViewModel = viewModel()
 ) {
+    val visibility = remember { MutableTransitionState(false).apply { targetState = true } }
+    val requestDismiss = { visibility.targetState = false }
+    LaunchedEffect(visibility.currentState, visibility.targetState, visibility.isIdle) {
+        if (!visibility.targetState && !visibility.currentState && visibility.isIdle) onDismiss()
+    }
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = requestDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            GpuDriverScreen(onBackClick = onDismiss, rendererOverride = rendererOverride, viewModel = viewModel)
+        AnimatedVisibility(
+            visibleState = visibility,
+            enter = appScreenEnterTransition(),
+            exit = appScreenPopExitTransition()
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                GpuDriverScreen(onBackClick = requestDismiss, rendererOverride = rendererOverride, viewModel = viewModel)
+            }
         }
     }
 }
@@ -499,6 +513,7 @@ private fun GpuDriverHeader(
 ) {
     ScreenTopBar(
         modifier = Modifier.testTag("gpu_driver_header"),
+        backButtonModifier = Modifier.testTag("gpu_driver_back"),
         title = title,
         onBackClick = onBackClick,
         backContentColor = MaterialTheme.colorScheme.onSurface,
