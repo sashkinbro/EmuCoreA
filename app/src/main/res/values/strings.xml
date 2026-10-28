@@ -558,6 +558,8 @@
     <string name="formats_psp_recommended_body">ISO is the standard UMD dump. CSO and CHD are compressed disc images supported by this core.</string>
     <string name="formats_psp_homebrew_title">Digital games and homebrew</string>
 <string name="formats_psp_homebrew_body">PBP packages and PSP ELF or PRX executables can also be opened.</string>
+    <string name="formats_archives_title">Game archives</string>
+    <string name="formats_archives_body">Open ZIP, RAR and 7Z archives directly — no need to extract the game first.</string>
     <string name="formats_converter_unavailable">ISO to CHD conversion is not available in this build.</string>
     <string name="formats_converter_success_title">Conversion complete</string>
     <string name="formats_converter_failed_title">Conversion failed</string>

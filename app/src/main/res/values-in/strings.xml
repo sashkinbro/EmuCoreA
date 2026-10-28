@@ -1346,6 +1346,8 @@
     <string name="formats_psp_recommended_body">ISO adalah salinan UMD standar. Core ini juga mendukung citra CSO dan CHD terkompresi.</string>
     <string name="formats_psp_homebrew_title">Game digital dan homebrew</string>
 <string name="formats_psp_homebrew_body">Paket PBP serta program PSP ELF atau PRX juga dapat dibuka.</string>
+    <string name="formats_archives_title">Arsip game</string>
+    <string name="formats_archives_body">Arsip ZIP, RAR, dan 7Z dibuka langsung, tanpa perlu mengekstrak game terlebih dahulu.</string>
     <string name="settings_network_tab">Jaringan</string>
     <string name="emulation_fast_forward">Maju cepat (tahan)</string>
     <string name="emulation_transport_fast_forward">Maju cepat</string>

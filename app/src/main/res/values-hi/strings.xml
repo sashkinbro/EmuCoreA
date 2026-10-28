@@ -1332,6 +1332,8 @@
     <string name="formats_psp_recommended_body">ISO मानक UMD डंप है। यह कोर संपीड़ित CSO और CHD इमेज भी चलाता है।</string>
     <string name="formats_psp_homebrew_title">डिजिटल गेम और होमब्रू</string>
 <string name="formats_psp_homebrew_body">PBP पैकेज और PSP के ELF या PRX प्रोग्राम भी खोले जा सकते हैं।</string>
+    <string name="formats_archives_title">गेम आर्काइव</string>
+    <string name="formats_archives_body">ZIP, RAR और 7Z आर्काइव सीधे खुलते हैं — गेम को पहले एक्सट्रैक्ट करने की ज़रूरत नहीं।</string>
     <string name="settings_network_tab">नेटवर्क</string>
     <string name="emulation_fast_forward">तेज़ी से आगे बढ़ाएँ (दबाए रखें)</string>
     <string name="emulation_transport_fast_forward">फ़ास्ट-फ़ॉरवर्ड</string>

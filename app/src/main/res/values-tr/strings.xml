@@ -1332,6 +1332,8 @@
     <string name="formats_psp_recommended_body">ISO standart UMD dökümüdür. Çekirdek sıkıştırılmış CSO ve CHD görüntülerini de destekler.</string>
     <string name="formats_psp_homebrew_title">Dijital oyunlar ve homebrew</string>
 <string name="formats_psp_homebrew_body">PBP paketleri ile PSP ELF veya PRX çalıştırılabilir dosyaları da açılabilir.</string>
+    <string name="formats_archives_title">Oyun arşivleri</string>
+    <string name="formats_archives_body">ZIP, RAR ve 7Z arşivleri doğrudan açılır — oyunu önce çıkarmanız gerekmez.</string>
     <string name="settings_network_tab">Ağ</string>
     <string name="emulation_fast_forward">Hızlı ileri sar (basılı tut)</string>
     <string name="emulation_transport_fast_forward">İleri sar</string>

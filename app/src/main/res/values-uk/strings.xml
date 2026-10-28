@@ -1337,6 +1337,8 @@
     <string name="formats_psp_recommended_body">ISO — стандартний дамп UMD. Ядро також підтримує стиснені образи CSO та CHD.</string>
     <string name="formats_psp_homebrew_title">Цифрові ігри та homebrew</string>
 <string name="formats_psp_homebrew_body">Також можна відкрити пакети PBP і виконувані файли PSP ELF або PRX.</string>
+    <string name="formats_archives_title">Архіви ігор</string>
+    <string name="formats_archives_body">Архіви ZIP, RAR і 7Z відкриваються напряму — гру не потрібно спершу розпаковувати.</string>
     <string name="settings_network_tab">Мережа</string>
     <string name="emulation_fast_forward">Перемотування вперед (утримувати)</string>
     <string name="emulation_transport_fast_forward">Перемотування вперед</string>

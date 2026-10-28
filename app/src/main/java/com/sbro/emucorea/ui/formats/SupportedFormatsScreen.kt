@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Archive
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.FolderZip
 import androidx.compose.material.icons.rounded.Memory
@@ -155,6 +156,13 @@ fun SupportedFormatsScreen(
                     title = stringResource(R.string.formats_psp_supported_title),
                     body = stringResource(R.string.formats_psp_supported_body),
                     formats = ImageConversionManager.libraryFormats
+                )
+
+                FormatGroupCard(
+                    icon = Icons.Rounded.Archive,
+                    title = stringResource(R.string.formats_archives_title),
+                    body = stringResource(R.string.formats_archives_body),
+                    formats = listOf("ZIP", "RAR", "7Z")
                 )
 
                 FormatGroupCard(

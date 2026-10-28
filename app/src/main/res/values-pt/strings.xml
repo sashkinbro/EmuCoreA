@@ -1334,6 +1334,8 @@
     <string name="formats_psp_recommended_body">ISO é a cópia UMD padrão. O núcleo também suporta imagens CSO e CHD comprimidas.</string>
     <string name="formats_psp_homebrew_title">Jogos digitais e homebrew</string>
 <string name="formats_psp_homebrew_body">Também é possível abrir pacotes PBP e executáveis PSP ELF ou PRX.</string>
+    <string name="formats_archives_title">Ficheiros comprimidos</string>
+    <string name="formats_archives_body">Os ficheiros ZIP, RAR e 7Z abrem diretamente, sem ser preciso extrair o jogo primeiro.</string>
     <string name="settings_network_tab">Rede</string>
     <string name="emulation_fast_forward">Avanço rápido (manter pressionado)</string>
     <string name="emulation_transport_fast_forward">Avanço rápido</string>

@@ -1353,6 +1353,8 @@
     <string name="formats_psp_recommended_body">ISO je běžný obraz UMD. Jádro podporuje také komprimované obrazy CSO a CHD.</string>
     <string name="formats_psp_homebrew_title">Digitální hry a homebrew</string>
 <string name="formats_psp_homebrew_body">Lze otevřít balíčky PBP a spustitelné soubory PSP ELF nebo PRX.</string>
+    <string name="formats_archives_title">Archivy her</string>
+    <string name="formats_archives_body">Archivy ZIP, RAR a 7Z se otevírají přímo, bez nutnosti hru nejprve rozbalit.</string>
     <string name="settings_network_tab">Síť</string>
     <string name="emulation_fast_forward">Rychlý posun vpřed (podržet)</string>
     <string name="emulation_transport_fast_forward">Posun vpřed</string>

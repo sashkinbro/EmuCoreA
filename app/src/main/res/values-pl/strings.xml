@@ -1353,6 +1353,8 @@
     <string name="formats_psp_recommended_body">ISO to standardowy zrzut UMD. Rdzeń obsługuje też skompresowane obrazy CSO i CHD.</string>
     <string name="formats_psp_homebrew_title">Gry cyfrowe i homebrew</string>
 <string name="formats_psp_homebrew_body">Można też otwierać pakiety PBP oraz pliki wykonywalne PSP ELF i PRX.</string>
+    <string name="formats_archives_title">Archiwa gier</string>
+    <string name="formats_archives_body">Archiwa ZIP, RAR i 7Z otwierają się bezpośrednio — nie trzeba najpierw rozpakowywać gry.</string>
     <string name="settings_network_tab">Sieć</string>
     <string name="emulation_fast_forward">Przewijanie do przodu (przytrzymaj)</string>
     <string name="emulation_transport_fast_forward">Przewijanie do przodu</string>

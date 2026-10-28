@@ -1340,6 +1340,8 @@
     <string name="formats_psp_recommended_body">ISO هو تفريغ UMD القياسي. ويدعم هذا النواة صور CSO وCHD المضغوطة.</string>
     <string name="formats_psp_homebrew_title">الألعاب الرقمية والتطبيقات المنزلية</string>
 <string name="formats_psp_homebrew_body">يمكن فتح حزم PBP وملفات PSP التنفيذية من نوع ELF وPRX.</string>
+    <string name="formats_archives_title">أرشيفات الألعاب</string>
+    <string name="formats_archives_body">تُفتح أرشيفات ZIP وRAR و7Z مباشرةً دون الحاجة إلى استخراج اللعبة أولاً.</string>
     <string name="settings_network_tab">الشبكة</string>
     <string name="emulation_fast_forward">تقديم سريع (ضغط مطوّل)</string>
     <string name="emulation_transport_fast_forward">تقديم سريع</string>

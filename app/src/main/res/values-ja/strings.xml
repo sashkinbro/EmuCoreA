@@ -1331,6 +1331,8 @@
     <string name="formats_psp_recommended_body">ISO は標準的な UMD ダンプです。このコアは圧縮された CSO と CHD にも対応します。</string>
     <string name="formats_psp_homebrew_title">ダウンロード版と自作ソフト</string>
 <string name="formats_psp_homebrew_body">PBP パッケージと PSP の ELF または PRX 実行ファイルも開けます。</string>
+    <string name="formats_archives_title">ゲームアーカイブ</string>
+    <string name="formats_archives_body">ZIP、RAR、7Z アーカイブを直接開けます。ゲームを先に展開する必要はありません。</string>
     <string name="settings_network_tab">ネットワーク</string>
     <string name="emulation_fast_forward">早送り（長押し）</string>
     <string name="emulation_transport_fast_forward">早送り</string>

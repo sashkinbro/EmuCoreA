@@ -1331,6 +1331,8 @@
     <string name="formats_psp_recommended_body">ISO는 표준 UMD 덤프입니다. 이 코어는 압축된 CSO 및 CHD 이미지도 지원합니다.</string>
     <string name="formats_psp_homebrew_title">디지털 게임과 홈브루</string>
 <string name="formats_psp_homebrew_body">PBP 패키지와 PSP ELF 또는 PRX 실행 파일도 열 수 있습니다.</string>
+    <string name="formats_archives_title">게임 압축 파일</string>
+    <string name="formats_archives_body">ZIP, RAR, 7Z 압축 파일을 게임을 먼저 풀지 않고 바로 열 수 있습니다.</string>
     <string name="settings_network_tab">네트워크</string>
     <string name="emulation_fast_forward">빨리 감기 (길게 누르기)</string>
     <string name="emulation_transport_fast_forward">빨리 감기</string>

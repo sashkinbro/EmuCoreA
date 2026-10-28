@@ -1333,6 +1333,8 @@
     <string name="formats_psp_recommended_body">ISO 是标准 UMD 转储。该核心也支持压缩的 CSO 和 CHD 镜像。</string>
     <string name="formats_psp_homebrew_title">数字游戏和自制程序</string>
 <string name="formats_psp_homebrew_body">还可以打开 PBP 包以及 PSP ELF 或 PRX 可执行文件。</string>
+    <string name="formats_archives_title">遊戲壓縮檔</string>
+    <string name="formats_archives_body">ZIP、RAR 與 7Z 壓縮檔可直接開啟，無需先解壓縮遊戲。</string>
     <string name="settings_network_tab">網路</string>
     <string name="emulation_fast_forward">快进（长按）</string>
     <string name="emulation_transport_fast_forward">快進</string>

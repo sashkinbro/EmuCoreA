@@ -1347,6 +1347,8 @@
     <string name="formats_psp_recommended_body">ISO تصویر استاندارد UMD است. این هسته تصویرهای فشردهٔ CSO و CHD را هم پشتیبانی می‌کند.</string>
     <string name="formats_psp_homebrew_title">بازی‌های دیجیتال و برنامه‌های مستقل</string>
 <string name="formats_psp_homebrew_body">بسته‌های PBP و فایل‌های اجرایی ELF یا PRX مربوط به PSP نیز باز می‌شوند.</string>
+    <string name="formats_archives_title">آرشیوهای بازی</string>
+    <string name="formats_archives_body">آرشیوهای ZIP، RAR و 7Z مستقیماً باز می‌شوند؛ نیازی به استخراج بازی نیست.</string>
     <string name="settings_network_tab">شبکه</string>
     <string name="emulation_fast_forward">جلو بردن سریع (نگه داشتن)</string>
     <string name="emulation_transport_fast_forward">جلو بردن سریع</string>
