@@ -1862,4 +1862,10 @@
     <string name="settings_gpu_driver_compatibility_xclipse">Kompatibilita Xclipse</string>
     <string name="settings_gpu_driver_compatibility_generic">Kompatibilita GPU</string>
     <string name="settings_gpu_driver_other_family_generic">Jiná rodina GPU</string>
+    <string name="game_picker_search_hint">Hledat hry…</string>
+    <string name="game_picker_no_results">Hledání neodpovídají žádné hry</string>
+    <string name="game_picker_tap_to_select">Klepnutím vyberte hru</string>
+    <string name="game_picker_change_game">Změnit hru</string>
+    <string name="game_picker_all_filter">Vše</string>
+    <string name="game_picker_clear_search">Vymazat hledání</string>
 </resources>

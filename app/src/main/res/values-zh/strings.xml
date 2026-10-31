@@ -1842,4 +1842,10 @@
     <string name="settings_gpu_driver_compatibility_xclipse">Xclipse 相容性</string>
     <string name="settings_gpu_driver_compatibility_generic">GPU 相容性</string>
     <string name="settings_gpu_driver_other_family_generic">不同的 GPU 系列</string>
+    <string name="game_picker_search_hint">搜索游戏…</string>
+    <string name="game_picker_no_results">未找到匹配的游戏</string>
+    <string name="game_picker_tap_to_select">点击选择游戏</string>
+    <string name="game_picker_change_game">更换游戏</string>
+    <string name="game_picker_all_filter">全部</string>
+    <string name="game_picker_clear_search">清除搜索</string>
 </resources>

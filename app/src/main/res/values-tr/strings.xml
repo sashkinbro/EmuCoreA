@@ -1841,4 +1841,10 @@
     <string name="settings_gpu_driver_compatibility_xclipse">Xclipse uyumluluğu</string>
     <string name="settings_gpu_driver_compatibility_generic">GPU uyumluluğu</string>
     <string name="settings_gpu_driver_other_family_generic">Farklı GPU ailesi</string>
+    <string name="game_picker_search_hint">Oyun ara…</string>
+    <string name="game_picker_no_results">Aramanızla eşleşen oyun bulunamadı</string>
+    <string name="game_picker_tap_to_select">Oyun seçmek için dokunun</string>
+    <string name="game_picker_change_game">Oyunu değiştir</string>
+    <string name="game_picker_all_filter">Tümü</string>
+    <string name="game_picker_clear_search">Aramayı temizle</string>
 </resources>

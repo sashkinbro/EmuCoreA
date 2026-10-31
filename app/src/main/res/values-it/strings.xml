@@ -1841,4 +1841,10 @@
     <string name="settings_gpu_driver_compatibility_xclipse">Compatibilità Xclipse</string>
     <string name="settings_gpu_driver_compatibility_generic">Compatibilità GPU</string>
     <string name="settings_gpu_driver_other_family_generic">Famiglia GPU diversa</string>
+    <string name="game_picker_search_hint">Cerca giochi…</string>
+    <string name="game_picker_no_results">Nessun gioco corrisponde alla ricerca</string>
+    <string name="game_picker_tap_to_select">Tocca per selezionare un gioco</string>
+    <string name="game_picker_change_game">Cambia gioco</string>
+    <string name="game_picker_all_filter">Tutti</string>
+    <string name="game_picker_clear_search">Cancella ricerca</string>
 </resources>

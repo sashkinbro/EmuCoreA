@@ -1849,4 +1849,10 @@
     <string name="settings_gpu_driver_compatibility_xclipse">توافق Xclipse</string>
     <string name="settings_gpu_driver_compatibility_generic">توافق GPU</string>
     <string name="settings_gpu_driver_other_family_generic">عائلة GPU مختلفة</string>
+    <string name="game_picker_search_hint">بحث عن ألعاب…</string>
+    <string name="game_picker_no_results">لا توجد ألعاب تطابق بحثك</string>
+    <string name="game_picker_tap_to_select">انقر لاختيار لعبة</string>
+    <string name="game_picker_change_game">تغيير اللعبة</string>
+    <string name="game_picker_all_filter">الكل</string>
+    <string name="game_picker_clear_search">مسح البحث</string>
 </resources>

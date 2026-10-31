@@ -1840,4 +1840,10 @@
     <string name="settings_gpu_driver_compatibility_xclipse">Xclipse 互換性</string>
     <string name="settings_gpu_driver_compatibility_generic">GPU 互換性</string>
     <string name="settings_gpu_driver_other_family_generic">別のGPUファミリー</string>
+    <string name="game_picker_search_hint">ゲームを検索…</string>
+    <string name="game_picker_no_results">一致するゲームが見つかりません</string>
+    <string name="game_picker_tap_to_select">タップしてゲームを選択</string>
+    <string name="game_picker_change_game">ゲームを変更</string>
+    <string name="game_picker_all_filter">すべて</string>
+    <string name="game_picker_clear_search">検索をクリア</string>
 </resources>

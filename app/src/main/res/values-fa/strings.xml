@@ -1856,4 +1856,10 @@
     <string name="settings_gpu_driver_compatibility_xclipse">سازگاری Xclipse</string>
     <string name="settings_gpu_driver_compatibility_generic">سازگاری GPU</string>
     <string name="settings_gpu_driver_other_family_generic">خانواده GPU متفاوت</string>
+    <string name="game_picker_search_hint">جستجوی بازی…</string>
+    <string name="game_picker_no_results">هیچ بازی با جستجوی شما مطابقت ندارد</string>
+    <string name="game_picker_tap_to_select">برای انتخاب بازی ضربه بزنید</string>
+    <string name="game_picker_change_game">تغییر بازی</string>
+    <string name="game_picker_all_filter">همه</string>
+    <string name="game_picker_clear_search">پاک کردن جستجو</string>
 </resources>

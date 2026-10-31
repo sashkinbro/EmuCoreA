@@ -1845,4 +1845,10 @@
     <string name="settings_gpu_driver_compatibility_xclipse">Совместимость с Xclipse</string>
     <string name="settings_gpu_driver_compatibility_generic">Совместимость GPU</string>
     <string name="settings_gpu_driver_other_family_generic">Другое семейство GPU</string>
+    <string name="game_picker_search_hint">Поиск игр…</string>
+    <string name="game_picker_no_results">Игр не найдено по вашему запросу</string>
+    <string name="game_picker_tap_to_select">Нажмите, чтобы выбрать игру</string>
+    <string name="game_picker_change_game">Сменить игру</string>
+    <string name="game_picker_all_filter">Все</string>
+    <string name="game_picker_clear_search">Очистить поиск</string>
 </resources>
