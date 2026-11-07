@@ -911,6 +911,7 @@ private fun GameSettingsTabContent(
     val nativeUpscaleLabel = stringResource(R.string.settings_upscale_native)
     val context = LocalContext.current
     val preferences = remember(context) { AppPreferences(context.applicationContext) }
+    val settingsSnapshot by preferences.settingsSnapshot.collectAsState(initial = SettingsSnapshot())
     val globalKeyboardMouseSettings by preferences.keyboardMouseSettings.collectAsState(
         initial = KeyboardMouseSettings()
     )
@@ -984,6 +985,17 @@ private fun GameSettingsTabContent(
                         draft = draft,
                         onDraftChange = onDraftChange
                     )
+                    val globalShaderPresetName = shaderPresets
+                        .firstOrNull { it.absolutePath == settingsSnapshot.shaderChainPreset }
+                        ?.label
+                        ?.substringAfterLast('/')
+                        ?: stringResource(R.string.settings_shader_preset_none)
+                    val globalScopeLabel = stringResource(R.string.controls_editor_global_scope)
+                    val globalValueLabel = stringResource(
+                        R.string.emulation_shaders_global_value,
+                        globalShaderPresetName
+                    )
+                    val useGlobalShaderLabel = "$globalScopeLabel · $globalValueLabel"
                     ShaderPresetSelector(
                         title = stringResource(R.string.settings_shader_preset),
                         presets = shaderPresets,
@@ -1013,7 +1025,7 @@ private fun GameSettingsTabContent(
                         },
                         helpText = stringResource(R.string.settings_help_shader_preset),
                         leadingOptions = listOf(
-                            SHADER_PRESET_USE_GLOBAL to stringResource(R.string.controls_editor_global_scope)
+                            SHADER_PRESET_USE_GLOBAL to useGlobalShaderLabel
                         ),
                         cardHorizontalPadding = 0.dp
                     )
