@@ -62,7 +62,7 @@ import com.sbro.emucorea.data.CheatGameConfig
 import com.sbro.emucorea.data.CheatRepository
 import com.sbro.emucorea.data.ContentLibraryRepository
 import com.sbro.emucorea.data.GameItem
-import com.sbro.emucorea.data.RemoteContentInstallState
+import com.sbro.emucorea.data.InstalledCheatPack
 import com.sbro.emucorea.core.NativeApp
 import com.sbro.emucorea.data.SelectedGameIdentity
 import com.sbro.emucorea.ui.common.AppAlertDialog
@@ -99,9 +99,11 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
     var selectedPath by remember { mutableStateOf<String?>(null) }
     var identity by remember { mutableStateOf<SelectedGameIdentity?>(null) }
     var config by remember { mutableStateOf<CheatGameConfig?>(null) }
+    var installedPacks by remember { mutableStateOf<List<InstalledCheatPack>>(emptyList()) }
+    var removingPackId by remember { mutableStateOf<String?>(null) }
     var resolvingIdentity by remember { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<CheatGameConfig?>(null) }
-    var catalogRefreshKey by remember { mutableStateOf(0) }
+    var pendingPackRemoval by remember { mutableStateOf<InstalledCheatPack?>(null) }
     var selectedCheatCategory by remember { mutableStateOf<CheatCategory?>(null) }
     var cheatSearchVisible by remember { mutableStateOf(false) }
     var cheatSearchQuery by remember { mutableStateOf("") }
@@ -113,6 +115,7 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
     val importSuccess = stringResource(R.string.cheat_manager_import_success)
     val importFailure = stringResource(R.string.cheat_manager_import_failed)
     val deleteSuccess = stringResource(R.string.cheat_manager_delete_success)
+    val packRemoveFailed = stringResource(R.string.cheat_manager_pack_remove_failed)
 
     suspend fun loadConfig(selectedIdentity: SelectedGameIdentity?): CheatGameConfig? = withContext(Dispatchers.IO) {
         val serial = selectedIdentity?.serial.orEmpty()
@@ -125,10 +128,18 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
         cheatRepository.getGameConfig(keys, serial, crc)
     }
 
+    suspend fun loadInstalledPacks(gameConfig: CheatGameConfig?): List<InstalledCheatPack> =
+        withContext(Dispatchers.IO) {
+            gameConfig?.let { cheatRepository.getInstalledCheatPacks(it.gameKey) }.orEmpty()
+        }
+
+    fun installedPackTitle(pack: InstalledCheatPack): String = pack.title.ifBlank { pack.id }
+
     fun syncSelectedGame() {
         scope.launch {
             val loaded = loadConfig(identity) ?: return@launch
             config = loaded
+            installedPacks = loadInstalledPacks(loaded)
             withContext(Dispatchers.IO) {
                 cheatWriteMutex.withLock {
                     cheatRepository.syncActiveCheats(
@@ -185,6 +196,7 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
         selectedCheatCategory = null
         cheatSearchVisible = false
         cheatSearchQuery = ""
+        installedPacks = loadInstalledPacks(config)
     }
 
     val installedBlocks = config?.blocks.orEmpty()
@@ -228,9 +240,29 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
             }
             if (result > 0) {
                 preferences.setEnableCheats(true)
-                config = loadConfig(identity)
+                val updatedConfig = loadConfig(identity)
+                config = updatedConfig
+                installedPacks = loadInstalledPacks(updatedConfig)
             }
             Toast.makeText(context, if (result > 0) importSuccess else importFailure, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun removeInstalledPack(pack: InstalledCheatPack) {
+        val current = config ?: return
+        if (removingPackId != null) return
+        removingPackId = pack.id
+        scope.launch {
+            val removed = withContext(Dispatchers.IO) {
+                cheatRepository.removeInstalledCheatPack(current.gameKey, pack.id)
+            }
+            val updatedConfig = loadConfig(identity)
+            config = updatedConfig
+            installedPacks = loadInstalledPacks(updatedConfig)
+            if (!removed) {
+                Toast.makeText(context, packRemoveFailed, Toast.LENGTH_LONG).show()
+            }
+            removingPackId = null
         }
     }
 
@@ -383,8 +415,8 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
                     identity = identity,
                     resolvingIdentity = resolvingIdentity,
                     gamesLoading = gamesLoading,
-                    onInstalled = { syncSelectedGame() },
-                    refreshKey = catalogRefreshKey
+                    installedPackIds = installedPacks.mapTo(linkedSetOf()) { it.id },
+                    onInstalled = { syncSelectedGame() }
                 )
             }
             config?.let { current ->
@@ -445,6 +477,21 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
                             } else null,
                             singleLine = true,
                             shape = neonShape(18.dp)
+                        )
+                    }
+                }
+                if (installedPacks.isNotEmpty() && !cheatSearchVisible && selectedCheatCategory == null) {
+                    item(key = "installed-cheat-packs") {
+                        InstalledCheatPacksRow(
+                            packs = installedPacks,
+                            removingPackId = removingPackId,
+                            titleFor = { pack -> installedPackTitle(pack) },
+                            onRemove = { pack -> pendingPackRemoval = pack },
+                            modifier = Modifier.animateItem(
+                                fadeInSpec = tween(220),
+                                placementSpec = tween(220),
+                                fadeOutSpec = tween(140)
+                            )
                         )
                     }
                 }
@@ -591,31 +638,34 @@ fun CheatManagerScreen(onBackClick: () -> Unit) {
                     scope.launch {
                         withContext(Dispatchers.IO) {
                             cheatRepository.deleteImportedCheats(current.gameKey, current.serial, current.crc)
-                            // The online catalog tracks installs by pack id; without this the
-                            // card keeps showing "Installed" after the files are gone.
-                            runCatching {
-                                val installState = RemoteContentInstallState(
-                                    context,
-                                    preferences.getEmulatorDataPathSync()
-                                )
-                                val serial = current.serial
-                                if (!serial.isNullOrBlank()) {
-                                    val packIds = installState.installedCheats().values
-                                        .filter { it.serial.equals(serial, ignoreCase = true) }
-                                        .map { it.packId }
-                                    if (packIds.isNotEmpty()) installState.removeCheatsForGame(packIds)
-                                }
-                            }
                             NativeApp.clearCheats()
                         }
                         config = null
-                        catalogRefreshKey++
+                        installedPacks = emptyList()
                         Toast.makeText(context, deleteSuccess, Toast.LENGTH_SHORT).show()
                     }
                 }) { Text(stringResource(R.string.delete)) }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.cancel)) }
+            }
+        )
+    }
+
+    pendingPackRemoval?.let { pack ->
+        val packTitle = installedPackTitle(pack)
+        AppAlertDialog(
+            onDismissRequest = { pendingPackRemoval = null },
+            title = { Text(stringResource(R.string.cheat_manager_remove_pack_title, packTitle)) },
+            text = { Text(stringResource(R.string.cheat_manager_remove_pack_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingPackRemoval = null
+                    removeInstalledPack(pack)
+                }) { Text(stringResource(R.string.delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingPackRemoval = null }) { Text(stringResource(R.string.cancel)) }
             }
         )
     }

@@ -35,6 +35,7 @@ import com.sbro.emucorea.data.SettingsSnapshot
 import com.sbro.emucorea.data.AppPreferences.Companion.FPS_OVERLAY_MODE_SIMPLE
 import com.sbro.emucorea.data.AppPreferences.Companion.FPS_OVERLAY_MODE_DETAILED
 import com.sbro.emucorea.data.CheatBlock
+import com.sbro.emucorea.data.InstalledCheatPack
 import com.sbro.emucorea.data.KeyboardMouseSettings
 import com.sbro.emucorea.data.OverlayControlLayout
 import com.sbro.emucorea.data.CheatRepository
@@ -42,6 +43,8 @@ import com.sbro.emucorea.data.GameRepository
 import com.sbro.emucorea.data.OverlayLayoutSnapshot
 import com.sbro.emucorea.data.PerGameSettings
 import com.sbro.emucorea.data.PerGameSettingsRepository
+import com.sbro.emucorea.data.RemoteCheatPack
+import com.sbro.emucorea.data.RemoteContentCatalogRepository
 import com.sbro.emucorea.data.PlayTimeSyncCacheRepository
 import com.sbro.emucorea.data.PlayerPlayTimeDelta
 import com.sbro.emucorea.data.PlayerProfileRepository
@@ -78,6 +81,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -324,6 +328,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val preferences = AppPreferences(application)
     private val cheatRepository = CheatRepository(application)
+    private val remoteContentCatalogRepository = RemoteContentCatalogRepository(application)
     private val perGameSettingsRepository = PerGameSettingsRepository(application)
     private val gameRepository = GameRepository()
     private val saveStateRepository = SaveStateRepository(application)
@@ -338,6 +343,13 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     )
     private val _keyboardMouseOverride = MutableStateFlow<KeyboardMouseSettings?>(null)
     val keyboardMouseOverride: StateFlow<KeyboardMouseSettings?> = _keyboardMouseOverride.asStateFlow()
+    // Kept outside EmulationUiState: that data class is near the JVM 255-argument
+    // limit. The cheat pack browser is menu-scoped and must outlive the menu, so
+    // its downloads and catalog cache are owned here instead of by the composable.
+    private val _cheatPackBrowser = MutableStateFlow(CheatPackBrowserState())
+    internal val cheatPackBrowser: StateFlow<CheatPackBrowserState> = _cheatPackBrowser.asStateFlow()
+    private var cheatPackCatalogJob: Job? = null
+    private var cheatPackInstallJob: Job? = null
     // Derive terminal presentation from authoritative runtime state. Deferred
     // startup/save-load coroutines cannot overwrite a fatal error with Running.
     val uiState: StateFlow<EmulationUiState> = combine(_uiState, EmulatorBridge.runtimeFailure) {
@@ -2030,34 +2042,209 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     /**
+     * Enables or disables every installed cheat for the running game at once.
+     * Disabling keeps the global cheat setting untouched; enabling turns it on
+     * so the newly checked blocks actually reach the core.
+     */
+    fun setAllCheatsEnabled(enabled: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val currentState = _uiState.value
+            val gameKey = currentState.cheatsGameKey ?: return@launch
+            if (currentState.availableCheats.isEmpty()) return@launch
+            val updatedBlocks = currentState.availableCheats.map { block -> block.copy(enabled = enabled) }
+            cheatRepository.setBlocksEnabled(
+                gameKey = gameKey,
+                blockIds = currentState.availableCheats.map { it.id },
+                enabled = enabled
+            )
+            if (enabled) {
+                persistRuntimeState(currentState.copy(availableCheats = updatedBlocks, enableCheats = true)) {
+                    preferences.setEnableCheats(true)
+                }
+                EmulatorBridge.setSetting("EmuCoreA", "EnableCheats", "bool", "true")
+            } else {
+                _uiState.value = currentState.copy(availableCheats = updatedBlocks)
+            }
+            syncCheatsForCurrentGame(gameKey)
+        }
+    }
+
+    /**
      * Re-reads the installed cheats from storage so changes made in the cheat
      * manager (or a freshly installed pack) are reflected in the in-game menu.
      */
     fun refreshAvailableCheats() {
-        viewModelScope.launch(Dispatchers.IO) {
-            val path = currentGamePath
-            val metadata = path?.takeIf { it.isNotBlank() }?.let { EmulatorBridge.getGameMetadata(it) }
-            val serial = currentGameSerial.takeIf { it.isNotBlank() }
-                ?: metadata?.serial?.takeIf { it.isNotBlank() }
-                .orEmpty()
-            val crc = currentGameCrc.takeIf { it.isNotBlank() }
-                ?: metadata?.serialWithCrc.extractCrc()
-                .orEmpty()
-            val keys = linkedSetOf<String>()
-            metadata?.let { keys.addAll(cheatLookupKeys(it)) }
-            if (serial.isNotBlank() && crc.isNotBlank()) keys.add("${serial}_$crc")
-            if (crc.isNotBlank()) keys.add(crc)
-            if (serial.isNotBlank()) keys.add(serial)
-            val config = cheatRepository.getGameConfig(
-                gameKeys = keys.toList(),
-                serial = serial,
-                crc = crc.takeIf { it.isNotBlank() }
-            ) ?: return@launch
-            _uiState.value = _uiState.value.copy(
-                cheatsGameKey = config.gameKey,
-                availableCheats = config.blocks
+        viewModelScope.launch(Dispatchers.IO) { refreshCheatsState() }
+    }
+
+    private suspend fun refreshCheatsState() {
+        val path = currentGamePath
+        val metadata = path?.takeIf { it.isNotBlank() }?.let { EmulatorBridge.getGameMetadata(it) }
+        val serial = currentGameSerial.takeIf { it.isNotBlank() }
+            ?: metadata?.serial?.takeIf { it.isNotBlank() }
+            .orEmpty()
+        val crc = currentGameCrc.takeIf { it.isNotBlank() }
+            ?: metadata?.serialWithCrc.extractCrc()
+            .orEmpty()
+        val keys = linkedSetOf<String>()
+        metadata?.let { keys.addAll(cheatLookupKeys(it)) }
+        if (serial.isNotBlank() && crc.isNotBlank()) keys.add("${serial}_$crc")
+        if (crc.isNotBlank()) keys.add(crc)
+        if (serial.isNotBlank()) keys.add(serial)
+        val config = cheatRepository.getGameConfig(
+            gameKeys = keys.toList(),
+            serial = serial,
+            crc = crc.takeIf { it.isNotBlank() }
+        ) ?: return
+        _uiState.value = _uiState.value.copy(
+            cheatsGameKey = config.gameKey,
+            availableCheats = config.blocks
+        )
+    }
+
+    /**
+     * Loads (or reuses) the online cheat catalog and selects the packs that match
+     * the running game. Called when the Cheats tab is opened; [forceRefresh]
+     * bypasses a previous result for the same game.
+     */
+    fun loadCheatPacks(forceRefresh: Boolean = false) {
+        val serial = currentGameSerial.trim()
+        val crc = currentGameCrc.trim().uppercase(Locale.US)
+        val title = currentGameTitle.trim().takeIf { it.isNotEmpty() }
+        val identityKey = "$serial|$crc|${title.orEmpty()}"
+        val snapshot = _cheatPackBrowser.value
+        if (cheatPackCatalogJob?.isActive == true || cheatPackInstallJob?.isActive == true) return
+        val alreadyLoaded = snapshot.identityKey == identityKey &&
+            (snapshot.phase == CheatPackBrowserPhase.Content || snapshot.phase == CheatPackBrowserPhase.Empty)
+        if (!forceRefresh && alreadyLoaded) return
+        if (serial.isEmpty() && crc.isEmpty() && title == null) {
+            _cheatPackBrowser.value = CheatPackBrowserState(
+                phase = CheatPackBrowserPhase.Empty,
+                identityKey = identityKey
             )
+            return
         }
+        _cheatPackBrowser.value = snapshot.beginCatalogLoad(identityKey, serial, crc)
+        val gameKey = resolveCheatPackGameKey(serial, crc)
+        cheatPackCatalogJob = viewModelScope.launch(Dispatchers.IO) {
+            // "Installed" badges must survive a game/app restart, so read the
+            // packs recorded on disk instead of relying on session memory.
+            val persistedInstalledIds = gameKey
+                ?.let { key ->
+                    runCatching { cheatRepository.getInstalledCheatPackIds(key) }
+                        .getOrDefault(emptySet())
+                }
+                .orEmpty()
+            val remote = runCatching {
+                remoteContentCatalogRepository.loadCheatCatalog(forceRefresh)
+            }.getOrNull()
+            val entries = remote?.entries.orEmpty()
+            val selection = if (entries.isEmpty()) {
+                null
+            } else {
+                runCatching {
+                    selectInGameCheatPacks(
+                        entries = entries,
+                        serial = serial,
+                        crc = crc,
+                        gameTitle = title.orEmpty()
+                    )
+                }.getOrNull()
+            }
+            _cheatPackBrowser.update { current ->
+                if (current.identityKey != identityKey) {
+                    current
+                } else {
+                    current.applyCatalogSelection(selection).copy(
+                        installedPackIds = current.installedPackIds + persistedInstalledIds
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * Downloads and installs a catalog pack for the running game. Existing user
+     * cheats are merged, enabled blocks are preserved, and only the newly added
+     * blocks start disabled, exactly like the cheat manager.
+     */
+    fun installCheatPack(pack: RemoteCheatPack) {
+        if (cheatPackInstallJob?.isActive == true) return
+        val serial = currentGameSerial.trim()
+        val crc = currentGameCrc.trim().uppercase(Locale.US)
+        val gameKey = resolveCheatPackGameKey(serial, crc)
+        if (gameKey == null) {
+            _cheatPackBrowser.update { it.failPackInstall(pack.id) }
+            return
+        }
+        _cheatPackBrowser.update { it.startPackInstall(pack.id) }
+        cheatPackInstallJob = viewModelScope.launch(Dispatchers.IO) {
+            val installedBlocks = runCatching {
+                val contents = remoteContentCatalogRepository.downloadCheatText(pack)
+                cheatRepository.importCheatFile(
+                    gameKey = gameKey,
+                    contents = contents,
+                    enableAllByDefault = false,
+                    mergeWithExisting = true,
+                    installedPack = InstalledCheatPack(
+                        id = pack.id,
+                        title = pack.title,
+                        crc = pack.crc,
+                        blockCount = pack.blockCount
+                    )
+                )
+            }.getOrDefault(0)
+            if (installedBlocks <= 0) {
+                _cheatPackBrowser.update { it.failPackInstall(pack.id) }
+                return@launch
+            }
+            finishCheatPackInstall(packId = pack.id)
+        }
+    }
+
+    /**
+     * Installs a user-selected PNACH file for the running game. Mirrors the cheat
+     * manager: the file replaces the current one for this game and the newly
+     * imported blocks start disabled.
+     */
+    fun importCheatPackText(contents: String, fallbackName: String?) {
+        if (cheatPackInstallJob?.isActive == true) return
+        val gameKey = resolveCheatPackGameKey(
+            serial = currentGameSerial,
+            crc = currentGameCrc,
+            fallbackName = fallbackName
+        ) ?: "cheat_${System.currentTimeMillis()}"
+        _cheatPackBrowser.update { it.startImport() }
+        cheatPackInstallJob = viewModelScope.launch(Dispatchers.IO) {
+            val importedBlocks = if (contents.isBlank()) {
+                0
+            } else {
+                runCatching {
+                    cheatRepository.importCheatFile(
+                        gameKey = gameKey,
+                        contents = contents,
+                        enableAllByDefault = false
+                    )
+                }.getOrDefault(0)
+            }
+            if (importedBlocks <= 0) {
+                _cheatPackBrowser.update { it.failImport() }
+                return@launch
+            }
+            finishCheatPackInstall(packId = null)
+        }
+    }
+
+    private suspend fun finishCheatPackInstall(packId: String?) {
+        _cheatPackBrowser.update { it.finishInstall(packId) }
+        runCatching {
+            persistRuntimeState(_uiState.value.copy(enableCheats = true)) {
+                preferences.setEnableCheats(true)
+            }
+            EmulatorBridge.setSetting("EmuCoreA", "EnableCheats", "bool", "true")
+        }.onFailure { Log.w(TAG, "Could not enable cheats after installing a pack", it) }
+        refreshCheatsState()
+        withContext(Dispatchers.IO) { syncCheatsForCurrentGame() }
     }
 
     fun toggleFrameLimit() {

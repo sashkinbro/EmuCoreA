@@ -3,10 +3,13 @@ package com.sbro.emucorea.ui.emulation
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -16,11 +19,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.sbro.emucorea.R
 import com.sbro.emucorea.data.CheatBlock
 import com.sbro.emucorea.ui.cheats.CheatCategory
 import com.sbro.emucorea.ui.cheats.groupCheatBlocks
+import com.sbro.emucorea.ui.theme.neon.neonButtonShape
 import com.sbro.emucorea.ui.theme.neon.neonShape
 
 /**
@@ -34,6 +39,7 @@ internal fun EmulationCheatsSection(
     blocks: List<CheatBlock>,
     onCheatToggle: (String, Boolean) -> Unit,
     onGroupToggle: (List<String>, Boolean) -> Unit,
+    onSetAllEnabled: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     if (blocks.isEmpty()) {
@@ -43,12 +49,21 @@ internal fun EmulationCheatsSection(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
         ) {
-            Text(
-                text = stringResource(R.string.emulation_cheats_empty),
+            Column(
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.emulation_cheats_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = stringResource(R.string.emulation_cheats_empty_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
         return
     }
@@ -58,6 +73,21 @@ internal fun EmulationCheatsSection(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CheatBulkActionButton(
+                text = stringResource(R.string.emulation_cheats_enable_all),
+                onClick = { onSetAllEnabled(true) },
+                modifier = Modifier.weight(1f)
+            )
+            CheatBulkActionButton(
+                text = stringResource(R.string.emulation_cheats_disable_all),
+                onClick = { onSetAllEnabled(false) },
+                modifier = Modifier.weight(1f)
+            )
+        }
         groups.forEach { (category, categoryBlocks) ->
             CheatGroupSection(
                 category = category,
@@ -66,6 +96,32 @@ internal fun EmulationCheatsSection(
                 onGroupToggle = onGroupToggle
             )
         }
+    }
+}
+
+@Composable
+private fun CheatBulkActionButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier,
+        shape = neonButtonShape(),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.32f)),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f)
+        ),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -90,14 +146,12 @@ private fun CheatGroupSection(
         blocks.forEach { block ->
             CheatOptionCard(
                 title = block.title,
-                subtitle = block.author,
                 checked = block.enabled,
                 onCheckedChange = { enabled -> onCheatToggle(block.id, enabled) }
             )
         }
         CheatOptionCard(
             title = stringResource(R.string.emulation_cheats_group_enable),
-            subtitle = null,
             checked = allEnabled,
             onCheckedChange = { enabled -> onGroupToggle(blocks.map { it.id }, enabled) }
         )
@@ -107,7 +161,6 @@ private fun CheatGroupSection(
 @Composable
 private fun CheatOptionCard(
     title: String,
-    subtitle: String?,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
@@ -122,20 +175,12 @@ private fun CheatOptionCard(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                subtitle?.takeIf { it.isNotBlank() }?.let { author ->
-                    Text(
-                        text = author,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
             Switch(
                 checked = checked,
                 onCheckedChange = onCheckedChange
