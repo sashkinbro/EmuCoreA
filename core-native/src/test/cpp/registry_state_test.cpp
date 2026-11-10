@@ -35,7 +35,7 @@ u32 Call(u32 nid, std::initializer_list<u32> args) {
     }
     int index = MIPS_REG_A0;
     for (u32 arg : args) currentMIPS->r[index++] = arg;
-    function->func();
+    function->func(currentMIPS);
     return currentMIPS->r[MIPS_REG_V0];
 }
 
@@ -172,6 +172,20 @@ bool OverlayState(bool clearBeforeLoad) {
     return ok;
 }
 
+bool MappedSettings() {
+    __RegInit();
+    if (Call(OPEN_REGISTRY, {0, 1, OUTPUT}) != 0 ||
+        Call(OPEN_CATEGORY, {0, Name("/CONFIG/SYSTEM/XMB"), 1, OUTPUT}) != 0) return false;
+    const int category = (int)Memory::ReadUnchecked_U32(OUTPUT);
+    const int previous = g_Config.iButtonPreference;
+    const int changed = previous == 0 ? 1 : 0;
+    bool ok = WriteInt(category, "button_assign", changed) &&
+        Check(g_Config.iButtonPreference == changed, "guest registry writes reach the mapped setting");
+    g_Config.iButtonPreference = previous;
+    ok = ReadInt(category, "button_assign", previous) && ok;
+    return ok;
+}
+
 bool LegacyStates() {
     bool ok = true;
     for (int version = 1; version <= 3; ++version) {
@@ -180,9 +194,16 @@ bool LegacyStates() {
         LegacyState legacy{version};
         auto snapshot = Save(legacy);
         if (!Load(snapshot)) return false;
+        // Versions 1-3 have no overlay: retain the current boot's plugin/font writes.
+        ok = ReadInt(1337, "h_size", 999) && ok;
+        ok = Check(Call(GET_INFO, {1337, Name("registry_future"), OUTPUT, OUTPUT + 4, OUTPUT + 8}) == 0,
+            "legacy load retains the current session overlay") && ok;
+        __RegShutdown();
+        __RegInit();
+        if (!Load(snapshot)) return false;
         ok = ReadInt(1337, "h_size", 0x288) && ok;
         ok = Check(Call(GET_INFO, {1337, Name("registry_future"), OUTPUT, OUTPUT + 4, OUTPUT + 8}) != 0,
-            "legacy load restores static registry instead of retaining future overlay") && ok;
+            "fresh-session legacy load uses the static registry") && ok;
     }
     return ok;
 }
@@ -205,6 +226,7 @@ int main() {
     run("stable handles", StableHandles());
     run("same-session rollback", OverlayState(false));
     run("fresh-session restoration", OverlayState(true));
+    run("mapped settings", MappedSettings());
     run("legacy state versions 1-3", LegacyStates());
     __RegShutdown();
     HLEShutdown();

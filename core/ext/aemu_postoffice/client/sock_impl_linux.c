@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
@@ -62,12 +63,12 @@ static int connect_with_timeout(int sock, void *addr, int addrlen, int timeout_m
 			}
 
 			if (*error == EAGAIN || *error == EALREADY || *error == EINPROGRESS){
-				// in progress
-				struct timespec sleep_time = {
-					.tv_sec = 0,
-					.tv_nsec = 1000000,
+				// in progress, wait until it's done, checking the timeout and abort every ms
+				struct pollfd pfd = {
+					.fd = sock,
+					.events = POLLOUT,
 				};
-				nanosleep(&sleep_time, NULL);
+				poll(&pfd, 1, 1);
 				continue;
 			}
 			if (*error == EISCONN){
@@ -239,6 +240,14 @@ int native_peek(int fd, char *buf, int len){
 		return -1;
 	}
 	return read_result;
+}
+
+void native_wait(int fd, bool for_write, int timeout_ms){
+	struct pollfd pfd = {
+		.fd = fd,
+		.events = for_write ? POLLOUT : POLLIN,
+	};
+	poll(&pfd, 1, timeout_ms);
 }
 
 bool native_send_buf_not_full(int fd){

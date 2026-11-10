@@ -529,6 +529,15 @@
     <ClCompile Include="HLE\NetAdhocCommon.cpp">
       <Filter>HLE\Libraries</Filter>
     </ClCompile>
+    <ClCompile Include="HLE\AdhocTransportP2P.cpp">
+      <Filter>HLE\Libraries</Filter>
+    </ClCompile>
+    <ClCompile Include="HLE\AdhocTransportRelay.cpp">
+    <ClCompile Include="HLE\AdhocTransportNetSim.cpp">
+      <Filter>HLE\Libraries</Filter>
+    </ClCompile>
+      <Filter>HLE\Libraries</Filter>
+    </ClCompile>
     <ClCompile Include="HLE\sceNetAdhoc.cpp">
       <Filter>HLE\Libraries</Filter>
     </ClCompile>
@@ -1309,6 +1318,9 @@
     <ClCompile Include="Util\MemStick.cpp">
       <Filter>Util</Filter>
     </ClCompile>
+    <ClCompile Include="Util\StorageTest.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
     <ClCompile Include="HW\Atrac3Standalone.cpp">
       <Filter>HW</Filter>
     </ClCompile>
@@ -1902,6 +1914,9 @@
     <ClInclude Include="Debugger\DisassemblyManager.h">
       <Filter>Debugger</Filter>
     </ClInclude>
+    <ClInclude Include="HLE\AdhocTransport.h">
+      <Filter>HLE\Libraries</Filter>
+    </ClInclude>
     <ClInclude Include="HLE\proAdhoc.h">
       <Filter>HLE\Libraries</Filter>
     </ClInclude>
@@ -2281,6 +2296,9 @@
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Util\MemStick.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\StorageTest.h">
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="HW\Atrac3Standalone.h">

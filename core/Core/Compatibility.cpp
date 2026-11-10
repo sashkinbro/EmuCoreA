@@ -113,6 +113,7 @@ void Compatibility::CheckSettings(IniFile &iniFile, const std::string &gameID) {
 	CheckSetting(iniFile, gameID, "ForceMax60FPS", &flags_.ForceMax60FPS);
 	CheckSetting(iniFile, gameID, "GoWFramerateHack60", &flags_.GoWFramerateHack60);
 	CheckSetting(iniFile, gameID, "FramerateHack30", &flags_.FramerateHack30);
+	CheckSetting(iniFile, gameID, "LimitFrameRateTo30", &flags_.LimitFrameRateTo30);
 	CheckSetting(iniFile, gameID, "HideISOFiles", &flags_.HideISOFiles);
 	CheckSetting(iniFile, gameID, "ForceSoftwareRenderer", &flags_.ForceSoftwareRenderer);
 	CheckSetting(iniFile, gameID, "DarkStalkersPresentHack", &flags_.DarkStalkersPresentHack);
@@ -150,6 +151,7 @@ void Compatibility::CheckSettings(IniFile &iniFile, const std::string &gameID) {
 	CheckSetting(iniFile, gameID, "ForceEnableGPUReadback", &flags_.ForceEnableGPUReadback);
 	CheckSetting(iniFile, gameID, "UseFFMPEGFindStreamInfo", &flags_.UseFFMPEGFindStreamInfo);
 	CheckSetting(iniFile, gameID, "SoftwareRasterDepth", &flags_.SoftwareRasterDepth);
+	CheckSetting(iniFile, gameID, "DepthRasterNoCallbackWait", &flags_.DepthRasterNoCallbackWait);
 	CheckSetting(iniFile, gameID, "DisableHLESceFont", &flags_.DisableHLESceFont);
 	CheckSetting(iniFile, gameID, "ForceHLEPsmf", &flags_.ForceHLEPsmf);
 	CheckSetting(iniFile, gameID, "SaveStatesNotRecommended", &flags_.SaveStatesNotRecommended);
@@ -171,6 +173,8 @@ void Compatibility::CheckSettings(IniFile &iniFile, const std::string &gameID) {
 	CheckSetting(iniFile, gameID, "ColorPickingDrawSyncReadback", &flags_.ColorPickingDrawSyncReadback);
 	CheckSetting(iniFile, gameID, "SeparateLogicOpDraws", &flags_.SeparateLogicOpDraws);
 	CheckSetting(iniFile, gameID, "SnapHalfPixelSprites", &flags_.SnapHalfPixelSprites);
+	CheckSetting(iniFile, gameID, "MatchingCancelUnknownTargetSucceeds", &flags_.MatchingCancelUnknownTargetSucceeds);
+	CheckSetting(iniFile, gameID, "MatchingStartUnknownIdSucceeds", &flags_.MatchingStartUnknownIdSucceeds);
 	CheckSetting(iniFile, gameID, "FixedFramebuffer", &flags_.FixedFramebuffer);
 	CheckSetting(iniFile, gameID, "NativeResolutionFramebuffer", &flags_.NativeResolutionFramebuffer);
 }

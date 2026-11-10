@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
@@ -14,6 +15,11 @@
 #include "../aemu_postoffice_packets.h"
 
 static bool initialized = false;
+static int close_delay_ms = 50;
+
+void set_close_delay_aemu_postoffice(int delay_ms){
+	close_delay_ms = delay_ms;
+}
 
 int init_aemu_postoffice(bool with_enet){
 	if (initialized){
@@ -106,6 +112,16 @@ static bool send_buf_not_full_wrapped(int sock, void *enet_handle){
 	return true;
 }
 
+// waits a little for a blocking send or recv to be able to go on
+static void wait_wrapped(int sock, void *enet_handle, bool for_write){
+	if (enet_handle == NULL){
+		// up to 1 ms at a time, to notice an abort
+		native_wait(sock, for_write, 1);
+		return;
+	}
+	delay(0);
+}
+
 static bool hung_up_wrapped(int sock, void *enet_handle){
 	if (enet_handle == NULL){
 		return native_hung_up(sock);
@@ -154,7 +170,7 @@ static int send_till_done(int fd, void *enet_handle, bool enet_reliable, const c
 				delay(0);
 				return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
 			}
-			delay(0);
+			wait_wrapped(fd, enet_handle, true);
 			continue;
 		}
 		if (write_status == -1){
@@ -182,7 +198,7 @@ static int recv_till_done(int fd, void *enet_handle, char *buf, int len, bool no
 					return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
 				}
 				// Continue block receving, either in block mode or we already received part of the message
-				delay(0);
+				wait_wrapped(fd, enet_handle, false);
 				continue;
 			}
 			return recv_status;
@@ -511,7 +527,7 @@ void pdp_delete(void *pdp_handle){
 
 	// make sure we are clear of send/recv operations
 	do{
-		delay(50);
+		delay(close_delay_ms);
 	}while(session->sending || session->recving);
 
 	if (!session->dead)
@@ -532,7 +548,7 @@ int pdp_peek_next_size(void *pdp_handle){
 	}
 
 	if (session->recv_ring_buf_used < sizeof(aemu_postoffice_pdp)){
-		return 0;
+		return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
 	}
 
 	aemu_postoffice_pdp header;
@@ -540,7 +556,7 @@ int pdp_peek_next_size(void *pdp_handle){
 	if (session->buffered_data >= header.size){
 		return header.size;
 	}
-	return 0;
+	return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
 }
 
 int pdp_buffered_data_size(void *pdp_handle){
@@ -646,7 +662,7 @@ void *ptp_listen_v4(const struct aemu_postoffice_sock_addr *addr, const char *pt
 	return ptp_listen(addr, NULL, ptp_mac, ptp_port, enet, abort_connection, abort_connection_arg, state);
 }
 
-void *ptp_accept(void *ptp_listen_handle, char *ptp_mac, int *ptp_port, bool nonblock, bool (*abort_connection)(void *arg), void *abort_connection_arg, int *state){
+void *ptp_accept(void *ptp_listen_handle, char *ptp_mac, int *ptp_port, bool nonblock, bool block_boundary_mode, bool (*abort_connection)(void *arg), void *abort_connection_arg, int *state){
 	if (ptp_listen_handle == NULL){
 		*state = AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
 		return NULL;
@@ -751,13 +767,14 @@ void *ptp_accept(void *ptp_listen_handle, char *ptp_mac, int *ptp_port, bool non
 	new_session->recv_ring_buf_start = 0;
 	new_session->recv_ring_buf_used = 0;
 	new_session->bytes_till_next_header = 0;
+	new_session->block_boundary_mode = block_boundary_mode;
 	*state = AEMU_POSTOFFICE_CLIENT_OK;
 	*ptp_port = connect_packet.port;
 	memcpy(ptp_mac, connect_packet.addr, 6);
 	return new_session;
 }
 
-static void *ptp_connect(const struct aemu_postoffice_sock_addr *addr4, const struct aemu_postoffice_sock6_addr *addr6, const char *src_ptp_mac, int ptp_sport, const char *dst_ptp_mac, int ptp_dport, bool enet, bool (*abort_connection)(void *arg), void *abort_connection_arg, int *state){
+static void *ptp_connect(const struct aemu_postoffice_sock_addr *addr4, const struct aemu_postoffice_sock6_addr *addr6, const char *src_ptp_mac, int ptp_sport, const char *dst_ptp_mac, int ptp_dport, bool enet, bool block_boundary_mode, bool (*abort_connection)(void *arg), void *abort_connection_arg, int *state){
 	// Allocate memory
 	struct ptp_session *new_session = NULL;
 	lock_sock_alloc_mutex();
@@ -819,16 +836,17 @@ static void *ptp_connect(const struct aemu_postoffice_sock_addr *addr4, const st
 	new_session->recv_ring_buf_start = 0;
 	new_session->recv_ring_buf_used = 0;
 	new_session->bytes_till_next_header = 0;
+	new_session->block_boundary_mode = block_boundary_mode;
 	*state = AEMU_POSTOFFICE_CLIENT_OK;
 	return new_session;
 }
 
-void *ptp_connect_v6(const struct aemu_postoffice_sock6_addr *addr, const char *src_ptp_mac, int ptp_sport, const char *dst_ptp_mac, int ptp_dport, bool enet, bool (*abort_connection)(void *arg), void *abort_connection_arg, int *state){
-	return ptp_connect(NULL, addr, src_ptp_mac, ptp_sport, dst_ptp_mac, ptp_dport, enet, abort_connection, abort_connection_arg, state);
+void *ptp_connect_v6(const struct aemu_postoffice_sock6_addr *addr, const char *src_ptp_mac, int ptp_sport, const char *dst_ptp_mac, int ptp_dport, bool enet, bool block_boundary_mode, bool (*abort_connection)(void *arg), void *abort_connection_arg, int *state){
+	return ptp_connect(NULL, addr, src_ptp_mac, ptp_sport, dst_ptp_mac, ptp_dport, enet, block_boundary_mode, abort_connection, abort_connection_arg, state);
 }
 
-void *ptp_connect_v4(const struct aemu_postoffice_sock_addr *addr, const char *src_ptp_mac, int ptp_sport, const char *dst_ptp_mac, int ptp_dport, bool enet, bool (*abort_connection)(void *arg), void *abort_connection_arg, int *state){
-	return ptp_connect(addr, NULL, src_ptp_mac, ptp_sport, dst_ptp_mac, ptp_dport, enet, abort_connection, abort_connection_arg, state);
+void *ptp_connect_v4(const struct aemu_postoffice_sock_addr *addr, const char *src_ptp_mac, int ptp_sport, const char *dst_ptp_mac, int ptp_dport, bool enet, bool block_boundary_mode, bool (*abort_connection)(void *arg), void *abort_connection_arg, int *state){
+	return ptp_connect(addr, NULL, src_ptp_mac, ptp_sport, dst_ptp_mac, ptp_dport, enet, block_boundary_mode, abort_connection, abort_connection_arg, state);
 }
 
 int ptp_send(void *ptp_handle, const char *buf, int len, bool non_block){
@@ -844,6 +862,11 @@ int ptp_send(void *ptp_handle, const char *buf, int len, bool non_block){
 	if (len > AEMU_POSTOFFICE_PTP_BLOCK_MAX){
 		LOG("%s: failed sending data, data too big, %d\n", __func__, len);
 		return AEMU_POSTOFFICE_CLIENT_OUT_OF_MEMORY;
+	}
+
+	if (len == 0){
+		LOG("%s: 0 size send not supported\n", __func__);
+		return AEMU_POSTOFFICE_CLIENT_UNKNOWN;
 	}
 
 	struct aemu_postoffice_ptp_data header = {
@@ -929,6 +952,13 @@ static int ptp_drain_blocks_to_ring_buf(struct ptp_session *session){
 				return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
 			}
 
+			if (header.size == 0){
+				LOG("%s: remote sent a 0 size PTP header\n", __func__);
+				close_wrapped(session->sock, session->enet_handle);
+				session->dead = true;
+				return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
+			}
+
 			session->bytes_till_next_header = header.size;
 		}
 
@@ -976,23 +1006,66 @@ static int ptp_drain_blocks_to_ring_buf_locked(struct ptp_session *session){
 	return result;
 }
 
+static int ptp_recv_block_boundary(struct ptp_session *session, char *buf, int *len, bool non_block){
+	while (!session->abort){
+		int next_size = ptp_peek_next_size(session);
+		if (next_size == AEMU_POSTOFFICE_CLIENT_SESSION_DEAD){
+			return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
+		}
+		if (next_size == 0){
+			// TODO might just remove blocking send/recv in the long run, and let users of the library handle those in a more meaningful way
+			if (!non_block){
+				delay(0);
+				continue;
+			}
+			return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
+		}
+		if (next_size > *len){
+			*len = next_size;
+			return AEMU_POSTOFFICE_CLIENT_SESSION_DATA_TRUNC;
+		}
+
+		// not really as a ring buffer here
+		int total_size = next_size + sizeof(aemu_postoffice_ptp_data);
+		int recv_status = recv_wrapped(session->sock, session->enet_handle, session->recv_ring_buf, total_size);
+		if (recv_status != total_size){
+			LOG("%s: socket perished when receiving after peek..\n", __func__);
+			session->dead = true;
+			close_wrapped(session->sock, session->enet_handle);
+			return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
+		}
+
+		*len = next_size;
+		memcpy(buf, &session->recv_ring_buf[sizeof(aemu_postoffice_ptp_data)], next_size);
+		return AEMU_POSTOFFICE_CLIENT_OK;
+	}
+
+	return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
+}
+
 int ptp_recv(void *ptp_handle, char *buf, int *len, bool non_block){
 	if (ptp_handle == NULL){
 		return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
 	}
 
 	struct ptp_session *session = (struct ptp_session *)ptp_handle;
-	if (session->dead || session->abort){
+	if (session->abort){
 		return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
 	}
 
-	while(true){
+	if (session->block_boundary_mode){
+		return ptp_recv_block_boundary(session, buf, len, non_block);
+	}
+
+	// Data that has already been received before the remote closed is still delivered.
+	// Confirmed by hardware test net/adhoc/pair/ptpclose.
+	while(!session->dead){
 		if (session->abort){
 			return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
 		}
 		int drain_result = ptp_drain_blocks_to_ring_buf_locked(session);
 		if (drain_result == AEMU_POSTOFFICE_CLIENT_SESSION_DEAD){
-			return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
+			break;
 		}
 		if (drain_result == AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK){
 			if (non_block){
@@ -1007,7 +1080,7 @@ int ptp_recv(void *ptp_handle, char *buf, int *len, bool non_block){
 	}
 
 	if (session->recv_ring_buf_used == 0){
-		return AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
+		return session->dead ? AEMU_POSTOFFICE_CLIENT_SESSION_DEAD : AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK;
 	}
 
 	int ring_buffer_consumed = consume_ring_buf((uint8_t *)buf, *len, (uint8_t *)session->recv_ring_buf, sizeof(session->recv_ring_buf), &session->recv_ring_buf_start, &session->recv_ring_buf_used);
@@ -1028,7 +1101,7 @@ void ptp_close(void *ptp_handle){
 
 	// make sure we are clear of send/recv operations
 	do{
-		delay(50);
+		delay(close_delay_ms);
 	}while(session->sending || session->recving);
 
 	if (!session->dead)
@@ -1048,7 +1121,7 @@ void ptp_listen_close(void *ptp_listen_handle){
 
 	// make sure we are clear of send/recv operations
 	do{
-		delay(50);
+		delay(close_delay_ms);
 	}while(session->accepting);
 
 	if (!session->dead)
@@ -1056,11 +1129,66 @@ void ptp_listen_close(void *ptp_listen_handle){
 	session->sock = -1;
 }
 
+static int ptp_peek_next_size_block_boundary(struct ptp_session *session){
+	struct aemu_postoffice_ptp_data header = {0};
+	int peek_status = peek_wrapped(session->sock, session->enet_handle, (char *)&header, sizeof(header));
+
+	#define CHECK_PEEK_STATUS(status, expected_size) { \
+		if (status == AEMU_POSTOFFICE_CLIENT_SESSION_WOULD_BLOCK){ \
+			return 0; \
+		} \
+		if (status == 0){ \
+			LOG("%s: the other side closed the listen socket\n", __func__); \
+			session->dead = true; \
+			close_wrapped(session->sock, session->enet_handle); \
+			return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD; \
+		} \
+		if (status < 0){ \
+			LOG("%s: socket error\n", __func__); \
+			session->dead = true; \
+			close_wrapped(session->sock, session->enet_handle); \
+			return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD; \
+		} \
+		if (status != (expected_size)){ \
+			return 0; \
+		} \
+	}
+
+	CHECK_PEEK_STATUS(peek_status, sizeof(header));
+
+	if (header.size > AEMU_POSTOFFICE_PTP_BLOCK_MAX){
+		LOG("%s: remote sending unrealistic giant PTP block\n", __func__);
+		session->dead = true;
+		close_wrapped(session->sock, session->enet_handle);
+		return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
+	}
+
+	if (header.size == 0){
+		LOG("%s: remote sent a 0 size PTP header\n", __func__);
+		session->dead = true;
+		close_wrapped(session->sock, session->enet_handle);
+		return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
+	}
+
+	// it is not really used as a ring buf in this mode
+	int total_size = sizeof(header) + header.size;
+	peek_status = peek_wrapped(session->sock, session->enet_handle, session->recv_ring_buf, total_size);
+	CHECK_PEEK_STATUS(peek_status, total_size);
+
+	#undef CHECK_PEEK_STATUS
+
+	return header.size;
+}
+
 int ptp_peek_next_size(void *ptp_handle){
 	struct ptp_session *session = ptp_handle;
 
 	if (session->dead || session->abort){
 		return AEMU_POSTOFFICE_CLIENT_SESSION_DEAD;
+	}
+
+	if (session->block_boundary_mode){
+		return ptp_peek_next_size_block_boundary(session);
 	}
 
 	int drain_result = ptp_drain_blocks_to_ring_buf_locked(session);

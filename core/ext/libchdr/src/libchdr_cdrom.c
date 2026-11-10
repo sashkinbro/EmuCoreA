@@ -4,7 +4,7 @@
 
     cdrom.c
 
-    Generic MAME CD-ROM utilties - build IDE and SCSI CD-ROMs on top of this
+    Generic MAME CD-ROM utilities - build IDE and SCSI CD-ROMs on top of this
 
 ****************************************************************************
 
@@ -18,9 +18,15 @@
 
 #include <string.h>
 
-#include <libchdr/cdrom.h>
+#include "../include/libchdr/cdrom.h"
 
-#ifdef WANT_RAW_DATA_SECTOR
+/* Undefined, this evaluates to 0 below and silently selects the in-place
+ * path, which sizes the codec scratch differently. Fail loudly instead. */
+#ifndef CHDR_CD_SCRATCH_BUFFER
+#error "chdconfig.h must be included before this file"
+#endif
+
+#if WANT_RAW_DATA_SECTOR
 
 /***************************************************************************
     DEBUGGING
@@ -89,6 +95,10 @@ void CLIB_DECL logerror(const char *text, ...) ATTR_PRINTF(1,2);
 #define ECC_Q_NUM_BYTES 52
 /** @brief  43 bytes each. */
 #define ECC_Q_COMP 43
+
+#if WANT_RAW_DATA_SECTOR
+static const uint8_t s_cd_sync_header[12] = { 0x00,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0x00 };
+#endif
 
 /**
  * @brief   -------------------------------------------------
@@ -297,19 +307,6 @@ static const uint16_t qoffsets[ECC_Q_NUM_BYTES][ECC_Q_COMP] =
 	{ 0x867,0x003,0x05b,0x0b3,0x10b,0x163,0x1bb,0x213,0x26b,0x2c3,0x31b,0x373,0x3cb,0x423,0x47b,0x4d3,0x52b,0x583,0x5db,0x633,0x68b,0x6e3,0x73b,0x793,0x7eb,0x843,0x89b,0x037,0x08f,0x0e7,0x13f,0x197,0x1ef,0x247,0x29f,0x2f7,0x34f,0x3a7,0x3ff,0x457,0x4af,0x507,0x55f }
 };
 
-/*-------------------------------------------------
- *  ecc_source_byte - return data from the sector
- *  at the given offset, masking anything
- *  particular to a mode
- *-------------------------------------------------
- */
-
-static inline uint8_t ecc_source_byte(const uint8_t *sector, uint32_t offset)
-{
-	/* in mode 2 always treat these as 0 bytes */
-	return (sector[MODE_OFFSET] == 2 && offset < 4) ? 0x00 : sector[SYNC_OFFSET + SYNC_NUM_BYTES + offset];
-}
-
 /**
  * @fn  void ecc_compute_bytes(const uint8_t *sector, const uint16_t *row, int rowlen, uint8_t &val1, uint8_t &val2)
  *
@@ -326,16 +323,43 @@ static inline uint8_t ecc_source_byte(const uint8_t *sector, uint32_t offset)
 
 void ecc_compute_bytes(const uint8_t *sector, const uint16_t *row, int rowlen, uint8_t *val1, uint8_t *val2)
 {
+	/* ecc_generate() points val1/val2 into the sector, so accumulating through
+	 * them forces a spill and reload on every component in case the source read
+	 * aliases the destination. It cannot: P reads stop at byte 2075 and write
+	 * 2076..2247, Q reads stop at 2247 and write 2248..2351, and sector[MODE_OFFSET]
+	 * is never a destination. So hoist the mode test, read each source byte once
+	 * instead of twice, and keep the accumulators in registers. */
+	const uint8_t *data = &sector[SYNC_OFFSET + SYNC_NUM_BYTES];
+	const int mode2 = (sector[MODE_OFFSET] == 2);
+	uint8_t v1 = 0, v2 = 0;
 	int component;
-	*val1 = *val2 = 0;
-	for (component = 0; component < rowlen; component++)
+
+	if (mode2)
 	{
-		*val1 ^= ecc_source_byte(sector, row[component]);
-		*val2 ^= ecc_source_byte(sector, row[component]);
-		*val1 = ecclow[*val1];
+		/* in mode 2 always treat the first four bytes as 0 */
+		for (component = 0; component < rowlen; component++)
+		{
+			const uint32_t offset = row[component];
+			const uint8_t byte = (offset < 4) ? 0x00 : data[offset];
+
+			v1 = ecclow[v1 ^ byte];
+			v2 ^= byte;
+		}
 	}
-	*val1 = ecchigh[ecclow[*val1] ^ *val2];
-	*val2 ^= *val1;
+	else
+	{
+		for (component = 0; component < rowlen; component++)
+		{
+			const uint8_t byte = data[row[component]];
+
+			v1 = ecclow[v1 ^ byte];
+			v2 ^= byte;
+		}
+	}
+
+	v1 = ecchigh[ecclow[v1] ^ v2];
+	*val1 = v1;
+	*val2 = v2 ^ v1;
 }
 
 /**
@@ -384,14 +408,102 @@ int ecc_verify(const uint8_t *sector)
  * @param [in,out]  sector  If non-null, the sector.
  */
 
+static CHDR_INLINE uint8_t ecc_xtime(uint8_t x)
+{
+	return (uint8_t)((x << 1) ^ ((x >> 7) * 0x1d));
+}
+
+/*-------------------------------------------------
+ *  ecc_p_generate_swar - compute the P parity four
+ *  rows at a time, packed into one 32-bit word
+ *-------------------------------------------------
+ */
+
+/* The P rows are independent of each other and, for a fixed component, they
+ * read consecutive bytes: poffsets[row][comp] is exactly row + 86*comp. So
+ * four rows fit in one 32-bit accumulator, and the whole per-component step
+ * becomes word-wide.
+ *
+ * The table lookup cannot come along - there is no gather - but it does not
+ * need to: ecclow[x] is exactly multiplication by x in GF(2^8) with polynomial
+ * 0x11d, verified over all 256 entries. Masking off the bits that would cross
+ * a byte boundary lets one word do four independent products.
+ *
+ * The bytes are assembled from four loads rather than read as a word: the P
+ * stride is 86 and 86 % 4 == 2, so consecutive components alternate 4-aligned
+ * and 2-aligned no matter how the caller aligned its buffer. On targets
+ * without cheap unaligned word loads this still beats both a split load and a
+ * padded aligned copy, and it is correct for any alignment.
+ */
+
+static CHDR_INLINE uint32_t ecc_xtime4(uint32_t t)
+{
+	return ((t << 1) & 0xfefefefeu) ^ (((t >> 7) & 0x01010101u) * 0x1du);
+}
+
+static void ecc_p_generate_swar(uint8_t *sector, int mode2)
+{
+	const uint8_t *data = &sector[SYNC_OFFSET + SYNC_NUM_BYTES];
+	int row, component;
+
+	for (row = 0; row + 4 <= ECC_P_NUM_BYTES; row += 4)
+	{
+		uint32_t v1 = 0, v2 = 0, out;
+		const uint8_t *src = data + row;
+
+		for (component = 0; component < ECC_P_COMP; component++)
+		{
+			const uint8_t *q = src + ECC_P_NUM_BYTES * component;
+			uint32_t x;
+
+			/* offset = row + 86*component, so offset < 4 - the only case mode 2
+			 * masks - is exactly this group's first component */
+			if (mode2 && row == 0 && component == 0)
+			{
+				x = 0;
+			}
+			else
+			{
+				x = (uint32_t)q[0] | ((uint32_t)q[1] << 8) |
+				    ((uint32_t)q[2] << 16) | ((uint32_t)q[3] << 24);
+			}
+
+			v1 = ecc_xtime4(v1 ^ x);
+			v2 ^= x;
+		}
+
+		v1 = ((uint32_t)ecchigh[ecc_xtime(       (uint8_t)v1        ) ^ (uint8_t)v2])
+		   | ((uint32_t)ecchigh[ecc_xtime((uint8_t)(v1 >>  8)) ^ (uint8_t)(v2 >>  8)] <<  8)
+		   | ((uint32_t)ecchigh[ecc_xtime((uint8_t)(v1 >> 16)) ^ (uint8_t)(v2 >> 16)] << 16)
+		   | ((uint32_t)ecchigh[ecc_xtime((uint8_t)(v1 >> 24)) ^ (uint8_t)(v2 >> 24)] << 24);
+		out = v2 ^ v1;
+
+		sector[ECC_P_OFFSET + row + 0] = (uint8_t)v1;
+		sector[ECC_P_OFFSET + row + 1] = (uint8_t)(v1 >> 8);
+		sector[ECC_P_OFFSET + row + 2] = (uint8_t)(v1 >> 16);
+		sector[ECC_P_OFFSET + row + 3] = (uint8_t)(v1 >> 24);
+		sector[ECC_P_OFFSET + ECC_P_NUM_BYTES + row + 0] = (uint8_t)out;
+		sector[ECC_P_OFFSET + ECC_P_NUM_BYTES + row + 1] = (uint8_t)(out >> 8);
+		sector[ECC_P_OFFSET + ECC_P_NUM_BYTES + row + 2] = (uint8_t)(out >> 16);
+		sector[ECC_P_OFFSET + ECC_P_NUM_BYTES + row + 3] = (uint8_t)(out >> 24);
+	}
+
+	/* 86 is not a multiple of 4 - finish the tail scalar */
+	for (; row < ECC_P_NUM_BYTES; row++)
+		ecc_compute_bytes(sector, poffsets[row], ECC_P_COMP,
+			&sector[ECC_P_OFFSET + row], &sector[ECC_P_OFFSET + ECC_P_NUM_BYTES + row]);
+}
+
 void ecc_generate(uint8_t *sector)
 {
 	int byte;
-	/* first verify P bytes */
-	for (byte = 0; byte < ECC_P_NUM_BYTES; byte++)
-		ecc_compute_bytes(sector, poffsets[byte], ECC_P_COMP, &sector[ECC_P_OFFSET + byte], &sector[ECC_P_OFFSET + ECC_P_NUM_BYTES + byte]);
 
-	/* then verify Q bytes */
+	/* first the P bytes, four rows per word */
+	ecc_p_generate_swar(sector, sector[MODE_OFFSET] == 2);
+
+	/* then the Q bytes. These cannot be packed the same way: qoffsets[row][comp]
+	 * is (86*(row>>1) + (row&1) + 88*comp) mod 2236, a diagonal that is
+	 * contiguous in neither dimension. */
 	for (byte = 0; byte < ECC_Q_NUM_BYTES; byte++)
 		ecc_compute_bytes(sector, qoffsets[byte], ECC_Q_COMP, &sector[ECC_Q_OFFSET + byte], &sector[ECC_Q_OFFSET + ECC_Q_NUM_BYTES + byte]);
 }
@@ -413,3 +525,135 @@ void ecc_clear(uint8_t *sector)
 }
 
 #endif /* WANT_RAW_DATA_SECTOR */
+
+/* Handles decompression for CDZL, CDLZ, CDZS, and co. */
+
+chd_error cd_codec_decompress(
+	uint8_t *scratch,
+	void *base_decompressor, chd_codec_interface_decompress base_decompress,
+	void *subcode_decompressor, chd_codec_interface_decompress subcode_decompress,
+	const uint8_t *src, uint32_t complen, uint8_t *dest, uint32_t destlen)
+{
+	uint32_t framenum;
+	chd_error decomp_err;
+	uint32_t complen_base;
+
+	/* determine header bytes */
+	const uint32_t frames = destlen / CD_FRAME_SIZE;
+	const uint32_t complen_bytes = (destlen < 65536) ? 2 : 3;
+	const uint32_t ecc_bytes = (frames + 7) / 8;
+	const uint32_t header_bytes = ecc_bytes + complen_bytes;
+
+#if !WANT_SUBCODE
+	(void)subcode_decompressor;
+	(void)subcode_decompress;
+#endif
+
+	/* input may be truncated, double-check */
+	if (complen < (ecc_bytes + 2))
+		return CHDERR_DECOMPRESSION_ERROR;
+
+	/* extract compressed length of base */
+	complen_base = (src[ecc_bytes + 0] << 8) | src[ecc_bytes + 1];
+	if (complen_bytes > 2)
+	{
+		if (complen < (ecc_bytes + 3))
+			return CHDERR_DECOMPRESSION_ERROR;
+
+		complen_base = (complen_base << 8) | src[ecc_bytes + 2];
+	}
+	if (complen < (header_bytes + complen_base))
+		return CHDERR_DECOMPRESSION_ERROR;
+
+#if CHDR_CD_SCRATCH_BUFFER
+	/* Private scratch: the caller's buffer is written once, linearly, at the
+	 * end and never read. Costs a hunk-sized allocation per codec. */
+	decomp_err = base_decompress(base_decompressor, &src[header_bytes], complen_base, &scratch[0], frames * CD_MAX_SECTOR_DATA);
+	if (decomp_err != CHDERR_NONE) {
+		return decomp_err;
+	}
+#if WANT_SUBCODE
+	decomp_err = subcode_decompress(subcode_decompressor, &src[header_bytes + complen_base], complen - complen_base - header_bytes, &scratch[frames * CD_MAX_SECTOR_DATA], frames * CD_MAX_SUBCODE_DATA);
+	if (decomp_err != CHDERR_NONE) {
+		return decomp_err;
+	}
+#endif
+
+	for (framenum = 0; framenum < frames; framenum++)
+	{
+#if WANT_RAW_DATA_SECTOR
+		uint8_t *sector;
+#endif
+		memcpy(&dest[framenum * CD_FRAME_SIZE], &scratch[framenum * CD_MAX_SECTOR_DATA], CD_MAX_SECTOR_DATA);
+#if WANT_SUBCODE
+		memcpy(&dest[framenum * CD_FRAME_SIZE + CD_MAX_SECTOR_DATA], &scratch[frames * CD_MAX_SECTOR_DATA + framenum * CD_MAX_SUBCODE_DATA], CD_MAX_SUBCODE_DATA);
+#endif
+#if WANT_RAW_DATA_SECTOR
+		sector = (uint8_t *)&dest[framenum * CD_FRAME_SIZE];
+		if ((src[framenum / 8] & (1 << (framenum % 8))) != 0)
+		{
+			memcpy(sector, s_cd_sync_header, sizeof(s_cd_sync_header));
+			ecc_generate(sector);
+		}
+#endif
+	}
+#else
+	/* Decode the sector data into the caller's hunk, packed at the front, then
+	 * spread it out to the 2448-byte frame stride in place. Needs only a
+	 * frame-sized scratch: 2352 bytes for the sector being moved, plus the
+	 * subcode, which cannot stay in place because spreading the sectors over
+	 * it would overwrite it.
+	 *
+	 * Frames move up by 96 bytes each, so source and destination overlap. Each
+	 * sector is bounced through the scratch rather than memmove()d, because
+	 * memmove on overlapping regions degrades to a byte-at-a-time loop in some
+	 * C libraries; two non-overlapping memcpys are far cheaper there and no
+	 * worse elsewhere.
+	 *
+	 * Frames are moved last to first so a sector never lands on one not yet
+	 * moved: frame N is written at 2448N, and every unmoved source below it
+	 * ends at 2352N or lower. */
+	{
+	uint8_t *bounce = &scratch[frames * CD_MAX_SUBCODE_DATA];
+
+	decomp_err = base_decompress(base_decompressor, &src[header_bytes], complen_base, &dest[0], frames * CD_MAX_SECTOR_DATA);
+	if (decomp_err != CHDERR_NONE) {
+		return decomp_err;
+	}
+#if WANT_SUBCODE
+	decomp_err = subcode_decompress(subcode_decompressor, &src[header_bytes + complen_base], complen - complen_base - header_bytes, &scratch[0], frames * CD_MAX_SUBCODE_DATA);
+	if (decomp_err != CHDERR_NONE) {
+		return decomp_err;
+	}
+#endif
+
+	/* reassemble the data */
+	for (framenum = frames; framenum-- > 0; )
+	{
+#if WANT_RAW_DATA_SECTOR
+		uint8_t *sector;
+#endif
+
+		/* frame 0 is already where it belongs */
+		if (framenum != 0) {
+			memcpy(bounce, &dest[framenum * CD_MAX_SECTOR_DATA], CD_MAX_SECTOR_DATA);
+			memcpy(&dest[framenum * CD_FRAME_SIZE], bounce, CD_MAX_SECTOR_DATA);
+		}
+#if WANT_SUBCODE
+		memcpy(&dest[framenum * CD_FRAME_SIZE + CD_MAX_SECTOR_DATA], &scratch[framenum * CD_MAX_SUBCODE_DATA], CD_MAX_SUBCODE_DATA);
+#endif
+
+#if WANT_RAW_DATA_SECTOR
+		/* reconstitute the ECC data and sync header */
+		sector = (uint8_t *)&dest[framenum * CD_FRAME_SIZE];
+		if ((src[framenum / 8] & (1 << (framenum % 8))) != 0)
+		{
+			memcpy(sector, s_cd_sync_header, sizeof(s_cd_sync_header));
+			ecc_generate(sector);
+		}
+#endif
+	}
+	}
+#endif
+	return CHDERR_NONE;
+}

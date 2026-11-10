@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #include "native_socket.h"
 #include "log.h"
 
@@ -10,6 +11,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
+#include <poll.h>
 
 #include <stdint.h>
 
@@ -32,7 +34,7 @@ int native_get_last_socket_error(){
 }
 
 bool native_error_is_would_block(int error){
-	return error == EAGAIN || error == EWOULDBLOCK;
+	return error == EAGAIN || error == EWOULDBLOCK || error == EINTR;
 }
 
 bool native_error_is_no_mem(int error){
@@ -40,7 +42,28 @@ bool native_error_is_no_mem(int error){
 }
 
 bool native_error_is_emfile(int error){
-	return error == EMFILE;
+	return error == EMFILE || error == ENFILE;
+}
+
+bool native_error_is_accept_transient(int error){
+	// Linux passes pending network errors of the new connection up through accept
+	// https://manpages.debian.org/bullseye/manpages-dev/accept.2.en.html
+	switch(error){
+		case ECONNABORTED:
+		case EPROTO:
+		case ENOPROTOOPT:
+		case ENETDOWN:
+		case ENETUNREACH:
+		case EHOSTDOWN:
+		case EHOSTUNREACH:
+		case EOPNOTSUPP:
+		#ifdef ENONET
+		case ENONET:
+		#endif
+			return true;
+		default:
+			return false;
+	}
 }
 
 AddrFamily get_addr_family(std::string ip){
@@ -102,12 +125,14 @@ int native_tcp_listen(std::string ip, uint16_t port){
 	int bind_result = bind(sock_fd, (const sockaddr *)addr, addr_len);
 	if (bind_result == -1){
 		LOG_TS("%s: bind failed, 0x%x\n", __func__, errno);
+		close(sock_fd);
 		return -1;
 	}
 
 	int listen_result = listen(sock_fd, 1000);
 	if (listen_result == -1){
 		LOG_TS("%s: listen failed, 0x%x\n", __func__, errno);
+		close(sock_fd);
 		return -1;
 	}
 
@@ -162,6 +187,17 @@ int native_accept(int sock_fd, std::string *peer_addr, uint16_t *peer_port){
 
 void native_close(int sock_fd){
 	close(sock_fd);
+}
+
+void native_wait_multiple(const std::vector<int> &read_fds, const std::vector<int> &write_fds, int timeout_ms){
+	std::vector<struct pollfd> fds;
+	for (int fd : read_fds){
+		fds.push_back({fd, POLLIN, 0});
+	}
+	for (int fd : write_fds){
+		fds.push_back({fd, POLLOUT, 0});
+	}
+	poll(fds.data(), fds.size(), timeout_ms);
 }
 
 }

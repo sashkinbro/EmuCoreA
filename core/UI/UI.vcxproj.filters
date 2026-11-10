@@ -91,6 +91,9 @@
     <ClCompile Include="MemStickScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
+    <ClCompile Include="StorageTestScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
     <ClCompile Include="Theme.cpp" />
     <ClCompile Include="GamepadEmu.cpp">
       <Filter>Views</Filter>
@@ -196,6 +199,9 @@
     <ClCompile Include="GameBrowser.cpp">
       <Filter>Views</Filter>
     </ClCompile>
+    <ClCompile Include="GameButton.cpp">
+      <Filter>Views</Filter>
+    </ClCompile>
     <ClCompile Include="LoadStateConfirmScreen.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -288,6 +294,9 @@
     <ClInclude Include="MemStickScreen.h">
       <Filter>Screens</Filter>
     </ClInclude>
+    <ClInclude Include="StorageTestScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
     <ClInclude Include="Theme.h" />
     <ClInclude Include="GamepadEmu.h">
       <Filter>Views</Filter>
@@ -370,6 +379,9 @@
       <Filter>ImDebugger</Filter>
     </ClInclude>
     <ClInclude Include="GameBrowser.h">
+      <Filter>Views</Filter>
+    </ClInclude>
+    <ClInclude Include="GameButton.h">
       <Filter>Views</Filter>
     </ClInclude>
     <ClInclude Include="LoadStateConfirmScreen.h" />

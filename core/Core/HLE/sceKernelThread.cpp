@@ -1703,7 +1703,7 @@ void __KernelStopThread(SceUID threadID, int exitStatus, const char *reason)
 		t->nt.waitType = WAITTYPE_NONE;
 		t->nt.waitID = 0;
 	} else {
-		ERROR_LOG_REPORT(Log::sceKernel, "__KernelStopThread: thread %d does not exist (%s)", threadID, reason ? reason : "?");
+		ERROR_LOG(Log::sceKernel, "__KernelStopThread: thread %d does not exist (%s)", threadID, reason ? reason : "?");
 	}
 }
 
@@ -1869,7 +1869,7 @@ static PSPThread *__KernelNextThread() {
 	// A busy syscall keeps the CPU unless something better wants it. An idle thread stands in.
 	PSPThread *busy = busySyscalls.empty() ? nullptr : __KernelBestBusyThread();
 	if (busy) {
-		const u32 busyPriority = busy->nt.currentPriority;
+		const s32 busyPriority = busy->nt.currentPriority;
 		const SceUID bestReady = threadReadyQueue.peek_first();
 		PSPThread *bestReadyThread = bestReady != 0 ? kernelObjects.GetFast<PSPThread>(bestReady) : nullptr;
 		const bool readyOutranks = bestReadyThread && bestReadyThread->nt.currentPriority < busyPriority;
@@ -2175,7 +2175,7 @@ int __KernelCreateThread(const char *threadName, SceUID moduleID, u32 entry, u32
 	}
 
 	if ((attr & ~PSP_THREAD_ATTR_SUPPORTED) != 0) {
-		WARN_LOG_REPORT(Log::sceKernel, "sceKernelCreateThread(name=%s): unsupported attributes %08x, ignoring", threadName, attr & ~PSP_THREAD_ATTR_SUPPORTED);
+		WARN_LOG(Log::sceKernel, "sceKernelCreateThread(name=%s): unsupported attributes %08x, ignoring", threadName, attr & ~PSP_THREAD_ATTR_SUPPORTED);
 	}
 
 	// TODO: Not sure what these values are, but they are removed from the attr silently.
@@ -2384,6 +2384,10 @@ void __KernelReturnFromThread(MIPSState *mips)
 	hleSkipDeadbeef();
 
 	int exitStatus = mips->r[MIPS_REG_V0];
+	// Returning a negative value works like passing it to sceKernelExitThread (threads/returnstatus).
+	if (exitStatus < 0) {
+		exitStatus = SCE_KERNEL_ERROR_ILLEGAL_ARGUMENT;
+	}
 	PSPThread *thread = __GetCurrentThread();
 	_dbg_assert_msg_(thread != NULL, "Returned from a NULL thread.");
 
@@ -3823,7 +3827,7 @@ bool __KernelCheckCallbacks() {
 	// canceled.)
 	PSPThread *cur = __GetCurrentThread();
 	u32 error;
-	u32 bestPriority = 0xFFFFFFFF;
+	s32 bestPriority = 0x7FFFFFFF;
 	if (cur && cur->isRunning())
 		bestPriority = cur->nt.currentPriority;
 	SceUID bestReady = threadReadyQueue.peek_first();

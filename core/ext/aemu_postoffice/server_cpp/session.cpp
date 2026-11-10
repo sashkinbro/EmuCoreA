@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #include <stdlib.h>
 #include <string.h>
 
@@ -221,6 +222,10 @@ void PendingSession::close_socket(){
 	}
 }
 
+int PendingSession::get_wait_fd(){
+	return enet_server == NULL ? sock_fd : -1;
+}
+
 Session::Session(SessionMode mode, char *from_mac, uint16_t from_port, char *to_mac, uint16_t to_port, std::string initial_data_buffer, int sock_fd, Session *peer_session, std::string client_addr, int client_port, struct config *config, aemu_postoffice_enet::BasicEnetClient *enet_server, bool enet_reliable){
 	this->mode = mode;
 	this->config = config;
@@ -307,7 +312,8 @@ SessionPumpStatus Session::pump_connect(){
 SessionPumpStatus Session::pump_from_client(){
 	SessionPumpStatus ret = SessionPumpStatus::SUCCESS;
 
-	Buffer _buf((AEMU_POSTOFFICE_PDP_BLOCK_MAX > AEMU_POSTOFFICE_PTP_BLOCK_MAX ? AEMU_POSTOFFICE_PDP_BLOCK_MAX : AEMU_POSTOFFICE_PTP_BLOCK_MAX) * 2 + (sizeof(aemu_postoffice_pdp) > sizeof(aemu_postoffice_ptp_data) ? sizeof(aemu_postoffice_pdp) : sizeof(aemu_postoffice_ptp_data)));
+	// malloc once per worker thread, not on every pump
+	static thread_local Buffer _buf((AEMU_POSTOFFICE_PDP_BLOCK_MAX > AEMU_POSTOFFICE_PTP_BLOCK_MAX ? AEMU_POSTOFFICE_PDP_BLOCK_MAX : AEMU_POSTOFFICE_PTP_BLOCK_MAX) * 2 + (sizeof(aemu_postoffice_pdp) > sizeof(aemu_postoffice_ptp_data) ? sizeof(aemu_postoffice_pdp) : sizeof(aemu_postoffice_ptp_data)));
 	char *buf = _buf.get_buf();
 	int buf_size = _buf.get_size();
 	while(true){
@@ -363,7 +369,7 @@ SessionPumpStatus Session::pump_from_client(){
 					this->pdp_data_target = get_pdp_session_name(header->addr, header->port);
 					this->data_size = header->size;
 					if (this->data_size > AEMU_POSTOFFICE_PDP_BLOCK_MAX * 2){
-						LOG("%s: bad data size %d on session %s with client %s\n", __func__, this->data_size, this->get_identifier().c_str(), this->client_addr.c_str());
+						LOG("%s: bad data size %llu on session %s with client %s\n", __func__, (unsigned long long)this->data_size, this->get_identifier().c_str(), this->client_addr.c_str());
 						return SessionPumpStatus::BAD_DATA_SIZE;
 					}
 					this->from_client_data_buffer.erase(0, sizeof(aemu_postoffice_pdp));
@@ -375,7 +381,7 @@ SessionPumpStatus Session::pump_from_client(){
 					aemu_postoffice_ptp_data *header = (aemu_postoffice_ptp_data *)this->from_client_data_buffer.data();
 					this->data_size = header->size;
 					if (this->data_size > AEMU_POSTOFFICE_PTP_BLOCK_MAX * 2){
-						LOG("%s: bad data size %d on session %s with client %s\n", __func__, this->data_size, this->get_identifier().c_str(), this->client_addr.c_str());
+						LOG("%s: bad data size %llu on session %s with client %s\n", __func__, (unsigned long long)this->data_size, this->get_identifier().c_str(), this->client_addr.c_str());
 						return SessionPumpStatus::BAD_DATA_SIZE;
 					}
 					this->from_client_data_buffer.erase(0, sizeof(aemu_postoffice_ptp_data));
@@ -604,6 +610,14 @@ uint16_t Session::get_to_port(){
 
 int Session::get_client_port(){
 	return client_port;
+}
+
+int Session::get_wait_fd(){
+	return enet_server == NULL ? sock_fd : -1;
+}
+
+bool Session::has_data_to_send(){
+	return to_client_data_buffer.size() != 0;
 }
 
 }

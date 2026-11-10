@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #ifdef __unix__
 // for naming threads
 #include <pthread.h>
@@ -11,42 +12,58 @@
 
 #include "native_socket.h"
 
+#include <algorithm>
 #include <mutex>
 
 namespace aemu_postoffice_server {
 
 Server::Server(const struct config &config){
 	this->config = config;
+	dead = false;
+
 	this->sock_fd = native_tcp_listen(config.ip_addr, config.port);
 
 	if (this->sock_fd == -1){
 		LOG("%s: failed creating listen socket, 0x%x\n", __func__, native_get_last_socket_error());
+		dead = true;
 		return;
 	}
 
 	if (this->sock_fd == -2){
-		this->sock_fd = -1;
 		LOG("%s: failed parsing %s as ipv6 nor ipv4\n", __func__, config.ip_addr.c_str());
+		dead = true;
 		return;
 	}
 
 	addr_family = get_addr_family(config.ip_addr);
+	enet_server = NULL;
 	if (addr_family == AddrFamily::IPV4){
 		// TODO this is a mess, if only it is possible to move around mixed/ipv4 only modes runtime..
 		LOG("%s: not initializing enet in ipv4 only mode\n", __func__);
 		enet_server = NULL;
-	} else {
+	} else if (config.enable_enet) {
 		enet_server = new aemu_postoffice_enet::BasicEnetClient();
 		int listen_status = enet_server->listen(config.ip_addr, config.port, config.max_num_sessions, 1);
 		if (listen_status != 0){
 			LOG("%s: failed initializing enet\n", __func__);
 			delete enet_server;
 			enet_server = NULL;
+			dead = true;
 			return;
 		}
 	}
 
 	this->stopping = false;
+
+	// with no workers, just do it on the calling thread.
+	if (config.num_threads == 0){
+		this->to_pump_pending_sessions.push_back(std::list<PendingSession*>());
+		this->pending_sessions_to_remove.push_back(std::list<PendingSession*>());
+		this->ready_pending_sessions.push_back(std::list<PendingSession*>());
+		this->sessions_to_pump.push_back(std::list<Session *>());
+		this->sessions_to_remove.push_back(std::unordered_set<std::string>());
+		this->send_list.push_back(std::unordered_map<std::string, std::list<SendListItem>>());
+	}
 
 	for(int i = 0;i < config.num_threads;i++){
 		this->pending_sessions_pump_worker_semas.push_back(Semaphore());
@@ -120,8 +137,6 @@ Server::Server(const struct config &config){
 Server::~Server(){
 	if (this->sock_fd >= 0){
 		native_close(this->sock_fd);
-	}else{
-		return;
 	}
 
 	this->stopping = true;
@@ -249,7 +264,7 @@ void Server::pump_to_clients(int set){
 					}
 				}
 
-				DataQueueStatus queue_status = session->queue_send(send.data);
+				queue_status = session->queue_send(send.data);
 				if (queue_status == DataQueueStatus::MAX_DATA_REACHED){
 					sessions_to_remove[set].insert(identifier);
 					break;
@@ -266,17 +281,50 @@ void Server::pump_to_clients(int set){
 		SessionPumpStatus pump_status = session->pump_to_client();
 		if (pump_status == SessionPumpStatus::SOCKET_CLOSED){
 			sessions_to_remove[set].insert(identifier);
-			break;
+			continue;
 		}
 	}
 }
 
-ServerPumpStatus Server::pump(){
-	if (this->sock_fd == -1){
+ServerPumpStatus Server::wait(int timeout_ms){
+	if (dead){
 		return ServerPumpStatus::LISTEN_SOCK_DEAD;
 	}
 
-	if (addr_family == AddrFamily::IPV6 && enet_server == NULL){
+	if (this->enet_server != NULL){
+		// enet traffic can't be waited for with the sockets, so check for it at least every ms
+		timeout_ms = std::min(timeout_ms, 1);
+	}
+
+	std::vector<int> read_fds;
+	std::vector<int> write_fds;
+	read_fds.push_back(this->sock_fd);
+	for(auto &pending_session : this->pending_sessions){
+		int fd = pending_session.get_wait_fd();
+		if (fd != -1){
+			read_fds.push_back(fd);
+		}
+	}
+	for(auto &session : this->sessions){
+		int fd = session.second.get_wait_fd();
+		if (fd == -1){
+			continue;
+		}
+		read_fds.push_back(fd);
+		if (session.second.has_data_to_send()){
+			write_fds.push_back(fd);
+		}
+		// a connect is matched with its listener by pumping, nothing arrives on its socket meanwhile
+		if (session.second.get_session_phase() == SessionPhase::PTP_CONNECTING){
+			timeout_ms = std::min(timeout_ms, 1);
+		}
+	}
+	native_wait_multiple(read_fds, write_fds, timeout_ms);
+	return ServerPumpStatus::SUCCESS;
+}
+
+ServerPumpStatus Server::pump(){
+	if (dead){
 		return ServerPumpStatus::LISTEN_SOCK_DEAD;
 	}
 
@@ -295,9 +343,12 @@ ServerPumpStatus Server::pump(){
 				LOG_TS("%s: warning, new relay connection dropped as system limit has been reached\n", __func__);
 				break;
 			}
+			if (native_error_is_accept_transient(error)){
+				LOG_TS("%s: new relay connection dropped, 0x%x\n", __func__, error);
+				break;
+			}
 			LOG_TS("%s: failed accepting connection, 0x%x\n", __func__, error);
-			native_close(this->sock_fd);
-			this->sock_fd = -1;
+			dead = true;
 			return ServerPumpStatus::LISTEN_SOCK_DEAD;
 		}
 
@@ -321,7 +372,14 @@ ServerPumpStatus Server::pump(){
 		}
 		if (status != aemu_postoffice_enet::EnetAcceptStatus::SUCCESS){
 			LOG("%s: enet accept error %d\n", __func__, status);
+			dead = true;
 			return ServerPumpStatus::LISTEN_SOCK_DEAD;
+		}
+
+		if (this->pending_sessions.size() + this->sessions.size() >= this->config.max_num_sessions){
+			LOG_TS("%s: warning, new relay connection from %s dropped as maximum number of sessions (%d) has been reached\n", __func__, peer_addr.c_str(), config.max_num_sessions);
+			enet_server->close(ref);
+			continue;
 		}
 
 		pending_sessions.emplace_back(ref, peer_addr, peer_port, &this->config, enet_server);
@@ -347,11 +405,14 @@ ServerPumpStatus Server::pump(){
 
 	int i = 0;
 	for(auto &pending_session : this->pending_sessions){
-		int worker = i % this->pending_sessions_pump_workers.size();
+		int worker = i % this->to_pump_pending_sessions.size();
 		this->to_pump_pending_sessions[worker].push_back(&pending_session);
 		i++;
 	}
 
+	if (this->pending_sessions_pump_workers.empty()){
+		pump_pending_sessions(0);
+	}
 	for(auto &sema : this->pending_sessions_pump_worker_semas){
 		sema.release();
 	}
@@ -415,11 +476,14 @@ ServerPumpStatus Server::pump(){
 
 	i = 0;
 	for(auto &session : this->sessions){
-		int worker = i % this->session_from_client_pump_workers.size();
+		int worker = i % this->sessions_to_pump.size();
 		this->sessions_to_pump[worker].push_back(&(session.second));
 		i++;
 	}
 
+	if (this->session_from_client_pump_workers.empty()){
+		this->pump_connect_and_from_clients(0);
+	}
 	for(auto &sema : this->session_from_client_pump_worker_semas){
 		sema.release();
 	}
@@ -429,6 +493,9 @@ ServerPumpStatus Server::pump(){
 	}
 
 	// pump data top clients
+	if (this->session_to_client_pump_workers.empty()){
+		this->pump_to_clients(0);
+	}
 	for(auto &sema : this->session_to_client_pump_worker_semas){
 		sema.release();
 	}
@@ -490,6 +557,7 @@ void Server::set_config(const struct config &config){
 	this->config.ip_addr = old_config.ip_addr;
 	this->config.port = old_config.port;
 	this->config.num_threads = old_config.num_threads;
+	this->config.enable_enet = old_config.enable_enet;
 }
 
 struct snapshot Server::get_snapshot(){

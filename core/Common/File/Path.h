@@ -32,7 +32,7 @@
 enum class PathType {
 	UNDEFINED = 0,
 	NATIVE = 1,  // Can be relative.
-	CONTENT_URI = 2,  // Android only. Can only be absolute!
+	CONTENT_URI = 2,  // Android storage. Recognized everywhere, but only usable on Android. Can only be absolute!
 	HTTP = 3,  // http://, https://
 };
 
@@ -59,7 +59,7 @@ public:
 	}
 
 	bool Valid() const { return !path_.empty(); }
-	bool IsRoot() const { return path_ == "/"; }  // Special value - only path that can end in a slash.
+	bool IsRoot() const { return path_ == "/"; }  // Special value - only path that can end in a slash - except see below.
 	// On Windows, "//" is the network folder that lists the servers, the other path that ends in a slash.
 	bool IsNetworkRoot() const {
 #if PPSSPP_PLATFORM(WINDOWS)

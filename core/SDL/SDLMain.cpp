@@ -1515,6 +1515,24 @@ static void ProcessSDLEvent(SDL_Window *window, const SDL_Event &event, InputSta
 	if (ProcessGameWindowEvent(event)) {
 		return;
 	}
+#if PPSSPP_PLATFORM(MAC)
+	// The file panel sheet doesn't stop SDL from delivering input to the window under it.
+	// Releases still go through, so nothing gets stuck down.
+	if (DarwinIsPanelOpen()) {
+		switch (event.type) {
+		case SDL_EVENT_KEY_DOWN:
+		case SDL_EVENT_TEXT_INPUT:
+		case SDL_EVENT_FINGER_DOWN:
+		case SDL_EVENT_FINGER_MOTION:
+		case SDL_EVENT_MOUSE_BUTTON_DOWN:
+		case SDL_EVENT_MOUSE_MOTION:
+		case SDL_EVENT_MOUSE_WHEEL:
+			return;
+		default:
+			break;
+		}
+	}
+#endif
 	// SDL input uses window coordinates; convert to pixels before applying the UI scale.
 	float inputPixelDensity = SDL_GetWindowPixelDensity(window);
 	if (inputPixelDensity <= 0.0f) {
@@ -1808,14 +1826,23 @@ static void ProcessSDLEvent(SDL_Window *window, const SDL_Event &event, InputSta
 			KeyInput key{};
 			key.deviceId = DEVICE_ID_MOUSE;
 			key.flags = KeyInputFlags::DOWN;
-			float wheelY = event.wheel.y;
-			if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
-				wheelY = -wheelY;
-			}
+			// SDL has already applied the OS's natural scrolling setting (direction just says whether
+			// it did), so don't undo it.
+			const float wheelY = event.wheel.y;
 			if (wheelY != 0.0f) {
-				const float scale = 30.0f;
+				// wheel.y is in notches.
+				float scale = (float)WHEEL_DELTA_PER_NOTCH;
+#if PPSSPP_PLATFORM(MAC)
+				// A trackpad reports how far the fingers moved, which SDL scales into rough notches
+				// that scroll about twice as far as they should. There's no telling a trackpad from
+				// a wheel here, so a mouse wheel gets the same.
+				scale *= 0.5f;
+#endif
 				key.keyCode = wheelY > 0 ? NKCODE_EXT_MOUSEWHEEL_UP : NKCODE_EXT_MOUSEWHEEL_DOWN;
 				key.flags |= KeyInputFlags::HAS_WHEEL_DELTA;
+				if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+					key.flags |= KeyInputFlags::WHEEL_FLIPPED;
+				}
 				int wheelDelta = (int)(fabsf(wheelY) * scale);
 				key.flags = (KeyInputFlags)((u32)key.flags | (wheelDelta << 16));
 				NativeKey(key);

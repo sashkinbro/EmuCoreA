@@ -328,7 +328,7 @@ const char* AchievementBucketName(uint8_t bucket)
     case RC_CLIENT_ACHIEVEMENT_BUCKET_LOCKED: return "locked";
     case RC_CLIENT_ACHIEVEMENT_BUCKET_UNLOCKED: return "unlocked";
     case RC_CLIENT_ACHIEVEMENT_BUCKET_UNSUPPORTED: return "unsupported";
-    case RC_CLIENT_ACHIEVEMENT_BUCKET_UNOFFICIAL: return "unofficial";
+    case RC_CLIENT_ACHIEVEMENT_BUCKET_UNPROMOTED: return "unofficial";
     case RC_CLIENT_ACHIEVEMENT_BUCKET_RECENTLY_UNLOCKED: return "recently_unlocked";
     case RC_CLIENT_ACHIEVEMENT_BUCKET_ACTIVE_CHALLENGE: return "active_challenge";
     case RC_CLIENT_ACHIEVEMENT_BUCKET_ALMOST_THERE: return "almost_there";
@@ -549,7 +549,7 @@ void EnsureClientLocked()
 
   rc_client_set_event_handler(g_state.client, EventHandler);
   rc_client_set_hardcore_enabled(g_state.client, g_state.hardcore ? 1 : 0);
-  rc_client_set_unofficial_enabled(g_state.client, g_state.unofficial ? 1 : 0);
+  rc_client_set_unpromoted_enabled(g_state.client, g_state.unofficial ? 1 : 0);
   rc_client_set_encore_mode_enabled(g_state.client, g_state.encore ? 1 : 0);
 }
 
@@ -610,7 +610,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsSetUnofficial(JNIEnv*
   std::lock_guard<std::recursive_mutex> lock(g_state.mutex);
   g_state.unofficial = enabled == JNI_TRUE;
   if (g_state.client != nullptr)
-    rc_client_set_unofficial_enabled(g_state.client, g_state.unofficial ? 1 : 0);
+    rc_client_set_unpromoted_enabled(g_state.client, g_state.unofficial ? 1 : 0);
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -760,7 +760,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsStateJson(JNIEnv* env
   if (client != nullptr)
   {
     rc_client_achievement_list_t* warning_list = rc_client_create_achievement_list(
-      client, RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE, RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_PROGRESS);
+      client, RC_CLIENT_ACHIEVEMENT_CATEGORY_PROMOTED, RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_PROGRESS);
     if (warning_list != nullptr)
     {
       for (uint32_t bucket_index = 0; bucket_index < warning_list->num_buckets; ++bucket_index)
@@ -769,7 +769,9 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsStateJson(JNIEnv* env
         for (size_t i = 0; i < bucket.num_achievements; ++i)
         {
           const rc_client_achievement_t* achievement = bucket.achievements[i];
-          if (!IsUnsupportedEmulatorWarning(achievement))
+          // rcheevos already excludes synthetic warning IDs from its summary.
+          // Only subtract a legacy warning that the summary still counts.
+          if (!IsUnsupportedEmulatorWarning(achievement) || achievement->id >= 101000001)
             continue;
           ++warning_total;
           if (achievement->state == RC_CLIENT_ACHIEVEMENT_STATE_UNLOCKED)
@@ -779,7 +781,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsStateJson(JNIEnv* env
       rc_client_destroy_achievement_list(warning_list);
     }
   }
-  long total_achievements = static_cast<long>(summary.num_core_achievements) - static_cast<long>(warning_total);
+  long total_achievements = static_cast<long>(summary.num_promoted_achievements) - static_cast<long>(warning_total);
   if (total_achievements < 0)
     total_achievements = 0;
   long unlocked_achievements =
@@ -827,7 +829,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsStateJson(JNIEnv* env
     json += ",\"token\":";
     AppendJsonString(&json, user->token);
     json += ",\"score\":" + std::to_string(user->score);
-    json += ",\"scoreSoftcore\":" + std::to_string(user->score_softcore);
+    json += ",\"scoreSoftcore\":" + std::to_string(user->score_casual);
     json += ",\"avatarUrl\":";
     AppendJsonString(&json, avatar);
     json += "}";
@@ -855,7 +857,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsStateJson(JNIEnv* env
   json += ",\"summary\":{\"total\":" + std::to_string(total_achievements);
   json += ",\"unlocked\":" + std::to_string(unlocked_achievements);
   json += ",\"unsupported\":" + std::to_string(summary.num_unsupported_achievements);
-  json += ",\"points\":" + std::to_string(summary.points_core);
+  json += ",\"points\":" + std::to_string(summary.points_available);
   json += ",\"pointsUnlocked\":" + std::to_string(summary.points_unlocked);
   json += ",\"beatenTime\":" + std::to_string(static_cast<long long>(summary.beaten_time));
   json += ",\"completedTime\":" + std::to_string(static_cast<long long>(summary.completed_time));
@@ -871,7 +873,7 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeAchievementsAchievementsJson(JNIE
     return env->NewStringUTF("[]");
 
   rc_client_achievement_list_t* list = rc_client_create_achievement_list(
-    g_state.client, RC_CLIENT_ACHIEVEMENT_CATEGORY_CORE, RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_PROGRESS);
+    g_state.client, RC_CLIENT_ACHIEVEMENT_CATEGORY_PROMOTED, RC_CLIENT_ACHIEVEMENT_LIST_GROUPING_PROGRESS);
   if (list == nullptr)
     return env->NewStringUTF("[]");
 

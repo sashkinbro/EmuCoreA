@@ -53,6 +53,8 @@ list(APPEND UISource
 	MainScreen.cpp
 	GameBrowser.h
 	GameBrowser.cpp
+	GameButton.h
+	GameButton.cpp
 	MiscScreens.h
 	MiscScreens.cpp
 	MiscViews.h
@@ -131,7 +133,9 @@ list(APPEND UISource
 	JitCompareScreen.h
 	JitCompareScreen.cpp
 	MemStickScreen.h
+	StorageTestScreen.h
 	MemStickScreen.cpp
+	StorageTestScreen.cpp
 	ProfilerDraw.h
 	ProfilerDraw.cpp
 	CustomButtonMappingScreen.h

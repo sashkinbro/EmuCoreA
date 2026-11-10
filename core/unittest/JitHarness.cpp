@@ -384,7 +384,7 @@ static bool CheckReplacementHooks(u32 func, u32 size, const std::vector<u8> &cod
 	// Removing the hook while a block holds the entry clears it once the block is destroyed.
 	mipsr4k.UpdateCore(CPUCore::JIT);
 	compile();
-	RestoreReplacedInstructions(func, func + size);
+	RemoveReplacements(func, func + size);
 	EXPECT_FALSE(Replacement_IsHooked(func));
 	currentMIPS->ProcessPendingInvalidates();
 	EXPECT_EQ_HEX(Memory::ReadBlockShadow(func), 0);
@@ -462,7 +462,7 @@ bool TestJitReplacementHooks() {
 
 	const bool success = CheckReplacementHooks(func, size, code);
 
-	RestoreReplacedInstructions(func, func + size);
+	RemoveReplacements(func, func + size);
 	Replacement_Shutdown();
 	MIPSAnalyst::Reset();
 	DestroyJitHarness();
@@ -1931,13 +1931,11 @@ bool TestCPUEquivalence() {
 bool TestJitVsgnPrefixes() {
 	const bool oldFast = g_Config.bFastMemory;
 	const bool oldSkip = g_Config.bSkipDeadbeefFilling;
-	const bool oldAccurate = g_Config.bAccurateVdot;
 	const u32 oldDisable = g_Config.uJitDisableFlags;
 	const std::vector<std::string> oldOps = g_fuzzOps;
 	SetupJitHarness();
 	g_Config.bFastMemory = true;
 	g_Config.bSkipDeadbeefFilling = true;
-	g_Config.bAccurateVdot = true;
 	g_Config.uJitDisableFlags = 0;
 	g_fuzzOps.clear();
 	bool success = true;
@@ -2014,7 +2012,6 @@ bool TestJitVsgnPrefixes() {
 	DestroyJitHarness();
 	g_Config.bFastMemory = oldFast;
 	g_Config.bSkipDeadbeefFilling = oldSkip;
-	g_Config.bAccurateVdot = oldAccurate;
 	g_Config.uJitDisableFlags = oldDisable;
 	g_fuzzOps = oldOps;
 	return success;
@@ -2038,11 +2035,9 @@ static bool AssembleLines(const std::vector<const char *> &lines, std::vector<u3
 
 bool TestJitMultiDotRounding() {
 	SetupJitHarness();
-	const bool oldAccurate = g_Config.bAccurateVdot;
 	const bool oldSkip = g_Config.bSkipDeadbeefFilling;
 	const u32 oldDisable = g_Config.uJitDisableFlags;
 	g_Config.bFastMemory = true;
-	g_Config.bAccurateVdot = true;
 	g_Config.bSkipDeadbeefFilling = true;
 	g_Config.uJitDisableFlags = 0;
 	bool success = true;
@@ -2087,7 +2082,6 @@ bool TestJitMultiDotRounding() {
 		}
 	}
 	mipsr4k.UpdateCore(CPUCore::INTERPRETER);
-	g_Config.bAccurateVdot = oldAccurate;
 	g_Config.bSkipDeadbeefFilling = oldSkip;
 	g_Config.uJitDisableFlags = oldDisable;
 	DestroyJitHarness();
@@ -2126,10 +2120,10 @@ bool TestJitProfileReportFailure() {
 			ExecCPUTest(false);
 		}
 		JitProfiler::Stop();
-		MIPSComp::jit->ClearCache();
+		currentMIPS->jit->ClearCache();
 		g_Config.sJitProfileFile = report.ToString();
 		// No old block indices or samples may survive into the empty cache epoch.
-		MIPSComp::jit->ClearCache();
+		currentMIPS->jit->ClearCache();
 		success = File::GetFileSize(report) == 0;
 	}
 	DestroyJitHarness();

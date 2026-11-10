@@ -161,6 +161,11 @@ std::vector<uint8_t> MakeElf(bool server, int round) {
         g.lw(10, 9, 4); g.expect(10, 0x31545345); // EST1
         g.call("join", {SCAN}); g.check();
     }
+    // Create/Join complete asynchronously. Peer enumeration now correctly rejects
+    // a disconnected group, so wait for CONNECTED before opening the transport.
+    g.label("groupConnectWait"); g.pause(); g.call("state", {STATE}); g.check();
+    g.li(8, STATE); g.lw(9, 8, 0); g.li(8, 1);
+    g.branch(0x14000000, 9, 8, "groupConnectWait");
     g.stage(3);
     g.call("pdpCreate", {MAC, 30000, 4096, 0}); g.check(); g.move(17, 2);
     if (server) { g.call("ptpListen", {MAC, 30001, 4096, 1000000, 5, 1, 0}); g.check(); g.move(18, 2); }

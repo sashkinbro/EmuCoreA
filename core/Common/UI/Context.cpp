@@ -21,7 +21,8 @@ UIContext::UIContext() {
 }
 
 UIContext::~UIContext() {
-	sampler_->Release();
+	if (sampler_)
+		sampler_->Release();
 	delete fontStyle_;
 	delete textDrawer_;
 	if (uitexture_)
@@ -145,7 +146,7 @@ Bounds UIContext::GetScissorBounds() {
 		return bounds_;
 }
 
-Bounds UIContext::GetLayoutBounds(ViewLayoutMode layoutMode, bool immersiveMode) const {
+Bounds UIContext::GetLayoutBounds(ViewLayoutMode layoutMode, bool immersiveMode, bool reserveHiddenNavBar) const {
 	float left = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_LEFT);
 	float right = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_RIGHT);
 	float top = System_GetPropertyFloat(SYSPROP_DISPLAY_SAFE_INSET_TOP);
@@ -201,6 +202,18 @@ Bounds UIContext::GetLayoutBounds(ViewLayoutMode layoutMode, bool immersiveMode)
 			int sideWidth = std::max(left, right);
 			left = sideWidth;
 			right = sideWidth;
+		}
+	}
+
+	if (reserveHiddenNavBar && layoutMode != ViewLayoutMode::IgnoreInsets) {
+		// Platforms without a navigation bar return -1, which leaves the insets alone.
+		if (layoutMode != ViewLayoutMode::IgnoreSideInsets) {
+			left = std::max(left, System_GetPropertyFloat(SYSPROP_DISPLAY_NAVBAR_INSET_LEFT));
+			right = std::max(right, System_GetPropertyFloat(SYSPROP_DISPLAY_NAVBAR_INSET_RIGHT));
+		}
+		top = std::max(top, System_GetPropertyFloat(SYSPROP_DISPLAY_NAVBAR_INSET_TOP));
+		if (layoutMode != ViewLayoutMode::IgnoreBottomInset) {
+			bottom = std::max(bottom, System_GetPropertyFloat(SYSPROP_DISPLAY_NAVBAR_INSET_BOTTOM));
 		}
 	}
 
@@ -354,7 +367,9 @@ float UIContext::CalculateTextScale(std::string_view str, float availWidth) cons
 	MeasureTextRect(theme->uiFont, 1.0f, 1.0f, str, availWidth, &actualWidth, &actualHeight, ALIGN_VCENTER);
 	if (actualWidth > availWidth) {
 		// TODO: Return feedback that wrapping was needed.
-		return std::max(MIN_TEXT_SCALE, availWidth / actualWidth);
+		// Shave off a little, since float rounding can otherwise leave the scaled text a hair
+		// wider than availWidth, and then it gets wrapped anyway.
+		return std::max(MIN_TEXT_SCALE, availWidth / actualWidth * 0.999f);
 	}
 	return 1.0f;
 }

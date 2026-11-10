@@ -67,9 +67,12 @@ TopBar::TopBar(const UIContext &ctx, TopBarFlags flags, std::string_view title, 
 	}
 
 	if (!title.empty()) {
-		TextView *titleView = Add(new TextView(title, ALIGN_VCENTER, false, new LinearLayoutParams(1.0f, Gravity::G_VCENTER)));
+		TextView *titleView = Add(new TextView(title, ALIGN_VCENTER | FLAG_ELLIPSIZE_TEXT, false, new LinearLayoutParams(1.0f, Gravity::G_VCENTER)));
 		titleView->SetTextColor(ctx.GetTheme().itemStyle.fgColor);
 		titleView->SetBig(true);
+		if (flags & TopBarFlags::DropShadowTitle) {
+			titleView->SetShadow(true);
+		}
 		// If using HCENTER, to balance the centering, add a spacer on the right.
 		// Add(new Spacer(50.0f));
 	}
@@ -238,13 +241,16 @@ void GameImageView::Draw(UIContext &dc) {
 	int x = bounds_.x + (bounds_.w - nw) / 2.0f;
 
 	dc.Flush();
+	dc.RebindTexture();
+	dc.DrawRectDropShadow(bounds_, 10.0f, 0.7f);
+	dc.Flush();
 	dc.GetDrawContext()->BindTexture(0, texture);
 	dc.Draw()->Rect(x, bounds_.y, nw, bounds_.h, color);
 	dc.Flush();
 	dc.RebindTexture();
 }
 
-void AddRotationPicker(ScreenManager *screenManager, UI::ViewGroup *parent, bool text) {
+UI::View *AddRotationPicker(ScreenManager *screenManager, UI::ViewGroup *parent, bool text) {
 	using namespace UI;
 	static const char *screenRotation[] = { "Auto", "Landscape", "Portrait", "Landscape Reversed", "N/A", "Landscape Auto"};
 	static const std::map<int, ImageID> screenRotationIcons{
@@ -271,6 +277,7 @@ void AddRotationPicker(ScreenManager *screenManager, UI::ViewGroup *parent, bool
 		INFO_LOG(Log::System, "New display rotation: %d", g_Config.iScreenRotation);
 		System_Notify(SystemNotification::ROTATE_UPDATED);
 	});
+	return rot;
 }
 
 void GameInfoBGView::Draw(UIContext &dc) {

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <ws2ipdef.h>
@@ -25,7 +26,7 @@ int native_get_last_socket_error(){
 }
 
 bool native_error_is_would_block(int error){
-	return error == WSAEWOULDBLOCK;
+	return error == WSAEWOULDBLOCK || error == WSAEINTR;
 }
 
 bool native_error_is_no_mem(int error){
@@ -34,6 +35,15 @@ bool native_error_is_no_mem(int error){
 
 bool native_error_is_emfile(int error){
 	return error == WSAEMFILE;
+}
+
+bool native_error_is_accept_transient(int error){
+	switch(error){
+		case WSAECONNRESET:
+			return true;
+		default:
+			return false;
+	}
 }
 
 AddrFamily get_addr_family(std::string ip){
@@ -111,6 +121,7 @@ int native_tcp_listen(std::string ip, uint16_t port){
 	int bind_result = bind(sock_fd, (const sockaddr *)addr, addr_len);
 	if (bind_result == SOCKET_ERROR){
 		int err = WSAGetLastError();
+		closesocket(sock_fd);
 		LOG_TS("%s: bind failed, 0x%x\n", __func__, err);
 		return -1;
 	}
@@ -118,6 +129,7 @@ int native_tcp_listen(std::string ip, uint16_t port){
 	int listen_result = listen(sock_fd, 1000);
 	if (listen_result == SOCKET_ERROR){
 		int err = WSAGetLastError();
+		closesocket(sock_fd);
 		LOG_TS("%s: listen failed, 0x%x\n", __func__, err);
 		return -1;
 	}
@@ -167,6 +179,22 @@ int native_accept(int sock_fd, std::string *peer_addr, uint16_t *peer_port){
 
 void native_close(int sock_fd){
 	closesocket(sock_fd);
+}
+
+void native_wait_multiple(const std::vector<int> &read_fds, const std::vector<int> &write_fds, int timeout_ms){
+	std::vector<WSAPOLLFD> fds;
+	for (int fd : read_fds){
+		fds.push_back({(SOCKET)fd, POLLRDNORM, 0});
+	}
+	for (int fd : write_fds){
+		fds.push_back({(SOCKET)fd, POLLWRNORM, 0});
+	}
+	if (fds.empty()){
+		// WSAPoll fails at once on an empty set
+		Sleep(timeout_ms);
+		return;
+	}
+	WSAPoll(fds.data(), (ULONG)fds.size(), timeout_ms);
 }
 
 }

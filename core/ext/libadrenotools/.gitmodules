@@ -1,4 +1,4 @@
 [submodule "lib/linkernsbypass"]
 	path = lib/linkernsbypass
-	url = https://github.com/bylaws/liblinkernsbypass/
+	url = https://github.com/hrydgard/liblinkernsbypass.git
 	branch = master

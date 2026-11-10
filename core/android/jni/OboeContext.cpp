@@ -15,8 +15,8 @@
 // callback on a thread of its own that can outlive the OboeContext.
 class OboeContext::Streams : public oboe::AudioStreamDataCallback, public oboe::AudioStreamErrorCallback, public std::enable_shared_from_this<OboeContext::Streams> {
 public:
-	Streams(AndroidAudioCallback cb, int framesPerBuffer, int sampleRate, bool forceOpenSLES)
-		: audioCallback_(cb), framesPerBuffer_(framesPerBuffer), sampleRate_(sampleRate), forceOpenSLES_(forceOpenSLES) {
+	Streams(AndroidAudioCallback cb, int sampleRate, bool forceOpenSLES)
+		: audioCallback_(cb), sampleRate_(sampleRate), forceOpenSLES_(forceOpenSLES) {
 		// The setting isn't offered before Android 8.1, where AAudio isn't stable.
 		if (g_Config.iAndroidAudioApi == (int)AndroidAudioApi::AAUDIO && oboe::AudioStreamBuilder::isAAudioRecommended()) {
 			audioApi_ = oboe::AudioApi::AAudio;
@@ -49,12 +49,16 @@ public:
 	void Shutdown() {
 		std::lock_guard<std::mutex> guard(mutex_);
 		shutdown_ = true;
-		CloseStream(output_);
+		CloseOutput();
 		CloseStream(input_);
 	}
 
 	oboe::DataCallbackResult onAudioReady(oboe::AudioStream *stream, void *audioData, int32_t numFrames) override {
 		if (stream->getDirection() == oboe::Direction::Output) {
+			// Grows the buffer a burst at a time when we underrun.
+			if (outputTuner_) {
+				outputTuner_->tune();
+			}
 			audioCallback_((short *)audioData, numFrames, stream->getSampleRate(), nullptr);
 		} else {
 			// This is the audio thread, so just buffer it. The CPU thread picks it up.
@@ -77,6 +81,7 @@ public:
 		}
 		WARN_LOG(Log::Audio, "Oboe: %s stream closed with error: %s", isOutput ? "output" : "input", oboe::convertToText(error));
 		if (isOutput) {
+			outputTuner_.reset();
 			output_.reset();
 		} else {
 			input_.reset();
@@ -107,7 +112,7 @@ private:
 			->setChannelConversionAllowed(true)
 			->setSampleRate(sampleRate_)
 			->setSampleRateConversionQuality(oboe::SampleRateConversionQuality::Medium)
-			->setFramesPerDataCallback(framesPerBuffer_)
+			// Let Oboe use the native burst without adding a fixed-size block adapter.
 			->setDataCallback(this)
 			->setErrorCallback(shared_from_this());
 		if (forceOpenSLES_) {
@@ -118,11 +123,11 @@ private:
 			output_.reset();
 			return Fail("Failed to open output stream", result);
 		}
-		// Double buffering, the same latency as the old OpenSL path.
-		output_->setBufferSizeInFrames(output_->getFramesPerBurst() * 2);
+		// Starts at two bursts.
+		outputTuner_ = std::make_unique<oboe::LatencyTuner>(*output_);
 		result = output_->requestStart();
 		if (result != oboe::Result::OK) {
-			CloseStream(output_);
+			CloseOutput();
 			return Fail("Failed to start output stream", result);
 		}
 		char info[256];
@@ -167,6 +172,16 @@ private:
 		return true;
 	}
 
+	void CloseOutput() {
+		if (output_) {
+			oboe::ResultWithValue<int32_t> xruns = output_->getXRunCount();
+			INFO_LOG(Log::Audio, "Oboe: Closing output stream, buffer %d, underruns %d", output_->getBufferSizeInFrames(), xruns ? xruns.value() : -1);
+		}
+		// Stopped first, so the callback is done with the tuner.
+		CloseStream(output_);
+		outputTuner_.reset();
+	}
+
 	static void CloseStream(std::shared_ptr<oboe::AudioStream> &stream) {
 		if (stream) {
 			stream->stop();
@@ -182,7 +197,6 @@ private:
 	}
 
 	AndroidAudioCallback audioCallback_;
-	int framesPerBuffer_;
 	int sampleRate_;
 	const bool forceOpenSLES_;
 	oboe::AudioApi audioApi_ = oboe::AudioApi::OpenSLES;
@@ -190,6 +204,8 @@ private:
 	std::mutex mutex_;
 	bool shutdown_ = false;
 	std::shared_ptr<oboe::AudioStream> output_;
+	// Only touched by the audio callback while output_ is running.
+	std::unique_ptr<oboe::LatencyTuner> outputTuner_;
 	std::shared_ptr<oboe::AudioStream> input_;
 	int inputSampleRate_ = 0;
 };
@@ -199,7 +215,7 @@ OboeContext::OboeContext(AndroidAudioCallback cb, int _FramesPerBuffer, int _Sam
 	// Only used by the OpenSL ES fallback, which can't query the device's native values itself.
 	oboe::DefaultStreamValues::SampleRate = sampleRate;
 	oboe::DefaultStreamValues::FramesPerBurst = framesPerBuffer;
-	streams_ = std::make_shared<Streams>(cb, framesPerBuffer, sampleRate, forceOpenSLES);
+	streams_ = std::make_shared<Streams>(cb, sampleRate, forceOpenSLES);
 }
 
 bool OboeContext::Init() {

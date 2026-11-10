@@ -44,6 +44,7 @@
     <ClCompile Include="EmuScreen.cpp" />
     <ClCompile Include="ImposeHome.cpp" />
     <ClCompile Include="GameBrowser.cpp" />
+    <ClCompile Include="GameButton.cpp" />
     <ClCompile Include="GameInfoCache.cpp" />
     <ClCompile Include="GamepadEmu.cpp" />
     <ClCompile Include="GameScreen.cpp" />
@@ -63,6 +64,7 @@
     <ClCompile Include="LoadStateConfirmScreen.cpp" />
     <ClCompile Include="MainScreen.cpp" />
     <ClCompile Include="MemStickScreen.cpp" />
+    <ClCompile Include="StorageTestScreen.cpp" />
     <ClCompile Include="MiscScreens.cpp" />
     <ClCompile Include="MiscViews.cpp" />
     <ClCompile Include="NativeApp.cpp" />
@@ -118,6 +120,7 @@
     <ClInclude Include="EmuScreen.h" />
     <ClInclude Include="ImposeHome.h" />
     <ClInclude Include="GameBrowser.h" />
+    <ClInclude Include="GameButton.h" />
     <ClInclude Include="GameInfoCache.h" />
     <ClInclude Include="GamepadEmu.h" />
     <ClInclude Include="GameScreen.h" />
@@ -139,6 +142,7 @@
     <ClInclude Include="LoadStateConfirmScreen.h" />
     <ClInclude Include="MainScreen.h" />
     <ClInclude Include="MemStickScreen.h" />
+    <ClInclude Include="StorageTestScreen.h" />
     <ClInclude Include="MiscScreens.h" />
     <ClInclude Include="MiscViews.h" />
     <ClInclude Include="OnScreenDisplay.h" />

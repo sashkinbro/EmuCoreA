@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <random>
 #include <signal.h>
 
 #include <sys/types.h>
@@ -498,16 +499,21 @@ void login_user_stream(int fd, uint32_t ip)
 	if(_db_user_count < SERVER_USER_MAXIMUM)
 	{
 		// Check IP Duplication
-		SceNetAdhocctlUserNode * u = _db_user;
-		while(u != NULL && u->resolver.ip != ip) u = u->next;
-
-		if (u != NULL) { // IP Already existed
-			WARN_LOG(Log::sceNet, "AdhocServer: Already Existing IP: %s\n", ip2str(*(in_addr*)&u->resolver.ip).c_str());
+		int sameIP = 0;
+		for (SceNetAdhocctlUserNode *u = _db_user; u != NULL; u = u->next) {
+			if (u->resolver.ip == ip) {
+				sameIP++;
+			}
 		}
 
-		// Unique IP Address
-		else //if(u == NULL)
-		{
+		// Players sharing an IP (behind one NAT, or instances on one machine) are told apart by MAC
+		// through the relay. In P2P mode, only one of them can play.
+		if (sameIP > 0) {
+			INFO_LOG(Log::sceNet, "AdhocServer: Another user from IP %s", ip2str(*(in_addr*)&ip).c_str());
+		}
+
+		// Capped, so one host can't take every slot.
+		if (sameIP < SERVER_USER_MAXIMUM_PER_IP) {
 			// Allocate User Node Memory
 			SceNetAdhocctlUserNode * user = (SceNetAdhocctlUserNode *)malloc(sizeof(SceNetAdhocctlUserNode));
 
@@ -530,6 +536,7 @@ void login_user_stream(int fd, uint32_t ip)
 
 				// Initialize Death Clock
 				user->last_recv = time(NULL);
+				user->connected_at = user->last_recv;
 
 				// Notify User
 				INFO_LOG(Log::sceNet, "AdhocServer: New Connection from %s", ip2str(*(in_addr*)&user->resolver.ip).c_str());
@@ -557,6 +564,9 @@ void login_user_stream(int fd, uint32_t ip)
  */
 void login_user_data(SceNetAdhocctlUserNode * user, SceNetAdhocctlLoginPacketC2S * data)
 {
+	// The client's nickname needn't be terminated, and it's printed with %s.
+	data->name.data[ADHOCCTL_NICKNAME_LEN - 1] = 0;
+
 	// Product Code Check
 	int valid_product_code = 1;
 
@@ -813,6 +823,15 @@ void connect_user(SceNetAdhocctlUserNode * user, SceNetAdhocctlGroupName * group
 					// Copy Group Name
 					g->group = *group;
 
+					// A PSP group's BSSID is a locally administered address of its own, not a member's MAC. It
+					// stays when the creator leaves, and a group created again gets a new one (pspautotests
+					// net/adhoc/pair/lifecycle).
+					static std::mt19937 bssidRng(std::random_device{}());
+					for (int i = 0; i < ETHER_ADDR_LEN; i++) {
+						g->bssid.data[i] = (uint8_t)bssidRng();
+					}
+					g->bssid.data[0] = (g->bssid.data[0] & 0xFC) | 0x02;
+
 					// Increase Group Counter for Game
 					g->game->groupcount++;
 				}
@@ -860,12 +879,11 @@ void connect_user(SceNetAdhocctlUserNode * user, SceNetAdhocctlGroupName * group
 					iResult = (int)send(user->stream, (const char*)&packet, sizeof(packet), MSG_NOSIGNAL);
 					if (iResult < 0) ERROR_LOG(Log::sceNet, "AdhocServer: connect_user[send user] (Socket error %d)", socket_errno);
 
-					// Set BSSID
-					if(peer->group_next == NULL) bssid.mac = peer->resolver.mac;
-
 					// Move Pointer
 					peer = peer->group_next;
 				}
+
+				bssid.mac = g->bssid;
 
 				// Link User to Group
 				user->group_next = g->player;
@@ -1057,17 +1075,7 @@ void send_scan_results(SceNetAdhocctlUserNode * user)
 			// Set Group Name
 			packet.group = group->group;
 
-			// Iterate Players in Network Group
-			SceNetAdhocctlUserNode * peer = group->player;
-			for(; peer != NULL; peer = peer->group_next)
-			{
-				// Found Network Founder
-				if(peer->group_next == NULL)
-				{
-					// Set Group Host MAC
-					packet.mac = peer->resolver.mac;
-				}
-			}
+			packet.mac = group->bssid;
 
 			// Send Group Packet
 			int iResult = (int)send(user->stream, (const char*)&packet, sizeof(packet), MSG_NOSIGNAL);
@@ -1228,7 +1236,10 @@ int get_user_state(SceNetAdhocctlUserNode * user)
 	if((time(NULL) - user->last_recv) >= SERVER_USER_TIMEOUT) return USER_STATE_TIMED_OUT;
 
 	// Waiting Status
-	if(user->game == NULL) return USER_STATE_WAITING;
+	if (user->game == NULL) {
+		if ((time(NULL) - user->connected_at) >= SERVER_LOGIN_TIMEOUT) return USER_STATE_TIMED_OUT;
+		return USER_STATE_WAITING;
+	}
 
 	// Logged-In Status
 	return USER_STATE_LOGGED_IN;
@@ -1389,12 +1400,9 @@ void game_product_override(SceNetAdhocctlProductCode * product)
 					// Destroy Prepare SQL Statement
 					sqlite3_finalize(statement);
 				}*/
-				db_productid unkproduct;
-				strncpy(unkproduct.id, productid, sizeof(unkproduct.id));
-				strncpy(unkproduct.name, productid, sizeof(unkproduct.name));
-				productids.push_back(unkproduct); //productids[productids.size()] = unkproduct;
-				// Log Addition
-				INFO_LOG(Log::sceNet, "AdhocServer: Added Unknown Product ID %s to Database", productid);
+				// Not added to productids: any client can send any code, so that would grow forever.
+				// update_status() shows the code itself as the name of an unknown game.
+				INFO_LOG(Log::sceNet, "AdhocServer: Unknown Product ID %s", productid);
 			}
 		}
 
@@ -2064,13 +2072,26 @@ int server_loop(int server)
 			user = next;
 		}
 
-		// Prevent needless CPU Overload (1ms Sleep)
-		// !!!! COMMENT NOT REFLECTING REALITY
-		sleep_ms(10, "pro-adhoc-poll");
-
-		// Don't do anything if it's paused, otherwise the log will be flooded
-		while (adhocServerRunning && Core_IsStepping() && coreState != CORE_POWERDOWN)
-			sleep_ms(10, "pro-adhot-paused-poll");
+		// Wait until a login or a message comes in, rather than polling: with nothing to do the server
+		// sleeps, and a message is handled as soon as it arrives. Woken at least every 50 ms anyway, to
+		// notice adhocServerRunning going false.
+		fd_set readfds;
+		FD_ZERO(&readfds);
+		int maxfd = server;
+		FD_SET(server, &readfds);
+		for (SceNetAdhocctlUserNode *u = _db_user; u != NULL; u = u->next) {
+#if !defined(_WIN32)
+			if (u->stream >= FD_SETSIZE) {
+				continue;
+			}
+#endif
+			FD_SET(u->stream, &readfds);
+			maxfd = std::max(maxfd, u->stream);
+		}
+		timeval tv;
+		tv.tv_sec = 0;
+		tv.tv_usec = 50000;
+		select(maxfd + 1, &readfds, nullptr, nullptr, &tv);
 	}
 
 	// Free User Database Memory

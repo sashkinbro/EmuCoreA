@@ -61,6 +61,7 @@ struct ThemeInfo {
 	uint32_t uScrollbarColor = 0x80FFFFFF;
 	uint32_t uPopupSliderColor = 0xFFFFFFFF;
 	uint32_t uPopupSliderFocusedColor = 0xFFEDC24C;
+	float choiceRoundRadius = 12.0f;
 
 	bool operator == (const std::string &other) {
 		return name == other;
@@ -90,10 +91,14 @@ static void LoadThemeInfo(const std::vector<Path> &directories) {
 
 	for (const auto &d : directories) {
 		std::vector<File::FileInfo> fileInfo;
-		g_VFS.GetFileListing(d.c_str(), &fileInfo, "ini:");
-
-		if (fileInfo.empty()) {
+		if (d.IsAbsolute()) {
+			// The memory stick's folder. The VFS would list it the same way, so an empty one got listed twice.
 			File::GetFilesInDir(d, &fileInfo, "ini:");
+		} else {
+			g_VFS.GetFileListing(d.c_str(), &fileInfo, "ini:");
+			if (fileInfo.empty()) {
+				File::GetFilesInDir(d, &fileInfo, "ini:");
+			}
 		}
 
 		for (const auto &f : fileInfo) {
@@ -160,6 +165,8 @@ static void LoadThemeInfo(const std::vector<Path> &directories) {
 				section.Get("ScrollbarColor", &info.uScrollbarColor);
 				section.Get("PopupSliderColor", &info.uPopupSliderColor);
 				section.Get("PopupSliderFocusedColor", &info.uPopupSliderFocusedColor);
+
+				section.Get("ChoiceRoundRadius", &info.choiceRoundRadius);
 
 				appendTheme(info);
 			}
@@ -246,6 +253,8 @@ void UpdateTheme() {
 
 	ui_theme.popupSliderColor = themeInfo.uPopupSliderColor;
 	ui_theme.popupSliderFocusedColor = themeInfo.uPopupSliderFocusedColor;
+
+	ui_theme.choiceRoundRadius = themeInfo.choiceRoundRadius;
 }
 
 const UI::Theme *GetTheme() {

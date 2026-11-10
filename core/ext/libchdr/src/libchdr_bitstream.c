@@ -9,7 +9,7 @@
 ***************************************************************************/
 
 #include <stdlib.h>
-#include <libchdr/bitstream.h>
+#include "../include/libchdr/bitstream.h"
 
 /***************************************************************************
  *  INLINE FUNCTIONS
@@ -51,8 +51,16 @@ uint32_t bitstream_peek(struct bitstream* bitstream, int numbits)
 	{
 		while (bitstream->bits <= 24)
 		{
-			if (bitstream->doffset < bitstream->dlength)
-				bitstream->buffer |= bitstream->read[bitstream->doffset] << (24 - bitstream->bits);
+			/* bits goes negative once a stream has been over-consumed, which
+			 * malformed input can provoke, and then 24 - bits reaches 32 and
+			 * the shift is undefined. A byte shifted that far lands entirely
+			 * above bit 31, so contributing nothing is also the arithmetically
+			 * correct result - well-formed streams keep bits >= 0 and never
+			 * take this branch. */
+			const int shift = 24 - bitstream->bits;
+
+			if (bitstream->doffset < bitstream->dlength && shift < 32)
+				bitstream->buffer |= (uint32_t)bitstream->read[bitstream->doffset] << shift;
 			bitstream->doffset++;
 			bitstream->bits += 8;
 		}
@@ -71,7 +79,10 @@ uint32_t bitstream_peek(struct bitstream* bitstream, int numbits)
 
 void bitstream_remove(struct bitstream* bitstream, int numbits)
 {
-	bitstream->buffer <<= numbits;
+	/* buffer is 32 bits wide, so shifting by 32 is undefined even though
+	 * consuming all 32 is a legitimate request - peek() already returns the
+	 * whole buffer for that width. */
+	bitstream->buffer = (numbits >= 32) ? 0 : (bitstream->buffer << numbits);
 	bitstream->bits -= numbits;
 }
 
@@ -104,6 +115,42 @@ uint32_t bitstream_read_offset(struct bitstream* bitstream)
 		bits -= 8;
 	}
 	return result;
+}
+
+
+/*-------------------------------------------------
+ *  flush - flush to the nearest byte
+ *-------------------------------------------------
+ */
+
+/*-------------------------------------------------
+ *  bitstream_position_bits - exact bit-granular
+ *  read position (unlike bitstream_read_offset,
+ *  which is only meaningful at a byte boundary)
+ *-------------------------------------------------
+ */
+
+uint64_t bitstream_position_bits(struct bitstream* bitstream)
+{
+	return (uint64_t)bitstream->doffset * 8 - (uint64_t)bitstream->bits;
+}
+
+
+/*-------------------------------------------------
+ *  bitstream_seek_bits - reposition to an exact
+ *  bit-granular offset, previously obtained from
+ *  bitstream_position_bits on the same buffer
+ *-------------------------------------------------
+ */
+
+void bitstream_seek_bits(struct bitstream* bitstream, uint64_t bitpos)
+{
+	int rem = (int)(bitpos % 8);
+	bitstream->doffset = (uint32_t)(bitpos / 8);
+	bitstream->bits = 0;
+	bitstream->buffer = 0;
+	if (rem)
+		bitstream_read(bitstream, rem);
 }
 
 

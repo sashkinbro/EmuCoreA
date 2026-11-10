@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #ifndef __POSTOFFICE_MEM_H
 #define __POSTOFFICE_MEM_H
 
@@ -45,7 +46,8 @@ struct ptp_session{
 	void *enet_handle;
 	bool dead;
 	bool abort;
-	char recv_ring_buf[AEMU_POSTOFFICE_PTP_BLOCK_MAX];
+	bool block_boundary_mode;
+	char recv_ring_buf[AEMU_POSTOFFICE_PTP_BLOCK_MAX + sizeof(aemu_postoffice_ptp_data)];
 	int recv_ring_buf_start;
 	int recv_ring_buf_used;
 	int bytes_till_next_header;

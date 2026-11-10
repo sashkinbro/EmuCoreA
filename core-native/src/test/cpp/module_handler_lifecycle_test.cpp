@@ -14,7 +14,7 @@ static u32 SetHandler(u32 address) {
     for (int i = 0; i < module->numFunctions; ++i) {
         if (module->funcTable[i].ID == 0x1C90BECB) {
             currentMIPS->r[MIPS_REG_A0] = address;
-            module->funcTable[i].func();
+            module->funcTable[i].func(currentMIPS);
             return currentMIPS->r[MIPS_REG_V0];
         }
     }

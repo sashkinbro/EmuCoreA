@@ -4,7 +4,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.LocalActivity
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -72,7 +72,7 @@ class GpuDriverScreenInstrumentedTest {
     @Test fun gameMenuDialogCoversTheEntireDisplay() {
         lateinit var activity: Activity
         compose.setContent {
-            activity = LocalContext.current as Activity
+            activity = checkNotNull(LocalActivity.current)
             EmuCoreATheme { GpuDriverDialog(onDismiss = {}) }
         }
         val previous = activity.requestedOrientation
@@ -154,7 +154,7 @@ class GpuDriverScreenInstrumentedTest {
     @Test fun gameMenuDialogCoversLandscapeDisplay() {
         lateinit var activity: Activity
         compose.setContent {
-            activity = LocalContext.current as Activity
+            activity = checkNotNull(LocalActivity.current)
             EmuCoreATheme { GpuDriverDialog(onDismiss = {}) }
         }
         val previous = activity.requestedOrientation

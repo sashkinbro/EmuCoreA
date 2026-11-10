@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-only
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <pspnet_inet.h>
@@ -129,6 +130,11 @@ typedef struct SceNetInetPollfd {
 #define INET_POLLHUP 0x0010
 
 int sceNetInetPoll(struct SceNetInetPollfd *fds, size_t nfds, int timeout);
+
+void native_wait(int fd, bool for_write, int timeout_ms){
+	// yield, as before
+	sceKernelDelayThread(0);
+}
 
 bool native_send_buf_not_full(int fd){
 	struct SceNetInetPollfd pfd;

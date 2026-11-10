@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# Generate a tiny CHDv5 fuzz corpus spanning all codec combos.
+# Requires: chdman (from MAME), dd, mktemp.
+set -euo pipefail
+
+CORPUS="$(cd "$(dirname "$0")" && pwd)/seeds"
+mkdir -p "$CORPUS"
+# Parent/delta pairs live outside seeds/, because a child CHD cannot be opened
+# without its parent and the workflows that walk seeds/ open every file there
+# standalone (big-endian-correctness.yml, lowram-correctness.yml) - a child
+# dropped in with them would fail every one of those jobs.
+PARENT="$(cd "$(dirname "$0")" && pwd)/parent"
+mkdir -p "$PARENT"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+if ! command -v chdman >/dev/null; then
+    echo "chdman not found in PATH" >&2
+    exit 1
+fi
+
+# Tiny raw payload: 64 KiB of zeros + a few deterministic bytes.
+# Small enough to fuzz fast, large enough to exercise multi-hunk paths.
+RAW_HD="$TMP/tiny.img"
+dd if=/dev/zero of="$RAW_HD" bs=512 count=128 status=none
+printf 'LIBCHDR-FUZZ-CORPUS' | dd of="$RAW_HD" bs=1 seek=0 conv=notrunc status=none
+
+# Minimal CUE+BIN (single audio track, 1 second = 75 frames of 2352 B).
+CUE="$TMP/tiny.cue"
+BIN="$TMP/tiny.bin"
+dd if=/dev/urandom of="$BIN" bs=2352 count=75 status=none
+cat > "$CUE" <<EOF
+FILE "tiny.bin" BINARY
+  TRACK 01 AUDIO
+    INDEX 01 00:00:00
+EOF
+
+# Raw for createraw (power-of-two, small).
+RAW="$TMP/tiny.raw"
+dd if=/dev/urandom of="$RAW" bs=4096 count=16 status=none
+
+# Raw for a small-hunk, many-hunk file - 2,200 hunks of 64 B (140,800 B
+# total) specifically to cross LOWRAM_TARGET_CHECKPOINT_STRIDE's default
+# 2048-hunk checkpoint boundary. LOWRAM_TARGET's sequential resume-cache
+# only exercises its bucket-boundary handling when a real checkpoint
+# crossing happens mid-file - every other seed here is too small to ever
+# hit one. See lowram-correctness.yml.
+RAW_BOUNDARY="$TMP/boundary.raw"
+dd if=/dev/urandom of="$RAW_BOUNDARY" bs=64 count=2200 status=none
+
+create_hd () {
+    local name="$1"; shift
+    chdman createhd -f -o "$CORPUS/$name" -i "$RAW_HD" --chs 4,16,2 -ss 512 "$@" >/dev/null 2>&1 || true
+}
+
+create_cd () {
+    local name="$1"; shift
+    chdman createcd -f -o "$CORPUS/$name" -i "$CUE" "$@" >/dev/null 2>&1 || true
+}
+
+create_raw () {
+    local name="$1"; shift
+    chdman createraw -f -o "$CORPUS/$name" -i "$RAW" -hs 4096 -us 512 "$@" >/dev/null 2>&1 || true
+}
+
+create_raw_boundary () {
+    local name="$1"; shift
+    chdman createraw -f -o "$CORPUS/$name" -i "$RAW_BOUNDARY" -hs 64 -us 64 "$@" >/dev/null 2>&1 || true
+}
+
+# Hard disk: default codecs + flavor variants.
+create_hd hd_default.chd
+create_hd hd_none.chd       -c none
+create_hd hd_zlib.chd       -c zlib
+create_hd hd_lzma.chd       -c lzma
+create_hd hd_huff.chd       -c huff
+create_hd hd_zstd.chd       -c zstd
+create_hd hd_multi.chd      -c zlib,lzma,huff,zstd
+# The raw FLAC codec, on its own. hd_default happens to include flac hunks
+# because that is one of chdman's default hard-disk codecs, but relying on a
+# default to cover a codec is how a codec stops being covered - and the FLAC
+# decoder holds the largest per-instance buffer of any codec here.
+create_hd hd_flac.chd       -c flac
+
+# A CHDv5 whose map compresses far below one bit per hunk: 64 MiB of zeros
+# becomes a couple of hundred bytes carrying 16384 hunks, because a run of
+# identical hunks costs almost nothing in the run-length and Huffman coded v5
+# map. Any header check that assumes a lower bound on map size per hunk
+# rejects it - the regression case for issue #190. Its own file, since the
+# shared RAW_HD is far too small to produce a run worth compressing.
+dd if=/dev/zero of="$TMP/sparse.raw" bs=1M count=64 status=none
+chdman createraw -f -o "$CORPUS/rle_sparse.chd" -i "$TMP/sparse.raw" \
+    -hs 4096 -us 2048 -c zlib >/dev/null 2>&1 || true
+
+# CD-ROM: default + per-codec.
+create_cd cd_default.chd
+create_cd cd_none.chd       -c none
+create_cd cd_cdzl.chd       -c cdzl
+create_cd cd_cdlz.chd       -c cdlz
+create_cd cd_cdfl.chd       -c cdfl
+create_cd cd_cdzs.chd       -c cdzs
+
+# Raw.
+create_raw raw_default.chd
+create_raw raw_none.chd     -c none
+create_raw raw_zstd.chd     -c zstd
+
+# Raw, many small hunks - crosses a LOWRAM_TARGET checkpoint boundary.
+create_raw_boundary raw_boundary.chd -c zstd
+
+# Summary.
+echo "generated $(ls -1 "$CORPUS"/*.chd 2>/dev/null | wc -l) CHD samples:"
+ls -lhS "$CORPUS"/*.chd 2>/dev/null | awk '{print "  " $5 "  " $NF}' | sed "s|$CORPUS/||"
+
+# ---- parent / delta pair ----------------------------------------------------
+#
+# Nothing in seeds/ has a parent, so COMPRESSION_PARENT is otherwise never
+# decoded by any test. Two children, because they exercise different maps:
+#
+#   delta.chd  identical content to the parent, so every hunk is a parent
+#              reference and nothing is stored - the maximal case.
+#   mixed.chd  a few regions overwritten, so the map holds parent references
+#              and real compressed hunks side by side, which is what a real
+#              delta looks like.
+#
+# tests/parent_decode.c checks both decode to the right bytes.
+
+chdman createcd -f -o "$PARENT/base.chd" -i "$CUE" >/dev/null 2>&1 || true
+
+if [ -f "$PARENT/base.chd" ]; then
+    chdman copy -f -i "$PARENT/base.chd" -o "$PARENT/delta.chd" \
+        -op "$PARENT/base.chd" >/dev/null 2>&1 || true
+
+    # perturb the extracted audio, then re-encode against the same parent
+    if chdman extractcd -f -i "$PARENT/base.chd" -o "$TMP/ext.cue" \
+            -ob "$TMP/ext.bin" >/dev/null 2>&1; then
+        dd if=/dev/urandom of="$TMP/ext.bin" bs=2352 seek=10 count=4 \
+            conv=notrunc status=none
+        dd if=/dev/urandom of="$TMP/ext.bin" bs=2352 seek=50 count=4 \
+            conv=notrunc status=none
+        chdman createcd -f -o "$PARENT/mixed.chd" -i "$TMP/ext.cue" \
+            -op "$PARENT/base.chd" >/dev/null 2>&1 || true
+    fi
+fi
+
+# CHDv3/v4 fixtures for tests/legacy_decode.c. chdman only writes v5, so these
+# come from mklegacy.py, which builds the older layouts directly.
+LEGACY="$(cd "$(dirname "$0")" && pwd)/legacy"
+if command -v python3 >/dev/null; then
+    python3 "$(dirname "$0")/mklegacy.py" "$LEGACY"
+else
+    echo "python3 not found, skipping the CHDv3/v4 fixtures" >&2
+fi

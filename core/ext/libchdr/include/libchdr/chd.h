@@ -42,12 +42,11 @@
 #ifndef __CHD_H__
 #define __CHD_H__
 
+#include "coretypes.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <libchdr/coretypes.h>
-#include <libchdr/chdconfig.h>
 
 /***************************************************************************
 
@@ -130,17 +129,17 @@ extern "C" {
     V5 header:
 
     [  0] char   tag[8];        // 'MComprHD'
-    [  8] uint32_t_t length;        // length of header (including tag and length fields)
-    [ 12] uint32_t_t version;       // drive format version
-    [ 16] uint32_t_t compressors[4];// which custom compressors are used?
-    [ 32] uint64_t_t logicalbytes;  // logical size of the data (in bytes)
-    [ 40] uint64_t_t mapoffset;     // offset to the map
-    [ 48] uint64_t_t metaoffset;    // offset to the first blob of metadata
-    [ 56] uint32_t_t hunkbytes;     // number of bytes per hunk (512k maximum)
-    [ 60] uint32_t_t unitbytes;     // number of bytes per unit within each hunk
-    [ 64] uint8_t_t  rawsha1[20];   // raw data SHA1
-    [ 84] uint8_t_t  sha1[20];      // combined raw+meta SHA1
-    [104] uint8_t_t  parentsha1[20];// combined raw+meta SHA1 of parent
+    [  8] uint32_t length;        // length of header (including tag and length fields)
+    [ 12] uint32_t version;       // drive format version
+    [ 16] uint32_t compressors[4];// which custom compressors are used?
+    [ 32] uint64_t logicalbytes;  // logical size of the data (in bytes)
+    [ 40] uint64_t mapoffset;     // offset to the map
+    [ 48] uint64_t metaoffset;    // offset to the first blob of metadata
+    [ 56] uint32_t hunkbytes;     // number of bytes per hunk (512k maximum)
+    [ 60] uint32_t unitbytes;     // number of bytes per unit within each hunk
+    [ 64] uint8_t  rawsha1[20];   // raw data SHA1
+    [ 84] uint8_t  sha1[20];      // combined raw+meta SHA1
+    [104] uint8_t  parentsha1[20];// combined raw+meta SHA1 of parent
     [124] (V5 header length)
 
     If parentsha1 != 0, we have a parent (no need for flags)
@@ -148,22 +147,22 @@ extern "C" {
 
     V5 uncompressed map format:
 
-    [  0] uint32_t_t offset;        // starting offset / hunk size
+    [  0] uint32_t offset;        // starting offset / hunk size
 
     V5 compressed map format header:
 
-    [  0] uint32_t_t length;        // length of compressed map
+    [  0] uint32_t length;        // length of compressed map
     [  4] UINT48 datastart;     // offset of first block
     [ 10] uint16_t crc;           // crc-16 of the map
-    [ 12] uint8_t_t lengthbits;     // bits used to encode complength
-    [ 13] uint8_t_t hunkbits;       // bits used to encode self-refs
-    [ 14] uint8_t_t parentunitbits; // bits used to encode parent unit refs
-    [ 15] uint8_t_t reserved;       // future use
+    [ 12] uint8_t lengthbits;     // bits used to encode complength
+    [ 13] uint8_t hunkbits;       // bits used to encode self-refs
+    [ 14] uint8_t parentunitbits; // bits used to encode parent unit refs
+    [ 15] uint8_t reserved;       // future use
     [ 16] (compressed header length)
 
     Each compressed map entry, once expanded, looks like:
 
-    [  0] uint8_t_t compression;    // compression type
+    [  0] uint8_t compression;    // compression type
     [  1] UINT24 complength;    // compressed length
     [  4] UINT48 offset;        // offset
     [ 10] uint16_t crc;           // crc-16 of the data
@@ -208,6 +207,7 @@ extern "C" {
 #define CHD_CODEC_HUFFMAN 			CHD_MAKE_TAG('h','u','f','f')
 #define CHD_CODEC_FLAC				CHD_MAKE_TAG('f','l','a','c')
 #define CHD_CODEC_ZSTD				CHD_MAKE_TAG('z', 's', 't', 'd')
+#define CHD_CODEC_AVHUFF			CHD_MAKE_TAG('a','v','h','u')
 /* general codecs with CD frontend */
 #define CHD_CODEC_CD_ZLIB			CHD_MAKE_TAG('c','d','z','l')
 #define CHD_CODEC_CD_LZMA			CHD_MAKE_TAG('c','d','l','z')
@@ -254,6 +254,9 @@ extern "C" {
 
 /* A/V laserdisc frame metadata */
 #define AV_LD_METADATA_TAG			CHD_MAKE_TAG('A','V','L','D')
+
+/* DVD metadata */
+#define DVD_METADATA_TAG			CHD_MAKE_TAG('D','V','D',' ')
 
 /* CHD open values */
 #define CHD_OPEN_READ				1
@@ -346,6 +349,8 @@ struct _chd_verify_result
 	uint8_t		metasha1[CHD_SHA1_BYTES];	/* SHA1 checksum of metadata */
 };
 
+typedef chd_error (*chd_codec_interface_decompress)(void *codec, const uint8_t *src, uint32_t complen, uint8_t *dest, uint32_t destlen);
+
 
 
 /***************************************************************************
@@ -374,13 +379,61 @@ struct _chd_verify_result
 /* same as chd_create(), but accepts an already-opened core_file object */
 /* chd_error chd_create_file(core_file *file, uint64_t logicalbytes, uint32_t hunkbytes, uint32_t compression, chd_file *parent); */
 
-/* open an existing CHD file */
-CHD_EXPORT chd_error chd_open_core_file(core_file *file, int mode, chd_file *parent, chd_file **chd);
+/* open an existing CHD file
+ *
+ * The file handle and the parent are handed over to libchdr by the call,
+ * whether it succeeds or not. On success, chd_close() closes both; on
+ * failure, they have already been closed - through the fclose callback, or
+ * chd_close() for the parent - and must not be closed again. To retry a child
+ * that reported CHDERR_REQUIRES_PARENT, open its file again. The one exception
+ * is chd_open_core_file_callbacks() with NULL callbacks, which has nothing to
+ * close the file with and leaves it to the caller.
+ *
+ * chd_open_file() never closes the FILE it is given, on success or failure:
+ * its fclose callback does nothing. It does take the parent, like the others.
+ * chd_open() closes the file it opened. */
+CHD_EXPORT chd_error chd_open_core_file_callbacks(const core_file_callbacks *callbacks, const void *user_data, int mode, chd_file *parent, chd_file **chd);
+CHD_EXPORT chd_error chd_open_core_file(core_file *file, int mode, chd_file *parent, chd_file **chd); /* Legacy; use chd_open_core_file_callbacks instead! */
 CHD_EXPORT chd_error chd_open_file(FILE *file, int mode, chd_file *parent, chd_file **chd);
 CHD_EXPORT chd_error chd_open(const char *filename, int mode, chd_file *parent, chd_file **chd);
 
 /* precache underlying file */
 CHD_EXPORT chd_error chd_precache(chd_file *chd);
+
+/* Give libchdr a memory budget, in bytes, to spend on internal caching.
+ *
+ * 0 (the default) disables it entirely and reproduces the historical
+ * behaviour exactly. libchdr deliberately does not choose this number
+ * itself: how much memory is available is a property of the embedding
+ * system, anywhere from a desktop to a microcontroller with a few hundred
+ * KB of SRAM, and not something a library can portably discover.
+ *
+ * Currently spent on a compressed read-ahead window, which collapses the
+ * one-seek-plus-one-read-per-hunk access pattern into far fewer, larger
+ * transfers. That matters when the per-transaction cost of the storage
+ * stack dominates its per-byte cost, which is the usual case for SD/eMMC
+ * behind a filesystem. Sequential reads transfer each byte exactly once
+ * regardless of the budget, so a larger budget trades memory for fewer
+ * transactions and never for redundant I/O.
+ *
+ * May be called at any time on an open file; lowering or zeroing it frees
+ * immediately. Returns CHDERR_OUT_OF_MEMORY if the budget could not be
+ * allocated, in which case caching stays off and the file remains fully
+ * usable.
+ *
+ * The value is a ceiling: libchdr never allocates more than this. A window
+ * smaller than one hunk cannot serve a read, so a budget below hunkbytes
+ * leaves caching off rather than exceeding the budget - hunkbytes ranges from
+ * 19,584 bytes on a CD image to 223,668 on AVHuff, so rounding up would
+ * allocate more than ten times the stated budget on some files. Call
+ * chd_get_cache_budget() to see what was actually taken; it returns 0 when
+ * caching is off. */
+CHD_EXPORT chd_error chd_set_cache_budget(chd_file *chd, size_t bytes);
+CHD_EXPORT size_t chd_get_cache_budget(const chd_file *chd);
+
+/* Read-ahead window hit/miss counts since the budget was last set. For
+ * tuning and diagnostics; either pointer may be NULL. */
+CHD_EXPORT void chd_get_cache_stats(const chd_file *chd, uint64_t *hits, uint64_t *misses);
 
 /* close a CHD file */
 CHD_EXPORT void chd_close(chd_file *chd);
@@ -399,7 +452,8 @@ CHD_EXPORT const char *chd_error_string(chd_error err);
 CHD_EXPORT const chd_header *chd_get_header(chd_file *chd);
 
 /* read CHD header data from file into the pointed struct */
-CHD_EXPORT chd_error chd_read_header_core_file(core_file *file, chd_header *header);
+CHD_EXPORT chd_error chd_read_header_core_file_callbacks(const core_file_callbacks *callback, const void *user_data, chd_header *header);
+CHD_EXPORT chd_error chd_read_header_core_file(core_file *file, chd_header *header); /* Legacy; use chd_read_header_core_file_callbacks instead! */
 CHD_EXPORT chd_error chd_read_header_file(FILE *file, chd_header *header);
 CHD_EXPORT chd_error chd_read_header(const char *filename, chd_header *header);
 
@@ -407,7 +461,27 @@ CHD_EXPORT chd_error chd_read_header(const char *filename, chd_header *header);
 
 /* ----- core data read/write ----- */
 
-/* read one hunk from the CHD file */
+/* Read one hunk from the CHD file.
+ *
+ * `buffer` must be ordinary readable RAM, not just writable: several codecs
+ * work through it rather than only filling it at the end. LZMA uses it as its
+ * dictionary window, so every back-reference reads bytes it wrote earlier in
+ * the same call; and with CHDR_CD_SCRATCH_BUFFER=0 a CD hunk is decoded into
+ * it packed and then spread out to the frame stride in place. An uncached or
+ * write-combining region, a write-only mapping or a hardware FIFO still
+ * yields correct output but can be far slower, and a consumer streaming
+ * `buffer` out while the call is in progress would see intermediate data
+ * rather than the finished hunk.
+ *
+ * `buffer` must also be at least 2-byte aligned: the FLAC codecs write 16-bit
+ * samples into it directly. Anything from malloc or an array already is. In
+ * the CD case an odd pointer is refused with CHDERR_INVALID_PARAMETER rather
+ * than trapping on a target without unaligned stores.
+ *
+ * CHDR_CD_SCRATCH_BUFFER=1 keeps a hunk-sized scratch per CD codec and writes
+ * `buffer` once at the end, which lifts the read-back requirement for CD
+ * images at the cost of roughly 37 KB of heap per open image. It does not
+ * change the LZMA or FLAC cases above, which apply to every build. */
 CHD_EXPORT chd_error chd_read(chd_file *chd, uint32_t hunknum, void *buffer);
 
 
@@ -416,17 +490,6 @@ CHD_EXPORT chd_error chd_read(chd_file *chd, uint32_t hunknum, void *buffer);
 
 /* get indexed metadata of a particular sort */
 CHD_EXPORT chd_error chd_get_metadata(chd_file *chd, uint32_t searchtag, uint32_t searchindex, void *output, uint32_t outputlen, uint32_t *resultlen, uint32_t *resulttag, uint8_t *resultflags);
-
-
-
-
-/* ----- codec interfaces ----- */
-
-/* set internal codec parameters */
-CHD_EXPORT chd_error chd_codec_config(chd_file *chd, int param, void *config);
-
-/* return a string description of a codec */
-CHD_EXPORT const char *chd_get_codec_name(uint32_t codec);
 
 #ifdef __cplusplus
 }

@@ -29,6 +29,7 @@
 #include "Common/StringUtils.h"
 #include "Common/System/System.h"
 #include "Common/VR/PPSSPPVR.h"
+#include "Common/VR/VRVulkan.h"
 #include "Common/File/FileUtil.h"
 
 #if !PPSSPP_PLATFORM(WINDOWS) && !PPSSPP_PLATFORM(SWITCH)
@@ -41,8 +42,13 @@
 #include <adrenotools/driver.h>
 #endif
 
+#if PPSSPP_PLATFORM(ANDROID)
+#include <cstring>
+#include <android/api-level.h>
+#include <sys/system_properties.h>
+#endif
+
 namespace PPSSPP_VK {
-#if !PPSSPP_VK_STATIC
 PFN_vkCreateInstance vkCreateInstance;
 PFN_vkDestroyInstance vkDestroyInstance;
 PFN_vkEnumeratePhysicalDevices vkEnumeratePhysicalDevices;
@@ -244,14 +250,11 @@ PFN_vkCreateRenderPass2 vkCreateRenderPass2;
 PFN_vkWaitForPresentKHR vkWaitForPresentKHR;
 PFN_vkGetPastPresentationTimingGOOGLE vkGetPastPresentationTimingGOOGLE;
 PFN_vkGetRefreshCycleDurationGOOGLE vkGetRefreshCycleDurationGOOGLE;
-#endif
 } // namespace PPSSPP_VK
 
 using namespace PPSSPP_VK;
 
-#if PPSSPP_VK_STATIC
-// Statically linked MoltenVK
-#elif PPSSPP_PLATFORM(SWITCH)
+#if PPSSPP_PLATFORM(SWITCH)
 typedef void *VulkanLibraryHandle;
 static VulkanLibraryHandle vulkanLibrary;
 #define dlsym(x, y) nullptr
@@ -327,20 +330,19 @@ struct DriverBlackListEntry {
 	uint32_t minOkDriverVersion;
 };
 
-static constexpr DriverBlackListEntry g_gpuNameBlacklist[] = {
-	{"motorola:moto g", "PowerVR BXM-8-256", 0x005d9576},  // avoid an empty array
 #if PPSSPP_PLATFORM(MAC)
+static constexpr DriverBlackListEntry g_gpuNameBlacklist[] = {
 	{"", "Intel(R) Iris(TM) Graphics 6000"},
 	{"", "Intel(R) Iris(TM) Graphics 6100"},
 	{"", "Intel(R) Iris(TM) Pro Graphics 6200"},
 	{"", "Intel Iris Pro Graphics"},
-#endif
 };
+#endif
 
-#if !defined(_WIN32) && !PPSSPP_VK_STATIC
+#if !defined(_WIN32)
 static const char * const so_names[] = {
 #if PPSSPP_PLATFORM(IOS)
-	// Only reached by the libretro core and the simulator (which has none). The app links MoltenVK statically.
+	// Only reached by the libretro core. The app has no MoltenVK.
 	"@executable_path/Frameworks/libMoltenVK.dylib",
 	"MoltenVK",
 #elif PPSSPP_PLATFORM(MAC)
@@ -362,7 +364,6 @@ static const char * const so_names[] = {
 
 static std::string g_customDriverPath;
 
-#if !PPSSPP_VK_STATIC
 static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 #if PPSSPP_PLATFORM(SWITCH)
 	// Always unavailable, for now.
@@ -375,7 +376,11 @@ static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 	void *lib = nullptr;
 
 #if PPSSPP_PLATFORM(ANDROID) && PPSSPP_ARCH(ARM64)
-	if (!g_customDriverPath.empty() && !g_nativeLibDir.empty()) {
+	const bool customDriverAllowed = VulkanCustomDriverAllowedByOS();
+	if (!customDriverAllowed && (!g_customDriverPath.empty() || (!g_Config.sCustomDriver.empty() && g_Config.sCustomDriver != "Default"))) {
+		WARN_LOG(Log::G3D, "Custom Vulkan driver ignored, not supported on this Android version");
+	}
+	if (customDriverAllowed && !g_customDriverPath.empty() && !g_nativeLibDir.empty()) {
 		const size_t slash = g_customDriverPath.find_last_of('/');
 		if (slash != std::string::npos && slash + 1 < g_customDriverPath.size()) {
 			const std::string driverDir = g_customDriverPath.substr(0, slash + 1);
@@ -394,7 +399,7 @@ static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 			}
 		}
 	}
-	if (!lib && g_customDriverPath.empty() && !g_Config.sCustomDriver.empty() && g_Config.sCustomDriver != "Default") {
+	if (customDriverAllowed && !lib && g_customDriverPath.empty() && !g_Config.sCustomDriver.empty() && g_Config.sCustomDriver != "Default") {
 		const Path driverPath = g_Config.internalDataDirectory / "drivers" / g_Config.sCustomDriver;
 
 		json::JsonReader meta = json::JsonReader((driverPath / "meta.json").c_str());
@@ -439,9 +444,7 @@ static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 	return lib;
 #endif
 }
-#endif
 
-#if !PPSSPP_VK_STATIC
 static void VulkanFreeLibrary(VulkanLibraryHandle &h) {
 	if (h) {
 #if PPSSPP_PLATFORM(SWITCH)
@@ -454,7 +457,6 @@ static void VulkanFreeLibrary(VulkanLibraryHandle &h) {
 		h = nullptr;
 	}
 }
-#endif
 
 void VulkanSetAvailable(bool available) {
 	INFO_LOG(Log::G3D, "Setting Vulkan availability to true");
@@ -479,14 +481,18 @@ void VulkanSetNativeLibDir(std::string_view nativeLibDir) {
 }
 
 bool VulkanMayBeAvailable() {
-#if PPSSPP_PLATFORM(IOS) && !PPSSPP_PLATFORM(IOS_SIMULATOR)
+#if PPSSPP_PLATFORM(IOS) && !defined(__LIBRETRO__)
+	// The app renders with Metal, and has no MoltenVK.
+	return false;
+#elif PPSSPP_PLATFORM(IOS) && !PPSSPP_PLATFORM(IOS_SIMULATOR)
 	// The deployment target (15.0) is above anything MoltenVK doesn't support.
 	g_vulkanAvailabilityChecked = true;
 	g_vulkanMayBeAvailable = true;
 	return true;
 #else
-	// Unsupported in VR at the moment
-	if (IsVREnabled()) {
+	// VR needs a runtime that takes a Vulkan session. Not cached: the config is checked before OpenXR is
+	// up, when only the driver can say no, and app-android checks again after.
+	if (IsVREnabled() && VR_VulkanUnsupported()) {
 		return false;
 	}
 
@@ -657,6 +663,7 @@ bool VulkanMayBeAvailable() {
 		{
 			// Check with the device blacklist.
 			bool blacklisted = false;
+#if PPSSPP_PLATFORM(MAC)
 			for (size_t i = 0; i < ARRAY_SIZE(g_gpuNameBlacklist); i++) {
 				if (startsWith(hwDeviceName, g_gpuNameBlacklist[i].deviceNamePrefix)) {
 					if (equals(props.deviceName, g_gpuNameBlacklist[i].gpuDeviceName)) {
@@ -670,6 +677,7 @@ bool VulkanMayBeAvailable() {
 					}
 				}
 			}
+#endif
 			// Note: Must not overwrite the verdict from a previously seen device, one good one is enough.
 			anyGood = anyGood || !blacklisted;
 			if (!blacklisted) {
@@ -711,11 +719,6 @@ bail:
 }
 
 bool VulkanLoad(std::string *errorStr) {
-#if PPSSPP_VK_STATIC
-	INFO_LOG(Log::G3D, "iOS: Vulkan doesn't need loading");
-	return true;
-#else
-
 	if (!vulkanLibrary) {
 		vulkanLibrary = VulkanLoadLibrary(errorStr);
 		if (!vulkanLibrary) {
@@ -741,15 +744,9 @@ bool VulkanLoad(std::string *errorStr) {
 		VulkanFreeLibrary(vulkanLibrary);
 		return false;
 	}
-#endif
 }
 
 bool VulkanLoadFromGetInstanceProcAddr(VkInstance instance, PFN_vkGetInstanceProcAddr getInstanceProcAddr) {
-#if PPSSPP_VK_STATIC
-	// MoltenVK is linked statically, the functions are already there - there are no function pointers to fill in.
-	INFO_LOG(Log::G3D, "iOS: Vulkan doesn't need loading");
-	return true;
-#else
 	vkGetInstanceProcAddr = getInstanceProcAddr;
 	vkCreateInstance = (PFN_vkCreateInstance)getInstanceProcAddr(nullptr, "vkCreateInstance");
 	// Per the Vulkan spec, vkGetDeviceProcAddr is not one of the handful of commands queryable with a
@@ -767,11 +764,9 @@ bool VulkanLoadFromGetInstanceProcAddr(VkInstance instance, PFN_vkGetInstancePro
 		ERROR_LOG(Log::G3D, "VulkanLoadFromGetInstanceProcAddr: Failed to load Vulkan base functions");
 		return false;
 	}
-#endif
 }
 
 void VulkanLoadInstanceFunctions(VkInstance instance, const VulkanExtensions &enabledExtensions, uint32_t vulkanInstanceApiVersion) {
-#if !PPSSPP_VK_STATIC
 	INFO_LOG(Log::G3D, "Loading Vulkan instance functions. Instance API version: %08x (%d.%d.%d)", vulkanInstanceApiVersion, VK_API_VERSION_MAJOR(vulkanInstanceApiVersion), VK_API_VERSION_MINOR(vulkanInstanceApiVersion), VK_API_VERSION_PATCH(vulkanInstanceApiVersion));
 	// OK, let's use the above functions to get the rest.
 	LOAD_INSTANCE_FUNC(instance, vkDestroyInstance);
@@ -840,14 +835,12 @@ void VulkanLoadInstanceFunctions(VkInstance instance, const VulkanExtensions &en
 	}
 
 	INFO_LOG(Log::G3D, "Vulkan instance functions loaded.");
-#endif
 }
 
 // On some implementations, loading functions (that have Device as their first parameter) via vkGetDeviceProcAddr may
 // increase performance - but then these function pointers will only work on that specific device. Thus, this loader is not very
 // good for multi-device - not likely we'll ever try that anyway though.
 void VulkanLoadDeviceFunctions(VkDevice device, const VulkanExtensions &enabledExtensions, uint32_t vulkanDeviceApiVersion) {
-#if !PPSSPP_VK_STATIC
 	INFO_LOG(Log::G3D, "Loading Vulkan device functions. Device API version: %08x (%d.%d.%d)", vulkanDeviceApiVersion, VK_API_VERSION_MAJOR(vulkanDeviceApiVersion), VK_API_VERSION_MINOR(vulkanDeviceApiVersion), VK_API_VERSION_PATCH(vulkanDeviceApiVersion));
 
 	LOAD_DEVICE_FUNC(device, vkQueueSubmit);
@@ -988,13 +981,10 @@ void VulkanLoadDeviceFunctions(VkDevice device, const VulkanExtensions &enabledE
 		LOAD_DEVICE_FUNC_CORE(device, vkGetDeviceBufferMemoryRequirements, vkGetDeviceBufferMemoryRequirementsKHR, VK_API_VERSION_1_3);
 		LOAD_DEVICE_FUNC_CORE(device, vkGetDeviceImageMemoryRequirements, vkGetDeviceImageMemoryRequirementsKHR, VK_API_VERSION_1_3);
 	}
-#endif
 }
 
 void VulkanFree() {
-#if !PPSSPP_VK_STATIC
 	VulkanFreeLibrary(vulkanLibrary);
-#endif
 }
 
 const char *VulkanResultToString(VkResult res) {
@@ -1052,6 +1042,23 @@ static const AdrenoEnvVarDef adrenoEnvVarDefs[] = {
 const AdrenoEnvVarDef *GetAdrenoEnvVarDefs(int *count) {
 	*count = ARRAY_SIZE(adrenoEnvVarDefs);
 	return adrenoEnvVarDefs;
+}
+
+bool VulkanCustomDriverAllowedByOS() {
+#if PPSSPP_PLATFORM(ANDROID)
+	// Android 17 internal builds crash in linkernsbypass (used by AdrenoTools), so stay away from 17 until
+	// that's been tested. Preview builds report the previous release's API level, with a codename other than "REL".
+	const int apiLevel = android_get_device_api_level();
+	if (apiLevel >= 37) {
+		return false;
+	}
+	char codename[PROP_VALUE_MAX]{};
+	__system_property_get("ro.build.version.codename", codename);
+	if (apiLevel >= 36 && strcmp(codename, "REL") != 0) {
+		return false;
+	}
+#endif
+	return true;
 }
 
 void VulkanApplyCustomDriverEnvVars(AdrenoEnvVar envVars) {
