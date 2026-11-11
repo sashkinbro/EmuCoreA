@@ -57,6 +57,9 @@ import com.sbro.emucorea.data.AppPreferences.Companion.FPS_OVERLAY_MODE_DETAILED
 import com.sbro.emucorea.data.CoverArtRepository
 import com.sbro.emucorea.data.CoverCacheClearResult
 import com.sbro.emucorea.data.CustomFontRepository
+import com.sbro.emucorea.data.UiSoundKind
+import com.sbro.emucorea.data.UiSoundRepository
+import com.sbro.emucorea.data.UiSoundSettings
 import com.sbro.emucorea.data.CustomThemeConfig
 import com.sbro.emucorea.data.CustomThemeLibrary
 import com.sbro.emucorea.data.CustomTouchControlLibrary
@@ -88,6 +91,7 @@ data class SettingsUiState(
     val appFontChoice: AppFontChoice = AppFontChoice.SYSTEM,
     val appFontScale: Float = AppPreferences.DEFAULT_APP_FONT_SCALE,
     val customFontName: String? = null,
+    val uiSounds: UiSoundSettings = UiSoundSettings(),
     val homeGridScale: Float = AppPreferences.DEFAULT_HOME_GRID_SCALE,
     val homeBackgroundType: HomeBackgroundType = HomeBackgroundType.NONE,
     val homeBackgroundPreset: HomeBackgroundPreset = HomeBackgroundPreset.OLYMPUS,
@@ -223,6 +227,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val gpuDriverManager = GpuDriverManager(application)
     private val gpuDriverCatalogRepository = GpuDriverCatalogRepository(application)
     private val customFontRepository = CustomFontRepository(application)
+    private val uiSoundRepository = UiSoundRepository(application)
     private val homeBackgroundRepository = HomeBackgroundRepository(application)
     private val emulationSideArtworkRepository = EmulationSideArtworkRepository(application)
     private val retroArchShaderRepository = RetroArchShaderRepository(application)
@@ -287,6 +292,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             appFontChoice = snapshot.appFontChoice,
             appFontScale = snapshot.appFontScale,
             customFontName = snapshot.customFontName,
+            uiSounds = snapshot.uiSounds,
             homeGridScale = snapshot.homeGridScale,
             homeBackgroundType = snapshot.homeBackgroundType,
             homeBackgroundPreset = snapshot.homeBackgroundPreset,
@@ -467,6 +473,43 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             } else {
                 com.sbro.emucorea.R.string.settings_customization_custom_font_failed
             }
+        ) }
+    }
+
+    fun setUiSoundEnabled(kind: UiSoundKind, enabled: Boolean) = viewModelScope.launch {
+        preferences.setUiSoundEnabled(kind, enabled)
+    }
+
+    fun setUiSoundVolume(kind: UiSoundKind, volume: Int) = viewModelScope.launch {
+        preferences.setUiSoundVolume(kind, volume)
+    }
+
+    fun selectUiSoundPreset(kind: UiSoundKind, presetId: String) = viewModelScope.launch(Dispatchers.IO) {
+        // A built-in preset replaces any imported file, so the private copy is deleted.
+        preferences.setUiSoundPreset(kind, presetId)
+        uiSoundRepository.clear(kind)
+    }
+
+    fun installUiSound(kind: UiSoundKind, uri: Uri) = viewModelScope.launch {
+        _uiState.update { it.copy(customizationMessageResId = null) }
+        val result = uiSoundRepository.install(kind, uri)
+        result.getOrNull()?.let { installed ->
+            preferences.setUiSoundCustomInstalled(kind, installed.displayName)
+        }
+        _uiState.update { it.copy(
+            customizationMessageResId = if (result.isSuccess) {
+                com.sbro.emucorea.R.string.settings_customization_sound_applied
+            } else {
+                com.sbro.emucorea.R.string.settings_customization_sound_failed
+            }
+        ) }
+    }
+
+    fun clearUiSoundCustom(kind: UiSoundKind) = viewModelScope.launch(Dispatchers.IO) {
+        uiSoundRepository.clear(kind)
+        preferences.clearUiSoundCustom(kind)
+        _uiState.update { it.copy(
+            customizationMessageResId = com.sbro.emucorea.R.string.settings_customization_sound_removed
         ) }
     }
 
@@ -750,6 +793,8 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         homeBackgroundRepository.clear()
         emulationSideArtworkRepository.clear()
         customFontRepository.clear()
+        uiSoundRepository.clearAll()
+        preferences.resetUiSounds()
         preferences.setHomeBackgroundType(HomeBackgroundType.NONE)
         preferences.setHomeBackgroundDim(AppPreferences.DEFAULT_HOME_BACKGROUND_DIM)
         preferences.setEmulationSideArtwork(EmulationSideArtwork.NONE)

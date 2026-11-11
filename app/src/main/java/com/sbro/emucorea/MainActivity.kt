@@ -35,6 +35,7 @@ import com.sbro.emucorea.core.PlayInAppReviewManager
 import com.sbro.emucorea.core.LocalTvUiEnvironment
 import com.sbro.emucorea.core.TvInterfaceMode
 import com.sbro.emucorea.core.TvUiPolicy
+import com.sbro.emucorea.core.UiSoundManager
 import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.AppFontChoice
 import com.sbro.emucorea.data.CustomFontRepository
@@ -114,6 +115,12 @@ open class MainActivity : ComponentActivity() {
                 }
         }
 
+        UiSoundManager.init(applicationContext)
+        lifecycleScope.launch {
+            // Unrelated DataStore writes re-emit this flow; only real sound changes may re-request audio focus.
+            preferences.uiSoundSettings.distinctUntilChanged().collect { UiSoundManager.applySettings(it) }
+        }
+
         lifecycleScope.launch {
             preferences.orientationLock
                 .distinctUntilChanged()
@@ -176,7 +183,10 @@ open class MainActivity : ComponentActivity() {
                         onStartupReady = {
                             keepSplashVisible = false
                         },
-                        onEmulationActiveChanged = { isEmulationActive = it },
+                        onEmulationActiveChanged = {
+                            isEmulationActive = it
+                            UiSoundManager.setEmulationActive(it)
+                        },
                         onEmulationSessionCompleted = { activePlayTimeMs ->
                             recordCompletedEmulationSession(preferences, activePlayTimeMs)
                         }
@@ -290,8 +300,20 @@ open class MainActivity : ComponentActivity() {
         controller.hide(WindowInsetsCompat.Type.statusBars())
     }
 
+    override fun onStart() {
+        super.onStart()
+        UiSoundManager.setAppForeground(true)
+    }
+
+    override fun onStop() {
+        // Keep music running across rotation/recreate (activity is momentarily stopped).
+        if (!isChangingConfigurations) UiSoundManager.setAppForeground(false)
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
+        UiSoundManager.refresh()
         KeyboardMouseManager.refreshConnectionState()
         window.decorView.post {
             applySystemBarTheme(appliedDarkTheme)

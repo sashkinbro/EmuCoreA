@@ -168,6 +168,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.sbro.emucorea.R
 import com.sbro.emucorea.core.AudioDefaults
 import com.sbro.emucorea.core.AndroidTouchHaptics
+import com.sbro.emucorea.core.UiSoundManager
 import com.sbro.emucorea.core.AndroidGyroscopeInput
 import com.sbro.emucorea.core.AndroidTouchHaptics.ButtonPhase
 import com.sbro.emucorea.core.EmulatorBridge
@@ -1555,6 +1556,12 @@ fun EmulationScreen(
                 onResetLayout = viewModel::resetTouchControlsLayout,
                 onCustomControlsChange = viewModel::setCustomTouchControls
             )
+        }
+
+        // Game menu open/close sound (no-op unless enabled in Settings -> Customization).
+        val gameMenuVisible = uiState.showMenu && !showControlsEditor
+        LaunchedEffect(gameMenuVisible) {
+            UiSoundManager.setGameMenuOpen(gameMenuVisible)
         }
 
         // Sidebar Menu
@@ -4600,7 +4607,10 @@ private fun EmulationMenuRailButton(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
-                onClick = onClick
+                onClick = {
+                    UiSoundManager.onUiInteraction()
+                    onClick()
+                }
             )
             .focusable(interactionSource = interactionSource),
         shape = shape,
