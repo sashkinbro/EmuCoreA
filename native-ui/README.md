@@ -111,9 +111,11 @@ native-ui/
       navigation sounds
 - [x] Live wave mesh, background ramp, clock and battery (wave placement and
       glow are not yet pixel-exact)
-- [ ] Game column renderer parity (focus glow, wave/theme exactness, game
-      backgrounds)
-- [ ] Host integration, lifecycle, other-tab stubs, settings and localisation
+- [x] Real item columns for all eight categories with cross-fades and the
+      firmware focus glow
+- [ ] Game column renderer parity (wave/theme exactness, transient status,
+      game backgrounds)
+- [ ] Host integration, lifecycle, in-XMB Settings column and localisation
       ([plan](docs/integration.md))
 - [ ] Frame-for-frame comparison against the firmware XMB
 - [ ] Host integration in place of the current 3D carousel
