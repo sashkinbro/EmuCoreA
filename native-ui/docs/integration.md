@@ -53,10 +53,29 @@ and a short "not available in this build" message. They must never look like an
 empty placeholder screen; the shell animations, focus glow, sound and status
 bar are the same as the Game column.
 
+## Touch without a gamepad
+
+The mode must be usable on phones/handhelds with no controller and with no
+on-screen buttons. Gestures are the whole input:
+
+- swipe up/down: previous/next item;
+- swipe left/right: previous/next category;
+- tap: confirm (launch/open the selected item);
+- edge-back gesture / system Back: item → category → leave, same as the PSP
+  Back button;
+- a long swipe may repeat one step only while the finger travels, and a gesture
+  must not also fire a tap.
+
+The gestures feed the same `KeyPressed` path as the physical D-pad, so the
+animation, sounds and selection state are identical. Thresholds and velocity
+handling live in the host, not in the firmware renderer.
+
 ## Settings
 
-After integration, add a settings tab/screen for the mode (the user's "3D
-carousel" settings entry), with live-applied options stored in
+After integration, add a new tab to the existing `SettingsTab` enum and
+`SettingsScreen` using the same section/list components, typography, dividers
+and navigation as every other settings tab; no separate bespoke screen. The tab
+(the user's "3D carousel" settings entry) has live-applied options stored in
 `AppPreferences`:
 
 - background: theme/wave on/off, theme colour, wave speed;
