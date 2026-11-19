@@ -5,10 +5,12 @@
 #include <cstring>
 
 #include "Core/Config.h"
+#include "Core/ConfigValues.h"
 #include "Core/CmdLine.h"
 #include "Core/WebServer.h"
 #include "Core/Util/PathUtil.h"
 #include "Common/File/FileUtil.h"
+#include "Common/Profiler/Profiler.h"
 #include "Common/StringUtils.h"
 #include "Common/Log/LogManager.h"
 
@@ -216,7 +218,7 @@ const char *g_ExceptionActionValues[] = {
 static const CommandLineParam g_autoParams[] = {
 	{POFF(fullscreen), CmdParamType::Bool, "fullscreen", '\0', "Force full screen mode", CmdLineMode::Application},
 	{POFF(fullscreen), CmdParamType::BoolInverse, "windowed", '\0', "Force windowed mode", CmdLineMode::Application},
-	{POFF(startScreen), CmdParamType::String, "start-screen", '\0', "Start on a specific screen (e.g. 'gamesettings', 'touchscreentest', 'colortest', 'firmware', 'memstick', 'storagetest')", CmdLineMode::Application},
+	{POFF(startScreen), CmdParamType::String, "start-screen", '\0', "Start on a specific screen (e.g. 'gamesettings', 'touchscreentest', 'colortest', 'firmware', 'memstick', 'storagetest', 'visualmapping')", CmdLineMode::Application},
 	{POFF(escapeExit), CmdParamType::Bool, "escape-exit", '\0', "Escape key exits the application", CmdLineMode::Application},
 	{POFF(gameWindow), CmdParamType::Bool, "game-window", '\0', "Show the game in a second window, for testing multiple outputs (Vulkan, or Metal on Mac)", CmdLineMode::Application},
 	{POFF(pauseMenuExit), CmdParamType::Bool, "pause-menu-exit", '\0', "Exit the application when the game ends, instead of returning to the menu", CmdLineMode::Application},
@@ -230,6 +232,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(bench), CmdParamType::Bool, "bench", 'b', "Enable benchmark mode", CmdLineMode::Headless},
 	{POFF(oldAtrac), CmdParamType::Bool, "old-atrac", '\0', "Use old ATRAC decoder"},
 	{POFF(jitProfile), CmdParamType::String, "jit-profile", '\0', "Profile the CPU core and write its hottest blocks to FILE on exit"},
+	{POFF(jitBench), CmdParamType::Int, "jit-bench", '\0', "After N flips, recompile every block in the JIT cache a few times and log how long it took"},
 	{POFF(memStickInserted), CmdParamType::BoolInverse, "no-memstick", '\0', "Run with the memory stick removed"},
 	{POFF(log), CmdParamType::String, "log", '\0', "Output log to FILE", CmdLineMode::Application},
 	{POFF(enableLogging), CmdParamType::Bool, "log", '\0', "Full log output, not just emulated printfs", CmdLineMode::Headless},
@@ -244,12 +247,14 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(shaderCache), CmdParamType::Bool, "shader-cache", '\0', "Load and save the per-game shader cache (default true); =false to time shader compiles like a first boot"},
 	{POFF(disableGPUFeatures), CmdParamType::String, "disable-gpu-features", '\0', "Act as if the GPU lacked these, to test the fallbacks: comma-separated clip-distance, cull-distance, depth-clamp, framebuffer-fetch, dual-source-blend", CmdLineMode::Headless},
 	{POFF(depthFilenameSave), CmdParamType::String, "depth-save", '\0', "Save the depth buffer to FILE along with the screenshot (u32 width, u32 height, u16 depths; float depths if FILE ends in .f32)", CmdLineMode::Headless},
+	{POFF(stencilFilenameSave), CmdParamType::String, "stencil-save", '\0', "Save the stencil buffer to FILE along with the screenshot (u32 width, u32 height, u8 per pixel)", CmdLineMode::Headless},
 	{POFF(screenshotRenderTarget), CmdParamType::Bool, "screenshot-render-target", '\0', "Take screenshots of the current render target instead of the displayed framebuffer", CmdLineMode::Headless},
 	{POFF(screenshotFilenameDiff), CmdParamType::String, "screenshot-diff", '\0', "Save a visual comparison image to FILE when comparing screenshots", CmdLineMode::Headless},
 	{POFF(screenshotSaveKeepAlpha), CmdParamType::Bool, "screenshot-keep-alpha", '\0', "Preserve the alpha channel when saving PNG screenshots (default: alpha is forced to 255)", CmdLineMode::Headless},
 	{POFF(dumpAudioFilename), CmdParamType::String, "dump-audio", '\0', "Record the mixed audio output to a WAV file", CmdLineMode::Headless},
 	{POFF(pressScript), CmdParamType::String, "press", '\0', "Hold buttons at emulated times: SECONDS:MASK[:DURATION],...", CmdLineMode::Headless},
 	{POFF(screenshotAt), CmdParamType::String, "screenshot-at", '\0', "Save screenshots at emulated times: SECONDS:FILE,...", CmdLineMode::Headless},
+	{POFF(recordDumpAt), CmdParamType::String, "record-dump-at", '\0', "Record a GE frame dump of the next frame after emulated times: SECONDS:FILE,...", CmdLineMode::Headless},
 	{POFF(timeoutWall), CmdParamType::Double, "timeout-wall", '\0', "Stop the run after this many real seconds", CmdLineMode::Headless},
 	{POFF(timeoutEmulated), CmdParamType::Double, "timeout-emulated", '\0', "Stop the run after this many emulated seconds", CmdLineMode::Headless},
 	// The old name for --timeout-wall, kept working because it's in a lot of scripts.
@@ -265,8 +270,13 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(adhocDelayMs), CmdParamType::Int, "adhoc-delay", '\0', "Delay ad hoc datagrams received by MS milliseconds of emulated time, to simulate a distant player"},
 	{POFF(adhocJitterMs), CmdParamType::Int, "adhoc-jitter", '\0', "With --adhoc-delay, up to MS more at random"},
 	{POFF(adhocLossPercent), CmdParamType::Int, "adhoc-loss", '\0', "Drop this percentage of the ad hoc datagrams received"},
+	{POFF(profileLog), CmdParamType::String, "profile-log", '\0', "Profiler builds: write each frame's profile, and the long scopes of slow frames, to FILE as JSON lines (see Tools/profile_report.py)"},
+	{POFF(profileHitchMs), CmdParamType::Double, "profile-hitch-ms", '\0', "Profiler builds: log frames taking at least MS milliseconds (default 25)"},
+	{POFF(profileSpanMs), CmdParamType::Double, "profile-span-ms", '\0', "Profiler builds: in slow frames, log the scopes of at least MS milliseconds (default 1)"},
 	{POFF(lagSync), CmdParamType::Bool, "lag-sync", '\0', "Keep emulated time in step with the wall clock every millisecond, not every frame (the Force real clock sync setting)"},
 	{POFF(frameStats), CmdParamType::Bool, "frame-stats", '\0', "Print flips per emulated second at the end of the run, counted from --state's load", CmdLineMode::Headless},
+	{POFF(audioSinkPeriod), CmdParamType::Int, "audio-sink", '\0', "Pull audio like an output device, FRAMES at 48 kHz at a time, and print the buffer's stats at the end (with --realtime)", CmdLineMode::Headless},
+	{POFF(audioGranular), CmdParamType::Bool, "audio-granular", '\0', "Mix audio with the granular mixer instead of the classic resampler (the Audio sync mode setting)"},
 	{POFF(maxScreenshotError), CmdParamType::Double, "max-mse", '\0', "Maximum allowed MSE error for screenshot comparison", CmdLineMode::Headless},
 	{POFF(mountIso), CmdParamType::String, "mount", 'm', "Mount ISO/CSO on umd1: when booting an ELF/PBP or --vsh"},
 	{POFF(unpackUpdater), CmdParamType::String, "unpack-updater", '\0', "Unpack the firmware in an updater EBOOT.PBP into DIR and exit", CmdLineMode::Headless},
@@ -292,6 +302,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(msaa), CmdParamType::Int, "msaa", '\0', "Set the MSAA level (0 = off, 1 = 2x, 2 = 4x, 3 = 8x)"},
 	{POFF(debuggerPort), CmdParamType::Int, "debugger", '\0', "Enable the WebSocket debugger on this port (0 = pick automatically); see docs/WebSocketDebugger.md"},
 	{POFF(debuggerRunPort), CmdParamType::Int, "debugger-run", '\0', "Like --debugger, but starts running instead of waiting at the entry point", CmdLineMode::Headless},
+	{POFF(debuggerPublic), CmdParamType::Bool, "debugger-public", '\0', "Accept debugger connections from other machines, not just this one (127.0.0.1)", CmdLineMode::Headless},
 	{POFF(autoSaveLoadSymbols), CmdParamType::Bool, "auto-save-load-symbols", '\0', "Auto save/load per-module and per-game symbol files (see bAutoSaveLoadSymbols)", CmdLineMode::Both},
 	{POFF(bootVSH), CmdParamType::Bool, "vsh", '\0', "Boot the VSH (requires files dumped from a PSP in the flash0 directory)"},
 	{POFF(disableHLE), CmdParamType::Int, "disable-hle", '\0', "Bitmask of libraries to run the real firmware module for instead of our HLE", CmdLineMode::Both},
@@ -307,6 +318,7 @@ static const CommandLineParam g_autoParams[] = {
 	{POFF(dpi), CmdParamType::Double, "dpi", '\0', "Set DPI", CmdLineMode::Application},
 	{POFF(scale), CmdParamType::Double, "scale", '\0', "Set scale", CmdLineMode::Application},
 	{POFF(skipLogo), CmdParamType::Bool, "skip-logo", '\0', "Skip the logo screen", CmdLineMode::Application},
+	{POFF(devStore), CmdParamType::Bool, "dev-store", '\0', "Use dev-store.ppsspp.org for the Homebrew Store", CmdLineMode::Application},
 	// TODO: At some point we should maybe simply expose all config settings to be set directly from the command line automatically?
 };
 
@@ -589,6 +601,13 @@ CommandLineParseResult CommandLineOptions::Parse(int argc, const char *argv[], C
 }
 
 void CommandLineOptions::ApplyToConfig() const {
+	if (profileLog.has_value() || profileHitchMs.has_value()) {
+#ifdef USE_PROFILER
+		Profiler_SetLogging(profileLog.value_or("").c_str(), profileHitchMs.value_or(25.0), profileSpanMs.value_or(1.0));
+#else
+		WARN_LOG(Log::System, "--profile-log and --profile-hitch-ms need a build with USE_PROFILER");
+#endif
+	}
 	if (adhocServer.has_value()) {
 		g_Config.bEnableAdhocServer = adhocServer.value();
 		g_Config.DoNotSaveSetting(&g_Config.bEnableAdhocServer);
@@ -613,6 +632,10 @@ void CommandLineOptions::ApplyToConfig() const {
 		g_Config.bForceLagSync = lagSync.value();
 		g_Config.DoNotSaveSetting(&g_Config.bForceLagSync);
 	}
+	if (audioGranular.has_value()) {
+		g_Config.iAudioPlaybackMode = (int)(audioGranular.value() ? AudioSyncMode::GRANULAR : AudioSyncMode::CLASSIC_PITCH);
+		g_Config.DoNotSaveSetting(&g_Config.iAudioPlaybackMode);
+	}
 	if (fuseId.has_value()) {
 		g_Config.sFuseID = fuseId.value();
 		g_Config.DoNotSaveSetting(&g_Config.sFuseID);
@@ -627,6 +650,7 @@ void CommandLineOptions::ApplyToConfig() const {
 	}
 	if (cpuCore.has_value()) {
 		g_Config.iCpuCore = (int)cpuCore.value();
+		g_Config.DoNotSaveSetting(&g_Config.iCpuCore);
 	}
 	if (hardwareTransform.has_value()) {
 		g_Config.bHardwareTransform = hardwareTransform.value();
@@ -717,6 +741,12 @@ void CommandLineOptions::ApplyToConfig() const {
 	}
 	if (jitProfile.has_value()) {
 		g_Config.sJitProfileFile = jitProfile.value();
+	}
+	if (jitBench.has_value()) {
+		g_Config.iJitBenchFlip = jitBench.value();
+	}
+	if (devStore.has_value()) {
+		g_Config.bDevStore = devStore.value();
 	}
 
 	if (root.has_value()) {

@@ -338,7 +338,7 @@ void SearchBar::Draw(UIContext &dc) {
 		dc.Draw()->DrawImage(searchIcon, bounds_.x + leftMargin, bounds_.centerY(), 1.0f, 0xFFFFFFFF, ALIGN_VCENTER);
 		leftMargin += image->w + 10;
 	}
-	dc.DrawText(searchFilter_, bounds_.x + leftMargin, bounds_.centerY(), 0xFFFFFFFF, ALIGN_VCENTER);
+	dc.DrawText(dc.GetTheme().uiFont, searchFilter_, bounds_.x + leftMargin, bounds_.centerY(), 0xFFFFFFFF, ALIGN_VCENTER);
 }
 
 SearchBar::SearchBar(UI::LayoutParams *params) : UI::InertView(params) {
@@ -537,6 +537,7 @@ bool ViewSearch::Key(UI::ViewGroup *viewGroup, const KeyInput &input) {
 }
 
 PMFVideoTexture::PMFVideoTexture(std::string data) : data_(std::move(data)) {
+	hasAudio_ = pmf_has_audio((const uint8_t *)data_.data(), data_.size());
 	player_ = pmf_create();
 	if (pmf_init(player_, (const uint8_t *)data_.data(), data_.size(), &width_, &height_) != 0) {
 		ERROR_LOG(Log::G3D, "Couldn't load pmf");
@@ -551,6 +552,10 @@ PMFVideoTexture::~PMFVideoTexture() {
 		pmf_destroy(player_);
 		player_ = nullptr;
 	}
+}
+
+bool PMFVideoTexture::ReachedEnd() const {
+	return pmf_reached_end(player_);
 }
 
 void PMFVideoTexture::DeviceLost() {
@@ -585,4 +590,15 @@ Draw::Texture *PMFVideoTexture::Update(Draw::DrawContext *draw, double timeSecon
 		curFrame_ = draw->CreateTexture(desc);
 	}
 	return curFrame_;
+}
+
+void PMFVideoTexture::DrawFrame(UIContext &dc, const Bounds &bounds) {
+	if (!curFrame_) {
+		return;
+	}
+	dc.Flush();
+	dc.GetDrawContext()->BindTexture(0, curFrame_);
+	dc.Draw()->DrawTexRect(bounds, 0.0f, 0.0f, 1.0f, 1.0f, 0xFFFFFFFF);
+	dc.Flush();
+	dc.RebindTexture();
 }

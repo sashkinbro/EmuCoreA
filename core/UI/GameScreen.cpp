@@ -61,6 +61,7 @@
 #include "UI/MainScreen.h"
 #include "UI/BackgroundAudio.h"
 #include "UI/SavedataScreen.h"
+#include "UI/ShareFiles.h"
 #include "UI/MiscViews.h"
 
 // This is in an objective-C file.
@@ -83,7 +84,7 @@ constexpr GameInfoFlags g_desiredFlags = GameInfoFlags::PARAM_SFO | GameInfoFlag
 
 class PMFView : public UI::InertView {
 public:
-	PMFView(std::string data, UI::LayoutParams *params) : UI::InertView(params), video_(std::move(data)) {
+	PMFView(const Path &gamePath, std::string data, UI::LayoutParams *params) : UI::InertView(params), gamePath_(gamePath), video_(std::move(data)) {
 		startTime_ = Instant::Now();
 	}
 
@@ -98,25 +99,29 @@ public:
 	}
 
 	void Draw(UIContext &dc) override {
-		Draw::Texture *frame = video_.Update(dc.GetDrawContext(), startTime_.ElapsedSeconds());
-		if (frame) {
-			dc.DrawRectDropShadow(bounds_, 10.0f, 0.7f);
-			dc.Flush();
-			dc.GetDrawContext()->BindTexture(0, frame);
-			dc.Draw()->DrawTexRect(bounds_, 0, 0, 1.0f, 1.0f, 0xFFFFFFFF);
-			dc.Flush();
+		const double videoTime = g_BackgroundAudio.PreviewVideoTime(gamePath_, video_.HasAudio(), startTime_.ElapsedSeconds());
+		if (videoTime < 0.0) {
+			// Waiting for the PMF's sound (see GameButton::Draw).
+			startTime_ = Instant::Now();
+			return;
 		}
-
-		dc.RebindTexture();
+		if (video_.Update(dc.GetDrawContext(), videoTime)) {
+			dc.DrawRectDropShadow(bounds_, 10.0f, 0.7f);
+			video_.DrawFrame(dc, bounds_);
+		}
 	}
 
 private:
+	Path gamePath_;
 	PMFVideoTexture video_;
 	Instant startTime_;
 };
 
 GameScreen::GameScreen(const Path &gamePath, bool inGame) : UITwoPaneBaseDialogScreen(gamePath, TwoPaneFlags::SettingsToTheRight | TwoPaneFlags::CustomContextMenu | TwoPaneFlags::DropShadowTitle), inGame_(inGame) {
-	g_BackgroundAudio.SetGame(gamePath);
+	// In-game, the game's own audio is playing - don't start the preview music on top of it.
+	if (!inGame_) {
+		g_BackgroundAudio.SetGame(gamePath);
+	}
 	System_PostUIMessage(UIMessage::GAME_SELECTED, gamePath.ToString());
 
 	// We want to re-fetch savedata size when opening this screen. We re-fetch PARAM_SFO because it's connected to updating the hasConfig bool.
@@ -296,6 +301,10 @@ void GameScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 	if (lookupsStarted_) {
 		StartLookups();
 	}
+	if (!strcmp(dialog->tag(), "Savedata")) {
+		// Saves may have been deleted or imported there. update() recreates the views when the size is in.
+		info_ = g_gameInfoCache->GetInfo(NULL, gamePath_, g_desiredFlags, &knownFlags_, GameInfoFlags::SAVEDATA_SIZE);
+	}
 	UITwoPaneBaseDialogScreen::dialogFinished(dialog, result);
 }
 
@@ -362,7 +371,7 @@ void GameScreen::CreateContentViews(UI::ViewGroup *parent) {
 		}
 
 		if (!pmfData.empty()) {
-			leftColumn->Add(new PMFView(pmfData, new LinearLayoutParams(144 * 2, 80 * 2, UI::Margins(0, 10))));
+			leftColumn->Add(new PMFView(gamePath_, pmfData, new LinearLayoutParams(144 * 2, 80 * 2, UI::Margins(0, 10))));
 		}
 	}
 
@@ -584,7 +593,7 @@ void GameScreen::CreateContentViews(UI::ViewGroup *parent) {
 	}
 }
 
-void GameScreen::CreateSettingsViews(UI::ViewGroup *rightColumn) {
+void GameScreen::CreateSettingsViews(UI::ViewGroup *rightColumn, bool inPopup) {
 	using namespace UI;
 
 	auto di = GetI18NCategory(I18NCat::DIALOG);
@@ -673,9 +682,8 @@ void GameScreen::DrawForeground(UIContext &dc) {
 		std::string eta = seconds >= 3600 ? StringFromFormat("%d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60) : StringFromFormat("%d:%02d", seconds / 60, seconds % 60);
 		text += "  " + ApplySafeSubstitutions(ga->T("PackTimeLeft", "~%1 left"), eta);
 	}
-	dc.SetFontStyle(dc.GetTheme().uiFont);
 	dc.SetFontScale(0.8f, 0.8f);
-	dc.DrawTextRectSqueeze(text, track.Inset(8.0f, 0.0f), 0xFFFFFFFF, ALIGN_CENTER);
+	dc.DrawTextRectSqueeze(dc.GetTheme().uiFont, text, track.Inset(8.0f, 0.0f), 0xFFFFFFFF, ALIGN_CENTER);
 	dc.SetFontScale(1.0f, 1.0f);
 }
 
@@ -713,6 +721,18 @@ void GameScreen::CreateContextMenu(UI::ViewGroup *parent) {
 		});
 	}
 
+	if (info_->saveDataSize || info_->installDataSize) {
+		auto sa = GetI18NCategory(I18NCat::SAVEDATA);
+		parent->Add(new Choice(sa->T("Savedata Manager"), ImageID("I_FILE_SAVE")))->OnClick.Add([this](UI::EventParams &e) {
+			screenManager()->push(new SavedataScreen(gamePath_));
+		});
+	}
+	if (info_->saveDataSize && CanShareFiles()) {
+		auto sa = GetI18NCategory(I18NCat::SAVEDATA);
+		parent->Add(new Choice(sa->T("Export all saves for this game"), ImageID("I_SHARE")))->OnClick.Add([this](UI::EventParams &e) {
+			ExportAllGameSavesForGame(info_.get());
+		});
+	}
 	if (info_->saveDataSize) {
 		Choice *btnDeleteSaveData = new Choice(ga->T("Delete Save Data"), ImageID("I_TRASHCAN"));
 		parent->Add(btnDeleteSaveData)->OnClick.Handle(this, &GameScreen::OnDeleteSaveData);

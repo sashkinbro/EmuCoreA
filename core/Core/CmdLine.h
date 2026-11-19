@@ -51,12 +51,16 @@ struct CommandLineOptions {
 	std::optional<bool> memStickInserted;
 	// Quit the app instead of going to the main menu when the game ends, for external launchers.
 	std::optional<bool> pauseMenuExit;
+	// Point the Homebrew Store at dev-store.ppsspp.org.
+	std::optional<bool> devStore;
 
 	// Enables the WebSocket debugger on startup, on this port (0 = pick automatically).
 	// Also breaks the CPU at start in the headless build. See docs/WebSocketDebugger.md.
 	std::optional<int> debuggerPort;
 	// Same, but without breaking at the entry point first.
 	std::optional<int> debuggerRunPort;
+	// Headless serves the debugger on 127.0.0.1 only, unless this asks for every interface.
+	std::optional<bool> debuggerPublic;
 
 	// The port either of the two debugger options asked for, if any.
 	std::optional<int> DebuggerPort() const {
@@ -175,6 +179,7 @@ struct CommandLineOptions {
 
 	std::optional<bool> oldAtrac;
 	std::optional<std::string> jitProfile;
+	std::optional<int> jitBench;
 
 	// Headless options that may also be mildly useful in application mode
 	std::optional<int> resolutionScale;
@@ -194,6 +199,10 @@ struct CommandLineOptions {
 	std::optional<bool> printEqualLines;
 	// Headless: print flips per emulated second at the end, counted from the loaded state (if any).
 	std::optional<bool> frameStats;
+	// Headless: pull audio through the resampler like an output device with this period, in frames
+	// at 48 kHz, and print how full the buffer was and how often it ran dry.
+	std::optional<int> audioSinkPeriod;
+	std::optional<bool> audioGranular;
 	// Headless: which of several instances running at once this is (sets PPSSPP_ID, and with it the
 	// instance's 127.0.0.N address and MAC), and whether to run at PSP speed rather than flat out.
 	// Both are for ad hoc tests where instances talk to each other.
@@ -214,15 +223,21 @@ struct CommandLineOptions {
 	std::optional<int> adhocDelayMs;
 	std::optional<int> adhocJitterMs;
 	std::optional<int> adhocLossPercent;
+	// Frame profiler logging (builds with USE_PROFILER). See Profiler_SetLogging.
+	std::optional<std::string> profileLog;
+	std::optional<double> profileHitchMs;
+	std::optional<double> profileSpanMs;
 
 	std::optional<std::string> screenshotFilename;
 	std::optional<std::string> screenshotFilenameSave;
 	// Headless: save each test's screenshot as DIR/<test path>.png, for many dumps in one run.
 	std::optional<std::string> screenshotDir;
 	std::optional<std::string> depthFilenameSave;
+	std::optional<std::string> stencilFilenameSave;
 	std::optional<std::string> dumpAudioFilename;
 	std::optional<std::string> pressScript;
 	std::optional<std::string> screenshotAt;
+	std::optional<std::string> recordDumpAt;
 	std::optional<int> replayEnd;
 	// Headless: apply the game's compatibility settings when replaying a GE frame dump.
 	std::optional<bool> dumpCompat;

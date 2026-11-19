@@ -55,6 +55,7 @@
 #include "UI/Background.h"
 #include "UI/DisplayLayoutScreen.h"
 #include "UI/EmuScreen.h"
+#include "UI/FirmwareScreen.h"
 #include "UI/GameSettingsScreen.h"
 #include "UI/MainScreen.h"
 #include "UI/MiscScreens.h"
@@ -80,6 +81,9 @@ void HandleCommonMessages(UIMessage message, const char *value, ScreenManager *m
 	} else if (message == UIMessage::SHOW_SETTINGS && isActiveScreen && std::string(activeScreen->tag()) != "GameSettings") {
 		UpdateUIState(UISTATE_MENU);
 		manager->push(new GameSettingsScreen(Path()));
+	} else if (message == UIMessage::SHOW_FIRMWARE_SCREEN && isActiveScreen && std::string(activeScreen->tag()) != "Firmware") {
+		UpdateUIState(UISTATE_MENU);
+		manager->push(new FirmwareScreen(Path()));
 	} else if (message == UIMessage::SHOW_LANGUAGE_SCREEN && isActiveScreen) {
 		auto sy = GetI18NCategory(I18NCat::SYSTEM);
 		auto langScreen = new NewLanguageScreen(sy->T("Language"));
@@ -116,7 +120,7 @@ bool BackgroundScreen::renderOutput(const OutputDisplay &output) {
 	}
 	const Bounds &bounds = dc.GetBounds();
 	dc.Begin();
-	dc.DrawText(text, bounds.centerX(), bounds.centerY(), 0xFF505050, ALIGN_CENTER);
+	dc.DrawText(dc.GetTheme().uiFont, text, bounds.centerX(), bounds.centerY(), 0xFF505050, ALIGN_CENTER);
 	dc.Flush();
 	return true;
 }
@@ -509,11 +513,10 @@ void LogoScreen::DrawForeground(UIContext &dc) {
 	dc.Draw()->DrawImage(ImageID("I_LOGO"), bounds.centerX() + 45, startY, 1.5f, 0xFFFFFFFF, ALIGN_CENTER);
 	//dc.Draw()->DrawTextShadow(UBUNTU48, "PPSSPP", bounds.w / 2, bounds.h / 2 - 30, textColor, ALIGN_CENTER);
 	dc.SetFontScale(1.0f, 1.0f);
-	dc.SetFontStyle(dc.GetTheme().uiFont);
-	dc.DrawText(temp, bounds.centerX(), startY + 70, textColor, ALIGN_CENTER);
-	dc.DrawText(cr->T_cstr("license", "Free Software under GPL 2.0+"), bounds.centerX(), startY + 110, textColor, ALIGN_CENTER);
+	dc.DrawText(dc.GetTheme().uiFont, temp, bounds.centerX(), startY + 70, textColor, ALIGN_CENTER);
+	dc.DrawText(dc.GetTheme().uiFont, cr->T_cstr("license", "Free Software under GPL 2.0+"), bounds.centerX(), startY + 110, textColor, ALIGN_CENTER);
 
-	dc.DrawText("www.ppsspp.org", bounds.centerX(), startY + 160, textColor, ALIGN_CENTER);
+	dc.DrawText(dc.GetTheme().uiFont, "www.ppsspp.org", bounds.centerX(), startY + 160, textColor, ALIGN_CENTER);
 
 #if !PPSSPP_PLATFORM(UWP) || defined(_DEBUG)
 	// Draw the graphics API, except on UWP where it's always D3D11
@@ -523,7 +526,7 @@ void LogoScreen::DrawForeground(UIContext &dc) {
 	// Add some emoji for testing.
 	apiName += CodepointToUTF8(0x1F41B) + CodepointToUTF8(0x1F41C) + CodepointToUTF8(0x1F914);
 #endif
-	dc.DrawText(apiName, bounds.centerX(), startY + 200, textColor, ALIGN_CENTER);
+	dc.DrawText(dc.GetTheme().uiFont, apiName, bounds.centerX(), startY + 200, textColor, ALIGN_CENTER);
 #endif
 
 	dc.Flush();
@@ -582,28 +585,29 @@ void CreditsScreen::CreateDialogViews(UI::ViewGroup *parent) {
 
 	constexpr float columnWidth = 265.0f;
 
-	LinearLayout *left;
-	LinearLayout *right;
+	ChoiceGroupList *left;
+	ChoiceGroupList *right;
 	if (portrait) {
 		parent->Add(new CreditsScroller(new LinearLayoutParams(1.0f)));
 
 		LinearLayout *columns = parent->Add(new LinearLayout(ORIENT_HORIZONTAL));
 
-		left = columns->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(columnWidth, WRAP_CONTENT, Margins(10))));
+		left = columns->Add(new ChoiceGroupList());
+		left->GetLayoutParams()->width = columnWidth;
 		columns->Add(new Spacer(ORIENT_VERTICAL, new LinearLayoutParams(1.0f)));
-		right = columns->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(columnWidth, WRAP_CONTENT, Margins(10))));
+		right = columns->Add(new ChoiceGroupList());
+		right->GetLayoutParams()->width = columnWidth;
 	} else {
 		LinearLayout *columns = parent->Add(new LinearLayout(ORIENT_HORIZONTAL, new LinearLayoutParams(1.0f)));
 
-		left = columns->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(columnWidth, FILL_PARENT, Margins(10))));
+		left = columns->Add(new ChoiceGroupList());
 		left->Add(new Spacer(0.0f, new LinearLayoutParams(1.0f)));
+		left->GetLayoutParams()->width = columnWidth;
 		columns->Add(new CreditsScroller(new LinearLayoutParams(WRAP_CONTENT, FILL_PARENT, 1.0f)));
-		right = columns->Add(new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(columnWidth, FILL_PARENT, Margins(10))));
+		right = columns->Add(new ChoiceGroupList());
 		right->Add(new Spacer(0.0f, new LinearLayoutParams(1.0f)));
+		right->GetLayoutParams()->width = columnWidth;
 	}
-
-	left->SetRoundCorners();
-	right->SetRoundCorners();
 
 	int rightYOffset = 0;
 	if (!System_GetPropertyBool(SYSPROP_APP_GOLD)) {
@@ -613,36 +617,37 @@ void CreditsScreen::CreateDialogViews(UI::ViewGroup *parent) {
 		gold->SetImageScale(0.6f);  // for the left-icon in case of vertical.
 		gold->SetShine(true);
 
-		left->Add(gold)->OnClick.Add([sm](UI::EventParams) {
+		left->Add(new ChoiceGroup())->Add(gold)->OnClick.Add([sm](UI::EventParams) {
 			LaunchBuyGold(sm);
 		});
 		rightYOffset = 74;
 	}
-	left->Add(new Choice(cr->T("PPSSPP Forums"), ImageID("I_LINK_OUT")))->OnClick.Add([](UI::EventParams &e) {
+
+	ChoiceGroup *social = right->Add(new ChoiceGroup());
+	social->Add(new Choice(cr->T("PPSSPP Forums"), ImageID("I_LINK_OUT")))->OnClick.Add([](UI::EventParams &e) {
 		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://forums.ppsspp.org");
 	});
-	left->Add(new Choice(cr->T("Discord"), ImageID("I_LOGO_DISCORD")))->OnClick.Add([](UI::EventParams &e) {
+	social->Add(new Choice(cr->T("Discord"), ImageID("I_LOGO_DISCORD")))->OnClick.Add([](UI::EventParams &e) {
 		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://discord.gg/5NJB6dD");
 	});
-	left->Add(new Choice("www.ppsspp.org", ImageID("I_LINK_OUT")))->OnClick.Add([](UI::EventParams &e) {
-		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org");
-	});
-	right->Add(new Choice(cr->T("Privacy Policy"), ImageID("I_LINK_OUT")))->OnClick.Add([](UI::EventParams &e) {
-		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org/privacy");
-	});
-	right->Add(new Choice(cr->T("@PPSSPP_emu"), ImageID("I_LOGO_X")))->OnClick.Add([](UI::EventParams &e) {
+	social->Add(new Choice(cr->T("@PPSSPP_emu"), ImageID("I_LOGO_X")))->OnClick.Add([](UI::EventParams &e) {
 		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://x.com/PPSSPP_emu");
 	});
 
+	ChoiceGroup *site = left->Add(new ChoiceGroup());
+	site->Add(new Choice("www.ppsspp.org", ImageID("I_LINK_OUT")))->OnClick.Add([](UI::EventParams &e) {
+		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org");
+	});
+	site->Add(new Choice(cr->T("Privacy Policy"), ImageID("I_LINK_OUT")))->OnClick.Add([](UI::EventParams &e) {
+		System_LaunchUrl(LaunchUrlType::BROWSER_URL, "https://www.ppsspp.org/privacy/");
+	});
+	
 	if (System_GetPropertyBool(SYSPROP_SUPPORTS_SHARE_TEXT)) {
-		right->Add(new Choice(cr->T("Share PPSSPP"), ImageID("I_SHARE")))->OnClick.Add([](UI::EventParams &e) {
+		site->Add(new Choice(cr->T("Share PPSSPP"), ImageID("I_SHARE")))->OnClick.Add([](UI::EventParams &e) {
 			auto cr = GetI18NCategory(I18NCat::PSPCREDITS);
 			System_ShareText(cr->T("CheckOutPPSSPP", "Check out PPSSPP, the awesome PSP emulator: https://www.ppsspp.org/"));
 		});
 	}
-
-	left->SetRoundCorners();
-	right->SetRoundCorners();
 }
 
 void CreditsScreen::update() {
@@ -827,7 +832,7 @@ void CreditsScroller::Draw(UIContext &dc) {
 
 		if (alpha > 0.0f) {
 			dc.SetFontScale(ease(alpha), ease(alpha));
-			dc.DrawText(credits[i], bounds.centerX(), y + bounds.y, textColor, ALIGN_HCENTER);
+			dc.DrawText(dc.GetTheme().uiFont, credits[i], bounds.centerX(), y + bounds.y, textColor, ALIGN_HCENTER);
 			dc.SetFontScale(1.0f, 1.0f);
 		}
 	}

@@ -537,6 +537,7 @@ SOURCES_CXX += \
 	$(COMMONDIR)/Log/LogManager.cpp \
 	$(COMMONDIR)/OSVersion.cpp \
 	$(COMMONDIR)/MemoryUtil.cpp \
+	$(COMMONDIR)/Profiler/Profiler.cpp \
 	$(COMMONDIR)/RiscVCPUDetect.cpp \
 	$(COMMONDIR)/LogReporting.cpp \
 	$(COMMONDIR)/SysError.cpp \
@@ -779,6 +780,7 @@ SOURCES_CXX += \
 	       $(COREDIR)/Font/PGF.cpp \
 	       $(COREDIR)/HLE/HLE.cpp \
 	       $(COREDIR)/HLE/KUBridge.cpp \
+	       $(COREDIR)/HLE/SystemCtrl.cpp \
 	       $(COREDIR)/HLE/sceSysreg.cpp \
 	       $(COREDIR)/HLE/NetInetConstants.cpp \
 	       $(COREDIR)/HLE/SocketManager.cpp \
@@ -1081,7 +1083,8 @@ SOURCES_CXX += \
 		$(LIBRETRODIR)/libretro.cpp \
 		$(LIBRETRODIR)/LibretroGraphicsContext.cpp \
 		$(LIBRETRODIR)/LibretroGLContext.cpp \
-		$(LIBRETRODIR)/LibretroGLCoreContext.cpp
+		$(LIBRETRODIR)/LibretroGLCoreContext.cpp \
+		$(LIBRETRODIR)/LibretroVR.cpp
 
 SOURCES_C +=   $(ZSTDDIR)/common/debug.c \
                $(ZSTDDIR)/common/entropy_common.c \

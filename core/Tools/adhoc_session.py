@@ -258,13 +258,32 @@ def cmd_start(args):
 	if not args.no_sync:
 		# The instances keep within an emulated millisecond of each other through this file (InitInstanceSync).
 		sync_file = os.path.join(args.dir, "sync")
-		with open(sync_file, "wb") as f:
-			f.write(bytes(4096))
+		# On Windows, instances of the last session that are still exiting keep it mapped for a moment.
+		for attempt in range(50):
+			try:
+				with open(sync_file, "wb") as f:
+					f.write(bytes(4096))
+				break
+			except OSError:
+				if attempt == 49:
+					raise
+				time.sleep(0.1)
 	instances = []
 	for n in range(1, args.n + 1):
 		memstick = os.path.join(args.dir, "memstick%d" % n)
 		shutil.rmtree(memstick, ignore_errors=True)
-		shutil.copytree(os.path.join(args.memstick, "PSP", "SAVEDATA"), os.path.join(memstick, "PSP", "SAVEDATA"))
+		savedata = os.path.join(args.memstick, "PSP", "SAVEDATA")
+		if args.savedata is None:
+			shutil.copytree(savedata, os.path.join(memstick, "PSP", "SAVEDATA"))
+		else:
+			os.makedirs(os.path.join(memstick, "PSP", "SAVEDATA"))
+			for pattern in filter(None, args.savedata.split(",")):
+				for path in glob.glob(os.path.join(savedata, pattern)):
+					shutil.copytree(path, os.path.join(memstick, "PSP", "SAVEDATA", os.path.basename(path)))
+		# Saves from elsewhere, like the memory stick a run without one left behind.
+		for folder in args.savedata_dir or []:
+			for name in os.listdir(folder):
+				shutil.copytree(os.path.join(folder, name), os.path.join(memstick, "PSP", "SAVEDATA", name), dirs_exist_ok=True)
 		log = os.path.join(args.dir, "instance%d.log" % n)
 		cmd = [headless, "--graphics=" + args.graphics, "--memstick=" + memstick,
 			"--nand=" + os.path.join(args.memstick, "PSP", "NAND"), "--realtime", "--instance=%d" % n,
@@ -321,11 +340,34 @@ def cmd_stop(args):
 	except FileNotFoundError:
 		return
 	for inst in session["instances"]:
+		if inst.get("pid") is None:
+			continue  # Attached: not ours to stop.
 		try:
 			os.kill(inst["pid"], 15)
 		except ProcessLookupError:
 			pass
 	os.remove(session_file(args))
+
+
+def cmd_attach(args):
+	# A session of one already running PPSSPP (the app, say) with the debugger on --port. With --adb, the
+	# app on an Android device, its debugger port forwarded to this machine, and screenshots taken with
+	# screencap from --rect, the game's image on the device's screen.
+	if os.path.exists(session_file(args)):
+		cmd_stop(args)
+	os.makedirs(args.dir, exist_ok=True)
+	inst = {"n": 1, "pid": None, "log": None, "port": args.port}
+	if args.adb is not None:
+		if not args.rect:
+			sys.exit("--adb needs --rect X,Y,W,H: where the game's image is on the device's screen")
+		inst["adb"] = args.adb
+		inst["rect"] = parse_ints(args.rect, 4)
+		subprocess.run(["adb"] + (["-s", args.adb] if args.adb else []) + ["forward", "tcp:%d" % args.port, "tcp:%d" % args.port], check=True, capture_output=True)
+	connect(inst).request("cpu.status")
+	session = {"game": None, "instances": [inst], "speed": 100, "attached": True}
+	with open(session_file(args), "w") as f:
+		json.dump(session, f, indent=1)
+	print("Attached to port %d%s, session in %s" % (args.port, " over adb" if args.adb is not None else "", args.dir))
 	print("Stopped")
 
 
@@ -404,7 +446,23 @@ def cmd_wait(args):
 	emulated_sleep(load_session(args), args.seconds)
 
 
+def grab_adb_png(inst):
+	# The device's screen, cut down to the game's image and scaled to the PSP's 480x272, so references
+	# and pixel positions mean the same as with headless. Doesn't pause emulation, unlike the debugger's
+	# screenshot, so it can watch a run that's being profiled.
+	import io
+	from PIL import Image
+	cmd = ["adb"] + (["-s", inst["adb"]] if inst["adb"] else []) + ["exec-out", "screencap", "-p"]
+	screen = Image.open(io.BytesIO(subprocess.run(cmd, capture_output=True, check=True).stdout))
+	x, y, w, h = inst["rect"]
+	out = io.BytesIO()
+	screen.convert("RGB").crop((x, y, x + w, y + h)).resize((480, 272), Image.BILINEAR).save(out, "PNG")
+	return out.getvalue()
+
+
 def grab_png(inst, attempts=3):
+	if inst.get("adb") is not None:
+		return grab_adb_png(inst)
 	# An instance busy loading can be slow to answer; try again rather than end a long script.
 	for attempt in range(attempts):
 		try:
@@ -451,6 +509,23 @@ def cmd_stats(args):
 		dbg.close()
 		print("instance %d: %.1f s emulated, %.1f fps, %.1f vblanks/s" % (inst["n"], status["us"] / 1e6,
 			stats["fps"]["actual"], stats["vblanksPerSecond"]["actual"]))
+
+
+def cmd_jitstats(args):
+	# Cumulative since the JIT started, so a script reads it twice and compares.
+	session = load_session(args)
+	for inst in selected(session, args.i):
+		dbg = connect(inst)
+		status = dbg.request("cpu.status")
+		stats = dbg.request("cpu.jitStats", timeout=5)
+		dbg.close()
+		if not stats.get("jit"):
+			print("instance %d: no JIT" % inst["n"])
+			continue
+		print("instance %d: %.1f s emulated, %d blocks (%d valid), %d invalidations (%d blocks), "
+			"%d large invalidation checks (%d blocks changed), %d full clears" % (inst["n"], status["us"] / 1e6,
+			stats["blocks"], stats["validBlocks"], stats["invalidations"], stats["invalidatedBlocks"],
+			stats["changedCodeChecks"], stats["changedCodeBlocks"], stats["fullClears"]))
 
 
 def parse_ints(text, count):
@@ -501,6 +576,9 @@ def cmd_until(args):
 	# --timeout, --every and --poll are emulated seconds, like wait's.
 	start = emulated_seconds(session)
 	last_press = None
+	# The screens it saw, to show how it got where it gave up: often a press that landed too early.
+	history = {inst["n"]: [] for inst in waiting}
+	wall_start = time.time()
 	while waiting:
 		now = emulated_seconds(session)
 		if now - start > args.timeout:
@@ -508,16 +586,144 @@ def cmd_until(args):
 				path = os.path.join(args.dir, "until_failed_%d.png" % inst["n"])
 				with open(path, "wb") as f:
 					f.write(grab_png(inst))
-			sys.exit("until: instances %s never matched; their screens are in until_failed_N.png" % ",".join(str(i["n"]) for i in waiting))
+				save_history(history[inst["n"]], os.path.join(args.dir, "until_failed_%d_history.png" % inst["n"]))
+			sys.exit("until: instances %s never matched; their screens are in until_failed_N.png, and what they showed "
+				"before in until_failed_N_history.png" % ",".join(str(i["n"]) for i in waiting))
+		pressed = False
 		if args.press and (last_press is None or now - last_press >= args.every):
 			for inst in waiting:
 				dbg = connect(inst)
-				dbg.send("input.buttons.press", button=args.press, duration=6)
+				dbg.send("input.buttons.press", button=args.press, duration=args.frames)
 				dbg.close()
 			last_press = now
-		waiting = [inst for inst in waiting if not screen_matches(args, Image.open(io.BytesIO(grab_png(inst))))]
+			pressed = True
+		still = []
+		poll_start = time.time()
+		for inst in waiting:
+			image = Image.open(io.BytesIO(grab_png(inst)))
+			remember(history[inst["n"]], now - start, time.time() - wall_start, image, pressed)
+			if not matches_any(args, image):
+				still.append(inst)
+		waiting = still
+		stalled = time.time() - poll_start
+		if stalled > 5:
+			# A screenshot that took this long (the debugger answering slowly) let the game run on unwatched,
+			# with no presses, for what can be most of the timeout. Don't count that against it.
+			after = emulated_seconds(session)
+			print("until: a screenshot took %.0f s; not counting the %.0f emulated s that passed meanwhile" % (stalled, after - now), file=sys.stderr)
+			start += after - now
 		if waiting:
 			time.sleep(wall_seconds(session, args.poll))
+
+
+HISTORY_LENGTH = 12
+
+
+def remember(history, seconds, wall, image, pressed):
+	# Keeps the last HISTORY_LENGTH screens that differ from the one before.
+	from PIL import ImageChops
+	small = image.convert("RGB").resize((160, 91))
+	if history and not pressed and not ImageChops.difference(small, history[-1][2]).getbbox():
+		return
+	history.append((seconds, wall, small, pressed))
+	del history[:-HISTORY_LENGTH]
+
+
+def save_history(history, path):
+	from PIL import Image, ImageDraw
+	if not history:
+		return
+	cols = 4
+	rows = (len(history) + cols - 1) // cols
+	sheet = Image.new("RGB", (cols * 164, rows * 107), "black")
+	draw = ImageDraw.Draw(sheet)
+	for i, (seconds, wall, small, pressed) in enumerate(history):
+		x, y = (i % cols) * 164 + 2, (i // cols) * 107 + 2
+		sheet.paste(small, (x, y))
+		draw.text((x, y + 92), "%+.1f s (wall %.0f)%s" % (seconds, wall, ", pressed" if pressed else ""), fill="yellow")
+	sheet.save(path)
+
+
+def matches_any(args, image):
+	# The reference, or any of the --or ones (REF@X,Y), for screens that differ between runs: a menu
+	# that only shows when there's a save, say. Follow with "if" to tell which it was.
+	if screen_matches(args, image):
+		return True
+	for alt in getattr(args, "alt", None) or []:
+		ref, _, box = alt.partition("@")
+		if screen_matches(argparse.Namespace(ref=ref, box=box or None, pixel=None, tolerance=args.tolerance,
+				slack=args.slack, base=getattr(args, "base", ".")), image):
+			return True
+	return False
+
+
+def if_matches(args, line):
+	# The condition of "if REF --box X,Y : ...": each selected instance shows the reference now (one
+	# screenshot each, no waiting). It takes until's matching options.
+	import io
+	from PIL import Image
+	cond = line[3:].partition(":")[0]
+	sub = build_parser().parse_args(["--dir", args.dir, "until"] + cond.split())
+	sub.base = os.path.dirname(os.path.abspath(args.script))
+	session = load_session(sub)
+	return all(matches_any(sub, Image.open(io.BytesIO(grab_png(inst)))) for inst in selected(session, sub.i))
+
+
+def run_if(args, line):
+	# "if REF --box X,Y : COMMAND ; COMMAND ..." runs the commands when the condition holds. (In a script,
+	# "if REF --box X,Y :" with nothing after it runs the indented lines that follow instead.)
+	then = line[3:].partition(":")[2]
+	if not then.strip():
+		sys.exit("if needs ': COMMAND' after the condition: %r" % line)
+	if if_matches(args, line):
+		for command in then.split(";"):
+			command = command.strip()
+			if command:
+				print(">   " + command)
+				run_line(args, command)
+
+
+def cmd_ref(args):
+	# Makes a reference image from what an instance shows now: a region of several screenshots, taken
+	# --every emulated seconds apart, with only the pixels that stayed the same kept (opaque). That
+	# leaves out moving backgrounds and blinking or colour-cycling text, and a screen still fading in
+	# fails rather than giving a reference only that frame matches.
+	import io
+	from PIL import Image, ImageStat
+	session = load_session(args)
+	inst = selected(session, args.i)[0]
+	x, y, w, h = parse_ints(args.box, 4)
+	frames = []
+	for shot in range(args.shots):
+		if shot > 0:
+			emulated_sleep(session, args.every)
+		frames.append(Image.open(io.BytesIO(grab_png(inst))).convert("RGB").crop((x, y, x + w, y + h)))
+	mask = Image.new("L", (w, h))
+	kept = 0
+	for py in range(h):
+		for px in range(w):
+			pixels = [f.getpixel((px, py)) for f in frames]
+			if any(max(abs(a - b) for a, b in zip(p, pixels[0])) > args.stable for p in pixels):
+				continue
+			level = min(pixels[0])
+			if args.only == "bright" and level < 200 or args.only == "dark" and max(pixels[0]) > 60:
+				continue
+			if args.only == "contrast" and 60 < max(pixels[0]) and level < 200:
+				continue
+			mask.putpixel((px, py), 255)
+			kept += 1
+	ref = frames[-1].copy()
+	ref.putalpha(mask)
+	ref.save(args.out)
+	print("%s: %dx%d at %d,%d (use --box %d,%d), %d of %d pixels kept" % (args.out, w, h, x, y, x, y, kept, w * h))
+	# A reference that's mostly one colour also matches a plain screen of it (a fade, a loading screen).
+	if kept < w * h * 0.05:
+		print("warning: very few pixels stayed the same; the region is moving, or still fading in", file=sys.stderr)
+	elif kept:
+		spread = ImageStat.Stat(frames[-1].convert("L"), mask).stddev[0]
+		if spread < 20:
+			print("warning: the kept pixels are nearly one colour (spread %.0f), so a plain screen would match too; "
+				"pick a region with more detail, or use --only contrast" % spread, file=sys.stderr)
 
 
 def cmd_crop(args):
@@ -566,16 +772,43 @@ def cmd_watch(args):
 COMMANDS = {}
 
 
+def run_line(args, line):
+	if line.startswith("if "):
+		run_if(args, line)
+		return
+	sub = build_parser().parse_args(["--dir", args.dir] + line.split())
+	sub.base = os.path.dirname(os.path.abspath(args.script))
+	COMMANDS[sub.command](sub)
+
+
+def run_block(args, lines, depth):
+	# lines: (indent, text). An "if ... :" with nothing after the colon owns the more indented lines
+	# that follow it, and runs them when its condition holds.
+	i = 0
+	while i < len(lines):
+		indent, line = lines[i]
+		body_end = i + 1
+		while body_end < len(lines) and lines[body_end][0] > indent:
+			body_end += 1
+		print(">" + "  " * depth + " " + line)
+		if line.startswith("if ") and not line.partition(":")[2].strip():
+			if if_matches(args, line):
+				run_block(args, lines[i + 1:body_end], depth + 1)
+		elif body_end > i + 1:
+			sys.exit("Only an if ending in ':' can have indented lines after it: %r" % line)
+		else:
+			run_line(args, line)
+		i = body_end
+
+
 def cmd_run(args):
+	lines = []
 	with open(args.script) as f:
-		for line in f:
-			line = line.split("#", 1)[0].strip()
-			if not line:
-				continue
-			print("> " + line)
-			sub = build_parser().parse_args(["--dir", args.dir] + line.split())
-			sub.base = os.path.dirname(os.path.abspath(args.script))
-			COMMANDS[sub.command](sub)
+		for raw in f:
+			text = raw.split("#", 1)[0].rstrip()
+			if text.strip():
+				lines.append((len(text.expandtabs(4)) - len(text.expandtabs(4).lstrip()), text.strip()))
+	run_block(args, lines, 0)
 
 
 def build_parser():
@@ -596,6 +829,8 @@ def build_parser():
 	p.add_argument("--speed", type=int, default=100, help="Run at this percentage of PSP speed (scripts count emulated time)")
 	p.add_argument("--state", help="Savestate to load at boot in every instance")
 	p.add_argument("--memstick", default=DEFAULT_MEMSTICK, help="Memory stick to take the firmware and savedata from")
+	p.add_argument("--savedata", help="Copy only the savedata folders matching these comma-separated globs (like ULUS10041*); empty for none")
+	p.add_argument("--savedata-dir", action="append", help="Also copy the savedata folders in this folder (a SAVEDATA folder; repeatable)")
 	p.add_argument("--graphics", default="vulkan")
 	p.add_argument("--headless", help="PPSSPPHeadless to run (default: the newest build*/ one)")
 	p.add_argument("--timeout", type=int, default=3600, help="Wall-clock seconds before the instances quit")
@@ -630,18 +865,32 @@ def build_parser():
 	p = sub.add_parser("stats", help="Emulated time and frame rate of each instance")
 	p.add_argument("-i")
 
+	p = sub.add_parser("jitstats", help="JIT block cache counters of each instance (cumulative)")
+	p.add_argument("-i")
+
 	p = sub.add_parser("until", help="Wait until the screen shows something: a region like a reference image, or a pixel's color")
 	p.add_argument("ref", nargs="?", help="Reference image (a crop of a screenshot, see crop); relative to the script in a script")
 	p.add_argument("--box", help="X,Y where the reference image goes on the screen (default 0,0)")
+	p.add_argument("--or", dest="alt", action="append", help="REF@X,Y: or this reference there (repeatable); a script follows with 'if REF --box X,Y : COMMANDS' to tell which")
 	p.add_argument("--pixel", help="X,Y of a pixel to check instead")
 	p.add_argument("--color", help="With --pixel: RRGGBB")
 	p.add_argument("--tolerance", type=float, default=12, help="Mean difference per channel allowed (0-255; default 12)")
 	p.add_argument("--slack", type=int, default=0, help="Also try the reference up to this many pixels off in each direction")
 	p.add_argument("--press", help="Keep pressing this button while waiting")
+	p.add_argument("--frames", type=int, default=6, help="With --press: how many vblanks to hold it (some games miss short presses)")
 	p.add_argument("--every", type=float, default=2, help="With --press: seconds between presses (default 2)")
 	p.add_argument("--timeout", type=float, default=60)
 	p.add_argument("--poll", type=float, default=0.5, help="Seconds between screenshots")
 	p.add_argument("-i")
+
+	p = sub.add_parser("ref", help="Make a reference image for until from what an instance shows, keeping only the pixels that stay the same")
+	p.add_argument("out")
+	p.add_argument("box", help="X,Y,W,H")
+	p.add_argument("-i", help="Instance (default the first)")
+	p.add_argument("--shots", type=int, default=4, help="Screenshots to compare (default 4)")
+	p.add_argument("--every", type=float, default=0.5, help="Emulated seconds between them (default 0.5)")
+	p.add_argument("--stable", type=int, default=8, help="How much a pixel may change and still be kept (0-255; default 8)")
+	p.add_argument("--only", choices=["bright", "dark", "contrast"], help="Keep only bright pixels (text over something that changes), dark ones, or both")
 
 	p = sub.add_parser("crop", help="Cut a reference image for until out of a screenshot")
 	p.add_argument("image")
@@ -662,10 +911,15 @@ def build_parser():
 	p.add_argument("script")
 
 	sub.add_parser("stop", help="Stop the instances")
+
+	p = sub.add_parser("attach", help="Drive one PPSSPP that's already running with --debugger=PORT, like the app on a phone")
+	p.add_argument("--port", type=int, default=45678)
+	p.add_argument("--adb", nargs="?", const="", help="It runs on an Android device (this serial, or the only one): forward the port and screenshot with screencap")
+	p.add_argument("--rect", help="With --adb: X,Y,W,H of the game's image on the device's screen, in its pixels")
 	return parser
 
 
-COMMANDS.update(start=cmd_start, stop=cmd_stop, press=cmd_press, stick=cmd_stick, type=cmd_type, wait=cmd_wait, shot=cmd_shot, stats=cmd_stats, until=cmd_until, crop=cmd_crop, log=cmd_log,
+COMMANDS.update(start=cmd_start, stop=cmd_stop, attach=cmd_attach, press=cmd_press, stick=cmd_stick, type=cmd_type, wait=cmd_wait, shot=cmd_shot, stats=cmd_stats, jitstats=cmd_jitstats, until=cmd_until, ref=cmd_ref, crop=cmd_crop, log=cmd_log,
 	watch=cmd_watch, run=cmd_run)
 
 

@@ -600,7 +600,7 @@ u32 GPUCommon::EnqueueList(u32 listpc, u32 stall, int subIntrBase, PSPPointer<Ps
 		}
 	}
 	if (id < 0) {
-		ERROR_LOG_REPORT(Log::G3D, "No DL ID available to enqueue");
+		ERROR_LOG_REPORT_ONCE(dlidnotavailable, Log::G3D, "No DL ID available to enqueue");
 		for (int i : dlQueue) {
 			DisplayList &dl = dls[i];
 			DEBUG_LOG(Log::G3D, "DisplayList %d status %d pc %08x stall %08x", i, dl.state, dl.pc, dl.stall);
@@ -783,30 +783,23 @@ u32 GPUCommon::Break(int mode) {
 		return -1;
 	}
 
-	if (currentList->state == PSP_GE_DL_STATE_PAUSED)
-	{
-		if (sceKernelGetCompiledSdkVersion() > 0x02000010)
-		{
-			if (currentList->signal == PSP_GE_SIGNAL_HANDLER_PAUSE)
-			{
-				ERROR_LOG_REPORT(Log::G3D, "sceGeBreak: can't break signal-pausing list");
-			}
-			else
+	if (currentList->state == PSP_GE_DL_STATE_PAUSED) {
+		if (sceKernelGetCompiledSdkVersion() > 0x02000010) {
+			if (currentList->signal == PSP_GE_SIGNAL_HANDLER_PAUSE) {
+				ERROR_LOG_REPORT_ONCE(signalpause, Log::G3D, "sceGeBreak: can't break signal-pausing list");
+			} else {
 				return SCE_KERNEL_ERROR_ALREADY;
+			}
 		}
 		return SCE_KERNEL_ERROR_BUSY;
 	}
 
-	if (currentList->state == PSP_GE_DL_STATE_QUEUED)
+	if (currentList->state == PSP_GE_DL_STATE_QUEUED) 
 	{
 		currentList->state = PSP_GE_DL_STATE_PAUSED;
 		return currentList->id;
 	}
 
-	// TODO Save BASE
-	// TODO Adjust pc to be just before SIGNAL/END
-
-	// TODO: Is this right?
 	if (currentList->signal == PSP_GE_SIGNAL_SYNC)
 		currentList->pc += 8;
 
@@ -1186,8 +1179,6 @@ void GPUCommon::Execute_BJump(u32 op, u32 diff) {
 }
 
 void GPUCommon::Execute_Call(u32 op, u32 diff) {
-	PROFILE_THIS_SCOPE("gpu_call");
-
 	const u32 target = gstate_c.getRelativeAddress(op & 0x00FFFFFC);
 	if (!Memory::IsValidAddress(target)) {
 		ERROR_LOG(Log::G3D, "CALL to illegal address %08x - ignoring! data=%06x", target, op & 0x00FFFFFF);
@@ -1496,7 +1487,7 @@ void GPUCommon::Execute_BoundingBox(u32 op, u32 diff) {
 	int bytesRead = (useInds ? 1 : dec->VertexSize()) * count;
 
 	if (!Memory::IsValidRange(gstate_c.vertexAddr, bytesRead)) {
-		ERROR_LOG_REPORT_ONCE(boundingbox, Log::G3D, "Bad bounding box data: %06x", count);
+		ERROR_LOG(Log::G3D, "Bad bounding box data: %06x", count);
 		// Data seems invalid. Let's assume the box test passed.
 		currentList->bboxResult = true;
 		return;
@@ -1506,7 +1497,7 @@ void GPUCommon::Execute_BoundingBox(u32 op, u32 diff) {
 	const void *inds = nullptr;
 	if (useInds) {
 		if (!IsValidDrawRange(gstate_c.vertexAddr, gstate_c.indexAddr, count, vertType, dec->VertexSize())) {
-			ERROR_LOG_REPORT_ONCE(boundingboxInds, Log::G3D, "Invalid inds in bounding box check");
+			ERROR_LOG(Log::G3D, "Invalid inds in bounding box check");
 			currentList->bboxResult = true;
 			return;
 		}
@@ -1540,7 +1531,7 @@ void GPUCommon::Execute_ImmVertexAlphaPrim(u32 op, u32 diff) {
 	if (immCount_ >= MAX_IMMBUFFER_SIZE) {
 		// Only print once for each overrun.
 		if (immCount_ == MAX_IMMBUFFER_SIZE) {
-			ERROR_LOG_REPORT_ONCE(exceed_imm_buffer, Log::G3D, "Exceeded immediate draw buffer size. gstate.imm_ap=%06x , prim=%d", gstate.imm_ap & 0xFFFFFF, (int)immPrim_);
+			ERROR_LOG(Log::G3D, "Exceeded immediate draw buffer size. gstate.imm_ap=%06x , prim=%d", gstate.imm_ap & 0xFFFFFF, (int)immPrim_);
 		}
 		if (immCount_ < 0x7fffffff)  // Paranoia :)
 			immCount_++;
@@ -1587,7 +1578,7 @@ void GPUCommon::Execute_ImmVertexAlphaPrim(u32 op, u32 diff) {
 		if (immCount_ == flushPrimCount[immPrim_ & 7])
 			FlushImm();
 	} else {
-		ERROR_LOG_REPORT_ONCE(imm_draw_prim, Log::G3D, "Immediate draw: Unexpected primitive %d at count %d", prim, immCount_);
+		ERROR_LOG(Log::G3D, "Immediate draw: Unexpected primitive %d at count %d", prim, immCount_);
 	}
 }
 
@@ -2585,7 +2576,8 @@ void GPUCommon::DoBlockTransfer(u32 skipDrawReason) {
 		} else {
 			// This seems to cause the GE to require a break/reset on a PSP.
 			// TODO: Handle that and figure out which bytes are still copied?
-			ERROR_LOG_REPORT_ONCE(invalidtransfer, Log::G3D, "Block transfer invalid: %08x/%x -> %08x/%x, %ix%ix%i (%i,%i)->(%i,%i)", srcBasePtr, srcStride, dstBasePtr, dstStride, width, height, bpp, srcX, srcY, dstX, dstY);
+			// Looking at reports, this is entirely noise from garbage executed as display lists.
+			ERROR_LOG(Log::G3D, "Block transfer invalid: %08x/%x -> %08x/%x, %ix%ix%i (%i,%i)->(%i,%i)", srcBasePtr, srcStride, dstBasePtr, dstStride, width, height, bpp, srcX, srcY, dstX, dstY);
 		}
 
 		if (framebufferManager_) {
@@ -2611,6 +2603,7 @@ void GPUCommon::NotifyVideoCopy(u32 dest, u32 src, int size) {
 }
 
 bool GPUCommon::PerformMemoryCopy(u32 dest, u32 src, int size, GPUCopyFlag flags) {
+	PROFILE_THIS_SCOPE("gpu_memcpy");
 	if (size == 0) {
 		_dbg_assert_msg_(false, "Zero-sized PerformMemoryCopy: %08x -> %08x, size %d (flag: %d)", src, dest, size, (int)flags);
 		return false;
@@ -2657,6 +2650,7 @@ bool GPUCommon::PerformMemoryCopy(u32 dest, u32 src, int size, GPUCopyFlag flags
 }
 
 bool GPUCommon::PerformMemorySet(u32 dest, u8 v, int size) {
+	PROFILE_THIS_SCOPE("gpu_memset");
 	if (size == 0) {
 		_dbg_assert_msg_(false, "Zero-sized PerformMemorySet: %08x, value %02x, size %d", dest, v, size);
 		return false;
@@ -2690,6 +2684,14 @@ bool GPUCommon::PerformMemorySet(u32 dest, u8 v, int size) {
 	return false;
 }
 
+bool GPUCommon::PerformDelayedReadbackToMemory(u32 dest, int size) {
+	if (!framebufferManager_) {
+		// The software renderer draws to memory.
+		return PerformReadbackToMemory(dest, size);
+	}
+	return framebufferManager_->ReadbackFramebufferRows(dest, size, Draw::ReadbackMode::OLD_DATA_OK);
+}
+
 bool GPUCommon::PerformReadbackToMemory(u32 dest, int size) {
 	if (Memory::IsVRAMAddress(dest)) {
 		return PerformMemoryCopy(dest, dest, size, GPUCopyFlag::FORCE_DST_MATCH_MEM);
@@ -2698,6 +2700,7 @@ bool GPUCommon::PerformReadbackToMemory(u32 dest, int size) {
 }
 
 bool GPUCommon::PerformWriteColorFromMemory(u32 dest, int size) {
+	PROFILE_THIS_SCOPE("gpu_upload");
 	if (Memory::IsVRAMAddress(dest)) {
 		recorder_.NotifyUpload(dest, size);
 		return PerformMemoryCopy(dest, dest, size, GPUCopyFlag::FORCE_SRC_MATCH_MEM | GPUCopyFlag::DEBUG_NOTIFIED);

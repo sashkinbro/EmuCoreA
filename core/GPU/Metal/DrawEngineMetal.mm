@@ -509,7 +509,7 @@ void DrawEngineMetal::ConvertStateToKeys(int prim) {
 		} else {
 			if (!IsDepthTestEffectivelyDisabled()) {
 				key.depthTestEnable = true;
-				key.depthCompare = gstate.getDepthTestFunction();
+				key.depthCompare = DepthTestFunctionForDraw();
 				key.depthWriteEnable = gstate.isDepthWriteEnabled();
 				UpdateEverUsedEqualDepth(gstate.getDepthTestFunction());
 			}
@@ -659,7 +659,7 @@ void DrawEngineMetal::Flush() {
 	if (!numDrawVerts_) {
 		return;
 	}
-	PROFILE_THIS_SCOPE("Flush");
+	PROFILE_THIS_SCOPE("flush");
 
 	GEPrimitiveType prim = prevPrim_;
 
@@ -776,7 +776,7 @@ void DrawEngineMetal::Flush() {
 		}
 	} else {
 		gpuStats.perFrame.numSoftTransformedDraws++;
-		PROFILE_THIS_SCOPE("soft");
+		PROFILE_LABEL("soft");
 
 		DecodeVerts(dec_, decoded_);
 		int vertexCount = DecodeInds();

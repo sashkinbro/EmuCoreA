@@ -87,6 +87,7 @@ using namespace std::placeholders;
 #include "UI/Background.h"
 #include "UI/EmuScreen.h"
 #include "UI/ImposeHome.h"
+#include "UI/GameBootAnimation.h"
 #include "UI/DevScreens.h"
 #include "UI/GameInfoCache.h"
 #include "UI/BaseScreens.h"
@@ -231,6 +232,10 @@ void EmuScreen::ProcessGameBoot(const Path &filename) {
 	}
 
 	if (readyToFinishBoot_) {
+		if (gameBoot_ && gameBoot_->IsPlaying()) {
+			// The game waits for the PSP's intro to finish, as on a PSP.
+			return;
+		}
 		// Finish booting.
 		bootComplete();
 		readyToFinishBoot_ = false;
@@ -293,6 +298,17 @@ void EmuScreen::ProcessGameBoot(const Path &filename) {
 		auto co = GetI18NCategory(I18NCat::CONTROLS);
 		auto di = GetI18NCategory(I18NCat::DIALOG);
 		g_OSD.Show(OSDType::MESSAGE_INFO, ApplySafeSubstitutions("%1: %2", co->T("Tilt control"), di->T("Enabled")), "", "I_CONTROLLER", 2.5f, "tilt");
+	}
+
+	// The PSP's game start intro, while the game boots: for games not started from the XMB (which
+	// plays it itself), not the XMB itself, and not on a reset.
+	if (g_Config.bGameBootAnimation && !bootIsReset_ && !launchedFromVSH_ && vshmainArgs_.empty() &&
+		!equalsNoCase(filename.GetFilename(), "vshmain.prx") && filename.GetFileExtension() != ".ppdmp" &&
+		GameBootAnimation::Available()) {
+		if (!gameBoot_) {
+			gameBoot_ = std::make_unique<GameBootAnimation>();
+		}
+		gameBoot_->Start();
 	}
 
 	currentMIPS = &mipsr4k;
@@ -530,7 +546,7 @@ void EmuScreen::dialogFinished(const Screen *dialog, DialogResult result) {
 }
 
 void EmuScreen::focusChanged(ScreenFocusChange focusChange) {
-	Screen::focusChanged(focusChange);
+	UIScreen::focusChanged(focusChange);
 
 	std::string gameID = g_paramSFO.GetValueString("DISC_ID");
 	if (gameID.empty()) {
@@ -552,6 +568,11 @@ void EmuScreen::sendMessage(UIMessage message, const char *value) {
 	// This happens on the main thread.
 	if (message == UIMessage::REQUEST_GAME_PAUSE && screenManager()->topScreen() == this) {
 		screenManager()->push(new GamePauseScreen(gamePath_, bootPending_));
+	} else if (message == UIMessage::REQUEST_GAME_STOP && value && !strcmp(value, "confirm")) {
+		// From a menu or shortcut (like Ctrl+W): ask the way the pause screen's Exit does.
+		if (!bootPending_) {
+			ConfirmAndStopGame(screenManager());
+		}
 	} else if (message == UIMessage::REQUEST_GAME_STOP) {
 		// We will push MainScreen in update().
 		if (bootPending_) {
@@ -568,6 +589,11 @@ void EmuScreen::sendMessage(UIMessage message, const char *value) {
 		} else {
 			// No callback (or already in flight, or core not running) - the destructor will take care of shutting down.
 			leaveGame();
+		}
+	} else if (message == UIMessage::REQUEST_GAME_RESET && value && !strcmp(value, "confirm")) {
+		// From a menu or shortcut (like Ctrl+B on Windows): ask the way the pause screen does.
+		if (!bootPending_) {
+			ConfirmAndResetGame(screenManager());
 		}
 	} else if (message == UIMessage::REQUEST_GAME_RESET) {
 		if (bootPending_) {
@@ -771,14 +797,9 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 			if (!gpu) {
 				return;
 			}
+			// Not opened right away, which would interrupt the game.
 			gpu->GetRecorder()->RecordNextFrame([](const Path &dumpPath) {
-				NOTICE_LOG(Log::System, "Frame dump created at '%s'", dumpPath.c_str());
-				g_OSD.Show(OSDType::MESSAGE_SUCCESS, GetFriendlyPath(dumpPath), 7.0f, "framedump");
-				if (System_GetPropertyBool(SYSPROP_CAN_SHOW_FILE)) {
-					g_OSD.SetClickCallback("framedump", [dumpPath]() {
-						System_ShowFileInFolder(dumpPath);
-					});
-				}
+				OnFrameDumpCreated(dumpPath, false);
 			});
 		}
 		break;
@@ -911,13 +932,7 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 		}
 		break;
 
-	case VIRTKEY_TOGGLE_FULLSCREEN:
-		if (down) {
-			// TODO: Limit to platforms that can support fullscreen.
-			g_Config.bFullScreen = !g_Config.bFullScreen;
-			System_ApplyFullscreenState();
-		}
-		break;
+	// VIRTKEY_TOGGLE_FULLSCREEN is handled by GlobalListener in NativeApp.cpp, so it also works in the menus.
 
 	case VIRTKEY_TOGGLE_TOUCH_CONTROLS:
 		if (down) {
@@ -1017,7 +1032,8 @@ void EmuScreen::ProcessVKey(VirtKey virtKey, bool down) {
 
 	case VIRTKEY_RESET_EMULATION:
 		if (down) {
-			System_PostUIMessage(UIMessage::REQUEST_GAME_RESET);
+			// Asks first, like the menus' Reset.
+			System_PostUIMessage(UIMessage::REQUEST_GAME_RESET, "confirm");
 		}
 		break;
 
@@ -1178,6 +1194,13 @@ InputMode EmuScreen::PassInputToMapper() const {
 }
 
 bool EmuScreen::key(const KeyInput &key) {
+	// Any key skips the PSP's intro.
+	if (gameBoot_ && gameBoot_->IsPlaying()) {
+		if (key.flags & KeyInputFlags::DOWN) {
+			gameBoot_->Stop();
+		}
+		return true;
+	}
 	bool retval = UIScreen::key(key);
 
 	if (!retval && (key.flags & KeyInputFlags::DOWN) != 0 && UI::IsEscapeKey(key)) {
@@ -1194,6 +1217,14 @@ bool EmuScreen::key(const KeyInput &key) {
 
 bool EmuScreen::touch(const TouchInput &touch) {
 	System_Notify(SystemNotification::ACTIVITY);
+
+	// A tap skips the PSP's intro.
+	if (gameBoot_ && gameBoot_->IsPlaying()) {
+		if (touch.flags & TouchInputFlags::DOWN) {
+			gameBoot_->Stop();
+		}
+		return true;
+	}
 
 	bool ignoreGamepad = false;
 
@@ -1265,7 +1296,7 @@ void EmuScreen::CreateViews() {
 
 	root_ = CreatePadLayout(touch, bounds.w, bounds.h, &pauseTrigger_, &g_controlMapper);
 	if (g_Config.bShowDeveloperMenu) {
-		root_->Add(new Button(dev->T("DevMenu")))->OnClick.Handle(this, &EmuScreen::OnDevTools);
+		root_->Add(new Button(dev->T("DevMenu"), new AnchorLayoutParams(12, 12, NONE, NONE)))->OnClick.Handle(this, &EmuScreen::OnDevTools);
 	}
 
 	LinearLayout *buttons = new LinearLayout(Orientation::ORIENT_HORIZONTAL, new AnchorLayoutParams(bounds.centerX(), NONE, NONE, 60, Centering::Both));
@@ -1277,6 +1308,7 @@ void EmuScreen::CreateViews() {
 		if (coreState == CoreState::CORE_RUNTIME_ERROR) {
 			// Force it!
 			Memory::MemFault_IgnoreLastCrash();
+			Core_ResetException();
 			coreState = CoreState::CORE_RUNNING_CPU;
 		}
 	});
@@ -1295,6 +1327,25 @@ void EmuScreen::CreateViews() {
 		this->pauseTrigger_ = true;
 	});
 	backButton_->SetVisibility(V_GONE);
+
+	auto rp = GetI18NCategory(I18NCat::REPORTING);
+	reportCrashButton_ = buttons->Add(new Button(rp->T("Report crash")));
+	reportCrashButton_->OnClick.Add([this](UI::EventParams &) {
+		if (crashSeen_ && !crashReported_) {
+			Reporting::ReportCrash(Core_GetExceptionInfo(), true);
+			crashReported_ = true;
+			auto rp = GetI18NCategory(I18NCat::REPORTING);
+			g_OSD.Show(OSDType::MESSAGE_SUCCESS, rp->T("Crash report sent"));
+		}
+	});
+	reportCrashButton_->SetVisibility(V_GONE);
+
+	reportCrashBlocked_ = root_->Add(new TextView(rp->T("CrashReportCheatsPlugins", "Cheats and plugins can change the game's code in unpredictable ways, so crashes with them enabled can't be reported."),
+		ALIGN_HCENTER | FLAG_WRAP_TEXT, true, new AnchorLayoutParams(bounds.w - 40.0f, WRAP_CONTENT, bounds.centerX(), NONE, NONE, 10.0f, Centering::Horizontal)));
+	reportCrashBlocked_->SetShadow(true);
+	reportCrashBlocked_->SetVisibility(V_GONE);
+
+	buttons->SetRoundCorners();
 
 	cardboardDisableButton_ = root_->Add(new Button(sc->T("Cardboard VR OFF"), new AnchorLayoutParams(bounds.centerX(), NONE, NONE, 30, Centering::Both)));
 	DeviceOrientation orientation = GetDeviceOrientation();
@@ -1379,6 +1430,9 @@ void EmuScreen::deviceLost() {
 	// A boot in progress only creates the GPU from PSP_InitUpdate, which doesn't run while the device is lost.
 	UIScreen::deviceLost();
 	imposeHome_->DeviceLost();
+	if (gameBoot_) {
+		gameBoot_->DeviceLost();
+	}
 }
 
 void EmuScreen::deviceRestored(Draw::DrawContext *draw) {
@@ -1441,6 +1495,10 @@ void EmuScreen::update() {
 		RecreateViews();
 	}
 
+	if (gameBoot_) {
+		gameBoot_->Update();
+	}
+
 	// The HOME button's quit screen.
 	const bool gameRunning = PSP_IsInited() && !bootPending_ && coreState == CORE_RUNNING_CPU && !PSP_HasBootRequest();
 	if (imposeHome_->Update(gameRunning, IsOnTop()) == ImposeHomeScreen::Action::LEAVE_GAME) {
@@ -1472,6 +1530,25 @@ void EmuScreen::update() {
 	resumeButton_->SetVisibility(coreState == CoreState::CORE_RUNTIME_ERROR && Memory::MemFault_MayBeResumable() ? V_VISIBLE : V_GONE);
 	resetButton_->SetVisibility(coreState == CoreState::CORE_RUNTIME_ERROR ? V_VISIBLE : V_GONE);
 	backButton_->SetVisibility(coreState == CoreState::CORE_RUNTIME_ERROR ? V_VISIBLE : V_GONE);
+
+	// The same condition as drawing the crash screen.
+	const bool crashed = (coreState == CoreState::CORE_RUNTIME_ERROR || coreState == CoreState::CORE_STEPPING_CPU) && Core_GetExceptionInfo().type != MIPSExceptionType::NONE;
+	if (crashed && !crashSeen_) {
+		crashSeen_ = true;
+		crashReported_ = Reporting::CrashAlreadyReported(Core_GetExceptionInfo());
+		if (Reporting::IsEnabled()) {
+			Reporting::ReportCrash(Core_GetExceptionInfo(), false);
+			crashReported_ = true;
+		}
+	} else if (!crashed) {
+		crashSeen_ = false;
+	}
+	// With cheats or plugins, the button stays up but disabled, to say why there's no report.
+	const bool reportBlocked = Reporting::CheatsOrPluginsInEffect();
+	const bool showReportButton = crashed && !crashReported_ && !Reporting::CrashReportsOff() && (reportBlocked || Reporting::CanReportCrashManually());
+	reportCrashButton_->SetVisibility(showReportButton ? V_VISIBLE : V_GONE);
+	reportCrashButton_->SetEnabled(!reportBlocked);
+	reportCrashBlocked_->SetVisibility(showReportButton && reportBlocked ? V_VISIBLE : V_GONE);
 
 	if (chatButton_ && chatMenu_) {
 		if (chatMenu_->GetVisibility() != V_GONE) {
@@ -1619,7 +1696,7 @@ void EmuScreen::drawGameOnOutputMessage() {
 	auto di = GetI18NCategory(I18NCat::DIALOG);
 	const Bounds &bounds = dc.GetBounds();
 	dc.Begin();
-	dc.DrawText(di->T("Playing on TV"), bounds.centerX(), bounds.centerY(), 0xFF505050, ALIGN_CENTER);
+	dc.DrawText(dc.GetTheme().uiFont, di->T("Playing on TV"), bounds.centerX(), bounds.centerY(), 0xFF505050, ALIGN_CENTER);
 	dc.Flush();
 }
 
@@ -1746,6 +1823,14 @@ DeviceOrientation EmuScreen::GameLayoutOrientation() const {
 
 const DisplayLayoutConfig &EmuScreen::GameLayoutConfig() const {
 	return g_Config.GetDisplayLayoutConfig(GameLayoutOrientation());
+}
+
+Bounds EmuScreen::PSPScreenBounds() const {
+	const DisplayLayoutConfig &config = GameLayoutConfig();
+	FRect frame = GetScreenFrame(config.bIgnoreScreenInsets, g_display.pixel_xres, g_display.pixel_yres);
+	FRect rc;
+	CalculateDisplayOutputRect(config, &rc, 480.0f, 272.0f, frame, config.iInternalScreenRotation);
+	return Bounds(rc.x * g_display.dpi_scale_x, rc.y * g_display.dpi_scale_y, rc.w * g_display.dpi_scale_x, rc.h * g_display.dpi_scale_y);
 }
 
 bool EmuScreen::renderOutput(const OutputDisplay &output) {
@@ -1992,7 +2077,9 @@ ScreenRenderFlags EmuScreen::RunEmulation(bool skipBufferEffects) {
 }
 
 bool EmuScreen::hasVisibleUI() {
-	if (imposeHome_->IsOpen())
+	if (gameBoot_ && gameBoot_->IsPlaying())
+		return true;
+	if (imposeHome_->IsVisible())
 		return true;
 	// Regular but uncommon UI.
 	if (saveStatePreview_->GetVisibility() != UI::V_GONE || loadingSpinner_->GetVisibility() == UI::V_VISIBLE || saveStateSpinner_->GetVisibility() == UI::V_VISIBLE)
@@ -2025,13 +2112,14 @@ void EmuScreen::renderUI() {
 	// This sets up some important states but not the viewport.
 	ctx->Begin();
 
-	if (imposeHome_->IsOpen() && PSP_IsInited()) {
+	if (imposeHome_->IsVisible() && PSP_IsInited()) {
 		// Over the PSP screen, wherever the layout puts it.
-		const DisplayLayoutConfig &config = GameLayoutConfig();
-		FRect frame = GetScreenFrame(config.bIgnoreScreenInsets, g_display.pixel_xres, g_display.pixel_yres);
-		FRect rc;
-		CalculateDisplayOutputRect(config, &rc, 480.0f, 272.0f, frame, config.iInternalScreenRotation);
-		imposeHome_->Draw(*ctx, Bounds(rc.x * g_display.dpi_scale_x, rc.y * g_display.dpi_scale_y, rc.w * g_display.dpi_scale_x, rc.h * g_display.dpi_scale_y));
+		imposeHome_->Draw(*ctx, PSPScreenBounds());
+	}
+
+	if (gameBoot_ && gameBoot_->IsPlaying()) {
+		// With the movie where the PSP's screen goes.
+		gameBoot_->Draw(*ctx, PSPScreenBounds());
 	}
 
 	if (root_) {
@@ -2049,11 +2137,9 @@ void EmuScreen::renderUI() {
 		}
 	}
 
-#ifdef USE_PROFILER
 	if ((DebugOverlay)g_Config.iDebugOverlay == DebugOverlay::FRAME_PROFILE && PSP_IsInited()) {
 		DrawProfile(*ctx);
 	}
-#endif
 
 	if (g_Config.bShowGPOLEDs) {
 		// Draw a vertical strip of LEDs at the right side of the screen.

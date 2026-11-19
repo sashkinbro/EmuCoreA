@@ -270,7 +270,7 @@ void MemStickScreen::CreateContentViews(UI::ViewGroup *parent) {
 	INFO_LOG(Log::System, "MemStickScreen: initialSetup=%d", (int)initialSetup_);
 }
 
-void MemStickScreen::CreateSettingsViews(UI::ViewGroup *parent) {
+void MemStickScreen::CreateSettingsViews(UI::ViewGroup *parent, bool inPopup) {
 	using namespace UI;
 
 	auto di = GetI18NCategory(I18NCat::DIALOG);
@@ -555,11 +555,10 @@ public:
 	void Draw(UIContext &dc) override {
 		const UI::Style &style = dc.GetTheme().itemStyle;
 		dc.FillRoundRect(style.background, bounds_, dc.GetTheme().choiceRoundRadius, roundCorners_);
-		dc.SetFontStyle(dc.GetTheme().uiFont);
 		if (minLines_ > 1) {
-			dc.DrawTextRect(text_, bounds_.Expand(-PADDING_X, -PADDING_Y), style.fgColor, FLAG_WRAP_TEXT);
+			dc.DrawTextRect(dc.GetTheme().uiFont, text_, bounds_.Expand(-PADDING_X, -PADDING_Y), style.fgColor, FLAG_WRAP_TEXT);
 		} else {
-			dc.DrawTextRect(text_, bounds_.Expand(-PADDING_X, 0), style.fgColor, ALIGN_VCENTER | FLAG_WRAP_TEXT);
+			dc.DrawTextRect(dc.GetTheme().uiFont, text_, bounds_.Expand(-PADDING_X, 0), style.fgColor, ALIGN_VCENTER | FLAG_WRAP_TEXT);
 		}
 	}
 
@@ -655,7 +654,7 @@ void ConfirmMemstickMoveScreen::CreateContentViews(UI::ViewGroup *parent) {
 	}
 }
 
-void ConfirmMemstickMoveScreen::CreateSettingsViews(UI::ViewGroup *parent) {
+void ConfirmMemstickMoveScreen::CreateSettingsViews(UI::ViewGroup *parent, bool inPopup) {
 	using namespace UI;
 	auto ms = GetI18NCategory(I18NCat::MEMSTICK);
 	auto di = GetI18NCategory(I18NCat::DIALOG);

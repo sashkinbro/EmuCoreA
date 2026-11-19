@@ -263,6 +263,9 @@ static int DefaultUIScaleFactor() {
 // All relative to g_Config.
 static constexpr const char *autoLoadSaveStateNames[] = { "Off", "Oldest Save", "Newest Save", "Slot 1", "Slot 2", "Slot 3", "Slot 4", "Slot 5" };
 
+static constexpr const char *uiSoundStyleNames[] = { "PPSSPP", "PSP sounds" };
+static constexpr const char *homeScreenStyleNames[] = { "PPSSPP", "PSP firmware" };
+
 static constexpr const char *backgroundAnimationNames[] = { "No animation", "Floating symbols", "Recent games", "Waves", "Moving background", "Bouncing icon", "Colored floating symbols" };
 
 static constexpr const char *notificationPosNames[] = { "None", "Bottom Left", "Bottom Center", "Bottom Right", "Top Left", "Top Center", "Top Right", "Center Left", "Center Right" };
@@ -360,11 +363,17 @@ static constexpr ConfigSetting generalSettings[] = {
 #endif
 	ConfigSetting("Language", SETTING(g_Config, sLanguageIni), &DefaultLangRegion, CfgFlag::DEFAULT),
 	ConfigSetting("ForceLagSync2", SETTING(g_Config, bForceLagSync), false, CfgFlag::PER_GAME)
-		.Label(I18NCat::SYSTEM, "Force real clock sync (slower, less lag)"),
+		.Label(I18NCat::SYSTEM, "Low-latency CPU timing"),
 	ConfigSetting("DiscordRichPresence", SETTING(g_Config, bDiscordRichPresence), false, CfgFlag::DEFAULT)
 		.Label(I18NCat::NETWORKING, "Send Discord Presence information"),
 	ConfigSetting("UISound", SETTING(g_Config, bUISound), false, CfgFlag::DEFAULT)
 		.Label(I18NCat::AUDIO, "UI sound"),
+	ConfigSetting("UISoundTheme", SETTING(g_Config, iUISoundStyle), (int)UISoundStyle::BUILTIN, CfgFlag::DEFAULT)
+		.Label(I18NCat::AUDIO, "UI sound theme").Choices(uiSoundStyleNames),
+	ConfigSetting("HomeScreenStyle", SETTING(g_Config, iHomeScreenStyle), (int)HomeScreenStyle::FIRMWARE, CfgFlag::DEFAULT)
+		.Label(I18NCat::SYSTEM, "HOME button screen").Choices(homeScreenStyleNames),
+	ConfigSetting("GameBootAnimation", SETTING(g_Config, bGameBootAnimation), false, CfgFlag::DEFAULT)
+		.Label(I18NCat::SYSTEM, "Play game launch animation like the PSP"),
 
 	ConfigSetting("DisableHTTPS", SETTING(g_Config, bDisableHTTPS), false, CfgFlag::DONT_SAVE),
 	ConfigSetting("AutoLoadSaveState", SETTING(g_Config, iAutoLoadSaveState), 0, CfgFlag::PER_GAME)
@@ -382,8 +391,8 @@ static constexpr ConfigSetting generalSettings[] = {
 	ConfigSetting("RemoteScrollPosition", SETTING(g_Config, fRemoteScrollPosition), 0.0f, CfgFlag::DEFAULT),
 	ConfigSetting("DebugOverlay", SETTING(g_Config, iDebugOverlay), 0, CfgFlag::DONT_SAVE),
 	ConfigSetting("DefaultTab", SETTING(g_Config, iDefaultTab), 0, CfgFlag::DEFAULT),
-	ConfigSetting("DisableHLEFlags", SETTING(g_Config, iDisableHLE), 0, CfgFlag::PER_GAME),
-	ConfigSetting("ForceEnableHLEFlags", SETTING(g_Config, iForceEnableHLE), 0, CfgFlag::PER_GAME),
+	ConfigSetting("DisableHLEFlags", SETTING(g_Config, iDisableHLE), 0, CfgFlag::PER_GAME | CfgFlag::REPORT),
+	ConfigSetting("ForceEnableHLEFlags", SETTING(g_Config, iForceEnableHLE), 0, CfgFlag::PER_GAME | CfgFlag::REPORT),
 
 	ConfigSetting("ScreenshotMode", SETTING(g_Config, iScreenshotMode), 0, CfgFlag::DEFAULT)
 		.Label(I18NCat::SYSTEM, "Screenshot mode").Choices(screenshotModeNames),
@@ -572,14 +581,14 @@ static constexpr ConfigSetting cpuSettings[] = {
 		.Label(I18NCat::SYSTEM, "I/O timing method").Choices(iOTimingMethodNames),
 	ConfigSetting("FastMemoryAccess", SETTING(g_Config, bFastMemory), true, CfgFlag::PER_GAME)
 		.Label(I18NCat::SYSTEM, "Fast Memory"),
-	ConfigSetting("EmulateMediaEngine", SETTING(g_Config, bEmulateMediaEngine), false, CfgFlag::REPORT)
+	ConfigSetting("EmulateMediaEngine", SETTING(g_Config, bEmulateMediaEngine), true, CfgFlag::REPORT)
 		.Label(I18NCat::DEVELOPER, "Enable ME emulation for homebrew"),
 	ConfigSetting("FunctionReplacements", SETTING(g_Config, bFuncReplacements), true, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("HideSlowWarnings", SETTING(g_Config, bHideSlowWarnings), false, CfgFlag::DEFAULT),
 	ConfigSetting("HideStateWarnings", SETTING(g_Config, bHideStateWarnings), false, CfgFlag::DEFAULT),
 	ConfigSetting("JitDisableFlags", SETTING(g_Config, uJitDisableFlags), (uint32_t)0, CfgFlag::PER_GAME),
 	ConfigSetting("CPUSpeed", SETTING(g_Config, iLockedCPUSpeed), 0, CfgFlag::PER_GAME | CfgFlag::REPORT)
-		.Label(I18NCat::SYSTEM, "Change CPU Clock", "Change CPU Clock (unstable)").Range(0, 1000).Units("MHz").ZeroLabel("Auto"),
+		.Label(I18NCat::SYSTEM, "PSP system clock speed").Range(0, 1000).Units("MHz").ZeroLabel("Auto"),
 };
 
 static int DefaultInternalResolution() {
@@ -614,7 +623,7 @@ const char * const vulkanDefaultBlacklist[] = {
 
 static int DefaultGPUBackend() {
 	if (IsVREnabled()) {
-		// Falls back to OpenGL if the runtime can't take a Vulkan session (VulkanMayBeAvailable).
+		// The only backend with VR.
 		return (int)GPUBackend::VULKAN;
 	}
 
@@ -702,7 +711,7 @@ int Config::NextValidBackend() {
 		}
 #endif
 #if PPSSPP_API(ANY_GL)
-		if (!failed.count(GPUBackend::OPENGL)) {
+		if (!failed.count(GPUBackend::OPENGL) && IsBackendEnabled(GPUBackend::OPENGL)) {
 			return (int)GPUBackend::OPENGL;
 		}
 #endif
@@ -756,6 +765,9 @@ bool Config::IsBackendEnabled(GPUBackend backend) {
 	if (backend == GPUBackend::OPENGL)
 		return false;
 #endif
+	// VR is Vulkan only.
+	if (backend == GPUBackend::OPENGL && IsVREnabled())
+		return false;
 	// On normal boots, this is where the Vulkan driver gets loaded the first time, in this check.
 	// That's a bit weird actually. But at least the config is loaded.
 	if (backend == GPUBackend::VULKAN && !VulkanMayBeAvailable())
@@ -860,6 +872,19 @@ std::unique_ptr<ConfigBlock> GestureControlConfig::NewDefault(std::string_view b
 	return block;
 }
 
+// AnalogGesture used to be a bool, and true meant the left stick.
+static int AnalogGestureFromString(const std::string &value) {
+	if (equalsNoCase(value, "True")) {
+		return (int)AnalogGestureStick::LEFT;
+	}
+	const int stick = atoi(value.c_str());
+	return (stick >= (int)AnalogGestureStick::OFF && stick <= (int)AnalogGestureStick::RIGHT) ? stick : (int)AnalogGestureStick::OFF;
+}
+
+static std::string AnalogGestureToString(int value) {
+	return StringFromInt(value);
+}
+
 // These were previously mostly part of General (which was wrong).
 static constexpr ConfigSetting gestureControlSettings[] = {
 	ConfigSetting("SwipeUp", SETTING(g_Config.gestureControls[0], iSwipeUp), 0, CfgFlag::PER_GAME),
@@ -870,7 +895,7 @@ static constexpr ConfigSetting gestureControlSettings[] = {
 	ConfigSetting("SwipeSmoothing", SETTING(g_Config.gestureControls[0], fSwipeSmoothing), 0.3f, CfgFlag::PER_GAME),
 	ConfigSetting("DoubleTapGesture", SETTING(g_Config.gestureControls[0], iDoubleTapGesture), 0, CfgFlag::PER_GAME),
 	ConfigSetting("GestureControlEnabled", SETTING(g_Config.gestureControls[0], bGestureControlEnabled), false, CfgFlag::PER_GAME),
-	ConfigSetting("AnalogGesture", SETTING(g_Config.gestureControls[0], bAnalogGesture), false, CfgFlag::PER_GAME),
+	ConfigSetting("AnalogGesture", SETTING(g_Config.gestureControls[0], iAnalogGesture), (int)AnalogGestureStick::OFF, &AnalogGestureToString, &AnalogGestureFromString, CfgFlag::PER_GAME),
 	ConfigSetting("AnalogGestureSensibility", SETTING(g_Config.gestureControls[0], fAnalogGestureSensitivity), 1.0f, CfgFlag::PER_GAME),
 };
 
@@ -1130,7 +1155,7 @@ static constexpr ConfigSetting soundSettings[] = {
 
 	ConfigSetting("FillAudioGaps", SETTING(g_Config, bFillAudioGaps), true, CfgFlag::DEFAULT)
 		.Label(I18NCat::AUDIO, "Fill audio gaps"),
-	ConfigSetting("AudioSyncMode", SETTING(g_Config, iAudioPlaybackMode), (int)AudioSyncMode::CLASSIC_PITCH, CfgFlag::DEFAULT)
+	ConfigSetting("AudioSyncMode", SETTING(g_Config, iAudioPlaybackMode), (int)AudioSyncMode::GRANULAR, CfgFlag::DEFAULT)
 		.Label(I18NCat::AUDIO, "Playback mode").Choices(audioPlaybackModes),
 
 	// Legacy volume settings, these get auto upgraded through default handlers on the new settings. NOTE: Must be before the new ones in the order here.
@@ -1167,6 +1192,10 @@ static constexpr ConfigSetting soundSettings[] = {
 		.Label(I18NCat::AUDIO, "Respect silent mode").OnChanged(&OnAudioModeChanged),
 	ConfigSetting("UseOldAtrac", SETTING(g_Config, bUseOldAtrac), false, CfgFlag::DEFAULT)
 		.Label(I18NCat::DEVELOPER, "Use the old sceAtrac implementation"),
+#if (PPSSPP_PLATFORM(WINDOWS) && !PPSSPP_PLATFORM(UWP)) || (defined(SDL) && !defined(MOBILE_DEVICE))
+	ConfigSetting("MuteOnLostFocus", SETTING(g_Config, bMuteOnLostFocus), false, CfgFlag::DEFAULT)
+		.Label(I18NCat::AUDIO, "Mute when window not focused"),
+#endif
 };
 
 static bool DefaultShowTouchControls() {
@@ -2204,7 +2233,7 @@ bool Config::SupportsUpgradeCheck() const {
 #endif
 }
 
-#if 0
+#if 0  // DO NOT COMMIT WITH THIS SET TO 1.
 // Use for debugging the version check without messing with the server
 #define NEW_VERSION_OVERRIDE "v1.100.3-gaaaaaaaaa"
 constexpr int UPDATE_CHECK_FREQ = 1;

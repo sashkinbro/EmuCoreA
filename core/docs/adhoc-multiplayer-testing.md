@@ -66,12 +66,68 @@ until --pixel 20,30 --color ff0000 -i 2                  # or until one pixel ha
 
 `until` takes screenshots until each selected instance shows the reference image at `--box` (a mean
 difference of up to `--tolerance` per channel, 12 by default, so moving backgrounds still match). When
-it gives up (`--timeout`, 60 s), it saves the screens it saw as `until_failed_N.png`. A screen that
-lands a pixel away from where it was when the reference was cut (a dialog panel, say) needs `--slack 1`,
-which also tries the reference that far off in each direction. Make references
-with `crop SHOT.png X,Y,W,H OUT.png` from a screenshot of the screen you want, and keep them next to the
-script: paths in a script are relative to it. A title screen left alone too long may start an attract
-demo, so don't wait for one without pressing.
+it gives up (`--timeout`, 60 s), it saves the screen as `until_failed_N.png`, and the last screens it
+saw before that, with when they came and which followed a press, as `until_failed_N_history.png`.
+That usually shows what went wrong, without running it again: a press that landed on the wrong
+screen, or one a screen ignored as it appeared. A screen that lands a pixel away from where it was
+when the reference was cut (a dialog panel, say) needs `--slack 1`, which also tries the reference that
+far off in each direction. Keep references next to the script: paths in a script are relative to it.
+A title screen left alone too long may start an attract demo, so don't wait for one without pressing.
+
+Make references with `ref OUT.png X,Y,W,H` while the screen you want is up. It compares a few
+screenshots (`--shots`, `--every`) and keeps only the pixels that stayed the same, so moving
+backgrounds, blinking text and colour cycling are left out of it, and `until` ignores what isn't kept.
+For text over video, `--only contrast` also leaves out whatever isn't nearly white or black. It warns
+when hardly anything stayed the same (the screen was still fading in) and when what's left is nearly
+one colour, which a plain fade or loading screen would match too. (`crop SHOT.png X,Y,W,H OUT.png` cuts
+one out of a screenshot as it is. Take it from a full-size screenshot, and one where the screen has
+finished fading in.)
+
+Menus often ignore buttons for a moment after they appear, so a single `press` right after the
+`until` that found the screen is easily lost. Pressing until the next screen shows is more robust:
+`until next.png --box X,Y --press cross --every 3`. A few games miss presses as short as the default
+6 vblanks; give `press` and `until --press` a longer `--frames 12` for those.
+
+A screen that only shows on some runs (a profile menu that needs a save, say) takes a branch: `until`
+also stops on any `--or REF@X,Y`, and a line `if REF --box X,Y : COMMAND ; COMMAND` runs the commands
+only when the screen shows the reference right then:
+
+```
+until select_profile.png --box 100,14 --or create_profile.png@100,14 --press start --every 4
+if select_profile.png --box 100,14 : press cross
+if create_profile.png --box 100,14 : press cross ; wait 2 ; press cross
+```
+
+A longer branch is an `if` with nothing after its colon, followed by indented lines (which can hold
+another such `if`):
+
+```
+if create_profile.png --box 100,14 :
+	press cross
+	until name_entry.png --box 0,200 --timeout 10
+	press start
+```
+
+To try a script with and without the game's save, `start --savedata ""` gives the instances an empty
+memory stick, `--savedata "ULUS10002*"` copies the game's folders from the real one, and
+`--savedata-dir DIR` copies in the folders of another SAVEDATA folder, like the one a run without a
+save left in the session's `memstickN/PSP/SAVEDATA`.
+
+### Driving the app, or a phone
+
+`attach` makes a session of one PPSSPP that's already running with `--debugger=PORT` (default 45678),
+and the other commands then drive it. With `--adb`, that's the app on an Android device: the port is
+forwarded, and screenshots come from `screencap`, cut to the game's image (`--rect X,Y,W,H` in the
+device's pixels; `0,249,1080,612` on a Galaxy S8 in portrait) and scaled to 480x272, so a script and its
+references work the same on a phone as headless. `screencap` doesn't pause emulation, unlike the
+debugger's screenshot, which matters when the run is being profiled
+([debugging.md](debugging.md#finding-stalls-with-the-frame-profiler)).
+
+```bash
+python Tools/android_run.py -- --debugger=45678 /sdcard/PSP/GAME.iso
+python3 Tools/adhoc_session.py attach --adb --rect 0,249,1080,612
+python3 Tools/adhoc_session.py run game_ingame.txt
+```
 
 To see what a game does, `log sceNet debug` turns a log channel up, and `watch SECONDS NAME` collects
 each instance's log messages meanwhile into `NAME_N.log` (the debugger only sends log messages to

@@ -61,6 +61,7 @@ struct JNIEnv {};
 #define JNI_VERSION_1_6 16
 #endif
 
+#include "Common/Data/Text/I18n.h"
 #include "Common/Log.h"
 #include "Common/LogReporting.h"
 
@@ -105,6 +106,7 @@ struct JNIEnv {};
 #include "Core/Loaders.h"
 #include "Core/KeyMap.h"
 #include "Core/Util/RecentFiles.h"
+#include "Core/Util/PSARUnpack.h"
 #include "Core/System.h"
 #include "Core/EmuThread.h"
 #include "Core/HLE/sceUsbCam.h"
@@ -839,10 +841,15 @@ retry:
 		GraphicsContext *ctx = new VulkanGraphicsContext();
 		std::string errorMessage;
 		if (!ctx->InitAPI(nullptr, &g_Config.sVulkanDevice, &errorMessage)) {
+			delete ctx;
+			// Only fall back to OpenGL when the system's driver doesn't work either.
+			if (VulkanDisableCustomDriver()) {
+				ERROR_LOG(Log::System, "Failed to initialize Vulkan with a custom driver, retrying with the system's: %s", errorMessage.c_str());
+				goto retry;
+			}
 			ERROR_LOG(Log::System, "Failed to initialize Vulkan, switching to OpenGL: %s", errorMessage.c_str());
 			g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
 			SetGPUBackend(GPUBackend::OPENGL);
-			delete ctx;
 			goto retry;
 		}
 		((VulkanContext *)ctx->GetAPIContext())->SetCbGetDrawSize([]() {
@@ -857,6 +864,14 @@ retry:
 		ERROR_LOG(Log::System, "NativeApp.init(): iGPUBackend %d not supported. Switching to OpenGL.", (int)g_Config.iGPUBackend);
 		g_Config.iGPUBackend = (int)GPUBackend::OPENGL;
 		goto retry;
+	}
+
+	// Here rather than where the driver failed, which can be before the translations are loaded.
+	const std::string failedDriver = VulkanTakeFailedCustomDriver();
+	if (!failedDriver.empty()) {
+		auto gr = GetI18NCategory(I18NCat::GRAPHICS);
+		g_OSD.Show(OSDType::MESSAGE_ERROR, gr->T("The custom Vulkan driver failed to load. Switching back to default."), failedDriver, 10.0f);
+		g_Config.Save("CustomDriverFailed");
 	}
 }
 
@@ -1183,6 +1198,10 @@ bool System_MakeRequest(SystemRequestType type, int requestId, const std::string
 		}
 		return true;
 	}
+	case SystemRequestType::BROWSE_FOR_FILE_SAVE:
+		// The type isn't passed on, the picker keeps the suggested name's extension.
+		PushCommand("browse_file_save", StringFromFormat("%d:@:%s", requestId, param2.c_str()), requestId);
+		return true;
 	case SystemRequestType::BROWSE_FOR_FOLDER:
 		PushCommand("browse_folder", StringFromFormat("%d", requestId), requestId);
 		return true;
@@ -1528,6 +1547,16 @@ extern "C" void JNICALL Java_org_ppsspp_ppsspp_NativeApp_sendMessageFromJava(JNI
 		CommandLineOptions options;
 		if (options.Parse((int)args.size(), args.data()) == CommandLineParseResult::Error) {
 			WARN_LOG(Log::System, "shortcutParam: Failed to parse '%s'", prm.c_str());
+		}
+		if (options.bootFilenames.empty() && options.bootVSH.value_or(false)) {
+			// An XMB shortcut.
+			const Path vshmain = GetVSHBootPath();
+			if (vshmain.empty()) {
+				System_PostUIMessage(UIMessage::SHOW_FIRMWARE_SCREEN);
+			} else {
+				System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, vshmain.ToString());
+			}
+			return;
 		}
 		if (options.bootFilenames.empty()) {
 			INFO_LOG(Log::System, "shortcutParam: Nothing to boot in there, ignoring (options only apply at startup)");

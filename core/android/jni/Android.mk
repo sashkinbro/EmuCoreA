@@ -766,6 +766,7 @@ EXEC_AND_LIB_FILES := \
   $(SRC)/Core/HLE/ReplaceTables.cpp \
   $(SRC)/Core/HLE/HLE.cpp \
   $(SRC)/Core/HLE/KUBridge.cpp \
+  $(SRC)/Core/HLE/SystemCtrl.cpp \
   $(SRC)/Core/HLE/sceSysreg.cpp \
   $(SRC)/Core/HLE/NetInetConstants.cpp \
   $(SRC)/Core/HLE/SocketManager.cpp \
@@ -1071,9 +1072,12 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/ImDebugger/ImDisasmView.cpp \
   $(SRC)/UI/ImDebugger/ImMemView.cpp \
   $(SRC)/UI/ImDebugger/ImJitViewer.cpp \
+  $(SRC)/UI/ImDebugger/ImProfiler.cpp \
   $(SRC)/UI/ImDebugger/ImStructViewer.cpp \
   $(SRC)/UI/AudioCommon.cpp \
   $(SRC)/UI/BackgroundAudio.cpp \
+  $(SRC)/UI/FirmwareSounds.cpp \
+  $(SRC)/UI/GameBootAnimation.cpp \
   $(SRC)/UI/DiscordIntegration.cpp \
   $(SRC)/UI/ChatScreen.cpp \
   $(SRC)/UI/DebugOverlay.cpp \
@@ -1118,6 +1122,7 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/GamePacker.cpp \
   $(SRC)/UI/UploadScreen.cpp \
   $(SRC)/UI/ControlMappingScreen.cpp \
+  $(SRC)/UI/VisualMappingScreen.cpp \
   $(SRC)/UI/GameSettingsScreen.cpp \
   $(SRC)/UI/DeveloperSettingsPages.cpp \
   $(SRC)/UI/GPUDriverTestScreen.cpp \
@@ -1139,6 +1144,9 @@ LOCAL_SRC_FILES := \
   $(SRC)/UI/UIAtlas.cpp \
   $(SRC)/UI/CustomButtonMappingScreen.cpp \
   $(SRC)/UI/RetroAchievementScreens.cpp
+
+# Calls between our own functions bind directly, not through the PLT (see CMakeLists.txt).
+LOCAL_LDFLAGS += -Wl,-Bsymbolic-functions
 
 ifneq ($(SKIPAPP),1)
   include $(BUILD_SHARED_LIBRARY)

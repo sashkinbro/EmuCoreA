@@ -162,7 +162,7 @@ struct GestureControlConfig : public ConfigBlock {
 	float fSwipeSensitivity = 1.0f;
 	float fSwipeSmoothing = 0.5f;
 	int iDoubleTapGesture = 0;
-	bool bAnalogGesture = false;
+	int iAnalogGesture = (int)AnalogGestureStick::OFF;
 	float fAnalogGestureSensitivity = 1.0f;
 
 	bool CanResetToDefault() const override { return true; }
@@ -186,11 +186,16 @@ public:
 
 	int iRunCount; // To be used to for example check for updates every 10 runs and things like that.
 
+	// Use dev-store.ppsspp.org for the Homebrew Store (--dev-store). Not saved.
+	bool bDevStore = false;
+
 	// Debugger
 	bool bAutoRun;  // start immediately
 	bool bBreakOnFrameTimeout;  // not saved
 	// Sample the JIT and write a report of the hottest blocks to this file. Not saved.
 	std::string sJitProfileFile;
+	// After this many flips, time recompiling the whole JIT cache (--jit-bench). Not saved.
+	int iJitBenchFlip = 0;
 
 	// General
 	bool bScreenshotsAsPNG;
@@ -386,6 +391,9 @@ public:
 	int iCurrentStateSlot;
 	int iRewindSnapshotInterval;
 	bool bUISound;
+	int iUISoundStyle;  // UISoundStyle
+	int iHomeScreenStyle;  // HomeScreenStyle
+	bool bGameBootAnimation;
 	bool bEnableStateUndo;
 	bool bConfirmLoadState;
 	std::string sStateLoadUndoGame;
@@ -466,6 +474,7 @@ public:
 	// iOS only for now
 	bool bAudioMixWithOthers;
 	bool bAudioRespectSilentMode;
+	bool bMuteOnLostFocus;  // Desktop only, see AudioCommon.h.
 
 	// UI
 	bool bShowDebuggerOnLoad;

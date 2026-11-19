@@ -26,6 +26,7 @@
 #include "Core/Debugger/DebugInterface.h"
 #include "Core/Debugger/DisassemblyManager.h"
 #include "Core/Debugger/Breakpoints.h"
+#include "Common/Profiler/Profiler.h"
 #include "Core/MIPS/MIPSDebugInterface.h"
 #include "Core/MIPS/MIPSTables.h"
 #include "Core/MIPS/MIPSVFPUUtils.h"
@@ -66,6 +67,7 @@
 
 // Callstack window
 #include "Core/MIPS/MIPSStackWalk.h"
+#include "Core/Util/PSARUnpack.h"
 
 // GPU things
 #include "GPU/GPUCommon.h"
@@ -73,6 +75,7 @@
 
 #include "UI/ImDebugger/ImDebugger.h"
 #include "UI/ImDebugger/ImGe.h"
+#include "UI/ImDebugger/ImProfiler.h"
 #include "UI/AudioCommon.h"
 #include "UI/GameInfoCache.h"
 #include "UI/PauseScreen.h"
@@ -1717,7 +1720,7 @@ void DrawAudioOut(ImConfig &cfg, ImControl &control) {
 		ImGui::Text("Queued (smooth): %0.3f", stats.smoothedQueuedGranules);
 		ImGui::Text("Target: %d", stats.targetQueueSize);
 		ImGui::Text("Max: %d", stats.maxQueuedGranules);
-		ImGui::Text("Computed queue latency: %d ms", (int)(stats.smoothedQueuedGranules * (GranularMixer::GRANULE_SIZE * 1000.0 / 44100.0)));
+		ImGui::Text("Computed queue latency: %d ms", (int)(stats.smoothedQueuedGranules * (GranularMixer::GRANULE_SIZE / 2 * 1000.0 / 44100.0)));
 		ImGui::Text("Fade volume: %0.2f", stats.fadeVolume);
 		ImGui::Text("Looping: %s", BoolStr(stats.looping));
 		ImGui::Text("Under/Over: %d / %d", stats.underruns, stats.overruns);
@@ -2774,7 +2777,7 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUCommon *gpuDebug, Draw:
 				});
 			}
 			if (ImGui::MenuItem("Load XMB (VSH)")) {
-				System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, (g_Config.nandRootDirectory / "flash0/vsh/module/vshmain.prx").ToString());
+				System_PostUIMessage(UIMessage::REQUEST_GAME_BOOT, InstalledFirmwareFile("vsh/module/vshmain.prx").ToString());
 			}
 			if (ImGui::MenuItem("Open directory...")) {
 				System_BrowseForFolder(reqToken_, "Load", Path(), [](std::string_view value, int) {
@@ -3031,6 +3034,10 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUCommon *gpuDebug, Draw:
 	auto menuMisc = [&]() {
 		if (beginMenu("Misc")) {
 			ImGui::MenuItem("PPSSPP Internals", nullptr, &cfg_.internalsOpen);
+#ifdef USE_PROFILER
+			ImGui::MenuItem("CPU profiler", nullptr, &cfg_.cpuProfilerOpen);
+			ImGui::MenuItem("Frame profile", nullptr, &cfg_.frameProfileOpen);
+#endif
 			ImGui::MenuItem("Dear ImGui Demo", nullptr, &cfg_.demoOpen);
 			ImGui::MenuItem("Dear ImGui Style editor", nullptr, &cfg_.styleEditorOpen);
 			ImGui::Separator();
@@ -3299,6 +3306,14 @@ void ImDebugger::Frame(MIPSDebugInterface *mipsDebug, GPUCommon *gpuDebug, Draw:
 
 	if (cfg_.internalsOpen) {
 		DrawInternals(cfg_);
+	}
+
+	if (cfg_.cpuProfilerOpen) {
+		DrawCpuProfiler(cfg_);
+	}
+
+	if (cfg_.frameProfileOpen) {
+		DrawFrameProfile(cfg_);
 	}
 
 	if (externalCommand_.cmd != ImCmd::NONE) {
@@ -3631,6 +3646,8 @@ void ImConfig::SyncConfig(IniFile *ini, bool save) {
 	sync.Sync("paramSFOOpen", &paramSFOOpen, false);
 	sync.Sync("atracToolOpen", &atracToolOpen, false);
 	sync.Sync("jitViewerOpen", &jitViewerOpen, false);
+	sync.Sync("cpuProfilerOpen", &cpuProfilerOpen, false);
+	sync.Sync("frameProfileOpen", &frameProfileOpen, false);
 	for (int i = 0; i < 4; i++) {
 		char name[64];
 		snprintf(name, sizeof(name), "memory%dOpen", i + 1);

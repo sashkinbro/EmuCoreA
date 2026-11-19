@@ -123,9 +123,6 @@ void DrawEngineGLES::ApplyDrawState(int prim) {
 		return;
 	}
 
-	// Start profiling here to skip SetTexture which is already accounted for
-	PROFILE_THIS_SCOPE("applydrawstate");
-
 	uint64_t dirtyRequiresRecheck_ = 0;
 	bool useBufferedRendering = framebufferManager_->UseBufferedRendering();
 
@@ -241,7 +238,7 @@ void DrawEngineGLES::ApplyDrawState(int prim) {
 		} else {
 			// Depth Test
 			bool depthTestUsed = !IsDepthTestEffectivelyDisabled();
-			renderManager->SetDepth(depthTestUsed, gstate.isDepthWriteEnabled(), compareOps[gstate.getDepthTestFunction()]);
+			renderManager->SetDepth(depthTestUsed, gstate.isDepthWriteEnabled(), compareOps[DepthTestFunctionForDraw()]);
 			if (depthTestUsed)
 				UpdateEverUsedEqualDepth(gstate.getDepthTestFunction());
 

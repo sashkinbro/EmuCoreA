@@ -15,9 +15,13 @@
 // NOTE: In MSVC, don't forget to set the working directory to $ProjectDir\.. in debug settings.
 
 #include "ppsspp_config.h"
+#include <atomic>
+#include <climits>
 #include <cstdio>
 #include <cstdlib>
 #include <limits>
+#include <memory>
+#include <thread>
 #if PPSSPP_PLATFORM(ANDROID)
 #include <jni.h>
 #endif
@@ -65,6 +69,9 @@
 #include "Core/HLE/__sceAudio.h"
 #include "Core/HLE/sceCtrl.h"
 #include "Core/HLE/sceDisplay.h"
+#include "Core/HW/Display.h"
+#include "Core/HW/GranularMixer.h"
+#include "Core/HW/StereoResampler.h"
 #include "Core/MIPS/MIPSTables.h"
 #include "Core/System.h"
 #include "Core/Util/PSARUnpack.h"
@@ -92,6 +99,7 @@ static Path g_comparisonScreenshot;
 static Path g_screenshotSavePath;
 static Path g_screenshotDir;
 static Path g_depthSavePath;
+static Path g_stencilSavePath;
 static bool g_screenshotRenderTarget = false;
 static Path g_screenshotDiffPath;
 static bool g_screenshotSaveKeepAlpha = false;
@@ -146,10 +154,147 @@ void NativeResized() { }
 void System_LaunchUrl(LaunchUrlType urlType, std::string_view url) {}
 std::string System_GetProperty(SystemProperty prop) { return ""; }
 std::vector<std::string> System_GetPropertyStringVec(SystemProperty prop) { return std::vector<std::string>(); }
+// --audio-sink: pulls audio through the resampler on a steady clock, the way an output device's
+// callback does, to see how full the buffer runs and how often it runs dry.
+class AudioSink {
+public:
+	static constexpr int SAMPLE_RATE = 48000;
+
+	void Start(int periodFrames, bool granular) {
+		periodFrames_ = periodFrames;
+		if (granular) {
+			granular_ = std::make_unique<GranularMixer>();
+		} else {
+			resampler_ = std::make_unique<StereoResampler>();
+		}
+		thread_ = std::thread([this] { Run(); });
+	}
+	void Stop() {
+		if (thread_.joinable()) {
+			stop_ = true;
+			thread_.join();
+		}
+	}
+	bool Active() const { return periodFrames_ > 0; }
+	int PeriodFrames() const { return periodFrames_; }
+	// Counting starts once the game runs in real time, not while a state loads.
+	void StartCounting() { counting_ = true; }
+	void Push(const s32 *audio, int numSamples, float volume) {
+		if (granular_) {
+			granular_->PushSamples(audio, numSamples, volume);
+		} else {
+			resampler_->PushSamples(audio, numSamples, volume);
+		}
+	}
+	// Like the app, which has nothing to clear in the granular mixer.
+	void Clear() {
+		if (resampler_) {
+			resampler_->Clear();
+		}
+	}
+
+	void Print() const {
+		const double toMs = 1000.0 / 44100.0;
+		const double avg = pulls_ ? (double)sumBuffered_ / pulls_ * toMs : 0.0;
+		if (granular_) {
+			fprintf(stderr, "Audio sink (granular): %d pulls of %d frames, %d with an underrun (%d underruns), queue before a pull %.1f/%.1f/%.1f ms min/avg/max, cap %.1f/%.1f/%.1f ms min/avg/max, %d overruns\n",
+				pulls_, periodFrames_, shortPulls_, underruns_, minBuffered_ * toMs, avg, maxBuffered_ * toMs,
+				minCap_ * toMs, pulls_ ? (double)sumCap_ / pulls_ * toMs : 0.0, maxCap_ * toMs, overruns_);
+			return;
+		}
+		fprintf(stderr, "Audio sink: %d pulls of %d frames, %d short (%d frames missing), buffer before a pull %.1f/%.1f/%.1f ms min/avg/max, target %.1f ms, %.1f ms of excess dropped\n",
+			pulls_, periodFrames_, shortPulls_, missingFrames_, minBuffered_ * toMs, avg,
+			maxBuffered_ * toMs, resampler_->CurrentTargetBufferSize() * toMs, resampler_->DroppedExcess() * toMs);
+	}
+
+private:
+	void Run() {
+		std::vector<s16> out(periodFrames_ * 2);
+		const double period = (double)periodFrames_ / SAMPLE_RATE;
+		double next = time_now_d();
+		while (!stop_) {
+			next += period;
+			const double now = time_now_d();
+			if (next > now) {
+				sleep_precise(next - now, "audio-sink");
+			} else if (now - next > 0.1) {
+				// Stalled (the debugger, say), start over rather than pulling a backlog.
+				next = now;
+			}
+			int buffered;
+			bool isShort;
+			if (granular_) {
+				buffered = granular_->QueuedSamples();
+				const int underrunsBefore = granular_->Underruns();
+				const int overrunsBefore = granular_->Overruns();
+				// As the app does, see NativeMix.
+				float vps, fpsEstimate, actualFps;
+				__DisplayGetFPS(&vps, &fpsEstimate, &actualFps);
+				granular_->Mix(out.data(), periodFrames_, SAMPLE_RATE, fpsEstimate);
+				const int newUnderruns = granular_->Underruns() - underrunsBefore;
+				isShort = newUnderruns > 0;
+				if (counting_) {
+					underruns_ += newUnderruns;
+					overruns_ += granular_->Overruns() - overrunsBefore;
+					const int cap = granular_->QueueCapSamples();
+					sumCap_ += cap;
+					minCap_ = std::min(minCap_, cap);
+					maxCap_ = std::max(maxCap_, cap);
+				}
+			} else {
+				buffered = resampler_->BufferedSamples();
+				const int mixed = resampler_->Mix(out.data(), periodFrames_, false, SAMPLE_RATE);
+				isShort = mixed < periodFrames_;
+				if (counting_ && isShort) {
+					missingFrames_ += periodFrames_ - mixed;
+				}
+			}
+			if (!counting_) {
+				continue;
+			}
+			pulls_++;
+			if (isShort) {
+				shortPulls_++;
+			}
+			sumBuffered_ += buffered;
+			minBuffered_ = std::min(minBuffered_, buffered);
+			maxBuffered_ = std::max(maxBuffered_, buffered);
+		}
+	}
+
+	std::unique_ptr<StereoResampler> resampler_;
+	std::unique_ptr<GranularMixer> granular_;
+	std::thread thread_;
+	std::atomic<bool> stop_{};
+	std::atomic<bool> counting_{};
+	int periodFrames_ = 0;
+	int pulls_ = 0;
+	int shortPulls_ = 0;
+	int missingFrames_ = 0;
+	int64_t sumBuffered_ = 0;
+	int minBuffered_ = INT_MAX;
+	int maxBuffered_ = 0;
+	// Granular only.
+	int underruns_ = 0;
+	int overruns_ = 0;
+	int64_t sumCap_ = 0;
+	int minCap_ = INT_MAX;
+	int maxCap_ = 0;
+};
+
+static AudioSink g_audioSink;
+
 int64_t System_GetPropertyInt(SystemProperty prop) {
-	if (prop == SYSPROP_SYSTEMVERSION)
+	switch (prop) {
+	case SYSPROP_SYSTEMVERSION:
 		return 31;
-	return -1;
+	case SYSPROP_AUDIO_SAMPLE_RATE:
+		return g_audioSink.Active() ? AudioSink::SAMPLE_RATE : -1;
+	case SYSPROP_AUDIO_FRAMES_PER_BUFFER:
+		return g_audioSink.Active() ? g_audioSink.PeriodFrames() : -1;
+	default:
+		return -1;
+	}
 }
 float System_GetPropertyFloat(SystemProperty prop) { return -1.0f; }
 bool System_GetPropertyBool(SystemProperty prop) {
@@ -172,8 +317,16 @@ std::vector<std::string> System_GetCameraDeviceList() { return std::vector<std::
 void System_AskForPermission(SystemPermission permission) {}
 PermissionStatus System_GetPermissionStatus(SystemPermission permission) { return PERMISSION_STATUS_GRANTED; }
 void System_AudioGetDebugStats(char *buf, size_t bufSize) { if (buf) buf[0] = '\0'; }
-void System_AudioClear() {}
-void System_AudioPushSamples(const s32 *audio, int numSamples, float volume) {}
+void System_AudioClear() {
+	if (g_audioSink.Active()) {
+		g_audioSink.Clear();
+	}
+}
+void System_AudioPushSamples(const s32 *audio, int numSamples, float volume) {
+	if (g_audioSink.Active()) {
+		g_audioSink.Push(audio, numSamples, volume);
+	}
+}
 bool System_MakeRequest(SystemRequestType type, int requestId, const std::string &param1, const std::string &param2, int64_t param3, int64_t param4) { return false; }
 
 // TODO: To avoid having to define these here, these should probably be turned into system "requests".
@@ -285,6 +438,30 @@ static void SaveDepthBuffer(const GPUDebugBuffer &depth, const Path &path) {
 	fclose(f);
 }
 
+// Writes u32 width, u32 height, then a u8 per PSP pixel.
+static void SaveStencilBuffer(const GPUDebugBuffer &stencil, const Path &path) {
+	const int scale = std::max(1, stencil.GetScaleFactor());
+	const u32 w = stencil.GetStride() / scale;
+	const u32 h = stencil.GetHeight() / scale;
+
+	std::vector<u8> values(w * h);
+	for (u32 y = 0; y < h; y++) {
+		const u32 srcY = stencil.GetFlipped() ? stencil.GetHeight() - 1 - y * scale : y * scale;
+		for (u32 x = 0; x < w; x++) {
+			values[y * w + x] = stencil.GetData()[srcY * stencil.GetStride() + x * scale];
+		}
+	}
+
+	FILE *f = File::OpenCFile(path, "wb");
+	if (!f) {
+		return;
+	}
+	const u32 header[2] = { w, h };
+	fwrite(header, sizeof(header), 1, f);
+	fwrite(values.data(), 1, values.size(), f);
+	fclose(f);
+}
+
 // At the render scale. pixels is the 1x readback, used when there's no scaling.
 static bool SaveDisplayScreenshot(const Path &path, const std::vector<u32> &pixels) {
 	const static u32 FRAME_STRIDE = 512;
@@ -335,6 +512,15 @@ void SendDebugScreenshot(const DebugScreenshotDesc &desc) {
 	if (!g_screenshotSavePath.empty()) {
 		bool saved = SaveDisplayScreenshot(g_screenshotSavePath, pixels);
 		g_screenshotSaved = g_screenshotSaved || saved;
+	}
+
+	if (!g_stencilSavePath.empty()) {
+		GPUDebugBuffer stencil;
+		if (gpu->GetCurrentStencilbuffer(stencil) && stencil.GetFormat() == GPU_DBG_FORMAT_8BIT) {
+			SaveStencilBuffer(stencil, g_stencilSavePath);
+		} else {
+			SendAndCollectOutput("Stencil buffer not saved: couldn't read it back\n");
+		}
 	}
 
 	if (!g_depthSavePath.empty()) {
@@ -451,6 +637,7 @@ struct AutoTestOptions {
 	};
 	std::vector<Press> presses;
 	std::vector<std::pair<double, Path>> screenshotsAt;
+	std::vector<std::pair<double, Path>> dumpsAt;
 };
 
 // Ends a frame of the draw context the way the app does, presenting it. Unpresented frames never
@@ -566,6 +753,7 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 	double statsStart = -1.0;
 	int statsLastFlips = 0;
 	std::vector<std::pair<double, Path>> screenshotsAt = opt.screenshotsAt;
+	std::vector<std::pair<double, Path>> dumpsAt = opt.dumpsAt;
 	// Hold the game until a --state has been applied. Otherwise it keeps booting while the state is
 	// read, which on a slow host can reach a different point (even a crash) before the state lands.
 	while (g_stateLoadPending && time_now_d() < wallDeadline) {
@@ -642,6 +830,10 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 		if (emulatedStep > 0.0 && emulatedStep < emulatedStepLimit && !g_stateLoadPending) {
 			emulatedElapsed += emulatedStep;
 		}
+		// The first seconds compile JIT blocks and shaders.
+		if (g_audioSink.Active() && emulatedElapsed > 2.0) {
+			g_audioSink.StartCounting();
+		}
 
 		if (!g_stateToSave.empty() && (time_now_d() > wallSaveStateAt || emulatedElapsed > opt.timeoutEmulated * 0.7)) {
 			const std::string filename = g_stateToSave;
@@ -669,6 +861,20 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 				shot.second.clear();
 			}
 		}
+		// The recorder takes one dump at a time, so a later one waits until the previous is written.
+		for (auto &dump : dumpsAt) {
+			if (!dump.second.empty() && emulatedElapsed >= dump.first && gpu) {
+				const Path dest = dump.second;
+				if (gpu->GetRecorder()->RecordNextFrame([dest](const Path &dumpPath) {
+					if (!File::Copy(dumpPath, dest)) {
+						fprintf(stderr, "Failed to copy the frame dump to %s\n", dest.c_str());
+					}
+				})) {
+					dump.second.clear();
+				}
+				break;
+			}
+		}
 
 		// Finer steps when input is scripted, so short presses land.
 		int blockTicks = (int)usToCycles(1000000 / (opt.presses.empty() ? 10 : 60));
@@ -689,9 +895,11 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 				paceStart += -maxBehind - ahead;
 				ahead = -maxBehind;
 			}
-			// With --lag-sync, lag sync paces every emulated millisecond instead, and two pacers out of
-			// phase would undo each other.
-			if (ahead > 0.001 && !g_Config.bForceLagSync) {
+			// While lag sync paces every emulated millisecond (--lag-sync), two pacers out of phase would
+			// undo each other.
+			LagSyncStats lagSync;
+			__DisplayGetLagSyncStats(&lagSync);
+			if (ahead > 0.001 && (!g_Config.bForceLagSync || lagSync.bursting)) {
 				sleep_ms((int)(std::min(ahead, 0.05) * 1000.0), "realtime");
 			}
 		}
@@ -721,6 +929,8 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 			if (gpu) {
 				gpu->BeginHostFrame(g_Config.GetDisplayLayoutConfig(DeviceOrientation::Landscape));
 			}
+			// As the app does in NativeFrame: the profiler's frames are host frames (--profile-log).
+			PROFILE_END_FRAME();
 		}
 		// Without a debugger nothing can resume a stop, so it ends the run.
 		if (coreState == CORE_STEPPING_CPU && !opt.debugger) {
@@ -765,9 +975,21 @@ static bool RunAutoTest(GraphicsContext *graphicsContext, CoreParameter &corePar
 			perSecond += StringFromFormat(" %d", flips);
 		}
 		fprintf(stderr, "Frame stats: %d flips in %d emulated seconds, wall %.1fs, per second:%s\n", total, (int)flipsPerSecond.size(), time_now_d() - startTime, perSecond.c_str());
+		if (g_Config.bForceLagSync) {
+			LagSyncStats lagSync;
+			__DisplayGetLagSyncStats(&lagSync);
+			fprintf(stderr, "Lag sync: %d sleeps, %.2fs slept, %.0fus late on average, %d syncs over 3ms behind (%.1fms at most), %d resets, %d fallbacks to bursting%s\n",
+				lagSync.sleeps, lagSync.slept, lagSync.sleeps ? lagSync.late / lagSync.sleeps * 1e6 : 0.0, lagSync.stalls, lagSync.maxBehind * 1000.0, lagSync.resets, lagSync.bursts, lagSync.bursting ? " (bursting now)" : "");
+		}
+	}
+	if (g_audioSink.Active()) {
+		g_audioSink.Stop();
+		g_audioSink.Print();
 	}
 	// What shader compiles cost the run, which the times include.
-	fprintf(stderr, "Pipelines created: %d\n", gpuStats.totals.numPipelinesCreated);
+	if (gpuStats.totals.numPipelinesCreated > 0) {
+		fprintf(stderr, "Pipelines created: %d\n", gpuStats.totals.numPipelinesCreated);
+	}
 	if (coreParameter.bootFromState) {
 		// Counted from the state's load. More than a few, and the game has gone off its usual path.
 		fprintf(stderr, "Failed disc reads: %d\n", pspFileSystem.FailedDiscReads());
@@ -1022,6 +1244,16 @@ int main(int argc, const char* argv[]) {
 			const size_t colon = item.find(':');
 			if (colon != std::string::npos) {
 				testOptions.screenshotsAt.emplace_back(atof(item.substr(0, colon).c_str()), Path(item.substr(colon + 1)));
+			}
+		}
+	}
+	if (cmdLineOptions.recordDumpAt.has_value()) {
+		std::vector<std::string> items;
+		SplitString(cmdLineOptions.recordDumpAt.value(), ',', items);
+		for (const std::string &item : items) {
+			const size_t colon = item.find(':');
+			if (colon != std::string::npos) {
+				testOptions.dumpsAt.emplace_back(atof(item.substr(0, colon).c_str()), Path(item.substr(colon + 1)));
 			}
 		}
 	}
@@ -1530,10 +1762,18 @@ int main(int argc, const char* argv[]) {
 		fprintf(stderr, "--dump-audio is not supported on this platform.\n");
 #endif
 	}
+	if (cmdLineOptions.audioSinkPeriod.has_value() && cmdLineOptions.audioSinkPeriod.value() > 0) {
+		// Sound on also changes how the frame throttle waits (DoFrameIdleTiming), as in the app.
+		g_Config.bEnableSound = true;
+		g_audioSink.Start(cmdLineOptions.audioSinkPeriod.value(), g_Config.iAudioPlaybackMode == (int)AudioSyncMode::GRANULAR);
+	}
 	if (cmdLineOptions.replayEnd.has_value()) {
 		GPURecord::SetReplayDrawLimit(cmdLineOptions.replayEnd.value());
 	}
 	g_screenshotRenderTarget = cmdLineOptions.screenshotRenderTarget.value_or(false);
+	if (cmdLineOptions.stencilFilenameSave.has_value()) {
+		g_stencilSavePath = Path(std::string(cmdLineOptions.stencilFilenameSave.value()));
+	}
 	if (cmdLineOptions.depthFilenameSave.has_value()) {
 		g_depthSavePath = Path(std::string(cmdLineOptions.depthFilenameSave.value()));
 	}
@@ -1573,6 +1813,7 @@ int main(int argc, const char* argv[]) {
 			fprintf(stderr, "--debugger: breaking at the entry point, waiting for a client to "
 				"resume the CPU (cpu.resume). Use --debugger-run to start running instead.\n");
 		}
+		WebServerSetLoopbackOnly(!cmdLineOptions.debuggerPublic.value_or(false));
 		StartWebServer(WebServerFlags::DEBUGGER);
 		// We break at start and wait for a debugger to drive us, so coming up without one just
 		// hangs until the timeout. Better to say why and bail - see WebServerSetRequireExactPort().

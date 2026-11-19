@@ -65,6 +65,7 @@
 #include "Common/GPU/OpenGL/GLFeatures.h"
 #include "Common/GPU/thin3d.h"
 #include "Common/GPU/Vulkan/FixedSPIRVCache.h"
+#include "Common/GPU/Vulkan/VulkanDriverVars.h"
 #include "Common/UI/UI.h"
 #include "Common/UI/Screen.h"
 #include "Common/UI/ScreenManager.h"
@@ -127,6 +128,7 @@
 #include "Core/Util/AudioFormat.h"
 #include "Core/Util/RecentFiles.h"
 #include "Core/Util/PathUtil.h"
+#include "Core/Util/PSARUnpack.h"
 #include "Core/WebServer.h"
 #include "Core/TiltEventProcessor.h"
 
@@ -137,6 +139,7 @@
 #include "UI/Background.h"
 #include "UI/BackgroundAudio.h"
 #include "UI/ControlMappingScreen.h"
+#include "UI/VisualMappingScreen.h"
 #include "UI/GamePacker.h"
 #include "UI/DevScreens.h"
 #include "UI/DiscordIntegration.h"
@@ -146,6 +149,8 @@
 #include "UI/GameInfoCache.h"
 #include "UI/GameSettingsScreen.h"
 #include "UI/GPUDriverTestScreen.h"
+#include "UI/InstallPkgScreen.h"
+#include "UI/InstallZipScreen.h"
 #include "UI/MiscScreens.h"
 #include "UI/MemStickScreen.h"
 #include "UI/StorageTestScreen.h"
@@ -290,12 +295,36 @@ class GlobalListener : public ControlListener {
 				g_Config.bShowImDebugger = !g_Config.bShowImDebugger;
 			}
 			break;
+		case VIRTKEY_TOGGLE_FULLSCREEN:
+			if (down) {
+				// TODO: Limit to platforms that can support fullscreen.
+				g_Config.bFullScreen = !g_Config.bFullScreen;
+				System_ApplyFullscreenState();
+			}
+			break;
 		default:
 			break;
 		}
 	}
 };
 GlobalListener g_globalListener;
+
+// Whether the key is part of a mapping of the fullscreen toggle, which works in the menus too.
+static bool IsFullscreenToggleKey(const KeyInput &key) {
+	std::vector<KeyMap::MultiInputMapping> mappings;
+	if (!KeyMap::InputMappingsFromPspButton(VIRTKEY_TOGGLE_FULLSCREEN, &mappings, false)) {
+		return false;
+	}
+	const InputMapping input(key.deviceId, key.keyCode);
+	for (const KeyMap::MultiInputMapping &mapping : mappings) {
+		for (const InputMapping &part : mapping.mappings) {
+			if (part == input) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
 
 static void AssertCancelCallback(const char *message, void *userdata) {
 	NOTICE_LOG(Log::CPU, "Broke after assert: %s", message);
@@ -478,6 +507,12 @@ std::thread *graphicsLoadThread;
 
 // globals
 Path boot_filename;
+
+// Archives that LaunchFile() in MainScreen.cpp opens an install screen for, rather than booting.
+static bool IsInstallableArchive(const Path &path) {
+	const std::string extension = path.GetFileExtension();
+	return extension == ".zip" || extension == ".7z" || extension == ".pkg";
+}
 Path boot_mountIso;
 
 // This is called before NativeInit so we do a little bit of initialization here.
@@ -506,12 +541,17 @@ static void CheckFailedGPUBackends() {
 	return;
 #endif
 
+	// Only a custom driver is given up on, never the backend.
+	bool customDriverOnly = false;
 #if PPSSPP_PLATFORM(ANDROID)
 	if (System_GetPropertyInt(SYSPROP_SYSTEMVERSION) >= 30) {
-		// In Android 11 or later, Vulkan is as stable as OpenGL, so let's not even bother.
-		// Have also seen unexplained issues with random fallbacks to OpenGL for no good reason,
-		// especially when debugging.
-		return;
+		// In Android 11 or later, Vulkan is as stable as OpenGL, so the only thing to check for is a custom
+		// driver that crashes. Have also seen unexplained issues with random fallbacks to OpenGL for no good
+		// reason, especially when debugging.
+		if (g_Config.iGPUBackend != (int)GPUBackend::VULKAN || g_Config.sCustomDriver.empty()) {
+			return;
+		}
+		customDriverOnly = true;
 	}
 #endif
 
@@ -538,8 +578,26 @@ static void CheckFailedGPUBackends() {
 		ERROR_LOG(Log::Loader, "Failed graphics backends: %s", g_Config.sFailedGPUBackends.c_str());
 	}
 
+#if PPSSPP_PLATFORM(ANDROID)
+	// A crash in Vulkan with a custom driver gets another try with the system's driver before leaving Vulkan.
+	std::vector<std::string> failed;
+	SplitString(g_Config.sFailedGPUBackends, ',', failed);
+	if (g_Config.iGPUBackend == (int)GPUBackend::VULKAN && ContainsNoCase(failed, "VULKAN") && VulkanDisableCustomDriver()) {
+		RemoveNoCase(failed, "VULKAN");
+		g_Config.sFailedGPUBackends.clear();
+		for (const std::string &backend : failed) {
+			if (!g_Config.sFailedGPUBackends.empty()) {
+				g_Config.sFailedGPUBackends += ",";
+			}
+			g_Config.sFailedGPUBackends += backend;
+		}
+	}
+#endif
+
 	// Okay, let's not try a backend in the failed list.
-	g_Config.iGPUBackend = g_Config.NextValidBackend();
+	if (!customDriverOnly) {
+		g_Config.iGPUBackend = g_Config.NextValidBackend();
+	}
 	if (lastBackend != g_Config.iGPUBackend) {
 		// This is the expected path.
 		std::string param = GPUBackendToString((GPUBackend)lastBackend) + " -> " + GPUBackendToString((GPUBackend)g_Config.iGPUBackend);
@@ -771,8 +829,11 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 	}
 
 	boot_filename.clear();
+	// No XMB to boot (like from an Android XMB shortcut before installing a firmware), so show where to get one.
+	bool noVSHToBoot = false;
 	if (boot_filename.empty() && cmdLineOptions.bootVSH.value_or(false)) {
-		boot_filename = g_Config.nandRootDirectory / "flash0/vsh/module/vshmain.prx";
+		boot_filename = GetVSHBootPath();
+		noVSHToBoot = boot_filename.empty();
 		skipLogo = true;
 	}
 	boot_mountIso = cmdLineOptions.mountIso.has_value() ? Path(cmdLineOptions.mountIso.value()) : Path();
@@ -930,9 +991,27 @@ void NativeInit(int argc, const char *argv[], const CommandLineOptions &cmdLineO
 		} else if (equals(cmdLineOptions.startScreen.value(), "driver")) {
 			g_screenManager->switchScreen(new MainScreen());
 			g_screenManager->push(new DriverManagerScreen(Path()));
+		} else if (equals(cmdLineOptions.startScreen.value(), "visualmapping")) {
+			g_screenManager->switchScreen(new MainScreen());
+			g_screenManager->push(new VisualMappingScreen(Path()));
 		} else {
 			WARN_LOG(Log::System, "Unknown start screen '%s'", cmdLineOptions.startScreen.value().c_str());
 			g_screenManager->switchScreen(new LogoScreen(AfterLogoScreen::DEFAULT));
+		}
+	} else if (noVSHToBoot && boot_filename.empty()) {
+		INFO_LOG(Log::System, "--vsh: No bootable XMB installed, opening the firmware screen");
+		g_screenManager->switchScreen(new MainScreen());
+		g_screenManager->push(new FirmwareScreen(Path()));
+	} else if (skipLogo && IsInstallableArchive(boot_filename)) {
+		// Not something to boot. Open its install screen over the main screen, like the game browser does.
+		INFO_LOG(Log::System, "Opening install screen for '%s'", boot_filename.c_str());
+		const Path archive = boot_filename;
+		boot_filename.clear();
+		g_screenManager->switchScreen(new MainScreen());
+		if (archive.GetFileExtension() == ".pkg") {
+			g_screenManager->push(new InstallPkgScreen(archive));
+		} else {
+			g_screenManager->push(new InstallZipScreen(archive));
 		}
 	} else if (skipLogo && !boot_filename.empty()) {
 		INFO_LOG(Log::System, "Launching EmuScreen with boot filename '%s'", boot_filename.c_str());
@@ -1726,6 +1805,11 @@ bool NativeKey(const KeyInput &key) {
 				}
 			}
 		}
+	}
+
+	// Outside the game, the mapper otherwise only gets key releases. Not while a key is being mapped.
+	if (!(inputMode & InputMode::AllKeys) && !imguiHasKeyboard && (key.flags & (KeyInputFlags::UP | KeyInputFlags::DOWN)) && IsFullscreenToggleKey(key)) {
+		passKeyThrough = true;
 	}
 
 	if (inputMode != InputMode::None) {

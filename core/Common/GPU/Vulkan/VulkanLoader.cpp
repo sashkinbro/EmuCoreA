@@ -42,12 +42,6 @@
 #include <adrenotools/driver.h>
 #endif
 
-#if PPSSPP_PLATFORM(ANDROID)
-#include <cstring>
-#include <android/api-level.h>
-#include <sys/system_properties.h>
-#endif
-
 namespace PPSSPP_VK {
 PFN_vkCreateInstance vkCreateInstance;
 PFN_vkDestroyInstance vkDestroyInstance;
@@ -363,6 +357,25 @@ static const char * const so_names[] = {
 #endif
 
 static std::string g_customDriverPath;
+// The custom driver that didn't work, for VulkanTakeFailedCustomDriver.
+static std::string g_failedCustomDriver;
+
+static bool CustomDriverInUse() {
+#if PPSSPP_PLATFORM(ANDROID) && PPSSPP_ARCH(ARM64)
+	return !g_customDriverPath.empty() || (!g_Config.sCustomDriver.empty() && g_Config.sCustomDriver != "Default");
+#else
+	return false;
+#endif
+}
+
+// Forgets the custom driver, so that the next try (and the next run) uses the system's.
+static void ForgetCustomDriver() {
+	const std::string &activeDriver = !g_customDriverPath.empty() ? g_customDriverPath : g_Config.sCustomDriver;
+	ERROR_LOG(Log::G3D, "Custom driver '%s' failed, switching to the system driver", activeDriver.c_str());
+	g_failedCustomDriver = activeDriver;
+	g_customDriverPath.clear();
+	g_Config.sCustomDriver.clear();
+}
 
 static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 #if PPSSPP_PLATFORM(SWITCH)
@@ -376,11 +389,7 @@ static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 	void *lib = nullptr;
 
 #if PPSSPP_PLATFORM(ANDROID) && PPSSPP_ARCH(ARM64)
-	const bool customDriverAllowed = VulkanCustomDriverAllowedByOS();
-	if (!customDriverAllowed && (!g_customDriverPath.empty() || (!g_Config.sCustomDriver.empty() && g_Config.sCustomDriver != "Default"))) {
-		WARN_LOG(Log::G3D, "Custom Vulkan driver ignored, not supported on this Android version");
-	}
-	if (customDriverAllowed && !g_customDriverPath.empty() && !g_nativeLibDir.empty()) {
+	if (!g_customDriverPath.empty() && !g_nativeLibDir.empty()) {
 		const size_t slash = g_customDriverPath.find_last_of('/');
 		if (slash != std::string::npos && slash + 1 < g_customDriverPath.size()) {
 			const std::string driverDir = g_customDriverPath.substr(0, slash + 1);
@@ -396,10 +405,11 @@ static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 				(std::string(redirectDir.c_str()) + "/").c_str(), nullptr);
 			if (!lib) {
 				ERROR_LOG(Log::G3D, "Failed to load selected Vulkan driver: %s", driverName.c_str());
+				ForgetCustomDriver();
 			}
 		}
 	}
-	if (customDriverAllowed && !lib && g_customDriverPath.empty() && !g_Config.sCustomDriver.empty() && g_Config.sCustomDriver != "Default") {
+	if (!lib && g_customDriverPath.empty() && !g_Config.sCustomDriver.empty() && g_Config.sCustomDriver != "Default") {
 		const Path driverPath = g_Config.internalDataDirectory / "drivers" / g_Config.sCustomDriver;
 
 		json::JsonReader meta = json::JsonReader((driverPath / "meta.json").c_str());
@@ -425,6 +435,12 @@ static VulkanLibraryHandle VulkanLoadLibrary(std::string *errorString) {
 			} else {
 				INFO_LOG(Log::G3D, "Vulkan library loaded with AdrenoTools ('%s')", g_Config.sCustomDriver.c_str());
 			}
+		} else {
+			ERROR_LOG(Log::G3D, "Custom driver '%s' has no readable meta.json", g_Config.sCustomDriver.c_str());
+		}
+		if (!lib) {
+			// The system's driver is loaded below instead.
+			ForgetCustomDriver();
 		}
 	}
 #endif
@@ -456,6 +472,22 @@ static void VulkanFreeLibrary(VulkanLibraryHandle &h) {
 #endif
 		h = nullptr;
 	}
+}
+
+bool VulkanDisableCustomDriver() {
+	if (!CustomDriverInUse()) {
+		return false;
+	}
+	ForgetCustomDriver();
+	VulkanFreeLibrary(vulkanLibrary);
+	g_vulkanAvailabilityChecked = false;
+	return true;
+}
+
+std::string VulkanTakeFailedCustomDriver() {
+	std::string driver = std::move(g_failedCustomDriver);
+	g_failedCustomDriver.clear();
+	return driver;
 }
 
 void VulkanSetAvailable(bool available) {
@@ -515,6 +547,8 @@ bool VulkanMayBeAvailable() {
 
 	std::string errorStr;
 	VulkanLibraryHandle lib = VulkanLoadLibrary(&errorStr);
+	// After the load, which forgets a custom driver that didn't load at all.
+	const bool usedCustomDriver = CustomDriverInUse();
 	if (!lib) {
 		INFO_LOG(Log::G3D, "Vulkan loader: Library not available: %s", errorStr.c_str());
 		g_vulkanAvailabilityChecked = true;
@@ -713,6 +747,10 @@ bail:
 	}
 	if (!g_vulkanMayBeAvailable) {
 		WARN_LOG(Log::G3D, "Vulkan with working device not detected.");
+		// Try the system's driver before giving up on Vulkan.
+		if (usedCustomDriver && VulkanDisableCustomDriver()) {
+			return VulkanMayBeAvailable();
+		}
 	}
 	return g_vulkanMayBeAvailable;
 #endif
@@ -1042,23 +1080,6 @@ static const AdrenoEnvVarDef adrenoEnvVarDefs[] = {
 const AdrenoEnvVarDef *GetAdrenoEnvVarDefs(int *count) {
 	*count = ARRAY_SIZE(adrenoEnvVarDefs);
 	return adrenoEnvVarDefs;
-}
-
-bool VulkanCustomDriverAllowedByOS() {
-#if PPSSPP_PLATFORM(ANDROID)
-	// Android 17 internal builds crash in linkernsbypass (used by AdrenoTools), so stay away from 17 until
-	// that's been tested. Preview builds report the previous release's API level, with a codename other than "REL".
-	const int apiLevel = android_get_device_api_level();
-	if (apiLevel >= 37) {
-		return false;
-	}
-	char codename[PROP_VALUE_MAX]{};
-	__system_property_get("ro.build.version.codename", codename);
-	if (apiLevel >= 36 && strcmp(codename, "REL") != 0) {
-		return false;
-	}
-#endif
-	return true;
 }
 
 void VulkanApplyCustomDriverEnvVars(AdrenoEnvVar envVars) {

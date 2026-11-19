@@ -89,9 +89,12 @@
     <ClInclude Include="..\..\UI\AudioCommon.h" />
     <ClInclude Include="..\..\UI\Background.h" />
     <ClInclude Include="..\..\UI\BackgroundAudio.h" />
+    <ClInclude Include="..\..\UI\FirmwareSounds.h" />
+    <ClInclude Include="..\..\UI\GameBootAnimation.h" />
     <ClInclude Include="..\..\UI\BaseScreens.h" />
     <ClInclude Include="..\..\UI\ChatScreen.h" />
     <ClInclude Include="..\..\UI\ControlMappingScreen.h" />
+    <ClInclude Include="..\..\UI\VisualMappingScreen.h" />
     <ClInclude Include="..\..\UI\CustomButtonMappingScreen.h" />
     <ClInclude Include="..\..\UI\CwCheatScreen.h" />
     <ClInclude Include="..\..\UI\DebugOverlay.h" />
@@ -115,6 +118,7 @@
     <ClInclude Include="..\..\UI\ImDebugger\ImDisasmView.h" />
     <ClInclude Include="..\..\UI\ImDebugger\ImGe.h" />
     <ClInclude Include="..\..\UI\ImDebugger\ImJitViewer.h" />
+    <ClInclude Include="..\..\UI\ImDebugger\ImProfiler.h" />
     <ClInclude Include="..\..\UI\ImDebugger\ImMemView.h" />
     <ClInclude Include="..\..\UI\ImDebugger\ImStructViewer.h" />
     <ClInclude Include="..\..\UI\InstallPkgScreen.h" />
@@ -158,9 +162,12 @@
     <ClCompile Include="..\..\UI\AudioCommon.cpp" />
     <ClCompile Include="..\..\UI\Background.cpp" />
     <ClCompile Include="..\..\UI\BackgroundAudio.cpp" />
+    <ClCompile Include="..\..\UI\FirmwareSounds.cpp" />
+    <ClCompile Include="..\..\UI\GameBootAnimation.cpp" />
     <ClCompile Include="..\..\UI\BaseScreens.cpp" />
     <ClCompile Include="..\..\UI\ChatScreen.cpp" />
     <ClCompile Include="..\..\UI\ControlMappingScreen.cpp" />
+    <ClCompile Include="..\..\UI\VisualMappingScreen.cpp" />
     <ClCompile Include="..\..\UI\CustomButtonMappingScreen.cpp" />
     <ClCompile Include="..\..\UI\CwCheatScreen.cpp" />
     <ClCompile Include="..\..\UI\DebugOverlay.cpp" />
@@ -184,6 +191,7 @@
     <ClCompile Include="..\..\UI\ImDebugger\ImDisasmView.cpp" />
     <ClCompile Include="..\..\UI\ImDebugger\ImGe.cpp" />
     <ClCompile Include="..\..\UI\ImDebugger\ImJitViewer.cpp" />
+    <ClCompile Include="..\..\UI\ImDebugger\ImProfiler.cpp" />
     <ClCompile Include="..\..\UI\ImDebugger\ImMemView.cpp" />
     <ClCompile Include="..\..\UI\ImDebugger\ImStructViewer.cpp" />
     <ClCompile Include="..\..\UI\InstallPkgScreen.cpp" />

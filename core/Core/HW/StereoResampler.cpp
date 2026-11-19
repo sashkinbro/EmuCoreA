@@ -28,6 +28,14 @@
 #define TARGET_BUFSIZE_DEFAULT 1680 // 40 ms
 #define TARGET_BUFSIZE_EXTRA 3360 // 80 ms
 
+// While lag sync paces: over the output's period, and without one to go by.
+#define TARGET_BUFSIZE_LAG_SYNC_MARGIN 192 // 4.4 ms
+#define TARGET_BUFSIZE_LAG_SYNC_UNKNOWN 882 // 20 ms
+
+#define TARGET_EXCESS_DROP 220 // 5 ms
+// How long a dropped excess is crossfaded over, so the skip doesn't click. Shorter than any drop.
+static const int EXCESS_DROP_FADE = 128;  // 2.9 ms
+
 #define MAX_FREQ_SHIFT  600.0f  // how far off can we be from 44100 Hz
 #define CONTROL_FACTOR  0.2f // in freq_shift per fifo size offset
 #define CONTROL_AVG     32.0f
@@ -46,6 +54,7 @@
 #include "Core/Config.h"
 #include "Core/ConfigValues.h"
 #include "Core/HW/StereoResampler.h"
+#include "Core/HLE/sceDisplay.h"
 #include "Core/Util/AudioFormat.h"  // for clamp_u16
 #include "Core/System.h"
 
@@ -74,20 +83,32 @@ StereoResampler::~StereoResampler() {
 	buffer_ = nullptr;
 }
 
-void StereoResampler::UpdateBufferSize() {
+int StereoResampler::TargetBufferSize() {
 	if (g_Config.bExtraAudioBuffering) {
+		return TARGET_BUFSIZE_EXTRA;
+	}
+	int systemBufsize = System_GetPropertyInt(SYSPROP_AUDIO_FRAMES_PER_BUFFER);
+	int target = TARGET_BUFSIZE_DEFAULT;
+	if (systemBufsize > 0 && target < systemBufsize + TARGET_BUFSIZE_MARGIN) {
+		target = std::min(4096, systemBufsize + TARGET_BUFSIZE_MARGIN);
+	}
+	// While lag sync paces, audio arrives every millisecond or two rather than a frame's worth at
+	// a time, so the buffer only has to cover the output's period, a little jitter, and how far
+	// emulation has recently fallen behind (a slow display list, say).
+	if (__DisplayGetLagSyncMode() == LagSyncMode::PACING) {
+		const int behind = (int)(__DisplayGetLagSyncBehindPeak() * 44100.0);
+		const int lagSyncTarget = (systemBufsize > 0 ? systemBufsize + TARGET_BUFSIZE_LAG_SYNC_MARGIN : TARGET_BUFSIZE_LAG_SYNC_UNKNOWN) + behind;
+		target = std::min(target, lagSyncTarget);
+	}
+	return target;
+}
+
+void StereoResampler::UpdateBufferSize() {
+	targetBufsize_ = TargetBufferSize();
+	if (g_Config.bExtraAudioBuffering || targetBufsize_ * 2 > MAX_BUFSIZE_DEFAULT) {
 		maxBufsize_ = MAX_BUFSIZE_EXTRA;
-		targetBufsize_ = TARGET_BUFSIZE_EXTRA;
 	} else {
 		maxBufsize_ = MAX_BUFSIZE_DEFAULT;
-		targetBufsize_ = TARGET_BUFSIZE_DEFAULT;
-
-		int systemBufsize = System_GetPropertyInt(SYSPROP_AUDIO_FRAMES_PER_BUFFER);
-		if (systemBufsize > 0 && targetBufsize_ < systemBufsize + TARGET_BUFSIZE_MARGIN) {
-			targetBufsize_ = std::min(4096, systemBufsize + TARGET_BUFSIZE_MARGIN);
-			if (targetBufsize_ * 2 > MAX_BUFSIZE_DEFAULT)
-				maxBufsize_ = MAX_BUFSIZE_EXTRA;
-		}
 	}
 }
 
@@ -174,12 +195,12 @@ inline int16_t MixSingleSample(int16_t s1, int16_t s2, uint16_t frac) {
 }
 
 // Executed from sound stream thread, pulling sound out of the buffer.
-void StereoResampler::Mix(s16 *samples, unsigned int numSamples, bool consider_framelimit, int sample_rate) {
+int StereoResampler::Mix(s16 *samples, unsigned int numSamples, bool consider_framelimit, int sample_rate) {
 	if (!samples)
-		return;
+		return 0;
 
 	if (!buffer_) {
-		return;
+		return 0;
 	}
 
 	unsigned int currentSample;
@@ -206,6 +227,39 @@ void StereoResampler::Mix(s16 *samples, unsigned int numSamples, bool consider_f
 	// samples we need.
 	numLeft -= droppedSamples_;
 	droppedSamples_ = 0;
+
+	// The rate adjustment below can only drain a full buffer slowly (taking around ten seconds from
+	// a startup fill down to a small target), so drop a lasting excess in one go. The lowest level
+	// over a window only stays high when there's an excess: when emulation bursts a frame of audio
+	// at a time, the level swings, and its troughs fall below the target.
+	windowMin_ = std::min(windowMin_, (int)numLeft);
+	windowSamples_ += numSamples;
+	if (windowSamples_ >= (u32)sample_rate / 4) {
+		const int excess = windowMin_ - targetBufsize_;
+		if (excess > TARGET_EXCESS_DROP) {
+			// Jumping straight ahead puts a step in the waveform, which is a click. So the start of
+			// what follows the skip is crossfaded in place, from what would have played next into
+			// itself: the join continues the waveform, and the skip is only heard as a few
+			// milliseconds of the sound missing. The producer only writes past indexW, so this part
+			// of the buffer is ours.
+			const u32 skipTo = indexR + excess * 2;
+			const int fade = std::min(EXCESS_DROP_FADE, (int)(((indexW - skipTo) & INDEX_MASK) / 2));
+			for (int i = 0; i < fade; i++) {
+				const int64_t newWeight = (int64_t)i * 65536 / fade;
+				for (int c = 0; c < 2; c++) {
+					const int64_t from = buffer_[(indexR + i * 2 + c) & INDEX_MASK];
+					int16_t &to = buffer_[(skipTo + i * 2 + c) & INDEX_MASK];
+					to = (int16_t)((from * (65536 - newWeight) + to * newWeight) >> 16);
+				}
+			}
+			indexR = skipTo;
+			numLeft -= excess;
+			numLeftI_ -= excess;
+			droppedExcess_ += excess;
+		}
+		windowMin_ = INT32_MAX;
+		windowSamples_ = 0;
+	}
 
 	// numLeftI_ here becomes a lowpass filtered version of numLeft.
 	numLeftI_ = (numLeft + numLeftI_ * (CONTROL_AVG - 1.0f)) / CONTROL_AVG;
@@ -247,7 +301,8 @@ void StereoResampler::Mix(s16 *samples, unsigned int numSamples, bool consider_f
 	frac_ = frac;
 
 	// Let's not count the underrun padding here.
-	outputSampleCount_ += currentSample / 2;
+	const int mixed = currentSample / 2;
+	outputSampleCount_ += mixed;
 
 	// Padding with the last value to reduce clicking
 	short s[2];
@@ -261,6 +316,11 @@ void StereoResampler::Mix(s16 *samples, unsigned int numSamples, bool consider_f
 
 	// Flush cached variable
 	indexR_.store(indexR);
+	return mixed;
+}
+
+int StereoResampler::BufferedSamples() const {
+	return ((indexW_.load() - indexR_.load()) & (maxBufsize_ * 2 - 1)) / 2;
 }
 
 // Executes on the emulator thread, pushing sound into the buffer.
@@ -313,11 +373,25 @@ void StereoResampler::GetAudioDebugStats(char *buf, size_t bufSize) {
 	double effective_output_sample_rate = (double)outputSampleCount_ / elapsed;
 
 	double bufferLatencyMs = 1000.0 * (double)lastBufSize_ / (double)inputSampleRateHz_;
+	double targetMs = 1000.0 * (double)targetBufsize_ / (double)inputSampleRateHz_;
+	char lagSync[64] = "off";
+	switch (__DisplayGetLagSyncMode()) {
+	case LagSyncMode::PACING:
+		snprintf(lagSync, sizeof(lagSync), "pacing (small target, %0.1fms of it for stalls)", __DisplayGetLagSyncBehindPeak() * 1000.0);
+		break;
+	case LagSyncMode::BURSTING:
+		snprintf(lagSync, sizeof(lagSync), "on, but bursting (host too busy)");
+		break;
+	default:
+		break;
+	}
 	snprintf(buf, bufSize,
-		"Audio buffer: %d/%d (%0.1fms, target: %d)\n"
+		"Audio buffer: %d/%d (%0.1fms, target: %d = %0.1fms)\n"
+		"Lag sync: %s\n"
 		"Filtered: %0.2f\n"
 		"Underruns: %d\n"
 		"Overruns: %d\n"
+		"Excess dropped: %d\n"
 		"Sample rate: %d (input: %d)\n"
 		"Effective input sample rate: %0.2f\n"
 		"Effective output sample rate: %0.2f\n"
@@ -327,9 +401,12 @@ void StereoResampler::GetAudioDebugStats(char *buf, size_t bufSize) {
 		maxBufsize_,
 		bufferLatencyMs,
 		targetBufsize_,
+		targetMs,
+		lagSync,
 		numLeftI_,
 		underrunCountTotal_,
 		overrunCountTotal_,
+		droppedExcess_,
 		(int)outputSampleRateHz_,
 		inputSampleRateHz_,
 		effective_input_sample_rate,
@@ -352,6 +429,7 @@ void StereoResampler::ResetStatCounters() {
 	overrunCount_ = 0;
 	underrunCountTotal_ = 0;
 	overrunCountTotal_ = 0;
+	droppedExcess_ = 0;
 	inputSampleCount_ = 0;
 	outputSampleCount_ = 0;
 	startTime_ = time_now_d();

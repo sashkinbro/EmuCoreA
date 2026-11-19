@@ -311,6 +311,7 @@ enum class UIMessage {
 	SHOW_DISPLAY_LAYOUT_EDITOR,
 	SHOW_SETTINGS,
 	SHOW_LANGUAGE_SCREEN,
+	SHOW_FIRMWARE_SCREEN,
 	REQUEST_GPU_DUMP_NEXT_FRAME,
 	REQUEST_CLEAR_JIT,
 	APP_RESUMED,
@@ -330,7 +331,7 @@ enum class UIMessage {
 	RECENT_FILES_CHANGED,
 	SAVE_FRAME_DUMP,
 	ADHOC_SERVER_LIST_CHANGED,
-	SAVESTATE_SLOT_SAVED,  // A slot's save state file was written.
+	SAVESTATE_SLOT_SAVED,  // A save state save finished: written, failed or refused.
 	SOFT_KEYBOARD_HIDDEN,  // The platform closed a soft keyboard forced by System_SetSoftKeyboardForced.
 };
 

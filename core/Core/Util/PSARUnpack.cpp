@@ -511,7 +511,8 @@ public:
 
 private:
 	// Decrypts one record into 'out'. Returns the decrypted size, or <= 0 on failure.
-	int DecodeBlock(u32 offset, u32 cbIn, std::vector<u8> &out);
+	// quiet: a failure is expected (we're guessing the size), so don't log it.
+	int DecodeBlock(u32 offset, u32 cbIn, std::vector<u8> &out, bool quiet = false);
 	// Decodes the current entry's contents, if that hasn't happened yet.
 	void EnsureContents();
 
@@ -543,7 +544,7 @@ private:
 	std::vector<u8> block2_;
 };
 
-int PSARReader::DecodeBlock(u32 offset, u32 cbIn, std::vector<u8> &out) {
+int PSARReader::DecodeBlock(u32 offset, u32 cbIn, std::vector<u8> &out, bool quiet) {
 	if (cbIn == 0 || cbIn > PSAR_MAX_ENTRY_BYTES || offset >= size_) {
 		return -1;
 	}
@@ -579,7 +580,7 @@ int PSARReader::DecodeBlock(u32 offset, u32 cbIn, std::vector<u8> &out) {
 	}
 
 	const int decrypted = pspDecryptPRX(out.data(), out.data(), cbIn);
-	if (decrypted <= 0) {
+	if (decrypted <= 0 && !quiet) {
 		WARN_LOG(Log::Loader, "PSAR: block at %u (%u bytes) failed to decrypt: %d, tag %08x", offset, cbIn, decrypted, ReadU32(out.data() + 0xD0));
 	}
 	return decrypted;
@@ -650,7 +651,7 @@ bool PSARReader::Init(std::string *error) {
 			if (candidate == 0) {
 				continue;
 			}
-			decoded = DecodeBlock(pos_, overhead_ + candidate, block2_);
+			decoded = DecodeBlock(pos_, overhead_ + candidate, block2_, true);
 			if (decoded > 0) {
 				break;
 			}
@@ -1461,13 +1462,25 @@ bool FirmwareVersionPlaysUmdVideo(std::string_view version) {
 	return FirmwareVersionSupportsVSH(version) && FirmwareVersionToInt(version) >= FirmwareVersionToInt(UMD_VIDEO_MIN_FIRMWARE);
 }
 
+Path InstalledFirmwareFile(std::string_view flash0Path) {
+	if (g_Config.nandRootDirectory.empty()) {
+		return Path();
+	}
+	return g_Config.nandRootDirectory / "flash0" / flash0Path;
+}
+
+bool InstalledFirmwareHasFile(std::string_view flash0Path) {
+	const Path path = InstalledFirmwareFile(flash0Path);
+	return !path.empty() && File::Exists(path);
+}
+
 bool InstalledFirmwareRunsPS1Discs() {
 	// The POPS managers PopsBoot knows for converted EBOOTs: 3.95 to 6.61. A version in between that it
 	// doesn't know fails the boot with a message saying so.
 	InstalledFirmwareInfo info;
 	ReadInstalledFirmwareInfo(g_Config.nandRootDirectory, &info, false);
 	const int version = FirmwareVersionToInt(info.version);
-	return version >= 395 && version <= 661 && File::Exists(g_Config.nandRootDirectory / "flash0/kd/popsman.prx");
+	return version >= 395 && version <= 661 && InstalledFirmwareHasFile("kd/popsman.prx");
 }
 
 Path GetUmdVideoVSHPath() {
@@ -1476,10 +1489,21 @@ Path GetUmdVideoVSHPath() {
 	if (!info.hasVsh || !FirmwareVersionPlaysUmdVideo(info.version)) {
 		return Path();
 	}
-	return g_Config.nandRootDirectory / "flash0/vsh/module/vshmain.prx";
+	return InstalledFirmwareFile("vsh/module/vshmain.prx");
 }
 
-std::string GetVSHTitle(const Path &path) {
+Path GetVSHBootPath() {
+	InstalledFirmwareInfo info;
+	ReadInstalledFirmwareInfo(g_Config.nandRootDirectory, &info, false);
+	if (!info.hasVsh || !FirmwareVersionSupportsVSH(info.version)) {
+		return Path();
+	}
+	return InstalledFirmwareFile("vsh/module/vshmain.prx");
+}
+
+const char *const VSH_DISC_ID = "VSHM00000";
+
+std::string GetVSHTitle(const Path &path, std::string *version) {
 	if (!equalsNoCase(path.GetFilename(), "vshmain.prx")) {
 		return std::string();
 	}
@@ -1488,6 +1512,9 @@ std::string GetVSHTitle(const Path &path) {
 	std::string versionTxt;
 	if (File::ReadTextFileToString(path.NavigateUp().NavigateUp() / "etc/version.txt", &versionTxt)) {
 		ParseVersionTxt(versionTxt, &info);
+	}
+	if (version) {
+		*version = info.version;
 	}
 	return info.version.empty() ? std::string("XMB") : "XMB " + info.version;
 }
@@ -1621,6 +1648,16 @@ std::string ReadMountedDiscUpdaterVersion() {
 	return ReadUpdaterVersionFromArchiveHeader();
 }
 
+// Keeps Android's media scanner out of the firmware.
+static void CreateNoMediaFile(const Path &dir) {
+#if PPSSPP_PLATFORM(ANDROID)
+	const Path noMedia = dir / ".nomedia";
+	if (!File::Exists(noMedia) && !File::CreateEmptyFile(noMedia)) {
+		WARN_LOG(Log::Loader, "Couldn't create %s", noMedia.c_str());
+	}
+#endif
+}
+
 bool UnpackUpdaterFromMountedDisc(const Path &outputDir, const PSARUnpackOptions &options, PSARUnpackStats *stats, std::string *error) {
 	std::string localError;
 	if (!error) {
@@ -1633,13 +1670,13 @@ bool UnpackUpdaterFromMountedDisc(const Path &outputDir, const PSARUnpackOptions
 		return false;
 	}
 
-	// Write a nomedia file to avoid Android indexing the files.
-#if PPSSPP_PLATFORM(ANDROID)
-	File::CreateEmptyFile(outputDir / ".nomedia");
-#endif
-
 	INFO_LOG(Log::Loader, "Found a %d byte updater on the mounted disc", (int)psar.size());
-	return UnpackPSAR(psar.data(), psar.size(), outputDir, options, stats, error);
+	if (!UnpackPSAR(psar.data(), psar.size(), outputDir, options, stats, error)) {
+		return false;
+	}
+	// After the unpack, which creates outputDir.
+	CreateNoMediaFile(outputDir);
+	return true;
 }
 
 bool UnpackUpdater(const Path &filename, const Path &outputDir, const PSARUnpackOptions &options, PSARUnpackStats *stats, std::string *error) {
@@ -1750,6 +1787,9 @@ bool InstallFirmware(const Path &updater, const Path &nandRoot, const PSARUnpack
 		ok = SwapStagingIntoPlace(nandRoot, staging, error);
 	}
 	if (ok) {
+		// Whichever way the firmware came, and also into a NAND that was set up without one.
+		CreateNoMediaFile(nandRoot);
+
 		// The shell refuses to install a theme without this directory, and the updater's archive
 		// doesn't have it (6.61's has nothing under flash1), so the real updater must create it.
 		const Path themeDir = nandRoot / "flash1/vsh/theme";
@@ -1786,11 +1826,6 @@ bool AutoInstallFirmwareFromDisc() {
 	}
 
 	const Path nandRoot = GetSysDirectory(DIRECTORY_NAND);
-
-	// Write a nomedia file to avoid Android indexing the files.
-#if PPSSPP_PLATFORM(ANDROID)
-	File::CreateEmptyFile(nandRoot / ".nomedia");
-#endif
 
 	InstalledFirmwareInfo installed;
 	ReadInstalledFirmwareInfo(nandRoot, &installed, false);
