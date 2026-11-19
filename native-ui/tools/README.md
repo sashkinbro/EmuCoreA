@@ -88,4 +88,18 @@ module's `prepareNativeUiPack` task runs this before `preBuild` and copies the
 ZIP into the APK's assets; the installer uses the hash as the installed pack's
 version.
 
+## Reference frames from the real XMB
 
+`reference_capture.py` boots the real 6.60 VSH in PPSSPPHeadless, stops on
+absolute emulated timestamps through the WebSocket debugger, drives the D-pad
+and saves 480x272 screenshots:
+
+```text
+python native-ui/tools/reference_capture.py --device ADB_SERIAL --umd /data/local/tmp/game.iso
+```
+
+It needs `websocket-client`, the headless build at
+`/data/local/tmp/ppsspp_headless` and a flash0 dump at
+`/data/local/tmp/flash-6.60` on the device. Frames land in the ignored
+`native-ui/reference/`; the measurements they produced and the limits of what
+they prove are in [docs/reference.md](../docs/reference.md).

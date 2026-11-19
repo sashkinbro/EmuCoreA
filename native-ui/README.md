@@ -102,6 +102,8 @@ native-ui/
 - [x] RCO/GIM/VAG parsing and resource extraction (305 images, 8 sounds,
       2 models and 16 fonts from the shell containers)
 - [x] Resource pack + first-start installer
+- [x] Reference oracle: the real 6.60 XMB captured through the debugger
+      ([measurements](docs/reference.md))
 - [ ] Game column renderer, animations and sounds
 - [ ] Frame-for-frame comparison against the firmware XMB
 - [ ] Host integration in place of the current 3D carousel

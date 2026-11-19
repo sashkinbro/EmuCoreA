@@ -41,6 +41,7 @@ ehthumbs.db
 # generated packs stay out of Git; only tooling and source are tracked.
 /native-ui/firmware/
 /native-ui/resources/
+/native-ui/reference/
 /native-ui/**/build/
 /native-ui/**/.cxx/
 /native-ui/**/__pycache__/
