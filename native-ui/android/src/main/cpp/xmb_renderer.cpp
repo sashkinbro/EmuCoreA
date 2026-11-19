@@ -391,10 +391,10 @@ void XmbRenderer::DrawStatusBar() {
 	std::tm local{};
 	localtime_r(&now, &local);
 	std::strftime(clock, sizeof(clock), "%d/%m %H:%M", &local);
-	const float scale = 0.90f;
+	const float scale = 0.76f;
 	const float width = font_.TextWidth(clock, scale);
 	const float color[4] = {1.0f, 1.0f, 1.0f, 0.95f};
-	DrawText(clock, 444.0f - width, 20.0f, scale, color, true);
+	DrawText(clock, 444.0f - width, 18.0f, scale, color, true);
 	auto battery = textures_.find("battery");
 	if (battery != textures_.end()) {
 		DrawTextureUv(battery->second, 464.0f, 12.0f, 1.0f, color, 0.0f, 0.0f, 1.0f, 0.25f);
@@ -652,19 +652,19 @@ void XmbRenderer::DrawCategoryRow() {
 		if (!font_loaded_) {
 			continue;
 		}
-		const float label_scale = 0.66f;
+		const float label_scale = 0.63f;
 		if (same && index == category_) {
 			const float width = font_.TextWidth(kCategoryNames[index], label_scale);
 			const float label_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-			DrawText(kCategoryNames[index], x - width * 0.5f, 105.0f, label_scale, label_color, true);
+			DrawText(kCategoryNames[index], x - width * 0.5f, 103.0f, label_scale, label_color, true);
 		} else if (!same && index == category_from_) {
 			const float width = font_.TextWidth(kCategoryNames[index], label_scale);
 			const float label_color[4] = {1.0f, 1.0f, 1.0f, 1.0f - category_t_};
-			DrawText(kCategoryNames[index], x - width * 0.5f, 105.0f, label_scale, label_color, true);
+			DrawText(kCategoryNames[index], x - width * 0.5f, 103.0f, label_scale, label_color, true);
 		} else if (!same && index == category_) {
 			const float width = font_.TextWidth(kCategoryNames[index], label_scale);
 			const float label_color[4] = {1.0f, 1.0f, 1.0f, category_t_};
-			DrawText(kCategoryNames[index], x - width * 0.5f, 105.0f, label_scale, label_color, true);
+			DrawText(kCategoryNames[index], x - width * 0.5f, 103.0f, label_scale, label_color, true);
 		}
 	}
 }
@@ -706,13 +706,13 @@ void XmbRenderer::DrawItems() {
 			continue;
 		}
 		const bool has_subtitle = !items_[index].subtitle.empty();
-		const float title_baseline = has_subtitle ? y - 5.0f : y + 4.0f;
-		DrawText(items_[index].title, 140.0f, title_baseline, 0.82f, color, true);
+		const float title_baseline = has_subtitle ? y - 5.0f : y + 5.0f;
+		DrawText(items_[index].title, 141.0f, title_baseline, 0.81f, color, true);
 		if (has_subtitle) {
 			const float subtitle_color[4] = {1.0f, 1.0f, 1.0f, alpha * 0.85f};
-			DrawText(items_[index].subtitle, 140.0f, y + 14.0f, 0.62f, subtitle_color, true);
+			DrawText(items_[index].subtitle, 141.0f, y + 14.0f, 0.62f, subtitle_color, true);
 			const float rule_color[4] = {1.0f, 1.0f, 1.0f, alpha * 0.5f};
-			DrawQuad(140.0f, y + 1.0f, 336.0f, 1.0f, rule_color);
+			DrawQuad(141.0f, y + 1.0f, 335.0f, 1.0f, rule_color);
 		}
 	}
 }
