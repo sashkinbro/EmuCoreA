@@ -107,8 +107,10 @@ native-ui/
 - [x] Native GLES scene skeleton with the measured category/item anchors and
       original textures ([renderer](docs/renderer.md))
 - [x] PGF font reader and native text with original glyph bitmaps
-- [ ] Game column renderer, animations and sounds (wave, transitions and the
-      game backgrounds are still missing)
+- [x] Live navigation: D-pad/touch, measured scroll/slide easing, original
+      navigation sounds
+- [ ] Game column renderer, animations and sounds (wave, focus glow, clock and
+      the game backgrounds are still missing)
 - [ ] Frame-for-frame comparison against the firmware XMB
 - [ ] Host integration in place of the current 3D carousel
 

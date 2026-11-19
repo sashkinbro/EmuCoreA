@@ -48,6 +48,25 @@ the ones measured against the real shell and recorded in
 [docs/reference.md](reference.md). `scene/categories.json` is the source for
 those values.
 
+## Interaction
+
+Physical D-pad / A / B and touch swipes are forwarded from the preview activity
+to `nativeKey`. The scene keeps a category index and an item index; Up/Down
+scroll the list, Left/Right move the category row, Confirm/Back are wired to
+the decide/cancel sounds.
+
+The two animations use the curve measured from sixty 60 Hz reference frames: a
+one-pole ease-out with a 45 ms time constant for the category row and 60 ms for
+the item scroll. The old selected icon shrinks/fades while the new one grows;
+titles cross-fade with the same progress. Rows above the selected item are
+hidden after the scroll settles, matching the reference's clean selection view.
+
+Sounds come from the installed pack through Kotlin `SoundPool`; the native
+scene calls `PlaySound` on the same events (cursor on list moves, category
+decide on row moves, decide/cancel on Confirm/Back). Verified on the Anbernic
+RG556: the preview plays `snd_cursor` and `snd_category_decide` for the D-pad
+sequence and does not crash.
+
 ## Deliberately not here yet
 
 - The wave background (`system_plugin_bg.rco` model and curves).

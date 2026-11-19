@@ -21,5 +21,7 @@ object XmbNative {
 
     external fun nativeDraw()
 
+    external fun nativeKey(key: Int)
+
     external fun nativeShutdown()
 }

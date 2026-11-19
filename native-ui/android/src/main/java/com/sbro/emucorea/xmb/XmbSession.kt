@@ -15,6 +15,7 @@ object XmbSession {
 
     fun initialize(context: Context): File = synchronized(this) {
         val directory = BundledResources.ensure(context)
+        XmbAudio.initialize(context.applicationContext, directory)
         val path = directory.absolutePath
         if (root != path) {
             XmbNative.nativeSetResourceRoot(path)
