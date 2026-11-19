@@ -48,11 +48,14 @@ The scene currently draws:
 - the category row at y = 71, with the measured x anchors for
   Video/Game/Network/PSN and extrapolated anchors for the four left slots;
 - the selected category at scale 1.0 and opacity 1.0, the others at 0.8/0.55;
-- the Game column's selected item icon (Saved Data Utility, EJ) at
-  (110, 136) and the next item (Memory Stick, BI) one 66-pixel slot lower;
-- the selected label "Game" at the matched 0.66 scale, centred at x = 109.5,
-  and the item titles at the matched 0.82 scale, starting at x = 140;
-- a flat provisional theme colour behind them.
+- real item columns for all eight categories (Settings with Video/Photo/System
+  Settings, Extras Digital Comics, Photo Camera, Music SensMe, Video and Game
+  Memory Stick, Network Internet Browser/Search, PSN Sign Up/Store), with the
+  previous item shown dim at the top-left and the selected item's firmware
+  focus glow;
+- the Game column's Saved Data Utility and Memory Stick, plus the PGF titles,
+  clock and battery;
+- a measured theme ramp and the live wave behind them.
 
 The icons and glyphs are the exact decoded resources; the layout constants are
 the ones measured against the real shell and recorded in
@@ -86,6 +89,9 @@ sequence and does not crash.
 - Real focus glow/shadow filtering (the current halo is a cheap multi-sample
   approximation), reflections and icon cross-fades.
 - Game backgrounds and preview playback when a game is selected.
+- The exact USB Connection glyph (the reference uses a USB trident; the
+  extracted `CA` cable/wrench icon is the closest current match and is still
+  provisional).
 - The transient Memory Stick access indicator that appears at the top-left in
   the first boot frames (it is already sliding away 0.7 s later).
 - Exact per-element font sizes for every text style and the real shadow

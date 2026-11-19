@@ -3,6 +3,7 @@
 #include <GLES3/gl3.h>
 
 #include <chrono>
+#include <array>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -47,6 +48,7 @@ private:
 		std::string title;
 		std::string subtitle;
 		std::string texture_name;
+		bool disabled = false;
 	};
 
 	bool BuildProgram();
@@ -102,6 +104,8 @@ private:
 	bool logged_gl_error_ = false;
 
 	std::vector<Item> items_;
+	std::array<std::vector<Item>, 8> categories_;
+	std::array<int, 8> category_selected_{};
 	int category_ = 5;
 	int category_from_ = 5;
 	float category_t_ = 1.0f;

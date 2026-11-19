@@ -22,7 +22,7 @@ constexpr float kCategoryY = 71.0f;
 constexpr float kCategoryAnchorX = 109.5f;
 constexpr float kCategoryX[8] = {-318.0f, -232.5f, -147.0f, -61.5f, 24.0f, 109.5f, 195.5f, 274.0f};
 const char *kCategoryNames[8] = {
-	"Settings", "Extras", "Photo", "Music", "Video", "Game", "Network", "PlayStation Network",
+	"Settings", "Extras", "Photo", "Music", "Video", "Game", "Network", "PlayStation\u00aeNetwork",
 };
 constexpr float kItemIconX = 110.0f;
 constexpr float kSelectedItemY = 136.0f;
@@ -204,14 +204,45 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"item_update", "images/topmenu_icon/EH.png"},
 		{"battery", "images/system_plugin_fg/tex_battery.png"},
 		{"focus_glow", "images/system_plugin/tex_3x3_focus.png"},
+		{"item_usb", "images/topmenu_icon/CA.png"},
+		{"item_video_settings", "images/topmenu_icon/CX.png"},
+		{"item_photo_settings", "images/topmenu_icon/CY.png"},
+		{"item_system_settings", "images/topmenu_icon/CZ.png"},
+		{"item_camera", "images/topmenu_icon/DJ.png"},
+		{"item_comics", "images/topmenu_icon/DW.png"},
+		{"item_sensme", "images/topmenu_icon/DM.png"},
+		{"item_internet_search", "images/topmenu_icon/FB.png"},
+		{"item_internet_browser", "images/topmenu_icon/EU.png"},
+		{"item_psn_signup", "images/topmenu_icon/FU.png"},
+		{"item_psn_store", "images/topmenu_icon/FV.png"},
 	};
 	for (const auto &asset : assets) {
 		LoadTexture(asset.name, asset.path);
 	}
-	items_ = {
-		{ "Saved Data Utility", "", "item_savedata" },
-		{ "Memory Stick", "Free Space 1459 MB", "item_memstick" },
+	categories_[0] = {
+		{ "USB Connection", "", "item_usb" },
+		{ "Video Settings", "", "item_video_settings" },
+		{ "Photo Settings", "", "item_photo_settings" },
+		{ "System Settings", "", "item_system_settings", true },
 	};
+	categories_[1] = {{ "Digital Comics", "", "item_comics" }};
+	categories_[2] = {{ "Camera", "", "item_camera" }};
+	categories_[3] = {{ "SensMe\u2122 channels", "", "item_sensme" }};
+	categories_[4] = {{ "Memory Stick\u2122", "Free Space 1459 MB", "item_memstick" }};
+	categories_[5] = {
+		{ "Saved Data Utility", "", "item_savedata" },
+		{ "Memory Stick\u2122", "Free Space 1459 MB", "item_memstick" },
+	};
+	categories_[6] = {
+		{ "Internet Browser", "", "item_internet_browser" },
+		{ "Internet Search", "", "item_internet_search" },
+	};
+	categories_[7] = {
+		{ "Sign Up for PlayStation\u00aeNetwork", "", "item_psn_signup" },
+		{ "PlayStation\u00aeStore", "", "item_psn_store" },
+	};
+	category_selected_ = {1, 0, 0, 0, 0, 0, 0, 0};
+	items_ = categories_[5];
 	item_ = 0;
 	item_from_ = 0;
 	item_t_ = 1.0f;
@@ -635,17 +666,27 @@ void XmbRenderer::KeyPressed(Key key) {
 		break;
 	case Key::Left:
 		if (category_ > 0) {
+			category_selected_[category_] = item_;
 			category_from_ = category_;
 			category_ -= 1;
 			category_t_ = 0.0f;
+			items_ = categories_[category_];
+			item_ = category_selected_[category_];
+			item_from_ = item_;
+			item_t_ = 1.0f;
 			PlaySound(3);
 		}
 		break;
 	case Key::Right:
 		if (category_ < 7) {
+			category_selected_[category_] = item_;
 			category_from_ = category_;
 			category_ += 1;
 			category_t_ = 0.0f;
+			items_ = categories_[category_];
+			item_ = category_selected_[category_];
+			item_from_ = item_;
+			item_t_ = 1.0f;
 			PlaySound(3);
 		}
 		break;
@@ -712,16 +753,21 @@ void XmbRenderer::DrawCategoryRow() {
 }
 
 void XmbRenderer::DrawItems() {
+	if (item_ > 0 && item_ <= (int)items_.size()) {
+		const Item &previous = items_[item_ - 1];
+		const float preview_color[4] = {1.0f, 1.0f, 1.0f, 0.55f};
+		auto preview_texture = textures_.find(previous.texture_name);
+		if (preview_texture != textures_.end()) {
+			DrawTexture(preview_texture->second, kItemIconX, 6.0f, 1.0f, preview_color);
+		}
+		if (font_loaded_) {
+			DrawText(previous.title, 141.0f, 17.0f, 0.81f, preview_color, true);
+		}
+	}
 	const float scroll = Lerp((float)item_from_, (float)item_, item_t_);
 	for (int index = 0; index < (int)items_.size(); ++index) {
-		const bool above = index < item_;
-		if (above && item_t_ >= 0.99f) {
-			// One slot above is hidden behind the category row; the row two
-			// slots above is the dim preview seen at the top-left.
-			const int slots = item_ - index;
-			if (slots == 1) {
-				continue;
-			}
+		if (index < item_) {
+			continue;
 		}
 		const float y = kSelectedItemY + ((float)index - scroll) * kItemSpacing;
 		if (y < -48.0f || y > kScreenHeight + 48.0f) {
@@ -729,8 +775,8 @@ void XmbRenderer::DrawItems() {
 		}
 		float focus = 1.0f - std::min(1.0f, std::fabs((float)index - scroll));
 		float alpha = 0.55f + 0.45f * focus;
-		if (above) {
-			alpha *= 0.35f;
+		if (items_[index].disabled) {
+			alpha *= 0.45f;
 		}
 		const float color[4] = {1.0f, 1.0f, 1.0f, alpha};
 		auto texture = textures_.find(items_[index].texture_name);
