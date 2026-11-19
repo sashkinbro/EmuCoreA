@@ -21,7 +21,11 @@ constexpr float kScreenHeight = 272.0f;
 constexpr float kCategoryY = 71.0f;
 constexpr float kCategoryAnchorX = 109.5f;
 constexpr float kCategoryX[8] = {-318.0f, -232.5f, -147.0f, -61.5f, 24.0f, 109.5f, 195.5f, 274.0f};
-const char *kCategoryNames[8] = {
+const char *kCategoryKeys[8] = {
+	"msgshare_settings", "msgtop_extras", "msgtop_photo", "msgtop_music",
+	"msgtop_video", "msgshare_game", "msgtop_network", "msg_psn",
+};
+const char *kCategoryFallbacks[8] = {
 	"Settings", "Extras", "Photo", "Music", "Video", "Game", "Network", "PlayStation\u00aeNetwork",
 };
 constexpr float kItemIconX = 110.0f;
@@ -167,6 +171,7 @@ GLuint CompileShader(GLenum type, const char *source) {
 
 bool XmbRenderer::Initialize(const std::string &resource_root) {
 	root_ = resource_root;
+	LoadTextCatalog();
 	textures_.clear();
 	if (!BuildProgram()) {
 		return false;
@@ -226,26 +231,26 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		LoadTexture(asset.name, asset.path);
 	}
 	categories_[0] = {
-		{ "USB Connection", "", "item_usb" },
-		{ "Video Settings", "", "item_video_settings" },
-		{ "Photo Settings", "", "item_photo_settings" },
-		{ "System Settings", "", "item_system_settings", true },
+		{ TextOr("msgtop_sysconf_usb", "USB Connection"), "", "item_usb" },
+		{ TextOr("msgtop_sysconf_video", "Video Settings"), "", "item_video_settings" },
+		{ TextOr("msgtop_sysconf_photo", "Photo Settings"), "", "item_photo_settings" },
+		{ TextOr("msgtop_sysconf_console", "System Settings"), "", "item_system_settings", true },
 	};
-	categories_[1] = {{ "Digital Comics", "", "item_comics" }};
-	categories_[2] = {{ "Camera", "", "item_camera" }};
-	categories_[3] = {{ "SensMe\u2122 channels", "", "item_sensme" }};
-	categories_[4] = {{ "Memory Stick\u2122", "Free Space 1459 MB", "item_memstick" }};
+	categories_[1] = {{ TextOr("msg_digitalcomics", "Digital Comics"), "", "item_comics" }};
+	categories_[2] = {{ TextOr("msgtop_camera", "Camera"), "", "item_camera" }};
+	categories_[3] = {{ TextOr("msg_sensme_channels", "SensMe\u2122 channels"), "", "item_sensme" }};
+	categories_[4] = {{ TextOr("msgshare_ms", "Memory Stick\u2122"), TextOr("msgshare_info_space", "Free Space") + " 1459 MB", "item_memstick" }};
 	categories_[5] = {
-		{ "Saved Data Utility", "", "item_savedata" },
-		{ "Memory Stick\u2122", "Free Space 1459 MB", "item_memstick" },
+		{ TextOr("msgtop_game_savedata", "Saved Data Utility"), "", "item_savedata" },
+		{ TextOr("msgshare_ms", "Memory Stick\u2122"), TextOr("msgshare_info_space", "Free Space") + " 1459 MB", "item_memstick" },
 	};
 	categories_[6] = {
-		{ "Internet Browser", "", "item_internet_browser" },
-		{ "Internet Search", "", "item_internet_search" },
+		{ TextOr("msgtop_network_browser", "Internet Browser"), "", "item_internet_browser" },
+		{ TextOr("msg_internet_search", "Internet Search"), "", "item_internet_search" },
 	};
 	categories_[7] = {
-		{ "Sign Up for PlayStation\u00aeNetwork", "", "item_psn_signup" },
-		{ "PlayStation\u00aeStore", "", "item_psn_store" },
+		{ TextOr("msg_signup", "Sign Up for PlayStation\u00aeNetwork"), "", "item_psn_signup" },
+		{ TextOr("msg_ps_store", "PlayStation\u00aeStore"), "", "item_psn_store" },
 	};
 	category_selected_ = {1, 0, 0, 0, 0, 0, 0, 0};
 	items_ = categories_[5];
@@ -341,6 +346,49 @@ bool XmbRenderer::BuildWaveProgram() {
 	wave_color_ = glGetUniformLocation(wave_program_, "uColor");
 	wave_sampler_ = glGetUniformLocation(wave_program_, "uTexture");
 	return true;
+}
+
+bool XmbRenderer::LoadTextCatalog() {
+	strings_.clear();
+	std::vector<uint8_t> bytes;
+	if (!ReadFile(root_ + "/text/en.txt", &bytes)) {
+		__android_log_print(ANDROID_LOG_WARN, kTag, "text/en.txt missing; using fallbacks");
+		return false;
+	}
+	std::string content(bytes.begin(), bytes.end());
+	size_t line_start = 0;
+	while (line_start < content.size()) {
+		size_t line_end = content.find('\n', line_start);
+		if (line_end == std::string::npos) {
+			line_end = content.size();
+		}
+		std::string line = content.substr(line_start, line_end - line_start);
+		if (!line.empty() && line.back() == '\r') {
+			line.pop_back();
+		}
+		const size_t tab = line.find('\t');
+		if (tab != std::string::npos) {
+			std::string value = line.substr(tab + 1);
+			std::string unescaped;
+			for (size_t i = 0; i < value.size(); ++i) {
+				if (value[i] == '\\' && i + 1 < value.size() && value[i + 1] == 'n') {
+					unescaped.push_back('\n');
+					++i;
+				} else {
+					unescaped.push_back(value[i]);
+				}
+			}
+			strings_[line.substr(0, tab)] = std::move(unescaped);
+		}
+		line_start = line_end + 1;
+	}
+	__android_log_print(ANDROID_LOG_INFO, kTag, "firmware text catalog: %zu strings", strings_.size());
+	return !strings_.empty();
+}
+
+std::string XmbRenderer::TextOr(const std::string &key, const std::string &fallback) const {
+	auto found = strings_.find(key);
+	return found != strings_.end() ? found->second : fallback;
 }
 
 bool XmbRenderer::LoadWave() {
@@ -816,18 +864,19 @@ void XmbRenderer::DrawCategoryRow() {
 			continue;
 		}
 		const float label_scale = 0.63f;
+		const std::string label = TextOr(kCategoryKeys[index], kCategoryFallbacks[index]);
 		if (same && index == category_) {
-			const float width = font_.TextWidth(kCategoryNames[index], label_scale);
+			const float width = font_.TextWidth(label, label_scale);
 			const float label_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-			DrawText(kCategoryNames[index], x - width * 0.5f, 103.0f, label_scale, label_color, true);
+			DrawText(label, x - width * 0.5f, 103.0f, label_scale, label_color, true);
 		} else if (!same && index == category_from_) {
-			const float width = font_.TextWidth(kCategoryNames[index], label_scale);
+			const float width = font_.TextWidth(label, label_scale);
 			const float label_color[4] = {1.0f, 1.0f, 1.0f, 1.0f - category_t_};
-			DrawText(kCategoryNames[index], x - width * 0.5f, 103.0f, label_scale, label_color, true);
+			DrawText(label, x - width * 0.5f, 103.0f, label_scale, label_color, true);
 		} else if (!same && index == category_) {
-			const float width = font_.TextWidth(kCategoryNames[index], label_scale);
+			const float width = font_.TextWidth(label, label_scale);
 			const float label_color[4] = {1.0f, 1.0f, 1.0f, category_t_};
-			DrawText(kCategoryNames[index], x - width * 0.5f, 103.0f, label_scale, label_color, true);
+			DrawText(label, x - width * 0.5f, 103.0f, label_scale, label_color, true);
 		}
 	}
 }

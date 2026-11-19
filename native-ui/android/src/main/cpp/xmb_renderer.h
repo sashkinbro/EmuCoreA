@@ -70,6 +70,8 @@ private:
 	bool BuildProgram();
 	bool BuildWaveProgram();
 	bool LoadWave();
+	bool LoadTextCatalog();
+	std::string TextOr(const std::string &key, const std::string &fallback) const;
 	void DrawBackground();
 	void DrawWave(float dt);
 	void DrawStatusBar();
@@ -119,6 +121,7 @@ private:
 	std::vector<float> wave_vertices_;
 	float wave_frame_ = 0.0f;
 	std::string root_;
+	std::unordered_map<std::string, std::string> strings_;
 	int surface_width_ = 0;
 	int surface_height_ = 0;
 	bool logged_gl_error_ = false;

@@ -194,6 +194,33 @@ def extract_into(flash0: Path, staging: Path) -> dict:
         })
         counts["fonts"] += 1
 
+    # English UI strings straight from the shell's text tables. The renderer
+    # uses these keys instead of embedding labels of its own.
+    (staging / "text").mkdir()
+    strings: dict[str, str] = {}
+    for name in ("topmenu_plugin.rco", "game_plugin.rco"):
+        path = resource_dir / name
+        if not path.is_file():
+            continue
+        document = rco.open_rco(path)
+        for entry in document.iter_entries(3):
+            if entry.type != 1 or len(entry.extra) < 8:
+                continue
+            lang = struct.unpack_from("<H", entry.extra, 0)[0]
+            if lang != 1:
+                continue
+            strings.update(document.text_entry_strings(entry))
+    if strings:
+        lines = [f"{key}\t{value.replace(chr(10), '\\n')}" for key, value in sorted(strings.items())]
+        destination = staging / "text" / "en.txt"
+        destination.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        files.append({
+            "kind": "text", "language": "en", "count": len(strings),
+            "file": str(destination.relative_to(staging)),
+            "sha256_file": sha256(destination.read_bytes()),
+        })
+        counts["text"] = len(strings)
+
     # The wave needs the RCO's ModelObject transform (position/scale/tint), not
     # just the GMO vertices. Keep this small container so the runtime can load
     # the exact transform instead of guessing it.
