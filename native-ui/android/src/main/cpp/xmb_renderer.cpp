@@ -768,13 +768,16 @@ void XmbRenderer::TouchTap(float norm_x, float norm_y) {
 				return;
 			}
 			// Tapping the bottom-right touch hint bar triggers Options (Triangle) or Back (Circle)
-			if (vy >= 236.0f) {
-				if (vx >= screen_width_ - 92.0f) {
+			const float corner_pad = (settings_.aspect_mode == 0 && (screen_width_ > 490.0f || touch_mode_active_))
+			                             ? std::clamp((screen_width_ - 480.0f) * 0.22f + 14.0f, 14.0f, 32.0f)
+			                             : 4.0f;
+			if (vy >= 232.0f) {
+				if (vx >= screen_width_ - 92.0f - corner_pad) {
 					KeyPressed(Key::Back);
 					return;
 				}
 				if ((memory_stick_page_ || saved_data_page_) &&
-				    vx >= screen_width_ - 185.0f && vx < screen_width_ - 92.0f) {
+				    vx >= screen_width_ - 185.0f - corner_pad && vx < screen_width_ - 92.0f - corner_pad) {
 					KeyPressed(Key::Options);
 					return;
 				}
@@ -876,6 +879,12 @@ void XmbRenderer::DrawStatusBar() {
 		return;
 	}
 
+	// Safe horizontal & vertical corner inset for smartphones with rounded physical display corners
+	const float corner_pad = (settings_.aspect_mode == 0 && (screen_width_ > 490.0f || touch_mode_active_))
+	                             ? std::clamp((screen_width_ - 480.0f) * 0.22f + 14.0f, 14.0f, 32.0f)
+	                             : 4.0f;
+	const float top_y_off = (corner_pad > 8.0f) ? 2.0f : 0.0f;
+
 	// Top-left transient Memory Stick access indicator (authentic PSP boot & loading behavior)
 	if (opening_t_ < 0.95f || resume_t_ < 0.85f || games_loading_ || saves_loading_) {
 		float ms_slide = 0.0f;
@@ -895,11 +904,11 @@ void XmbRenderer::DrawStatusBar() {
 		if (ms_tex != textures_.end() && ms_alpha > 0.02f) {
 			const float msc[4] = {1.0f, 1.0f, 1.0f, ms_alpha * 0.92f};
 			const float mss[4] = {0.0f, 0.0f, 0.0f, ms_alpha * 0.50f};
-			DrawTexture(ms_tex->second, 18.0f - ms_slide, 13.0f, 0.95f, mss);
-			DrawTexture(ms_tex->second, 17.0f - ms_slide, 12.0f, 0.95f, msc);
+			DrawTexture(ms_tex->second, 18.0f + corner_pad - ms_slide, 13.0f + top_y_off, 0.95f, mss);
+			DrawTexture(ms_tex->second, 17.0f + corner_pad - ms_slide, 12.0f + top_y_off, 0.95f, msc);
 			const float led_pulse = 0.45f + 0.55f * std::abs(std::sin(time_elapsed_ * 9.0f));
 			const float led_col[4] = {1.0f, 0.58f, 0.14f, ms_alpha * led_pulse};
-			DrawSolidQuad(27.0f - ms_slide, 10.0f, 3.5f, 4.0f, led_col);
+			DrawSolidQuad(27.0f + corner_pad - ms_slide, 10.0f + top_y_off, 3.5f, 4.0f, led_col);
 		}
 	}
 
@@ -920,19 +929,19 @@ void XmbRenderer::DrawStatusBar() {
 	const float width = MeasureText(clock, scale);
 	const float color[4] = {1.0f, 1.0f, 1.0f, bar_alpha};
 	const float shadow_col[4] = {0.0f, 0.0f, 0.0f, bar_alpha * 0.55f};
-	const float clock_x = (screen_width_ - 38.0f) - width;
-	DrawText(clock, clock_x, 18.0f, scale, color, true);
+	const float clock_x = (screen_width_ - 38.0f - corner_pad) - width;
+	DrawText(clock, clock_x, 18.0f + top_y_off, scale, color, true);
 
 	// Authentic PSP top status bar indicators to the left of the clock (Bluetooth, Wi-Fi, AVLS, Mute)
 	float icon_x = clock_x - 10.0f;
 	if (bluetooth_enabled_) {
 		auto bt = textures_.find("status_bt");
 		if (bt != textures_.end()) {
-			DrawTexture(bt->second, icon_x + 1.0f, 13.0f, 0.52f, shadow_col);
-			DrawTexture(bt->second, icon_x, 12.0f, 0.52f, color);
+			DrawTexture(bt->second, icon_x + 1.0f, 13.0f + top_y_off, 0.52f, shadow_col);
+			DrawTexture(bt->second, icon_x, 12.0f + top_y_off, 0.52f, color);
 			if (bluetooth_connected_) {
 				const float dot_col[4] = {0.55f, 0.85f, 1.0f, bar_alpha};
-				DrawSolidQuad(icon_x + 4.5f, 10.5f, 2.2f, 2.2f, dot_col);
+				DrawSolidQuad(icon_x + 4.5f, 10.5f + top_y_off, 2.2f, 2.2f, dot_col);
 			}
 			icon_x -= 14.0f;
 		}
@@ -941,15 +950,15 @@ void XmbRenderer::DrawStatusBar() {
 		auto wifi = textures_.find("status_wifi");
 		if (wifi != textures_.end() && wifi->second.height > 0) {
 			const float wscale = 14.5f / (float)wifi->second.height;
-			DrawTexture(wifi->second, icon_x + 1.0f, 13.0f, wscale, shadow_col);
-			DrawTexture(wifi->second, icon_x, 12.0f, wscale, color);
+			DrawTexture(wifi->second, icon_x + 1.0f, 13.0f + top_y_off, wscale, shadow_col);
+			DrawTexture(wifi->second, icon_x, 12.0f + top_y_off, wscale, color);
 			icon_x -= 17.0f;
 		}
 	}
 	if (settings_.avls_enabled) {
 		auto avls = textures_.find("status_avls");
 		if (avls != textures_.end()) {
-			DrawTexture(avls->second, icon_x - 3.0f, 12.5f, 0.42f, color);
+			DrawTexture(avls->second, icon_x - 3.0f, 12.5f + top_y_off, 0.42f, color);
 			icon_x -= 26.0f;
 		}
 	}
@@ -957,10 +966,10 @@ void XmbRenderer::DrawStatusBar() {
 		auto mute = textures_.find("status_mute");
 		auto mute_sh = textures_.find("status_mute_shadow");
 		if (mute_sh != textures_.end()) {
-			DrawTexture(mute_sh->second, icon_x, 12.5f, 1.0f, color);
+			DrawTexture(mute_sh->second, icon_x, 12.5f + top_y_off, 1.0f, color);
 		}
 		if (mute != textures_.end()) {
-			DrawTexture(mute->second, icon_x, 12.0f, 1.0f, color);
+			DrawTexture(mute->second, icon_x, 12.0f + top_y_off, 1.0f, color);
 			icon_x -= 15.0f;
 		}
 	}
@@ -986,7 +995,7 @@ void XmbRenderer::DrawStatusBar() {
 				}
 			}
 		}
-		DrawTextureCrop(battery->second, screen_width_ - 16.0f, 12.0f, 1.0f, color, 0, frame * 16, 44, 16);
+		DrawTextureCrop(battery->second, screen_width_ - 16.0f - corner_pad, 12.0f + top_y_off, 1.0f, color, 0, frame * 16, 44, 16);
 	}
 }
 
@@ -2438,11 +2447,15 @@ void XmbRenderer::DrawTouchControlsBar() {
 	const std::string back_lbl = TextOr("xmb_hint_back", "Back");
 	const bool show_options = (memory_stick_page_ && !games_.empty()) || (saved_data_page_ && !saves_.empty());
 
+	const float corner_pad = (settings_.aspect_mode == 0 && (screen_width_ > 490.0f || touch_mode_active_))
+	                             ? std::clamp((screen_width_ - 480.0f) * 0.22f + 14.0f, 14.0f, 32.0f)
+	                             : 4.0f;
+	const float bot_y_off = (corner_pad > 8.0f) ? 2.0f : 0.0f;
 	const float scale = 0.54f;
 	const float col[4] = {1.0f, 1.0f, 1.0f, 0.78f};
-	const float hint_y = kScreenHeight - 10.0f;
+	const float hint_y = kScreenHeight - 10.0f - bot_y_off;
 
-	float cur_x = screen_width_ - 14.0f;
+	float cur_x = screen_width_ - 14.0f - corner_pad;
 	// 1. Back (Circle) on far right
 	const float back_w = MeasureText(back_lbl, scale);
 	cur_x -= back_w;
