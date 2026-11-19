@@ -4172,7 +4172,7 @@ private fun GameMenuLayoutHost(
                         .fillMaxWidth(0.94f)
                         .fillMaxHeight(),
                     shape = neonShape(24.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                    color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
                     shadowElevation = 12.dp
                 ) {
@@ -4214,7 +4214,7 @@ private fun GameMenuLayoutHost(
                         .fillMaxWidth(0.96f)
                         .fillMaxHeight(),
                     shape = neonShapeCorners(topStart = 30.dp, topEnd = 30.dp, bottomStart = 18.dp, bottomEnd = 18.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                    color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f)),
                     shadowElevation = 14.dp
                 ) {
@@ -4254,7 +4254,7 @@ private fun GameMenuLayoutHost(
                         .fillMaxHeight()
                         .widthIn(min = 300.dp, max = 352.dp),
                     shape = neonShape(18.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f),
+                    color = MaterialTheme.colorScheme.surface,
                     border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)),
                     shadowElevation = 10.dp
                 ) {
@@ -4298,7 +4298,7 @@ private fun GameMenuContentSurface(
     Surface(
         modifier = modifier,
         shape = shape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
     ) {
         GameMenuContentColumn(
@@ -4347,7 +4347,7 @@ private fun GameMenuVerticalNavigation(
         color = if (showLabels) {
             MaterialTheme.colorScheme.surfaceContainerLow
         } else {
-            MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+            MaterialTheme.colorScheme.surface
         },
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.48f))
     ) {
