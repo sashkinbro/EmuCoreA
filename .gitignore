@@ -43,6 +43,7 @@ ehthumbs.db
 /native-ui/resources/
 /native-ui/**/build/
 /native-ui/**/.cxx/
+/native-ui/**/__pycache__/
 
 # Commercial game images - never commit
 *.iso

@@ -50,6 +50,35 @@ APK asset         --> BundledResources --> app-private versioned directory
 The runtime never reads firmware containers. Resource preparation is offline
 tooling only; none of it ships in the application.
 
+## Android host module
+
+`:native-ui:android` is an Android library with the Kotlin host and the C++
+renderer entry point. It does not depend on `:app` or `:core-native`, so
+building it cannot initialize the emulation core.
+
+`BundledResources` copies the APK asset `native-ui.zip` into a directory named
+after the pack's SHA-256 under `noBackupFilesDir/native-ui/`, extracts it into a
+staging directory, writes a completion marker and renames the directory into
+place. Installs are serialized in-process and with a file lock; entries are
+checked for absolute paths, `..`, entry count and total expansion. A partial
+install is removed and retried on the next call. `XmbSession.initialize` hands
+the installed root to the native side once.
+
+The pack is produced from the ignored resource tree during the module build:
+
+```text
+python native-ui/tools/pack_resources.py
+```
+
+The ZIP is deterministic (sorted entries, fixed timestamps), so unchanged
+resources always produce the same SHA-256 and are installed only once.
+
+`native-ui/preview` is a dependency-free launch host used while the scene is
+built. It installs the pack, reports the native version and root, and has no
+game library or emulation core attached. Verified on a Lenovo TB710FU: the
+6.60 pack installs once into `no_backup/native-ui/<sha256>/`, with 333 files
+(305 images, 8 sounds), and a relaunch reuses it.
+
 ## Layout
 
 ```text
@@ -72,7 +101,7 @@ native-ui/
 - [x] RLZ table decoder, verified on all 48 RLZ tables in the 6.60 firmware
 - [x] RCO/GIM/VAG parsing and resource extraction (305 images, 8 sounds,
       2 models and 16 fonts from the shell containers)
-- [ ] Resource pack + first-start installer
+- [x] Resource pack + first-start installer
 - [ ] Game column renderer, animations and sounds
 - [ ] Frame-for-frame comparison against the firmware XMB
 - [ ] Host integration in place of the current 3D carousel

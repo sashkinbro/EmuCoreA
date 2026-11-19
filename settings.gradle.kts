@@ -25,3 +25,5 @@ dependencyResolutionManagement {
 rootProject.name = "EmuCoreA"
 include(":app")
 include(":core-native")
+include(":native-ui:android")
+include(":native-ui:preview")

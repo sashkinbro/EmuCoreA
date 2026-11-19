@@ -74,3 +74,18 @@ The VAG reader keeps the source sample rate and does a plain PSX ADPCM decode;
 nothing is resampled, normalised or looped at this stage. The navigation sounds
 are 44.1 kHz mono, with `snd_cursor` at 1,848 samples.
 
+## Packing
+
+```text
+python native-ui/tools/pack_resources.py
+```
+
+Writes `native-ui/build/native-ui.zip` and `native-ui/build/native-ui-pack.json`
+with the SHA-256, packed size, file count and unpacked size. The ZIP is
+deterministic (sorted entries, 1980 timestamps, level 9), and the script
+verifies every entry against the resource tree after writing. The Android
+module's `prepareNativeUiPack` task runs this before `preBuild` and copies the
+ZIP into the APK's assets; the installer uses the hash as the installed pack's
+version.
+
+
