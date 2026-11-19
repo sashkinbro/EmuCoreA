@@ -113,6 +113,8 @@ native-ui/
       glow are not yet pixel-exact)
 - [ ] Game column renderer parity (focus glow, wave/theme exactness, game
       backgrounds)
+- [ ] Host integration, lifecycle, other-tab stubs, settings and localisation
+      ([plan](docs/integration.md))
 - [ ] Frame-for-frame comparison against the firmware XMB
 - [ ] Host integration in place of the current 3D carousel
 
