@@ -6,6 +6,7 @@
 #include <array>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
@@ -40,6 +41,8 @@ public:
 	void Draw();
 	void KeyPressed(Key key);
 	void SetGames(const std::vector<std::string> &titles);
+	std::pair<int, int> GetState();
+	void SetState(int category, int item);
 	void Shutdown();
 
 private:

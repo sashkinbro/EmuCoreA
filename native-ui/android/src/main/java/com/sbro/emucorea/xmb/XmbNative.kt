@@ -23,6 +23,10 @@ object XmbNative {
 
     external fun nativeSetGames(titles: Array<String>)
 
+    external fun nativeGetState(): IntArray
+
+    external fun nativeSetState(category: Int, item: Int)
+
     external fun nativeKey(key: Int)
 
     external fun nativeShutdown()

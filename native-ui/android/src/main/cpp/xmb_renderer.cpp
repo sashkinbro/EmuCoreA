@@ -793,6 +793,31 @@ void XmbRenderer::SetGames(const std::vector<std::string> &titles) {
 	}
 }
 
+std::pair<int, int> XmbRenderer::GetState() {
+	std::lock_guard<std::mutex> lock(mutex_);
+	return {category_, item_};
+}
+
+void XmbRenderer::SetState(int category, int item) {
+	std::lock_guard<std::mutex> lock(mutex_);
+	category = std::max(0, std::min(7, category));
+	if (category != category_) {
+		category_selected_[category_] = item_;
+		category_from_ = category_;
+		category_ = category;
+		category_t_ = 1.0f;
+		items_ = categories_[category_];
+	}
+	const int count = (int)items_.size();
+	item_ = count > 0 ? std::max(0, std::min(count - 1, item)) : 0;
+	item_from_ = item_;
+	item_t_ = 1.0f;
+	category_selected_[category_] = item_;
+	previous_items_ = items_;
+	previous_item_ = item_;
+	items_fade_t_ = 1.0f;
+}
+
 void XmbRenderer::DrawItems() {
 	const float fade = items_fade_t_;
 	const float eased = 1.0f - (1.0f - fade) * (1.0f - fade);
@@ -824,12 +849,17 @@ void XmbRenderer::DrawItemColumn(const std::vector<Item> &list, int selected, fl
 		const float color[4] = {1.0f, 1.0f, 1.0f, alpha};
 		auto texture = textures_.find(list[index].texture_name);
 		if (texture != textures_.end()) {
+			float icon_scale = 1.0f;
+			if (list[index].is_game) {
+				const float max_dimension = std::max(1, std::max(texture->second.width, texture->second.height));
+				icon_scale = 48.0f / max_dimension;
+			}
 			auto glow = textures_.find("focus_glow");
 			if (glow != textures_.end() && focus > 0.6f) {
 				const float glow_color[4] = {1.0f, 1.0f, 1.0f, 0.65f * focus * global_alpha};
-				DrawTexture(glow->second, kItemIconX, y, 0.65f, glow_color);
+				DrawTexture(glow->second, kItemIconX, y, list[index].is_game ? 0.8f : 0.65f, glow_color);
 			}
-			DrawTexture(texture->second, kItemIconX, y, 1.0f, color);
+			DrawTexture(texture->second, kItemIconX, y, icon_scale, color);
 		}
 		if (!font_loaded_) {
 			continue;

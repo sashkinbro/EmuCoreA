@@ -167,6 +167,22 @@ Java_com_sbro_emucorea_xmb_XmbNative_nativeKey(JNIEnv *, jclass, jint key) {
 	}
 }
 
+extern "C" JNIEXPORT jintArray JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeGetState(JNIEnv *env, jclass) {
+	const auto state = g_renderer.GetState();
+	jint values[2] = {state.first, state.second};
+	jintArray result = env->NewIntArray(2);
+	if (result != nullptr) {
+		env->SetIntArrayRegion(result, 0, 2, values);
+	}
+	return result;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeSetState(JNIEnv *, jclass, jint category, jint item) {
+	g_renderer.SetState((int)category, (int)item);
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_xmb_XmbNative_nativeShutdown(JNIEnv *, jclass) {
 	g_renderer.Shutdown();
