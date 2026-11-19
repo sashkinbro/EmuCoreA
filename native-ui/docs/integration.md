@@ -76,6 +76,18 @@ the same path as the current home screen, and carry the return state back. It
 must not change emulator behaviour, graphics settings or the core's game list;
 only the glue needed for the XMB launch/metadata path.
 
+## Current integration state
+
+- `:app` depends on `:native-ui:android`.
+- `XmbScreen` hosts the GL surface in Compose, supplies the `HomeViewModel`
+  library titles and forwards `XmbHost.onGameSelected(index)` to
+  `EmulationRoute(gamePath)`.
+- `XmbRoute` is reachable with the temporary `xmb_mode` intent extra while the
+  carousel replacement/default is wired; the screen renders fullscreen in the
+  app process with the same pack/installer.
+- The game hand-off is in place but still needs a populated library and the
+  return-to-same-position state (next).
+
 ## Opening transition
 
 Entering the mode from the app must play the short PSP opening animation, not

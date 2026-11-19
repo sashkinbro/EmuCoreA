@@ -62,6 +62,8 @@ import com.sbro.emucorea.ui.emulation.EmulationScreen
 import com.sbro.emucorea.ui.formats.SupportedFormatsScreen
 import com.sbro.emucorea.ui.feedback.FeedbackScreen
 import com.sbro.emucorea.ui.home.HomeScreen
+import com.sbro.emucorea.ui.home.HomeViewModel
+import com.sbro.emucorea.ui.xmb.XmbScreen
 import com.sbro.emucorea.ui.hub.HubScreen
 import com.sbro.emucorea.ui.hub.detail.HubDetailScreen
 import com.sbro.emucorea.ui.memorycards.PspMemoryStickScreen
@@ -94,6 +96,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 object HomeRoute
+
+@Serializable
+object XmbRoute
 
 @Serializable
 data class GameDetailRoute(val catalogGameId: Long)
@@ -380,10 +385,15 @@ fun AppNavigation(
                 }
             }
         )
+        val hostActivity = LocalContext.current as? ComponentActivity
+        LaunchedEffect(Unit) {
+            if (hostActivity?.intent?.getBooleanExtra("xmb_mode", false) == true) {
+                navController.navigate(XmbRoute) { launchSingleTop = true }
+            }
+        }
         NavHost(
             navController = navController,
-            startDestination = startDestination,
-            modifier = Modifier
+            startDestination = startDestination,            modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
             enterTransition = { appScreenEnterTransition() },
@@ -402,8 +412,23 @@ fun AppNavigation(
                 )
             }
 
-            composable<HomeRoute> {
-                AdaptiveShell(
+            composable<XmbRoute> {
+                val xmbViewModel: HomeViewModel = viewModel()
+                val xmbState by xmbViewModel.uiState.collectAsState()
+                val libraryGames = xmbState.games.filterNot { it.isDlc }
+                XmbScreen(
+                    games = libraryGames,
+                    onGameSelected = { index ->
+                        libraryGames.getOrNull(index)?.let { game ->
+                            navController.navigate(EmulationRoute(gamePath = game.path)) {
+                                launchSingleTop = true
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            composable<HomeRoute> {                AdaptiveShell(
                     isProUnlocked = settingsUiState.isProUnlocked,
                     selected = PrimaryDestination.Home,
                     onNavigateHub = navigateHub,

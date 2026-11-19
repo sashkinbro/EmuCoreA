@@ -143,6 +143,7 @@ android {
 
 dependencies {
     implementation(project(":core-native"))
+    implementation(project(":native-ui:android"))
     implementation(libs.libarchive)
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services)

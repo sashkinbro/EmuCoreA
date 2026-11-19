@@ -7,7 +7,10 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 /** GLSurfaceView renderer that forwards every frame to the native scene. */
-class XmbSurfaceRenderer(context: Context) : GLSurfaceView.Renderer {
+class XmbSurfaceRenderer(
+    context: Context,
+    private val onReady: (() -> Unit)? = null,
+) : GLSurfaceView.Renderer {
     private val appContext = context.applicationContext
     private var initialized = false
 
@@ -17,6 +20,8 @@ class XmbSurfaceRenderer(context: Context) : GLSurfaceView.Renderer {
             initialized = XmbNative.nativeInit()
             if (!initialized) {
                 Log.e(TAG, "native scene failed to initialize")
+            } else {
+                onReady?.invoke()
             }
         } catch (error: Throwable) {
             Log.e(TAG, "scene initialization failed", error)
