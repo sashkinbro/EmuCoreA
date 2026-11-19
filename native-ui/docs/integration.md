@@ -72,21 +72,24 @@ handling live in the host, not in the firmware renderer.
 
 ## Settings
 
-After integration, add a new tab to the existing `SettingsTab` enum and
-`SettingsScreen` using the same section/list components, typography, dividers
-and navigation as every other settings tab; no separate bespoke screen. The tab
-(the user's "3D carousel" settings entry) has live-applied options stored in
-`AppPreferences`:
+The settings for the mode live inside the XMB itself, as the PSP's own Settings
+column did — this is the immersion the mode is for. Selecting the Settings
+category shows a normal PSP column with the same icons, focus glow, scroll and
+opening/closing animations. No bespoke Material settings screen is added for
+the mode.
 
-- background: theme/wave on/off, theme colour, wave speed;
-- clock format and date/time visibility;
-- navigation sounds on/off and volume;
-- icon/text scale and animation speed;
-- reset to defaults.
+The column mixes two kinds of entries:
 
-Settings are available from both the main settings screen and the home menu;
-they persist and survive process death. Existing app preferences/backup rules
-apply.
+- real settings implemented by this app and stored in `AppPreferences`
+  (background/theme, wave on/off and speed, navigation sounds/volume, clock
+  format/visibility, icon/text scale, animation speed, reset to defaults);
+- imitated PSP entries (the same labels/icons and full navigation, animation
+  and sound behaviour, but inert or showing the PSP unavailable sound), so the
+  tab feels complete rather than like a stub.
+
+The existing app settings may offer a shortcut that opens the XMB already
+positioned on its Settings category, but the authoritative UI is the in-XMB
+column with the existing PSP layout.
 
 ## Localisation
 
@@ -107,8 +110,9 @@ locale.
   same way it does from the carousel; returning always lands in XMB.
 - No empty category: each tab draws real labels/icons and its opening/closing
   animation, with inert items behaving consistently.
-- Toggling the mode repeatedly does not leak the GL surface, audio player or
+- Toggling this mode repeatedly does not leak the GL surface, audio player or
   pack installer.
-- Settings changes apply live and persist; all strings resolve in every
-  supported locale.
+- The XMB Settings column is reachable inside the mode, contains the real
+  options plus imitated PSP entries, and its changes apply live and persist.
+- All strings resolve in every supported locale.
 - The renderer parity suite from the previous phase still passes.
