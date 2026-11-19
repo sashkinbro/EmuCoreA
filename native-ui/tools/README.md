@@ -51,3 +51,26 @@ took four details beyond the public notes:
 All 48 RLZ table streams in the 6.60 firmware decode to exactly the size their
 container declares (`native-ui/tests/test_rlz.py` checks this when the local
 dump is present).
+
+## Ready resources
+
+```text
+python native-ui/tools/extract_psp_resources.py --flash0 native-ui/firmware/flash0 --out native-ui/resources --force
+```
+
+This reads the shell's containers (`system_plugin`, `topmenu`, `game_plugin`,
+`savedata_plugin`, `opening_plugin`, `impose_plugin`), decodes every image and
+sound, copies the Latin fonts and writes `manifest.json`. From the 6.60 dump
+that is 305 PNG images, 8 WAV sounds, 2 GMO models and 16 PGF fonts. Every file
+records its source RCO and entry label plus source/file hashes.
+
+The GIM reader handles the formats those containers use: indexed 4/8-bit with
+a palette block, RGBA8888 and the 16-bit colour formats, in both linear and
+tiled (`pixel_order == 1`) layouts. The tiled layout is 128-bit-wide, 8-row
+tiles over a pitch- and tile-aligned buffer; treating it as linear produces
+diagonal bands instead of icons.
+
+The VAG reader keeps the source sample rate and does a plain PSX ADPCM decode;
+nothing is resampled, normalised or looped at this stage. The navigation sounds
+are 44.1 kHz mono, with `snd_cursor` at 1,848 samples.
+

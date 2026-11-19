@@ -70,7 +70,8 @@ native-ui/
 - [x] UMD updater extraction from an owned disc image
 - [x] PSAR unpack to a local flash0 tree
 - [x] RLZ table decoder, verified on all 48 RLZ tables in the 6.60 firmware
-- [ ] RCO/GIM/VAG parsing and resource extraction
+- [x] RCO/GIM/VAG parsing and resource extraction (305 images, 8 sounds,
+      2 models and 16 fonts from the shell containers)
 - [ ] Resource pack + first-start installer
 - [ ] Game column renderer, animations and sounds
 - [ ] Frame-for-frame comparison against the firmware XMB
