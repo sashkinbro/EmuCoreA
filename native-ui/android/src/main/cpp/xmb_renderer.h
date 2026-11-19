@@ -309,6 +309,7 @@ private:
 	bool info_dialog_active_ = false;
 	float boot_t_ = 0.0f;
 	bool launching_ = false;
+	bool launch_dispatched_ = false;
 	float launch_t_ = 0.0f;
 	XmbSettings settings_;
 	int battery_level_ = 100;

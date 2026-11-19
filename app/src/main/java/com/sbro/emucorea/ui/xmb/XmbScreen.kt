@@ -502,6 +502,7 @@ fun XmbScreen(
         }
         XmbAssetCache.lastSaves = enriched
         XmbAssetCache.hasLoadedSaves = true
+        XmbNative.nativeSetSavesLoading(false)
         value = enriched
     }
     val currentSaves = rememberUpdatedState(saveStates)
@@ -628,6 +629,7 @@ fun XmbScreen(
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
             isFocusable = true
             isFocusableInTouchMode = true
+            defaultFocusHighlightEnabled = false
             requestFocus()
             setOnKeyListener { _, _, event -> XmbHost.handleKeyEvent(event) }
             setOnTouchListener { _, event ->

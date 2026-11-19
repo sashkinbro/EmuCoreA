@@ -429,6 +429,9 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		items_fade_t_ = 1.0f;
 	}
 	initialized_once_ = true;
+	launching_ = false;
+	launch_dispatched_ = false;
+	launch_t_ = 0.0f;
 	boot_t_ = 0.0f;
 	font_loaded_ = font_.Load(root_ + "/fonts/ltn0.pgf");
 	if (font_loaded_) {
@@ -681,6 +684,9 @@ void XmbRenderer::SetWirelessStatus(bool wifi_connected, bool bluetooth_enabled,
 
 void XmbRenderer::TriggerTransition(int kind) {
 	std::lock_guard<std::recursive_mutex> lock(mutex_);
+	launching_ = false;
+	launch_dispatched_ = false;
+	launch_t_ = 0.0f;
 	if (kind == 0) {
 		opening_t_ = 0.0f;
 		resume_t_ = 1.0f;
@@ -2408,11 +2414,13 @@ void XmbRenderer::KeyPressed(Key key) {
 					if (memory_stick_page_ && game_page_index_ >= 0 && game_page_index_ < (int)games_.size()) {
 						PlaySound(8);
 						launching_ = true;
+						launch_dispatched_ = false;
 						launch_t_ = 0.0f;
 						launching_save_index_ = -1;
 					} else if (saved_data_page_ && save_page_index_ >= 0 && save_page_index_ < (int)saves_.size()) {
 						PlaySound(8);
 						launching_ = true;
+						launch_dispatched_ = false;
 						launch_t_ = 0.0f;
 						launching_save_index_ = save_page_index_;
 					}
@@ -2593,6 +2601,7 @@ void XmbRenderer::KeyPressed(Key key) {
 				if (game_page_index_ >= 0 && game_page_index_ < (int)games_.size()) {
 					PlaySound(8);
 					launching_ = true;
+					launch_dispatched_ = false;
 					launch_t_ = 0.0f;
 					launching_save_index_ = -1;
 				}
@@ -3054,6 +3063,9 @@ std::pair<int, int> XmbRenderer::GetState() {
 
 void XmbRenderer::SetState(int category, int item) {
 	std::lock_guard<std::recursive_mutex> lock(mutex_);
+	launching_ = false;
+	launch_dispatched_ = false;
+	launch_t_ = 0.0f;
 	settings_sub_active_ = false;
 	settings_picker_open_ = false;
 	empty_media_kind_ = EmptyMediaKind::None;
@@ -3582,10 +3594,10 @@ void XmbRenderer::Draw() {
 		}
 
 		if (launching_) {
-			launch_t_ += dt / 2.10f;
+			launch_t_ = std::min(1.0f, launch_t_ + dt / 2.10f);
 			DrawGameBootAnimation();
-			if (launch_t_ >= 1.0f) {
-				launching_ = false;
+			if (launch_t_ >= 1.0f && !launch_dispatched_) {
+				launch_dispatched_ = true;
 				if (launching_save_index_ >= 0) {
 					selected_save_to_launch = launching_save_index_;
 					launching_save_index_ = -1;
