@@ -54,6 +54,37 @@ x ≈ 109 and the row shifts horizontally when the category changes, while the
 selected icon stays at that anchor. Icons of unselected categories are dimmed,
 and only the selected category shows its label.
 
+Walking the row left and right gives the full order and the icon each category
+uses from `topmenu_icon.rco` (confirmed by template correlation on the
+unselected icons and the selected one):
+
+| Order | Category | Texture | Selected centre |
+| --- | --- | --- | --- |
+| 0 | Settings | AJ (toolbox) | x ≈ 109 |
+| 1 | Extras | AK (+) | x ≈ 109 |
+| 2 | Photo | AL (camera) | x ≈ 109 |
+| 3 | Music | AM (note) | x ≈ 109 |
+| 4 | Video | AN (film) | x ≈ 109 |
+| 5 | Game | AO (gamepad) | x ≈ 109, y ≈ 71 |
+| 6 | Network | AP (globe) | x ≈ 109 |
+| 7 | PlayStation Network | AQ (blue orb) | x ≈ 109 |
+
+The selected icon is drawn at scale 1.0; the same texture at about 0.8 for the
+neighbouring slots. The texture labels are the ones in the extracted pack.
+
+The item icons identified from the same frames:
+
+| Item | Texture |
+| --- | --- |
+| Saved Data Utility | EJ |
+| Memory Stick | BI |
+| PSP Update | EH |
+| Internet Browser | EU |
+| UMD game | the game's own ICON0 (not a firmware texture) |
+
+`native-ui/scene/categories.json` holds these values together with the measured
+anchors. Values not measured yet are left null there rather than guessed.
+
 The Game column's selected item changes what is behind it: with a UMD game
 selected the game's PIC1 fills the screen, its preview plays in a small
 rectangle at the left, and its icon is drawn at the top-left (partially clipped

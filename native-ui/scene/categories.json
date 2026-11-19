@@ -1,0 +1,52 @@
+{
+  "comment": "Measured from the 6.60 XMB; asset labels refer to topmenu_icon.rco images in the resource pack. Coordinates are PSP pixels on a 480x272 screen.",
+  "screen": { "width": 480, "height": 272 },
+  "category_row": {
+    "selected_icon_center": { "x": 109.5, "y": 71 },
+    "selected_icon_scale": 1.0,
+    "unselected_icon_scale": 0.8,
+    "label_center_y": 99,
+    "label_size": 13,
+    "spacing": [86.0, 78.5],
+    "order": [
+      { "id": "settings", "label": "Settings", "texture": "topmenu_icon/AJ" },
+      { "id": "extras", "label": "Extras", "texture": "topmenu_icon/AK" },
+      { "id": "photo", "label": "Photo", "texture": "topmenu_icon/AL" },
+      { "id": "music", "label": "Music", "texture": "topmenu_icon/AM" },
+      { "id": "video", "label": "Video", "texture": "topmenu_icon/AN" },
+      { "id": "game", "label": "Game", "texture": "topmenu_icon/AO" },
+      { "id": "network", "label": "Network", "texture": "topmenu_icon/AP" },
+      { "id": "psn", "label": "PlayStation Network", "texture": "topmenu_icon/AQ" }
+    ]
+  },
+  "game_column": {
+    "selected_icon": { "x": 94, "y": 124, "width": 32, "height": 24 },
+    "title_x": 140,
+    "title_cap_height": 16,
+    "subtitle_y_offset": 21,
+    "underline_y_offset": 18,
+    "item_spacing": 66,
+    "items": {
+      "saved_data": { "label": "Saved Data Utility", "texture": "topmenu_icon/EJ" },
+      "memory_stick": { "label": "Memory Stick", "texture": "topmenu_icon/BI" },
+      "update": { "label": "PSP Update ver 6.10", "texture": "topmenu_icon/EH" },
+      "game_sharing": { "label": "Game Sharing", "texture": null },
+      "umd_game": { "label": null, "texture": "game icon (ICON0 from the inserted disc)" }
+    }
+  },
+  "known_other_items": {
+    "internet_browser": { "label": "Internet Browser", "texture": "topmenu_icon/EU" },
+    "camera": { "label": "Camera", "texture": null },
+    "sensme": { "label": "SensMe channels", "texture": null }
+  },
+  "provenance": {
+    "frames": "native-ui/reference (local, ignored)",
+    "method": "480x272 debugger screenshots at fixed emulated times, template correlation against the extracted topmenu_icon textures",
+    "unverified": [
+      "exact texture scale for every category",
+      "spacing between settings/network/psn anchors (only measured where visible)",
+      "game sharing icon and the full item order with a UMD inserted",
+      "animation curves and durations"
+    ]
+  }
+}
