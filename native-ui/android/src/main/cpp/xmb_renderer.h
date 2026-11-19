@@ -57,9 +57,12 @@ private:
 	void DrawStatusBar();
 	bool LoadTexture(const std::string &name, const std::string &relative_path);
 	const Texture *GlyphTexture(uint32_t codepoint);
+	const Texture *ShadowGlyphTexture(uint32_t codepoint);
 	void DrawTexture(const Texture &texture, float center_x, float center_y, float scale, const float color[4]);
 	void DrawTextureUv(const Texture &texture, float center_x, float center_y, float scale,
 	                   const float color[4], float u0, float v0, float u1, float v1);
+	void DrawTextureCrop(const Texture &texture, float center_x, float center_y, float scale,
+	                     const float color[4], int x, int y, int width, int height);
 	void DrawQuad(float x, float y, float width, float height, const float color[4]);
 	void DrawQuadUv(float x, float y, float width, float height, const float color[4],
 	                float u0, float v0, float u1, float v1);
@@ -76,6 +79,7 @@ private:
 	GLint u_texture_ = -1;
 	std::unordered_map<std::string, Texture> textures_;
 	std::unordered_map<uint32_t, Texture> glyph_textures_;
+	std::unordered_map<uint32_t, Texture> shadow_glyph_textures_;
 	PgfFont font_;
 	bool font_loaded_ = false;
 	PspWave wave_;

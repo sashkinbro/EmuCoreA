@@ -203,6 +203,7 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"item_memstick", "images/topmenu_icon/BI.png"},
 		{"item_update", "images/topmenu_icon/EH.png"},
 		{"battery", "images/system_plugin_fg/tex_battery.png"},
+		{"focus_glow", "images/system_plugin/tex_3x3_focus.png"},
 	};
 	for (const auto &asset : assets) {
 		LoadTexture(asset.name, asset.path);
@@ -397,7 +398,7 @@ void XmbRenderer::DrawStatusBar() {
 	DrawText(clock, 444.0f - width, 18.0f, scale, color, true);
 	auto battery = textures_.find("battery");
 	if (battery != textures_.end()) {
-		DrawTextureUv(battery->second, 464.0f, 12.0f, 1.0f, color, 0.0f, 0.0f, 1.0f, 0.25f);
+		DrawTextureCrop(battery->second, 464.0f, 12.0f, 1.0f, color, 0, 0, 44, 16);
 	}
 }
 
@@ -507,6 +508,20 @@ void XmbRenderer::DrawTextureUv(const Texture &texture, float center_x, float ce
 	DrawQuadUv(center_x - width * 0.5f, center_y - height * 0.5f, width, height, color, u0, v0, u1, v1);
 }
 
+void XmbRenderer::DrawTextureCrop(const Texture &texture, float center_x, float center_y, float scale,
+                                  const float color[4], int x, int y, int width, int height) {
+	if (texture.id == 0 || width <= 0 || height <= 0) {
+		return;
+	}
+	const float u0 = (float)x / texture.width;
+	const float v0 = (float)y / texture.height;
+	const float u1 = (float)(x + width) / texture.width;
+	const float v1 = (float)(y + height) / texture.height;
+	glBindTexture(GL_TEXTURE_2D, texture.id);
+	DrawQuadUv(center_x - width * scale * 0.5f, center_y - height * scale * 0.5f,
+	           width * scale, height * scale, color, u0, v0, u1, v1);
+}
+
 const XmbRenderer::Texture *XmbRenderer::GlyphTexture(uint32_t codepoint) {
 	auto found = glyph_textures_.find(codepoint);
 	if (found != glyph_textures_.end()) {
@@ -537,6 +552,36 @@ const XmbRenderer::Texture *XmbRenderer::GlyphTexture(uint32_t codepoint) {
 	return &inserted.first->second;
 }
 
+const XmbRenderer::Texture *XmbRenderer::ShadowGlyphTexture(uint32_t codepoint) {
+	auto found = shadow_glyph_textures_.find(codepoint);
+	if (found != shadow_glyph_textures_.end()) {
+		return &found->second;
+	}
+	const FontGlyph *glyph = font_.Glyph(codepoint, true);
+	if (!glyph || glyph->width <= 0 || glyph->height <= 0 || glyph->pixels.empty()) {
+		return nullptr;
+	}
+	std::vector<uint8_t> rgba((size_t)glyph->width * glyph->height * 4);
+	for (size_t i = 0; i < glyph->pixels.size(); ++i) {
+		rgba[i * 4 + 0] = 255;
+		rgba[i * 4 + 1] = 255;
+		rgba[i * 4 + 2] = 255;
+		rgba[i * 4 + 3] = (uint8_t)(glyph->pixels[i] * 17);
+	}
+	Texture texture;
+	texture.width = glyph->width;
+	texture.height = glyph->height;
+	glGenTextures(1, &texture.id);
+	glBindTexture(GL_TEXTURE_2D, texture.id);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture.width, texture.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	const auto inserted = shadow_glyph_textures_.emplace(codepoint, texture);
+	return &inserted.first->second;
+}
+
 float XmbRenderer::DrawText(const std::string &text, float x, float baseline, float scale,
                             const float color[4], bool shadow) {
 	if (!font_loaded_) {
@@ -556,13 +601,22 @@ float XmbRenderer::DrawText(const std::string &text, float x, float baseline, fl
 		}
 		const Texture *texture = GlyphTexture(codepoint);
 		if (texture) {
-			glBindTexture(GL_TEXTURE_2D, texture->id);
 			const float glyph_x = x + glyph->left * scale;
 			const float glyph_y = baseline - glyph->top * scale;
 			const float width = glyph->width * scale;
 			const float height = glyph->height * scale;
 			if (shadow) {
-				DrawQuad(glyph_x + 1.0f, glyph_y + 1.0f, width, height, shadow_color);
+				const FontGlyph *shadow_glyph = font_.Glyph(codepoint, true);
+				const Texture *shadow_texture = ShadowGlyphTexture(codepoint);
+				if (shadow_glyph && shadow_texture) {
+					glBindTexture(GL_TEXTURE_2D, shadow_texture->id);
+					DrawQuad(x + shadow_glyph->left * scale, baseline - shadow_glyph->top * scale,
+					         shadow_glyph->width * scale, shadow_glyph->height * scale, shadow_color);
+				} else {
+					glBindTexture(GL_TEXTURE_2D, texture->id);
+					DrawQuad(glyph_x + 1.0f, glyph_y + 1.0f, width, height, shadow_color);
+				}
+				glBindTexture(GL_TEXTURE_2D, texture->id);
 			}
 			DrawQuad(glyph_x, glyph_y, width, height, color);
 		}
@@ -641,12 +695,10 @@ void XmbRenderer::DrawCategoryRow() {
 			icon_alpha = Lerp(0.55f, 1.0f, category_t_);
 		}
 		const float icon_color[4] = {1.0f, 1.0f, 1.0f, icon_alpha};
-		if (index == category_ && icon_scale >= 0.99f) {
-			const float glow[4] = {1.0f, 1.0f, 1.0f, 0.08f};
-			const float offsets[5][2] = {{0.0f, 0.0f}, {-2.0f, 0.0f}, {2.0f, 0.0f}, {0.0f, -2.0f}, {0.0f, 2.0f}};
-			for (const auto &offset : offsets) {
-				DrawTexture(texture->second, x + offset[0], kCategoryY + offset[1], 1.15f, glow);
-			}
+		auto glow = textures_.find("focus_glow");
+		if (glow != textures_.end() && index == category_ && icon_scale >= 0.99f) {
+			const float glow_color[4] = {1.0f, 1.0f, 1.0f, 0.62f};
+			DrawTexture(glow->second, x, kCategoryY, 1.0f, glow_color);
 		}
 		DrawTexture(texture->second, x, kCategoryY, icon_scale, icon_color);
 		if (!font_loaded_) {
@@ -693,12 +745,10 @@ void XmbRenderer::DrawItems() {
 		const float color[4] = {1.0f, 1.0f, 1.0f, alpha};
 		auto texture = textures_.find(items_[index].texture_name);
 		if (texture != textures_.end()) {
-			if (focus > 0.6f) {
-				const float glow[4] = {1.0f, 1.0f, 1.0f, 0.10f * focus};
-				const float offsets[5][2] = {{0.0f, 0.0f}, {-3.0f, 0.0f}, {3.0f, 0.0f}, {0.0f, -3.0f}, {0.0f, 3.0f}};
-				for (const auto &offset : offsets) {
-					DrawTexture(texture->second, kItemIconX + offset[0], y + offset[1], 1.35f, glow);
-				}
+			auto glow = textures_.find("focus_glow");
+			if (glow != textures_.end() && focus > 0.6f) {
+				const float glow_color[4] = {1.0f, 1.0f, 1.0f, 0.65f * focus};
+				DrawTexture(glow->second, kItemIconX, y, 0.65f, glow_color);
 			}
 			DrawTexture(texture->second, kItemIconX, y, 1.0f, color);
 		}
@@ -776,6 +826,12 @@ void XmbRenderer::Draw() {
 }
 
 void XmbRenderer::Shutdown() {
+	for (auto &entry : shadow_glyph_textures_) {
+		if (entry.second.id) {
+			glDeleteTextures(1, &entry.second.id);
+		}
+	}
+	shadow_glyph_textures_.clear();
 	for (auto &entry : glyph_textures_) {
 		if (entry.second.id) {
 			glDeleteTextures(1, &entry.second.id);
