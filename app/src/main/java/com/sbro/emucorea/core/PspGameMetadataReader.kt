@@ -11,8 +11,20 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import java.security.MessageDigest
+import com.sbro.emucorea.xmb.XmbNative
 
 data class PspGameMetadata(val title: String?, val serial: String?, val category: String?)
+
+data class PspGameExtendedInfo(
+    val title: String?,
+    val serial: String?,
+    val discVersion: String?,
+    val systemVersion: String?,
+    val parentalLevel: String?,
+    val region: String?,
+    val sizeBytes: Long,
+    val lastModified: Long,
+)
 
 /**
  * Reads bounded PARAM.SFO and ICON0.PNG assets straight from the game image.
@@ -33,6 +45,56 @@ object PspGameMetadataReader {
             serial = fields["DISC_ID"]?.takeIf(String::isNotBlank),
             category = fields["CATEGORY"]?.takeIf(String::isNotBlank)
         )
+    }
+
+    fun readExtendedInfo(context: Context, path: String): PspGameExtendedInfo {
+        val fields = runCatching {
+            readAsset(context, path, PSP_ASSET_PARAM_SFO)?.let(::parseSfo)
+        }.getOrNull().orEmpty()
+        var sizeBytes = 0L
+        var lastModified = 0L
+        runCatching {
+            if (path.startsWith("content://")) {
+                val doc = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
+                sizeBytes = doc?.length() ?: 0L
+                lastModified = doc?.lastModified() ?: 0L
+            } else {
+                val file = File(path)
+                if (file.isFile) {
+                    sizeBytes = file.length()
+                    lastModified = file.lastModified()
+                }
+            }
+        }
+        val rawSerial = fields["DISC_ID"]?.takeIf(String::isNotBlank)?.uppercase(java.util.Locale.ROOT)
+        val formattedSerial = if (rawSerial != null && rawSerial.length == 9 && !rawSerial.contains('-')) {
+            "${rawSerial.substring(0, 4)}-${rawSerial.substring(4)}"
+        } else {
+            rawSerial
+        }
+        val region = rawSerial?.let(::regionFromSerial)
+        return PspGameExtendedInfo(
+            title = fields["TITLE"]?.takeIf(String::isNotBlank),
+            serial = formattedSerial,
+            discVersion = fields["DISC_VERSION"]?.takeIf(String::isNotBlank),
+            systemVersion = fields["PSP_SYSTEM_VER"]?.takeIf(String::isNotBlank),
+            parentalLevel = fields["PARENTAL_LEVEL"]?.takeIf(String::isNotBlank),
+            region = region,
+            sizeBytes = sizeBytes,
+            lastModified = lastModified,
+        )
+    }
+
+    private fun regionFromSerial(serial: String): String? {
+        if (serial.length < 4) return null
+        return when (serial.substring(0, 4)) {
+            "ULUS", "UCUS", "NPUG", "NPUH", "NPUZ", "NPUJ" -> "North America"
+            "ULES", "UCES", "NPEG", "NPEH", "NPEZ" -> "Europe"
+            "ULJM", "UCJM", "ULJS", "UCJS", "NPJG", "NPJH", "NPJJ" -> "Japan"
+            "ULAS", "UCAS", "NPHG", "NPHH" -> "Asia"
+            "ULKS", "UCKS", "NPKG", "NPKH" -> "Korea"
+            else -> null
+        }
     }
 
     fun extractIcon0(context: Context, path: String): String? = runCatching {
@@ -58,6 +120,90 @@ object PspGameMetadataReader {
             if (!isImage(temporary)) return@runCatching null
             if (!temporary.renameTo(target)) temporary.copyTo(target, overwrite = true)
             target.takeIf(::isImage)?.absolutePath
+        } finally {
+            temporary.delete()
+        }
+    }.getOrNull()
+
+    fun extractPic1(context: Context, path: String): String? = runCatching {
+        val directory = File(context.cacheDir, "game-covers/embedded").apply { mkdirs() }
+        val identity = if (path.startsWith("content://")) {
+            val document = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
+            "$path:${document?.length()}:${document?.lastModified()}"
+        } else {
+            val file = File(path)
+            "$path:${file.length()}:${file.lastModified()}"
+        }
+        val hash = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val target = File(directory, "${hash}_pic1.png")
+        if (isImage(target)) return@runCatching target.absolutePath
+        val bytes = readAsset(context, path, PSP_ASSET_PIC1) ?: return@runCatching null
+        if (bytes.size < 8 || !bytes.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))) {
+            return@runCatching null
+        }
+        val temporary = File.createTempFile("${hash}_pic1", ".tmp", directory)
+        try {
+            temporary.writeBytes(bytes)
+            if (!isImage(temporary)) return@runCatching null
+            if (!temporary.renameTo(target)) temporary.copyTo(target, overwrite = true)
+            target.takeIf(::isImage)?.absolutePath
+        } finally {
+            temporary.delete()
+        }
+    }.getOrNull()
+
+    fun extractPic0(context: Context, path: String): String? = runCatching {
+        val directory = File(context.cacheDir, "game-covers/embedded").apply { mkdirs() }
+        val identity = if (path.startsWith("content://")) {
+            val document = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
+            "$path:${document?.length()}:${document?.lastModified()}"
+        } else {
+            val file = File(path)
+            "$path:${file.length()}:${file.lastModified()}"
+        }
+        val hash = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val target = File(directory, "${hash}_pic0.png")
+        if (isImage(target)) return@runCatching target.absolutePath
+        val bytes = readAsset(context, path, PSP_ASSET_PIC0) ?: return@runCatching null
+        if (bytes.size < 8 || !bytes.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))) {
+            return@runCatching null
+        }
+        val temporary = File.createTempFile("${hash}_pic0", ".tmp", directory)
+        try {
+            temporary.writeBytes(bytes)
+            if (!isImage(temporary)) return@runCatching null
+            if (!temporary.renameTo(target)) temporary.copyTo(target, overwrite = true)
+            target.takeIf(::isImage)?.absolutePath
+        } finally {
+            temporary.delete()
+        }
+    }.getOrNull()
+
+    fun extractSnd0(context: Context, path: String): String? = runCatching {
+        val directory = File(context.cacheDir, "game-covers/embedded").apply { mkdirs() }
+        val identity = if (path.startsWith("content://")) {
+            val document = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
+            "$path:${document?.length()}:${document?.lastModified()}"
+        } else {
+            val file = File(path)
+            "$path:${file.length()}:${file.lastModified()}"
+        }
+        val hash = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val target = File(directory, "${hash}_snd0.wav")
+        if (target.isFile && target.length() > 44L) return@runCatching target.absolutePath
+        val bytes = readAsset(context, path, PSP_ASSET_SND0) ?: return@runCatching null
+        if (bytes.size < 44 || !bytes.copyOfRange(0, 4).contentEquals("RIFF".toByteArray(Charsets.US_ASCII))) {
+            return@runCatching null
+        }
+        val temporary = File.createTempFile("${hash}_snd0", ".tmp", directory)
+        try {
+            val ok = XmbNative.nativeDecodeAt3Bytes(bytes, temporary.absolutePath)
+            if (!ok || temporary.length() <= 44L) return@runCatching null
+            if (!temporary.renameTo(target)) temporary.copyTo(target, overwrite = true)
+            target.takeIf { it.isFile && it.length() > 44L }?.absolutePath
         } finally {
             temporary.delete()
         }
@@ -149,14 +295,22 @@ object PspGameMetadataReader {
             val item = 20 + index * 16
             if (item + 16 > bytes.size) break
             val keyOffset = (bytes[item].toInt() and 0xff) or ((bytes[item + 1].toInt() and 0xff) shl 8)
+            val dataFormat = (bytes[item + 2].toInt() and 0xff) or ((bytes[item + 3].toInt() and 0xff) shl 8)
             val valueLength = littleInt(bytes, item + 4)
             val valueOffset = dataStart.toLong() + (littleInt(bytes, item + 12).toLong() and 0xffffffffL)
             val keyAt = keyStart + keyOffset
             if (keyAt !in bytes.indices || valueLength !in 1..4096 || valueOffset < 0 || valueOffset + valueLength > bytes.size) continue
             val keyEnd = (keyAt until bytes.size).firstOrNull { bytes[it] == 0.toByte() } ?: continue
             val key = String(bytes, keyAt, keyEnd - keyAt, Charsets.UTF_8)
-            if (key != "TITLE" && key != "DISC_ID" && key != "CATEGORY") continue
-            val value = String(bytes, valueOffset.toInt(), valueLength, Charsets.UTF_8).trimEnd('\u0000').trim()
+            if (key != "TITLE" && key != "DISC_ID" && key != "CATEGORY" &&
+                key != "DISC_VERSION" && key != "PSP_SYSTEM_VER" && key != "PARENTAL_LEVEL") {
+                continue
+            }
+            val value = if (dataFormat == 0x0404 && valueLength >= 4) {
+                littleInt(bytes, valueOffset.toInt()).toString()
+            } else {
+                String(bytes, valueOffset.toInt(), valueLength, Charsets.UTF_8).trimEnd('\u0000').trim()
+            }
             result[key] = value
         }
         return result

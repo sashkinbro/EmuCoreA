@@ -9,12 +9,16 @@ import java.util.zip.Inflater
 
 internal const val PSP_ASSET_PARAM_SFO = 0
 internal const val PSP_ASSET_ICON0 = 1
+internal const val PSP_ASSET_ICON1 = 2
+internal const val PSP_ASSET_PIC0 = 3
+internal const val PSP_ASSET_PIC1 = 4
+internal const val PSP_ASSET_SND0 = 5
 
 private const val ISO_SECTOR_BYTES = 2048
 private const val ISO_PRIMARY_VOLUME_DESCRIPTOR_SECTOR = 16
 private const val ISO_ROOT_RECORD_OFFSET = 156
 private const val ISO_DIRECTORY_ENTRY_BYTES = 34
-private const val MAX_ASSET_BYTES = 4 * 1024 * 1024
+private const val MAX_ASSET_BYTES = 16 * 1024 * 1024
 private const val MAX_DIRECTORY_BYTES = 512 * 1024
 
 /** Random-access view over the logical ISO9660 bytes of a PSP game image. */
@@ -41,7 +45,15 @@ internal interface PspImageSource : Closeable {
     }
 
     fun readIsoAsset(asset: Int): ByteArray? {
-        val name = if (asset == PSP_ASSET_PARAM_SFO) "PARAM.SFO" else "ICON0.PNG"
+        val name = when (asset) {
+            PSP_ASSET_PARAM_SFO -> "PARAM.SFO"
+            PSP_ASSET_ICON0 -> "ICON0.PNG"
+            PSP_ASSET_ICON1 -> "ICON1.PMF"
+            PSP_ASSET_PIC0 -> "PIC0.PNG"
+            PSP_ASSET_PIC1 -> "PIC1.PNG"
+            PSP_ASSET_SND0 -> "SND0.AT3"
+            else -> return null
+        }
         val descriptor = read(
             ISO_PRIMARY_VOLUME_DESCRIPTOR_SECTOR.toLong() * ISO_SECTOR_BYTES,
             ISO_SECTOR_BYTES
@@ -174,24 +186,31 @@ internal class CsoImageSource private constructor(
     }
 
     private fun inflateBlock(data: ByteArray, expected: Int): ByteArray? {
-        // Each frame ends before CISO's reserved trailing byte, so the full span
-        // normally inflates on its own; the trim retry covers nonconforming writers.
-        for (trim in intArrayOf(0, 1)) {
+        // Each frame normally inflates cleanly via raw deflate; retries cover alignment
+        // padding or nonconforming zlib-wrapped writers.
+        val variants = arrayOf(
+            true to 0,
+            true to 1,
+            false to 0,
+        )
+        for ((nowrap, trim) in variants) {
             val available = data.size - trim
             if (available <= 0) continue
-            val inflater = Inflater(true)
+            val inflater = Inflater(nowrap)
             try {
                 inflater.setInput(data, 0, available)
                 val out = ByteArray(expected)
                 var produced = 0
                 while (produced < expected) {
                     val count = inflater.inflate(out, produced, expected - produced)
-                    if (count == 0) break
+                    if (count == 0) {
+                        if (inflater.finished() || inflater.needsInput()) break
+                    }
                     produced += count
                 }
                 if (produced == expected) return out
             } catch (_: DataFormatException) {
-                // Try the next trim variant.
+                // Try the next variant.
             } finally {
                 inflater.end()
             }

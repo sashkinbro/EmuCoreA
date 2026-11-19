@@ -21,13 +21,57 @@ object XmbNative {
 
     external fun nativeDraw()
 
-    external fun nativeSetGames(titles: Array<String>, icons: Array<String>)
+    external fun nativeSetGames(
+        titles: Array<String>,
+        icons: Array<String>,
+        pic1s: Array<String>,
+        pic0s: Array<String>,
+        wavs: Array<String>,
+        serials: Array<String>,
+        versions: Array<String>,
+        sysVersions: Array<String>,
+        regions: Array<String>,
+        sizes: Array<String>,
+        dates: Array<String>,
+    )
+
+    external fun nativeSetSaves(
+        titles: Array<String>,
+        slots: Array<String>,
+        dates: Array<String>,
+        sizes: Array<String>,
+        previews: Array<String>,
+        saves: Array<String>,
+        games: Array<String>,
+    )
+
+    external fun nativeSetBattery(level: Int, charging: Boolean)
+
+    external fun nativeSetStrings(keys: Array<String>, values: Array<String>)
+
+    external fun nativeSetStorageInfo(freeSpaceText: String, deviceName: String)
+
+    external fun nativeSetSettings(
+        themeStyle: Int,
+        colorIndex: Int,
+        bgMode: Int,
+        waveMode: Int,
+        keyTone: Boolean,
+        bgmEnabled: Boolean,
+        dateFormat: Int,
+        time24h: Boolean,
+        swapConfirm: Boolean,
+    )
 
     external fun nativeGetState(): IntArray
 
     external fun nativeSetState(category: Int, item: Int)
 
     external fun nativeKey(key: Int)
+
+    external fun nativeDecodeAt3(at3Path: String, wavPath: String): Boolean
+
+    external fun nativeDecodeAt3Bytes(at3Bytes: ByteArray, wavPath: String): Boolean
 
     external fun nativeShutdown()
 }

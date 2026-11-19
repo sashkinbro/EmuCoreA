@@ -425,6 +425,20 @@ fun AppNavigation(
                             }
                         }
                     },
+                    onSaveSelected = { gamePath, slot ->
+                        navController.navigate(EmulationRoute(gamePath = gamePath, saveSlot = slot)) {
+                            launchSingleTop = true
+                        }
+                    },
+                    onDeleteGame = { game ->
+                        runCatching {
+                            com.sbro.emucorea.core.DocumentPathResolver.resolveFilePath(context, game.path)?.let {
+                                java.io.File(it).delete()
+                            }
+                        }
+                        xmbViewModel.refreshGames()
+                    },
+                    onExitXmb = { navController.popBackStack() },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -504,6 +518,11 @@ fun AppNavigation(
                         onMenuClick = openDrawer,
                         onShelfModeChanged = { isShelfMode ->
                             homeDrawerEnabled = !isShelfMode
+                        },
+                        onSaveSelected = { gamePath, slot ->
+                            navController.navigate(EmulationRoute(gamePath = gamePath, saveSlot = slot)) {
+                                launchSingleTop = true
+                            }
                         }
                     )
                 }

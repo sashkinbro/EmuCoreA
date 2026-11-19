@@ -189,6 +189,57 @@ class Rco:
             end = len(self.labels)
         return self.labels[offset:end].decode("utf-8", "replace")
 
+    def texts(self) -> dict[int, bytes]:
+        """Decode the per-language text data pool (lang -> UTF-8/16 bytes)."""
+        start = self.header["p_text_data"]
+        total = self.header["l_text_data"]
+        if start == NONE or total == 0:
+            return {}
+        result: dict[int, bytes] = {}
+        pos = start
+        end = min(len(self.data), start + total)
+        while pos + 16 <= end:
+            lang, _unknown, next_offset, packed, unpacked = struct.unpack_from(
+                "<HHIII", self.data, pos
+            )
+            payload = self.data[pos + 16:pos + 16 + packed]
+            if len(payload) != packed:
+                break
+            if self.method == COMPRESSION_RLZ:
+                block, _ = rlz.decompress(payload, unpacked)
+            elif self.method == COMPRESSION_ZLIB:
+                block = zlib.decompress(payload)
+            else:
+                block = payload
+            if len(block) == unpacked:
+                result[lang] = block
+            if next_offset == 0:
+                break
+            pos = start + next_offset
+        return result
+
+    def text_entry_strings(self, entry: Entry) -> dict[str, str]:
+        """Resolve the text indexes of one text-table entry to label -> text."""
+        if entry.table_id != TABLE_TEXT or entry.type != 1 or len(entry.extra) < 8:
+            return {}
+        lang, text_format, count = struct.unpack_from("<HHI", entry.extra, 0)
+        block = self.texts().get(lang)
+        if block is None:
+            return {}
+        strings: dict[str, str] = {}
+        for i in range(min(count, (len(entry.extra) - 8) // 12)):
+            label_offset, length, offset = struct.unpack_from("<III", entry.extra, 8 + i * 12)
+            if offset + length > len(block):
+                continue
+            raw = block[offset:offset + length]
+            if text_format == 1:
+                text = raw.decode("utf-16-le", "replace")
+            else:
+                text = raw.decode("utf-8", "replace")
+            label = self._label(label_offset) or f"text_{i:03d}"
+            strings[label] = text.rstrip("\0")
+        return strings
+
     # -- entry tree -----------------------------------------------------------
 
     def _table_read(self, offset: int, size: int) -> bytes:

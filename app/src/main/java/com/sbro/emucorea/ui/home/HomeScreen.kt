@@ -1,5 +1,7 @@
 package com.sbro.emucorea.ui.home
 
+import com.sbro.emucorea.ui.xmb.XmbScreen
+
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.net.Uri
@@ -185,6 +187,7 @@ fun HomeScreen(
     onCreateShortcutClick: (GameItem) -> Unit,
     onMenuClick: (() -> Unit)? = null,
     onShelfModeChanged: (Boolean) -> Unit = {},
+    onSaveSelected: ((String, Int) -> Unit)? = null,
     viewModel: HomeViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -514,28 +517,25 @@ fun HomeScreen(
                 label = "home-library-mode"
             ) { shelfMode ->
                 if (shelfMode) {
-                    HomeShelfMode(
+                    XmbScreen(
                         games = uiState.games,
-                        recentGames = uiState.recentGames,
-                        isCoverArtDisabled = uiState.isCoverArtDisabled,
-                        // Keep the outgoing shelf edge-to-edge until its exit animation finishes.
-                        // The parent state already points at the standard Home layout at that time.
-                        topInset = 0.dp,
-                        bottomInset = 0.dp,
-                        horizontalInset = horizontalInset,
-                        modifier = Modifier.fillMaxSize(),
-                        onExitShelfMode = viewModel::toggleShelfMode,
-                        onEnable3dCoverArt = viewModel::enable3dCoverArt,
-                        onGameClick = onGameClick,
-                        onLongClickStart = onGameClick,
-                        onLongClickContinue = onContinueGame,
-                        onLongClickLoadSave = onLoadSaveClick,
-                        onLongClickManage = onManageGameClick,
-                        onLongClickCreateShortcut = onCreateShortcutClick,
-                        onLongClickCustomCover = { game ->
-                            gameAwaitingPickerLaunch = game
+                        onGameSelected = { index ->
+                            val game = uiState.games.getOrNull(index)
+                            if (game != null) {
+                                onGameClick(game)
+                            }
                         },
-                        onLongClickRestoreCover = { game -> restoreCustomCover(game) }
+                        onSaveSelected = onSaveSelected,
+                        onDeleteGame = { game ->
+                            runCatching {
+                                com.sbro.emucorea.core.DocumentPathResolver.resolveFilePath(context, game.path)?.let {
+                                    java.io.File(it).delete()
+                                }
+                            }
+                            viewModel.refreshGames()
+                        },
+                        onExitXmb = viewModel::toggleShelfMode,
+                        modifier = Modifier.fillMaxSize()
                     )
                 } else {
                     val columns = if (isListView) GridCells.Fixed(1) else GridCells.Adaptive(minSize = minCellSize)
