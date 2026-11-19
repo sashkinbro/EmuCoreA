@@ -5,6 +5,7 @@ add_library(emucorea_xmb SHARED
     xmb_jni.cpp
     xmb_renderer.cpp
     png_image.cpp
+    pgf_font.cpp
 )
 
 target_compile_features(emucorea_xmb PRIVATE cxx_std_17)

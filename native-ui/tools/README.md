@@ -74,6 +74,15 @@ The VAG reader keeps the source sample rate and does a plain PSX ADPCM decode;
 nothing is resampled, normalised or looped at this stage. The navigation sounds
 are 44.1 kHz mono, with `snd_cursor` at 1,848 samples.
 
+## Fonts
+
+`psp/pgf.py` reads the firmware's PGF fonts: the 0x188-byte header, the compact
+metric tables, the char map, the nibble-RLE glyph bitmaps and the V_ROWS
+column-major variant. From `ltn0.pgf` the reader gives "G" as a 15x16 bitmap
+with a 1000/64-pixel advance, "Game" as 58.25 px and "Saved Data Utility" as
+184.48 px. The same layout is implemented once more in the native renderer;
+`tests/test_pgf.py` pins the metrics so the two do not drift apart.
+
 ## Packing
 
 ```text

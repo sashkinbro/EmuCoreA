@@ -108,6 +108,12 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 	for (const auto &asset : assets) {
 		LoadTexture(asset.name, asset.path);
 	}
+	font_loaded_ = font_.Load(root_ + "/fonts/ltn0.pgf");
+	if (font_loaded_) {
+		__android_log_print(ANDROID_LOG_INFO, kTag, "font loaded: %s", font_.name().c_str());
+	} else {
+		__android_log_print(ANDROID_LOG_WARN, kTag, "fonts/ltn0.pgf could not be loaded");
+	}
 	__android_log_print(ANDROID_LOG_INFO, kTag, "scene initialized with %zu textures", textures_.size());
 	return true;
 }
@@ -174,7 +180,7 @@ void XmbRenderer::Resize(int width, int height) {
 	surface_height_ = height;
 }
 
-void XmbRenderer::DrawQuad(float x, float y, float width, float height, float alpha) {
+void XmbRenderer::DrawQuad(float x, float y, float width, float height, const float color[4]) {
 	const float x1 = x + width;
 	const float y1 = y + height;
 	const float vertices[24] = {
@@ -185,22 +191,85 @@ void XmbRenderer::DrawQuad(float x, float y, float width, float height, float al
 		x1, y1, 1.0f, 1.0f,
 		x, y1, 0.0f, 1.0f,
 	};
-	static float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-	color[3] = alpha;
 	glUniform4fv(u_color_, 1, color);
 	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
-void XmbRenderer::DrawTexture(const Texture &texture, float center_x, float center_y, float scale, float alpha) {
+void XmbRenderer::DrawTexture(const Texture &texture, float center_x, float center_y, float scale,
+                              const float color[4]) {
 	if (texture.id == 0) {
 		return;
 	}
 	const float width = texture.width * scale;
 	const float height = texture.height * scale;
 	glBindTexture(GL_TEXTURE_2D, texture.id);
-	DrawQuad(center_x - width * 0.5f, center_y - height * 0.5f, width, height, alpha);
+	DrawQuad(center_x - width * 0.5f, center_y - height * 0.5f, width, height, color);
+}
+
+const XmbRenderer::Texture *XmbRenderer::GlyphTexture(uint32_t codepoint) {
+	auto found = glyph_textures_.find(codepoint);
+	if (found != glyph_textures_.end()) {
+		return &found->second;
+	}
+	const FontGlyph *glyph = font_.Glyph(codepoint);
+	if (!glyph || glyph->width <= 0 || glyph->height <= 0 || glyph->pixels.empty()) {
+		return nullptr;
+	}
+	std::vector<uint8_t> rgba((size_t)glyph->width * glyph->height * 4);
+	for (size_t i = 0; i < glyph->pixels.size(); ++i) {
+		rgba[i * 4 + 0] = 255;
+		rgba[i * 4 + 1] = 255;
+		rgba[i * 4 + 2] = 255;
+		rgba[i * 4 + 3] = (uint8_t)(glyph->pixels[i] * 17);
+	}
+	Texture texture;
+	texture.width = glyph->width;
+	texture.height = glyph->height;
+	glGenTextures(1, &texture.id);
+	glBindTexture(GL_TEXTURE_2D, texture.id);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture.width, texture.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	const auto inserted = glyph_textures_.emplace(codepoint, texture);
+	return &inserted.first->second;
+}
+
+float XmbRenderer::DrawText(const std::string &text, float x, float baseline, float scale,
+                            const float color[4], bool shadow) {
+	if (!font_loaded_) {
+		return 0.0f;
+	}
+	const float start = x;
+	size_t position = 0;
+	const float shadow_color[4] = {0.0f, 0.0f, 0.0f, color[3] * 0.62f};
+	while (true) {
+		const uint32_t codepoint = NextCodepoint(text, position);
+		if (codepoint == 0) {
+			break;
+		}
+		const FontGlyph *glyph = font_.Glyph(codepoint);
+		if (!glyph) {
+			continue;
+		}
+		const Texture *texture = GlyphTexture(codepoint);
+		if (texture) {
+			glBindTexture(GL_TEXTURE_2D, texture->id);
+			const float glyph_x = x + glyph->left * scale;
+			const float glyph_y = baseline - glyph->top * scale;
+			const float width = glyph->width * scale;
+			const float height = glyph->height * scale;
+			if (shadow) {
+				DrawQuad(glyph_x + 1.0f, glyph_y + 1.0f, width, height, shadow_color);
+			}
+			DrawQuad(glyph_x, glyph_y, width, height, color);
+		}
+		x += glyph->advance_h / 64.0f * scale;
+	}
+	return x - start;
 }
 
 void XmbRenderer::Draw() {
@@ -233,6 +302,8 @@ void XmbRenderer::Draw() {
 
 	const char *order[] = {"settings", "extras", "photo", "music", "video", "game", "network", "psn"};
 	constexpr int selected = 5;
+	const float selected_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+	const float dim_color[4] = {1.0f, 1.0f, 1.0f, 0.55f};
 	for (int index = 0; index < 8; ++index) {
 		auto texture = textures_.find(order[index]);
 		if (texture == textures_.end()) {
@@ -241,14 +312,23 @@ void XmbRenderer::Draw() {
 		const float x = kCategoryX[index];
 		const bool is_selected = index == selected;
 		DrawTexture(texture->second, x, kCategoryY, is_selected ? 1.0f : 0.8f,
-		            is_selected ? 1.0f : 0.55f);
+		            is_selected ? selected_color : dim_color);
 	}
 
+	const float item_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+	const float item_dim[4] = {1.0f, 1.0f, 1.0f, 0.65f};
 	if (auto saved = textures_.find("item_savedata"); saved != textures_.end()) {
-		DrawTexture(saved->second, kItemIconX, kSelectedItemY, 1.0f, 1.0f);
+		DrawTexture(saved->second, kItemIconX, kSelectedItemY, 1.0f, item_color);
 	}
 	if (auto stick = textures_.find("item_memstick"); stick != textures_.end()) {
-		DrawTexture(stick->second, kItemIconX, kSelectedItemY + kItemSpacing, 1.0f, 0.65f);
+		DrawTexture(stick->second, kItemIconX, kSelectedItemY + kItemSpacing, 1.0f, item_dim);
+	}
+
+	if (font_loaded_) {
+		const float label_width = font_.TextWidth("Game", 0.66f);
+		DrawText("Game", 109.5f - label_width * 0.5f, 105.0f, 0.66f, item_color, true);
+		DrawText("Saved Data Utility", 140.0f, 144.0f, 0.82f, item_color, true);
+		DrawText("Memory Stick", 140.0f, 210.0f, 0.82f, item_dim, true);
 	}
 
 	glBindVertexArray(0);
@@ -262,6 +342,12 @@ void XmbRenderer::Draw() {
 }
 
 void XmbRenderer::Shutdown() {
+	for (auto &entry : glyph_textures_) {
+		if (entry.second.id) {
+			glDeleteTextures(1, &entry.second.id);
+		}
+	}
+	glyph_textures_.clear();
 	for (auto &entry : textures_) {
 		if (entry.second.id) {
 			glDeleteTextures(1, &entry.second.id);

@@ -5,6 +5,8 @@
 #include <string>
 #include <unordered_map>
 
+#include "pgf_font.h"
+
 namespace xmb {
 
 // The first native scene. It draws the measured Game-column anchors with the
@@ -26,8 +28,11 @@ private:
 
 	bool BuildProgram();
 	bool LoadTexture(const std::string &name, const std::string &relative_path);
-	void DrawTexture(const Texture &texture, float center_x, float center_y, float scale, float alpha);
-	void DrawQuad(float x, float y, float width, float height, float alpha);
+	const Texture *GlyphTexture(uint32_t codepoint);
+	void DrawTexture(const Texture &texture, float center_x, float center_y, float scale, const float color[4]);
+	void DrawQuad(float x, float y, float width, float height, const float color[4]);
+	float DrawText(const std::string &text, float x, float baseline, float scale,
+	               const float color[4], bool shadow);
 
 	GLuint program_ = 0;
 	GLuint vertex_array_ = 0;
@@ -36,6 +41,9 @@ private:
 	GLint u_color_ = -1;
 	GLint u_texture_ = -1;
 	std::unordered_map<std::string, Texture> textures_;
+	std::unordered_map<uint32_t, Texture> glyph_textures_;
+	PgfFont font_;
+	bool font_loaded_ = false;
 	std::string root_;
 	int surface_width_ = 0;
 	int surface_height_ = 0;
