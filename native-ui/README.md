@@ -104,7 +104,10 @@ native-ui/
 - [x] Resource pack + first-start installer
 - [x] Reference oracle: the real 6.60 XMB captured through the debugger
       ([measurements](docs/reference.md))
-- [ ] Game column renderer, animations and sounds
+- [x] Native GLES scene skeleton with the measured category/item anchors and
+      original textures ([renderer](docs/renderer.md))
+- [ ] Game column renderer, animations and sounds (text, wave, transitions and
+      the game backgrounds are still missing)
 - [ ] Frame-for-frame comparison against the firmware XMB
 - [ ] Host integration in place of the current 3D carousel
 

@@ -2,52 +2,78 @@ package com.sbro.emucorea.xmb.preview
 
 import android.app.Activity
 import android.graphics.Color
+import android.opengl.GLSurfaceView
 import android.os.Bundle
 import android.util.Log
+import android.view.Gravity
+import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.TextView
+import com.sbro.emucorea.xmb.XmbNative
 import com.sbro.emucorea.xmb.XmbSession
+import com.sbro.emucorea.xmb.XmbSurfaceRenderer
 import java.io.File
 
 /**
  * Development host for the standalone XMB module.
  *
- * It has no game library and no emulation core: its only job is to prove that
- * the AAR carries the pack, that the first-start installer verifies and
- * unpacks it, and that the native library can be loaded and handed the pack
- * root. Rendering will replace this text once the scene exists.
+ * It has no game library and no emulation core. The GL surface runs the native
+ * scene against the installed pack; the overlay only reports what was loaded.
  */
 class MainActivity : Activity() {
+    private lateinit var surface: GLSurfaceView
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val text = TextView(this).apply {
-            textSize = 15f
-            setPadding(48, 48, 48, 48)
-            setBackgroundColor(Color.rgb(14, 14, 16))
-            setTextColor(Color.rgb(225, 225, 230))
-            text = "installing native-ui pack..."
+        surface = GLSurfaceView(this).apply {
+            setEGLContextClientVersion(3)
+            preserveEGLContextOnPause = true
+            setRenderer(XmbSurfaceRenderer(this@MainActivity))
+            renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         }
-        setContentView(text)
+        val status = TextView(this).apply {
+            textSize = 11f
+            setPadding(24, 12, 24, 12)
+            setTextColor(Color.rgb(235, 235, 240))
+            setBackgroundColor(Color.argb(150, 0, 0, 0))
+            text = "loading native-ui pack..."
+        }
+        val root = FrameLayout(this).apply {
+            addView(surface, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+            addView(status, FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.START,
+            ))
+        }
+        setContentView(root)
+
         Thread {
             val message = try {
                 val directory = XmbSession.initialize(applicationContext)
                 val files = directory.walkTopDown().filter { it.isFile }.count()
-                val images = File(directory, "images").walkTopDown().count { it.extension == "png" }
-                val audio = File(directory, "audio").walkTopDown().count { it.extension == "wav" }
                 buildString {
-                    appendLine("EmuCoreA XMB preview")
-                    appendLine("native ${XmbSession.version()}")
-                    appendLine("root ${directory.absolutePath}")
-                    appendLine("files $files, images $images, audio $audio")
-                    appendLine("manifest ${File(directory, "manifest.json").isFile}")
-                    appendLine("native root ${com.sbro.emucorea.xmb.XmbNative.nativeResourceRoot()}")
-                }.trim()
+                    append("native ${XmbSession.version()} · pack ${directory.name.take(8)}")
+                    append("\n$files files · ${File(directory, "images").walkTopDown().count { it.extension == "png" }} images")
+                    append("\nnative root ${XmbNative.nativeResourceRoot().takeLast(12)}")
+                }
             } catch (error: Throwable) {
                 Log.e(TAG, "install failed", error)
-                "FAILED: $error\n\n${error.stackTraceToString()}"
+                "pack failed: $error"
             }
-            Log.i(TAG, message)
-            runOnUiThread { text.text = message }
-        }.apply { name = "xmb-pack-install" }.start()
+            Log.i(TAG, message.replace('\n', ' '))
+            runOnUiThread { status.text = message }
+        }.apply { name = "xmb-pack-status" }.start()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        surface.onResume()
+    }
+
+    override fun onPause() {
+        surface.onPause()
+        super.onPause()
     }
 
     private companion object {

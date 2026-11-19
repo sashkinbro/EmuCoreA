@@ -14,4 +14,12 @@ object XmbNative {
     external fun nativeSetResourceRoot(path: String)
 
     external fun nativeResourceRoot(): String
+
+    external fun nativeInit(): Boolean
+
+    external fun nativeResize(width: Int, height: Int)
+
+    external fun nativeDraw()
+
+    external fun nativeShutdown()
 }

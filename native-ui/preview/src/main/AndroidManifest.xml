@@ -5,7 +5,7 @@
         android:allowBackup="false"
         android:label="XMB Preview"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
