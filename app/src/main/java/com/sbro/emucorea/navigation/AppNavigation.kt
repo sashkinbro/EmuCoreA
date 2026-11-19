@@ -418,6 +418,7 @@ fun AppNavigation(
                 val libraryGames = xmbState.games.filterNot { it.isDlc }
                 XmbScreen(
                     games = libraryGames,
+                    isLoadingGames = xmbState.isLoading || xmbState.isBootstrapping,
                     onGameSelected = { index ->
                         libraryGames.getOrNull(index)?.let { game ->
                             navController.navigate(EmulationRoute(gamePath = game.path)) {

@@ -5,6 +5,9 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.Uri
 import android.opengl.GLSurfaceView
 import android.os.BatteryManager
 import android.os.Build
@@ -75,8 +78,19 @@ private object XmbAssetCache {
     @Volatile
     var lastSaves: List<SaveStateEntryInfo> = emptyList()
 
+    @Volatile
+    var hasLoadedSaves: Boolean = false
+
     fun keyFor(game: GameItem): String = "${game.path}|${game.fileSize}|${game.lastModified}"
 }
+
+private fun isNetworkAvailable(context: Context): Boolean = runCatching {
+    val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        ?: return false
+    val network = cm.activeNetwork ?: return false
+    val caps = cm.getNetworkCapabilities(network) ?: return false
+    caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}.getOrDefault(false)
 
 private fun formatGameSize(sizeBytes: Long): String = when {
     sizeBytes <= 0L -> ""
@@ -195,6 +209,81 @@ private val XMB_STRING_BINDINGS: List<Pair<String, Int>> = listOf(
     "xmb_month_oct" to R.string.xmb_month_oct,
     "xmb_month_nov" to R.string.xmb_month_nov,
     "xmb_month_dec" to R.string.xmb_month_dec,
+    "xmb_sysinfo_model" to R.string.xmb_sysinfo_model,
+    "xmb_theme_cookie" to R.string.xmb_theme_cookie,
+    "xmb_theme_piano" to R.string.xmb_theme_piano,
+    "xmb_no_content" to R.string.xmb_no_content,
+    "xmb_color_ext_00" to R.string.xmb_color_ext_00,
+    "xmb_color_ext_01" to R.string.xmb_color_ext_01,
+    "xmb_color_ext_02" to R.string.xmb_color_ext_02,
+    "xmb_color_ext_03" to R.string.xmb_color_ext_03,
+    "xmb_color_ext_04" to R.string.xmb_color_ext_04,
+    "xmb_color_ext_05" to R.string.xmb_color_ext_05,
+    "xmb_color_ext_06" to R.string.xmb_color_ext_06,
+    "xmb_color_ext_07" to R.string.xmb_color_ext_07,
+    "xmb_color_ext_08" to R.string.xmb_color_ext_08,
+    "xmb_color_ext_09" to R.string.xmb_color_ext_09,
+    "xmb_color_ext_10" to R.string.xmb_color_ext_10,
+    "xmb_color_ext_11" to R.string.xmb_color_ext_11,
+    "xmb_color_ext_12" to R.string.xmb_color_ext_12,
+    "xmb_color_ext_13" to R.string.xmb_color_ext_13,
+    "xmb_color_ext_14" to R.string.xmb_color_ext_14,
+    "xmb_color_ext_15" to R.string.xmb_color_ext_15,
+    "xmb_color_ext_16" to R.string.xmb_color_ext_16,
+    "xmb_color_ext_17" to R.string.xmb_color_ext_17,
+    "xmb_color_ext_18" to R.string.xmb_color_ext_18,
+    "xmb_color_ext_19" to R.string.xmb_color_ext_19,
+    "xmb_color_ext_20" to R.string.xmb_color_ext_20,
+    "xmb_color_ext_21" to R.string.xmb_color_ext_21,
+    "xmb_setting_aspect" to R.string.xmb_setting_aspect,
+    "xmb_opt_16_9" to R.string.xmb_opt_16_9,
+    "xmb_opt_4_3" to R.string.xmb_opt_4_3,
+    "xmb_setting_seq_play" to R.string.xmb_setting_seq_play,
+    "xmb_setting_ss_speed" to R.string.xmb_setting_ss_speed,
+    "xmb_opt_normal" to R.string.xmb_opt_normal,
+    "xmb_opt_fast" to R.string.xmb_opt_fast,
+    "xmb_setting_ss_effect" to R.string.xmb_setting_ss_effect,
+    "xmb_opt_slide" to R.string.xmb_opt_slide,
+    "xmb_opt_fade" to R.string.xmb_opt_fade,
+    "xmb_setting_restore" to R.string.xmb_setting_restore,
+    "xmb_restore_confirm_1" to R.string.xmb_restore_confirm_1,
+    "xmb_restore_confirm_2" to R.string.xmb_restore_confirm_2,
+    "xmb_setting_backlight" to R.string.xmb_setting_backlight,
+    "xmb_opt_2min" to R.string.xmb_opt_2min,
+    "xmb_opt_5min" to R.string.xmb_opt_5min,
+    "xmb_setting_wlan_ps" to R.string.xmb_setting_wlan_ps,
+    "xmb_setting_avls" to R.string.xmb_setting_avls,
+    "xmb_setting_parental" to R.string.xmb_setting_parental,
+    "xmb_level_prefix" to R.string.xmb_level_prefix,
+    "xmb_setting_net_status" to R.string.xmb_setting_net_status,
+    "xmb_net_connected" to R.string.xmb_net_connected,
+    "xmb_net_disconnected" to R.string.xmb_net_disconnected,
+    "xmb_setting_adhoc_ch" to R.string.xmb_setting_adhoc_ch,
+    "xmb_opt_auto" to R.string.xmb_opt_auto,
+    "xmb_ch_prefix" to R.string.xmb_ch_prefix,
+    "xmb_setting_rss_auto" to R.string.xmb_setting_rss_auto,
+    "xmb_notice_update_1" to R.string.xmb_notice_update_1,
+    "xmb_notice_update_2" to R.string.xmb_notice_update_2,
+    "xmb_usb_status" to R.string.xmb_usb_status,
+    "xmb_games_count_lbl" to R.string.xmb_games_count_lbl,
+    "xmb_saves_count_lbl" to R.string.xmb_saves_count_lbl,
+    "xmb_notice_1seg" to R.string.xmb_notice_1seg,
+    "xmb_notice_camera" to R.string.xmb_notice_camera,
+    "xmb_notice_gamesharing_1" to R.string.xmb_notice_gamesharing_1,
+    "xmb_notice_gamesharing_2" to R.string.xmb_notice_gamesharing_2,
+    "xmb_notice_manual_1" to R.string.xmb_notice_manual_1,
+    "xmb_notice_manual_2" to R.string.xmb_notice_manual_2,
+    "xmb_notice_manual_3" to R.string.xmb_notice_manual_3,
+    "xmb_notice_manual_4" to R.string.xmb_notice_manual_4,
+    "xmb_notice_locationfree" to R.string.xmb_notice_locationfree,
+    "xmb_notice_remoteplay" to R.string.xmb_notice_remoteplay,
+    "xmb_notice_rss" to R.string.xmb_notice_rss,
+    "xmb_browser_confirm_1" to R.string.xmb_browser_confirm_1,
+    "xmb_browser_confirm_2" to R.string.xmb_browser_confirm_2,
+    "xmb_notice_radio" to R.string.xmb_notice_radio,
+    "xmb_notice_skype" to R.string.xmb_notice_skype,
+    "xmb_notice_psn" to R.string.xmb_notice_psn,
+    "xmb_notice_ps_store" to R.string.xmb_notice_ps_store,
 )
 
 private fun pushLocalizedStrings(context: Context) {
@@ -269,6 +358,7 @@ private fun pushSavesToNative(
 @Composable
 fun XmbScreen(
     games: List<GameItem>,
+    isLoadingGames: Boolean = false,
     onGameSelected: (Int) -> Unit,
     onSaveSelected: ((gamePath: String, slot: Int) -> Unit)? = null,
     onDeleteGame: ((GameItem) -> Unit)? = null,
@@ -281,6 +371,7 @@ fun XmbScreen(
     val localeTag = context.resources.configuration.locales.toLanguageTags()
 
     val currentGames = rememberUpdatedState(games)
+    val currentLoadingGames = rememberUpdatedState(isLoadingGames)
     val currentSelection = rememberUpdatedState(onGameSelected)
     val currentSaveSelection = rememberUpdatedState(onSaveSelected)
     val currentDeleteGame = rememberUpdatedState(onDeleteGame)
@@ -362,6 +453,7 @@ fun XmbScreen(
             runCatching { saveRepo.enrichGlobalEntries(raw) }.getOrDefault(raw)
         }
         XmbAssetCache.lastSaves = enriched
+        XmbAssetCache.hasLoadedSaves = true
         value = enriched
     }
     val currentSaves = rememberUpdatedState(saveStates)
@@ -380,12 +472,21 @@ fun XmbScreen(
         keyTone: Boolean,
         bgmEnabled: Boolean,
         swapConfirm: Boolean,
+        avlsEnabled: Boolean,
+        keepScreenMode: Int,
     ) {
         XmbAudio.keyToneEnabled = keyTone
         XmbAudio.bgmEnabled = bgmEnabled
+        XmbAudio.avlsEnabled = avlsEnabled
         XmbHost.swapConfirmButton = swapConfirm
         if (!bgmEnabled) {
             XmbAudio.stopBgm()
+        }
+        val window = (context as? Activity)?.window
+        if (keepScreenMode == 0) {
+            window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        } else {
+            window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
@@ -399,7 +500,14 @@ fun XmbScreen(
         val dateFormat = preferences.getInt("date_format", 0)
         val time24h = preferences.getBoolean("time_24h", true)
         val swapConfirm = preferences.getBoolean("swap_confirm", false)
-        applyAudioAndHostSettings(keyTone, bgmEnabled, swapConfirm)
+        val avlsEnabled = preferences.getBoolean("avls_enabled", false)
+        val keepScreenMode = preferences.getInt("keep_screen_mode", 0)
+        val aspectMode = preferences.getInt("aspect_mode", 0)
+        val slideshowSpeed = preferences.getInt("slideshow_speed", 0)
+        val slideshowEffect = preferences.getInt("slideshow_effect", 0)
+        val parentalLevel = preferences.getInt("parental_level", 0)
+        val adhocChannel = preferences.getInt("adhoc_channel", 0)
+        val rssAutoUpdate = preferences.getBoolean("rss_auto_update", false)
         XmbNative.nativeSetSettings(
             themeStyle = themeStyle,
             colorIndex = colorIndex,
@@ -410,6 +518,14 @@ fun XmbScreen(
             dateFormat = dateFormat,
             time24h = time24h,
             swapConfirm = swapConfirm,
+            avlsEnabled = avlsEnabled,
+            keepScreenMode = keepScreenMode,
+            aspectMode = aspectMode,
+            slideshowSpeed = slideshowSpeed,
+            slideshowEffect = slideshowEffect,
+            parentalLevel = parentalLevel,
+            adhocChannel = adhocChannel,
+            rssAutoUpdate = rssAutoUpdate,
         )
     }
 
@@ -441,9 +557,14 @@ fun XmbScreen(
                 XmbSurfaceRenderer(context) {
                     pushLocalizedStrings(context)
                     pushStorageInfo()
+                    XmbNative.nativeSetNetworkStatus(isNetworkAvailable(context))
                     pushSettingsToNativeOnGlThread()
-                    pushGamesToNative(currentAssets.value)
-                    pushSavesToNative(context, saveRepo, currentSaves.value)
+                    val assetsSnapshot = currentAssets.value
+                    val savesSnapshot = currentSaves.value
+                    XmbNative.nativeSetGamesLoading(currentLoadingGames.value && assetsSnapshot.isEmpty())
+                    XmbNative.nativeSetSavesLoading(!XmbAssetCache.hasLoadedSaves && savesSnapshot.isEmpty())
+                    pushGamesToNative(assetsSnapshot)
+                    pushSavesToNative(context, saveRepo, savesSnapshot)
                     XmbNative.nativeSetState(
                         preferences.getInt("category", initialState[0]),
                         preferences.getInt("item", initialState[1]),
@@ -503,6 +624,8 @@ fun XmbScreen(
             keyTone = preferences.getBoolean("key_tone", true),
             bgmEnabled = preferences.getBoolean("bgm_enabled", true),
             swapConfirm = preferences.getBoolean("swap_confirm", false),
+            avlsEnabled = preferences.getBoolean("avls_enabled", false),
+            keepScreenMode = preferences.getInt("keep_screen_mode", 0),
         )
 
         val sticky = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
@@ -585,6 +708,14 @@ fun XmbScreen(
                 val bgmEnabled = arr[5] != 0
                 val time24h = arr[7] != 0
                 val swapConfirm = arr[8] != 0
+                val avlsEnabled = arr.getOrElse(9) { 0 } != 0
+                val keepScreenMode = arr.getOrElse(10) { 0 }
+                val aspectMode = arr.getOrElse(11) { 0 }
+                val slideshowSpeed = arr.getOrElse(12) { 0 }
+                val slideshowEffect = arr.getOrElse(13) { 0 }
+                val parentalLevel = arr.getOrElse(14) { 0 }
+                val adhocChannel = arr.getOrElse(15) { 0 }
+                val rssAutoUpdate = arr.getOrElse(16) { 0 } != 0
                 preferences.edit()
                     .putInt("theme_style", arr[0])
                     .putInt("color_index", arr[1])
@@ -595,8 +726,24 @@ fun XmbScreen(
                     .putInt("date_format", arr[6])
                     .putBoolean("time_24h", time24h)
                     .putBoolean("swap_confirm", swapConfirm)
+                    .putBoolean("avls_enabled", avlsEnabled)
+                    .putInt("keep_screen_mode", keepScreenMode)
+                    .putInt("aspect_mode", aspectMode)
+                    .putInt("slideshow_speed", slideshowSpeed)
+                    .putInt("slideshow_effect", slideshowEffect)
+                    .putInt("parental_level", parentalLevel)
+                    .putInt("adhoc_channel", adhocChannel)
+                    .putBoolean("rss_auto_update", rssAutoUpdate)
                     .apply()
-                applyAudioAndHostSettings(keyTone, bgmEnabled, swapConfirm)
+                applyAudioAndHostSettings(keyTone, bgmEnabled, swapConfirm, avlsEnabled, keepScreenMode)
+            }
+        }
+
+        XmbHost.setBrowserListener { url ->
+            runCatching {
+                context.startActivity(
+                    Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
             }
         }
 
@@ -609,15 +756,15 @@ fun XmbScreen(
 
         XmbHost.setKeyListener { XmbNative.nativeKey(it) }
 
-        val window = (context as? Activity)?.window
-        window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
                     surface.onResume()
                     surface.requestFocus()
                     savesRevision++
+                    surface.queueEvent {
+                        XmbNative.nativeSetNetworkStatus(isNetworkAvailable(context))
+                    }
                 }
                 Lifecycle.Event.ON_PAUSE -> {
                     saveState()
@@ -642,6 +789,7 @@ fun XmbScreen(
             XmbHost.setDeleteSaveListener(null)
             XmbHost.setDeleteGameListener(null)
             XmbHost.setSettingsListener(null)
+            XmbHost.setBrowserListener(null)
             XmbHost.setExitListener(null)
             XmbHost.setKeyListener(null)
         }
@@ -652,15 +800,21 @@ fun XmbScreen(
         surface.queueEvent {
             pushLocalizedStrings(context)
             pushStorageInfo()
+            XmbNative.nativeSetNetworkStatus(isNetworkAvailable(context))
             pushSavesToNative(context, saveRepo, saves)
         }
     }
 
-    LaunchedEffect(gameAssets) {
+    LaunchedEffect(isLoadingGames, gameAssets) {
         val assets = gameAssets
-        if (lastAppliedAssets.value !== assets) {
+        val loading = isLoadingGames && assets.isEmpty()
+        val refChanged = lastAppliedAssets.value !== assets
+        if (refChanged) {
             lastAppliedAssets.value = assets
-            surface.queueEvent {
+        }
+        surface.queueEvent {
+            XmbNative.nativeSetGamesLoading(loading)
+            if (refChanged) {
                 pushGamesToNative(assets)
             }
         }
@@ -668,9 +822,14 @@ fun XmbScreen(
 
     LaunchedEffect(saveStates) {
         val saves = saveStates
-        if (lastAppliedSaves.value !== saves) {
+        val loading = !XmbAssetCache.hasLoadedSaves && saves.isEmpty()
+        val refChanged = lastAppliedSaves.value !== saves
+        if (refChanged) {
             lastAppliedSaves.value = saves
-            surface.queueEvent {
+        }
+        surface.queueEvent {
+            XmbNative.nativeSetSavesLoading(loading)
+            if (refChanged) {
                 pushSavesToNative(context, saveRepo, saves)
             }
         }

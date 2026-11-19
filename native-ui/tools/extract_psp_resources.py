@@ -19,6 +19,7 @@ import shutil
 import struct
 import sys
 import time
+import zlib
 from dataclasses import asdict
 from pathlib import Path
 
@@ -235,6 +236,8 @@ def extract_into(flash0: Path, staging: Path) -> dict:
         })
         counts["rco"] += 1
 
+    extract_theme_assets(resource_dir, staging, files, counts)
+
     manifest = {
         "schema": 1,
         "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -244,6 +247,109 @@ def extract_into(flash0: Path, staging: Path) -> dict:
     }
     (staging / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return manifest
+
+
+def bmp24_to_png(data: bytes) -> tuple[int, int, bytes]:
+    """Decode an uncompressed 24bpp Windows BMP into PNG bytes without external libs."""
+    if len(data) < 54 or data[:2] != b"BM":
+        raise ValueError("not a BMP")
+    pixel_offset = struct.unpack_from("<I", data, 10)[0]
+    width, raw_height = struct.unpack_from("<ii", data, 18)
+    bpp = struct.unpack_from("<H", data, 28)[0]
+    if width <= 0 or raw_height == 0 or bpp != 24:
+        raise ValueError(f"unsupported BMP {width}x{raw_height} {bpp}bpp")
+    top_down = raw_height < 0
+    height = abs(raw_height)
+    row_stride = ((width * 3) + 3) & ~3
+    rgba = bytearray(width * height * 4)
+    for y in range(height):
+        src_y = y if top_down else (height - 1 - y)
+        row_start = pixel_offset + src_y * row_stride
+        dst_start = y * width * 4
+        for x in range(width):
+            b, g, r = data[row_start + x * 3 : row_start + x * 3 + 3]
+            rgba[dst_start + x * 4 : dst_start + x * 4 + 4] = bytes((r, g, b, 255))
+    image = gim.Image(width=width, height=height, format=3, pixel_order=0, bpp=32, pixels=bytes(rgba))
+    return width, height, gim.png_bytes(image)
+
+
+def extract_theme_assets(resource_dir: Path, staging: Path, files: list[dict], counts: dict) -> None:
+    """Extract PSP 6.60 theme palettes (01-12/13-27.bmp) and built-in Cookies PTF."""
+    themes_dir = staging / "images" / "themes"
+    themes_dir.mkdir(parents=True, exist_ok=True)
+
+    def write_theme_png(name: str, w: int, h: int, payload: bytes, src_digest: str) -> None:
+        dest = themes_dir / f"{name}.png"
+        dest.write_bytes(payload)
+        files.append({
+            "kind": "image",
+            "rco": "theme",
+            "label": name,
+            "width": w,
+            "height": h,
+            "file": str(dest.relative_to(staging)),
+            "sha256_file": sha256(payload),
+            "sha256_source": src_digest,
+        })
+        counts["images"] += 1
+
+    def extract_bmp_strip(src_name: str, prefix: str, expected_count: int) -> None:
+        src = resource_dir / src_name
+        if not src.is_file():
+            return
+        raw = src.read_bytes()
+        chunk_size = 6176  # 60x34 24bpp BMP (6174 + 2-byte alignment)
+        count = len(raw) // chunk_size
+        for i in range(min(count, expected_count)):
+            chunk = raw[i * chunk_size : (i + 1) * chunk_size]
+            if chunk[:2] != b"BM":
+                continue
+            w, h, png = bmp24_to_png(chunk)
+            write_theme_png(f"{prefix}_{i:02d}", w, h, png, sha256(chunk))
+
+    orig_name = "01-12_03g.bmp" if (resource_dir / "01-12_03g.bmp").is_file() else "01-12.bmp"
+    extract_bmp_strip(orig_name, "orig", 12)
+    extract_bmp_strip("01-12.bmp", "classic", 12)
+    extract_bmp_strip("13-27.bmp", "ext", 22)
+
+    ptf_path = resource_dir / "custom_theme.dat"
+    if ptf_path.is_file():
+        ptf = ptf_path.read_bytes()
+        if len(ptf) >= 0x114 and ptf[:4] == b"\x00PTF":
+            offs = struct.unpack_from("<5I", ptf, 0x100)
+            # Section 1: 480x272 wallpaper BMP
+            sec1 = ptf[offs[1] : offs[2]]
+            zp = sec1.find(b"\x78\x9c")
+            if zp >= 0:
+                bmp = zlib.decompress(sec1[zp:])
+                w, h, png = bmp24_to_png(bmp)
+                write_theme_png("cookies_bg", w, h, png, sha256(bmp))
+            # Section 2: 8 category GIMs -> map PTF order to XMB 0..7
+            sec2 = ptf[offs[2] : offs[3]]
+            gims: list[bytes] = []
+            pos = 0
+            while len(gims) < 8:
+                zp = sec2.find(b"\x78\x9c", pos)
+                if zp < 0:
+                    break
+                try:
+                    dec = zlib.decompress(sec2[zp:])
+                    if dec.startswith(b"MIG."):
+                        gims.append(dec)
+                except zlib.error:
+                    pass
+                pos = zp + 2
+            ptf_to_xmb = [1, 7, 2, 3, 4, 5, 6, 0]
+            if len(gims) == 8:
+                for xmb_cat, ptf_idx in enumerate(ptf_to_xmb):
+                    decoded = gim.decode(gims[ptf_idx])
+                    write_theme_png(
+                        f"cookies_cat_{xmb_cat}",
+                        decoded.width,
+                        decoded.height,
+                        gim.png_bytes(decoded),
+                        sha256(gims[ptf_idx]),
+                    )
 
 
 def main(argv: list[str]) -> int:

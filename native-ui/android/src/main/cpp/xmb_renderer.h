@@ -16,8 +16,8 @@
 namespace xmb {
 
 struct XmbSettings {
-	int theme_style = 0;      // 0 = Original, 1 = Classic
-	int color_index = 0;      // 0 = Month (Auto), 1..12 = January..December
+	int theme_style = 0;      // 0 = Original, 1 = Classic, 2 = Cookie, 3 = Piano Black
+	int color_index = 0;      // 0 = Month (Auto), 1..12 = Jan..Dec, 13..34 = Extended 13-27.bmp Colors
 	int bg_mode = 0;          // 0 = Original, 1 = Classic, 2 = Off
 	int wave_mode = 0;        // 0 = Original, 1 = Slow, 2 = Static, 3 = Off
 	bool key_tone = true;
@@ -25,6 +25,14 @@ struct XmbSettings {
 	int date_format = 0;      // 0 = DD/MM/YYYY, 1 = MM/DD/YYYY, 2 = YYYY/MM/DD
 	bool time_24h = true;
 	bool swap_confirm = false;// false = X Enter / O Back, true = O Enter / X Back
+	bool avls_enabled = false;
+	int keep_screen_mode = 0; // 0 = Off (Always On), 1 = 2 Min, 2 = 5 Min
+	int aspect_mode = 0;      // 0 = 16:9 Full, 1 = 4:3 Original
+	int slideshow_speed = 0;  // 0 = Normal, 1 = Slow, 2 = Fast
+	int slideshow_effect = 0; // 0 = Slide, 1 = Fade, 2 = Off
+	int parental_level = 0;   // 0 = Off, 1..9 = Level 1..9
+	int adhoc_channel = 0;    // 0 = Automatic, 1 = Ch 1, 2 = Ch 6, 3 = Ch 11
+	bool rss_auto_update = false;
 };
 
 struct FallbackGlyph {
@@ -44,6 +52,7 @@ void SaveSelected(int index);
 void DeleteSaveRequested(int index);
 void DeleteGameRequested(int index);
 void SettingsChanged(const XmbSettings &settings);
+void OpenBrowserRequested(const std::string &url);
 bool RasterizeFallbackGlyph(uint32_t codepoint, FallbackGlyph *out_metrics, std::vector<uint8_t> *out_alpha);
 
 struct GameInfo {
@@ -89,6 +98,9 @@ public:
 	void KeyPressed(Key key);
 	void SetGames(const std::vector<GameInfo> &games);
 	void SetSaveStates(const std::vector<SaveStateInfo> &saves);
+	void SetGamesLoading(bool loading);
+	void SetSavesLoading(bool loading);
+	void SetNetworkStatus(bool connected);
 	void SetBattery(int level, bool charging);
 	void SetStrings(const std::unordered_map<std::string, std::string> &strings);
 	void SetStorageInfo(const std::string &free_space_text, const std::string &device_name);
@@ -101,10 +113,17 @@ public:
 
 private:
 	enum class SettingsKind {
-		Theme = 0,
-		System = 1,
-		Sound = 2,
-		DateTime = 3,
+		Video = 0,
+		Photo = 1,
+		System = 2,
+		Theme = 3,
+		DateTime = 4,
+		PowerSave = 5,
+		Sound = 6,
+		Security = 7,
+		Network = 8,
+		Rss = 9,
+		Display = 10,
 	};
 
 	enum class EmptyMediaKind {
@@ -112,6 +131,7 @@ private:
 		Photo = 1,
 		Music = 2,
 		Video = 3,
+		Comics = 4,
 	};
 
 	struct Texture {
@@ -142,6 +162,13 @@ private:
 	void RebuildCategories();
 	int EffectiveColorIndex() const;
 	std::string TextOr(const std::string &key, const std::string &fallback) const;
+	std::vector<std::string> WrapText(const std::string &text, float scale, float max_width);
+	std::array<float, 3> ColorSwatchForChoice(int choice_index) const;
+	int SettingsRowCount() const;
+	int SettingsPickerCount() const;
+	int SettingsCurrentValue() const;
+	void ApplySettingsPickerChoice(int value_index);
+	void OpenNoticeDialog(const std::string &title, const std::vector<std::string> &lines);
 	void DrawBackground();
 	void DrawWave(float dt);
 	void DrawStatusBar();
@@ -169,6 +196,7 @@ private:
 	void DrawEmptyMediaPage();
 	void DrawSettingsSubPage();
 	void DrawSystemInfoDialog();
+	void DrawNoticeDialog();
 	void DrawItemColumn(const std::vector<Item> &list, int selected, float scroll, float global_alpha);
 	void DrawGameIcon(const GameInfo &game, float center_x, float center_y, float width, float height, const float color[4]);
 	void DrawDialogFrame(float box_x, float box_y, float box_w, float box_h);
@@ -212,6 +240,7 @@ private:
 	GLint wave_sampler_ = -1;
 	std::vector<float> wave_vertices_;
 	float wave_frame_ = 0.0f;
+	std::array<float, 3> wave_tint_{0.725f, 0.247f, 0.047f};
 	std::string root_;
 	std::unordered_map<std::string, std::string> strings_;
 	std::unordered_map<std::string, std::string> string_overrides_;
@@ -221,6 +250,9 @@ private:
 	int surface_height_ = 0;
 	bool logged_gl_error_ = false;
 	bool initialized_once_ = false;
+	bool games_loading_ = true;
+	bool saves_loading_ = true;
+	bool network_connected_ = false;
 
 	std::vector<Item> items_;
 	std::vector<Item> previous_items_;
@@ -236,6 +268,14 @@ private:
 	bool settings_picker_open_ = false;
 	int settings_picker_index_ = 0;
 	bool system_info_dialog_ = false;
+	bool info_notice_active_ = false;
+	std::string info_notice_title_;
+	std::vector<std::string> info_notice_lines_;
+	bool restore_confirm_active_ = false;
+	int restore_confirm_selected_ = 1;
+	bool browser_confirm_active_ = false;
+	int browser_confirm_selected_ = 0;
+	std::string pending_browser_url_;
 	bool pending_focus_notify_ = false;
 	bool theme_dirty_ = true;
 

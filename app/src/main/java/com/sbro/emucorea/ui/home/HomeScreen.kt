@@ -519,6 +519,7 @@ fun HomeScreen(
                 if (shelfMode) {
                     XmbScreen(
                         games = uiState.games,
+                        isLoadingGames = uiState.isLoading || uiState.isBootstrapping,
                         onGameSelected = { index ->
                             val game = uiState.games.getOrNull(index)
                             if (game != null) {

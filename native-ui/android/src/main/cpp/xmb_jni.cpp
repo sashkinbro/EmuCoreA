@@ -29,6 +29,7 @@ jmethodID g_host_save_selected = nullptr;
 jmethodID g_host_delete_save = nullptr;
 jmethodID g_host_delete_game = nullptr;
 jmethodID g_host_settings_changed = nullptr;
+jmethodID g_host_open_browser = nullptr;
 
 jclass g_font_fallback_class = nullptr;
 jmethodID g_font_rasterize_glyph = nullptr;
@@ -46,6 +47,7 @@ void EnsureHostClass(JNIEnv *env) {
 			g_host_delete_save = env->GetStaticMethodID(g_host_class, "onDeleteSave", "(I)V");
 			g_host_delete_game = env->GetStaticMethodID(g_host_class, "onDeleteGame", "(I)V");
 			g_host_settings_changed = env->GetStaticMethodID(g_host_class, "onSettingsChanged", "([I)V");
+			g_host_open_browser = env->GetStaticMethodID(g_host_class, "onOpenBrowser", "(Ljava/lang/String;)V");
 		} else {
 			env->ExceptionClear();
 		}
@@ -183,9 +185,9 @@ void SettingsChanged(const XmbSettings &s) {
 	if (g_vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK || env == nullptr) return;
 	EnsureHostClass(env);
 	if (g_host_class == nullptr || g_host_settings_changed == nullptr) return;
-	jintArray arr = env->NewIntArray(9);
+	jintArray arr = env->NewIntArray(17);
 	if (arr == nullptr) return;
-	jint values[9] = {
+	jint values[17] = {
 		s.theme_style,
 		s.color_index,
 		s.bg_mode,
@@ -195,11 +197,32 @@ void SettingsChanged(const XmbSettings &s) {
 		s.date_format,
 		s.time_24h ? 1 : 0,
 		s.swap_confirm ? 1 : 0,
+		s.avls_enabled ? 1 : 0,
+		s.keep_screen_mode,
+		s.aspect_mode,
+		s.slideshow_speed,
+		s.slideshow_effect,
+		s.parental_level,
+		s.adhoc_channel,
+		s.rss_auto_update ? 1 : 0,
 	};
-	env->SetIntArrayRegion(arr, 0, 9, values);
+	env->SetIntArrayRegion(arr, 0, 17, values);
 	env->CallStaticVoidMethod(g_host_class, g_host_settings_changed, arr);
 	if (env->ExceptionCheck()) env->ExceptionClear();
 	env->DeleteLocalRef(arr);
+}
+
+void OpenBrowserRequested(const std::string &url) {
+	if (g_vm == nullptr) return;
+	JNIEnv *env = nullptr;
+	if (g_vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK || env == nullptr) return;
+	EnsureHostClass(env);
+	if (g_host_class == nullptr || g_host_open_browser == nullptr) return;
+	jstring jurl = env->NewStringUTF(url.c_str());
+	if (jurl == nullptr) return;
+	env->CallStaticVoidMethod(g_host_class, g_host_open_browser, jurl);
+	if (env->ExceptionCheck()) env->ExceptionClear();
+	env->DeleteLocalRef(jurl);
 }
 
 bool RasterizeFallbackGlyph(uint32_t codepoint, FallbackGlyph *out_metrics, std::vector<uint8_t> *out_alpha) {
@@ -364,6 +387,21 @@ Java_com_sbro_emucorea_xmb_XmbNative_nativeSetStorageInfo(JNIEnv *env, jclass,
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeSetGamesLoading(JNIEnv *, jclass, jboolean loading) {
+	g_renderer.SetGamesLoading(loading == JNI_TRUE);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeSetSavesLoading(JNIEnv *, jclass, jboolean loading) {
+	g_renderer.SetSavesLoading(loading == JNI_TRUE);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeSetNetworkStatus(JNIEnv *, jclass, jboolean connected) {
+	g_renderer.SetNetworkStatus(connected == JNI_TRUE);
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_xmb_XmbNative_nativeSetSettings(JNIEnv *, jclass,
                                                        jint theme_style,
                                                        jint color_index,
@@ -373,7 +411,15 @@ Java_com_sbro_emucorea_xmb_XmbNative_nativeSetSettings(JNIEnv *, jclass,
                                                        jboolean bgm_enabled,
                                                        jint date_format,
                                                        jboolean time_24h,
-                                                       jboolean swap_confirm) {
+                                                       jboolean swap_confirm,
+                                                       jboolean avls_enabled,
+                                                       jint keep_screen_mode,
+                                                       jint aspect_mode,
+                                                       jint slideshow_speed,
+                                                       jint slideshow_effect,
+                                                       jint parental_level,
+                                                       jint adhoc_channel,
+                                                       jboolean rss_auto_update) {
 	xmb::XmbSettings s;
 	s.theme_style = (int)theme_style;
 	s.color_index = (int)color_index;
@@ -384,6 +430,14 @@ Java_com_sbro_emucorea_xmb_XmbNative_nativeSetSettings(JNIEnv *, jclass,
 	s.date_format = (int)date_format;
 	s.time_24h = (time_24h == JNI_TRUE);
 	s.swap_confirm = (swap_confirm == JNI_TRUE);
+	s.avls_enabled = (avls_enabled == JNI_TRUE);
+	s.keep_screen_mode = (int)keep_screen_mode;
+	s.aspect_mode = (int)aspect_mode;
+	s.slideshow_speed = (int)slideshow_speed;
+	s.slideshow_effect = (int)slideshow_effect;
+	s.parental_level = (int)parental_level;
+	s.adhoc_channel = (int)adhoc_channel;
+	s.rss_auto_update = (rss_auto_update == JNI_TRUE);
 	g_renderer.ApplySettings(s);
 }
 

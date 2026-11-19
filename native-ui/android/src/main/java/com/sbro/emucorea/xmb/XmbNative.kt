@@ -51,6 +51,12 @@ object XmbNative {
 
     external fun nativeSetStorageInfo(freeSpaceText: String, deviceName: String)
 
+    external fun nativeSetGamesLoading(loading: Boolean)
+
+    external fun nativeSetSavesLoading(loading: Boolean)
+
+    external fun nativeSetNetworkStatus(connected: Boolean)
+
     external fun nativeSetSettings(
         themeStyle: Int,
         colorIndex: Int,
@@ -61,6 +67,14 @@ object XmbNative {
         dateFormat: Int,
         time24h: Boolean,
         swapConfirm: Boolean,
+        avlsEnabled: Boolean,
+        keepScreenMode: Int,
+        aspectMode: Int,
+        slideshowSpeed: Int,
+        slideshowEffect: Int,
+        parentalLevel: Int,
+        adhocChannel: Int,
+        rssAutoUpdate: Boolean,
     )
 
     external fun nativeGetState(): IntArray

@@ -40,6 +40,9 @@ object XmbHost {
     private var keyListener: ((Int) -> Unit)? = null
 
     @Volatile
+    private var browserListener: ((String) -> Unit)? = null
+
+    @Volatile
     var swapConfirmButton: Boolean = false
 
     fun setGameListener(listener: ((Int) -> Unit)?) {
@@ -72,6 +75,15 @@ object XmbHost {
 
     fun setKeyListener(listener: ((Int) -> Unit)?) {
         keyListener = listener
+    }
+
+    fun setBrowserListener(listener: ((String) -> Unit)?) {
+        browserListener = listener
+    }
+
+    @JvmStatic
+    fun onOpenBrowser(url: String) {
+        mainHandler.post { browserListener?.invoke(url) }
     }
 
     @JvmStatic

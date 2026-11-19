@@ -40,6 +40,9 @@ object XmbAudio {
         }
 
     @Volatile
+    var avlsEnabled: Boolean = false
+
+    @Volatile
     private var soundPool: SoundPool? = null
 
     @Volatile
@@ -97,7 +100,8 @@ object XmbAudio {
         val pool = soundPool ?: return
         val id = soundIds.getOrNull(sound) ?: 0
         if (id != 0) {
-            pool.play(id, 1.0f, 1.0f, 1, 0, 1.0f)
+            val vol = if (avlsEnabled) 0.55f else 1.0f
+            pool.play(id, vol, vol, 1, 0, 1.0f)
         }
     }
 
@@ -215,7 +219,8 @@ object XmbAudio {
         }.getOrNull() ?: return
 
         try {
-            track.setVolume(0.85f)
+            var lastAvls = avlsEnabled
+            track.setVolume(if (lastAvls) 0.48f else 0.85f)
             track.play()
             Log.i(TAG, "playing BGM (AudioTrack): $wavPath")
 
@@ -229,6 +234,11 @@ object XmbAudio {
 
                 raf.seek(wav.dataOffset)
                 while (bgmGeneration.get() == gen && remaining > 0) {
+                    val currentAvls = avlsEnabled
+                    if (currentAvls != lastAvls) {
+                        lastAvls = currentAvls
+                        track.setVolume(if (lastAvls) 0.48f else 0.85f)
+                    }
                     val toRead = minOf(chunkBuf.size.toLong(), remaining).toInt()
                     val read = raf.read(chunkBuf, 0, toRead)
                     if (read <= 0) {

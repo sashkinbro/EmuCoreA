@@ -109,20 +109,63 @@ const uint8_t kBackgroundRows[17][3] = {
 	{182, 62, 10}, {182, 62, 10},
 };
 
-// 12 authentic PSP monthly theme tints (January to December)
+// 12 authentic PSP monthly theme swatches (sampled from 01-12_03g.bmp)
 const float kMonthGradients[12][3] = {
-	{0.65f, 0.67f, 0.70f},   // Jan (Silver)
-	{0.74f, 0.64f, 0.16f},   // Feb (Gold)
-	{0.46f, 0.68f, 0.16f},   // Mar (Spring Green)
-	{0.86f, 0.42f, 0.58f},   // Apr (Sakura Pink)
-	{0.14f, 0.64f, 0.28f},   // May (Emerald)
-	{0.54f, 0.36f, 0.78f},   // Jun (Violet)
-	{0.14f, 0.64f, 0.76f},   // Jul (Turquoise)
-	{0.12f, 0.36f, 0.84f},   // Aug (Ocean Blue)
-	{0.44f, 0.20f, 0.76f},   // Sep (Royal Purple)
-	{0.78f, 0.54f, 0.14f},   // Oct (Amber)
-	{0.725f, 0.247f, 0.047f},// Nov (PSP 6.60 Orange-Red)
-	{0.76f, 0.12f, 0.14f},   // Dec (Crimson)
+	{0.729f, 0.745f, 0.800f}, // Jan (Silver)
+	{0.922f, 0.718f, 0.078f}, // Feb (Gold)
+	{0.494f, 0.757f, 0.188f}, // Mar (Spring Green)
+	{0.973f, 0.592f, 0.698f}, // Apr (Sakura Pink)
+	{0.071f, 0.467f, 0.106f}, // May (Emerald)
+	{0.600f, 0.439f, 0.855f}, // Jun (Violet)
+	{0.039f, 0.671f, 0.788f}, // Jul (Turquoise)
+	{0.039f, 0.408f, 0.733f}, // Aug (Ocean Blue)
+	{0.420f, 0.063f, 0.569f}, // Sep (Royal Purple)
+	{1.000f, 0.616f, 0.180f}, // Oct (Amber)
+	{0.725f, 0.247f, 0.047f}, // Nov (PSP 6.60 Orange-Red)
+	{0.812f, 0.094f, 0.027f}, // Dec (Crimson)
+};
+
+// 22 authentic PSP-2000/3000 Slim extended theme swatches (sampled from 13-27.bmp)
+const float kExtColorSwatches[22][3] = {
+	{0.996f, 0.514f, 0.647f}, // Rose Pink
+	{1.000f, 0.243f, 0.529f}, // Hot Pink
+	{0.922f, 0.000f, 0.275f}, // Crimson
+	{0.835f, 0.200f, 0.655f}, // Magenta
+	{0.667f, 0.004f, 0.494f}, // Deep Magenta
+	{0.525f, 0.000f, 0.314f}, // Wine Red
+	{0.620f, 0.600f, 0.824f}, // Lavender
+	{0.412f, 0.424f, 0.737f}, // Periwinkle
+	{0.318f, 0.306f, 0.667f}, // Slate Blue
+	{0.000f, 0.886f, 0.427f}, // Mint Green
+	{0.008f, 0.780f, 0.365f}, // Emerald
+	{0.000f, 0.616f, 0.247f}, // Forest Green
+	{0.278f, 0.267f, 0.420f}, // Steel Gray
+	{0.196f, 0.176f, 0.282f}, // Charcoal
+	{0.059f, 0.039f, 0.133f}, // Midnight Blue
+	{0.063f, 0.063f, 0.118f}, // Piano Black
+	{0.753f, 0.702f, 0.839f}, // Pearl Lilac
+	{0.518f, 0.533f, 0.565f}, // Silver
+	{0.376f, 0.102f, 0.824f}, // Electric Violet
+	{0.827f, 0.169f, 0.478f}, // Berry
+	{0.863f, 0.694f, 0.106f}, // Gold
+	{0.604f, 0.498f, 0.322f}, // Bronze
+};
+
+const char *kExtColorKeys[22] = {
+	"xmb_color_ext_00", "xmb_color_ext_01", "xmb_color_ext_02", "xmb_color_ext_03",
+	"xmb_color_ext_04", "xmb_color_ext_05", "xmb_color_ext_06", "xmb_color_ext_07",
+	"xmb_color_ext_08", "xmb_color_ext_09", "xmb_color_ext_10", "xmb_color_ext_11",
+	"xmb_color_ext_12", "xmb_color_ext_13", "xmb_color_ext_14", "xmb_color_ext_15",
+	"xmb_color_ext_16", "xmb_color_ext_17", "xmb_color_ext_18", "xmb_color_ext_19",
+	"xmb_color_ext_20", "xmb_color_ext_21",
+};
+
+const char *kExtColorFallbacks[22] = {
+	"Rose Pink", "Hot Pink", "Crimson", "Magenta", "Deep Magenta",
+	"Wine Red", "Lavender", "Periwinkle", "Slate Blue", "Mint Green",
+	"Emerald", "Forest Green", "Steel Gray", "Charcoal", "Midnight Blue",
+	"Piano Black", "Pearl Lilac", "Silver", "Electric Violet", "Berry",
+	"Gold", "Bronze",
 };
 
 const float kClassicBlueTint[3] = {0.12f, 0.42f, 0.88f};
@@ -327,6 +370,16 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"btn_circle", "images/system_plugin_fg/tex_circle.png"},
 		{"btn_triangle", "images/system_plugin_fg/tex_triangle.png"},
 		{"btn_square", "images/system_plugin_fg/tex_square.png"},
+		{"item_loading", "images/savedata_plugin/icon_loading.png"},
+		{"cookies_bg", "images/themes/cookies_bg.png"},
+		{"cookies_cat_0", "images/themes/cookies_cat_0.png"},
+		{"cookies_cat_1", "images/themes/cookies_cat_1.png"},
+		{"cookies_cat_2", "images/themes/cookies_cat_2.png"},
+		{"cookies_cat_3", "images/themes/cookies_cat_3.png"},
+		{"cookies_cat_4", "images/themes/cookies_cat_4.png"},
+		{"cookies_cat_5", "images/themes/cookies_cat_5.png"},
+		{"cookies_cat_6", "images/themes/cookies_cat_6.png"},
+		{"cookies_cat_7", "images/themes/cookies_cat_7.png"},
 	};
 	for (const auto &asset : assets) {
 		LoadTexture(asset.name, asset.path);
@@ -566,12 +619,33 @@ void XmbRenderer::SetStorageInfo(const std::string &free_space_text, const std::
 void XmbRenderer::ApplySettings(const XmbSettings &settings) {
 	std::lock_guard<std::recursive_mutex> lock(mutex_);
 	settings_ = settings;
-	settings_.theme_style = std::max(0, std::min(1, settings_.theme_style));
-	settings_.color_index = std::max(0, std::min(12, settings_.color_index));
+	settings_.theme_style = std::max(0, std::min(3, settings_.theme_style));
+	settings_.color_index = std::max(0, std::min(34, settings_.color_index));
 	settings_.bg_mode = std::max(0, std::min(2, settings_.bg_mode));
 	settings_.wave_mode = std::max(0, std::min(3, settings_.wave_mode));
 	settings_.date_format = std::max(0, std::min(2, settings_.date_format));
+	settings_.keep_screen_mode = std::max(0, std::min(2, settings_.keep_screen_mode));
+	settings_.aspect_mode = std::max(0, std::min(1, settings_.aspect_mode));
+	settings_.slideshow_speed = std::max(0, std::min(2, settings_.slideshow_speed));
+	settings_.slideshow_effect = std::max(0, std::min(2, settings_.slideshow_effect));
+	settings_.parental_level = std::max(0, std::min(9, settings_.parental_level));
+	settings_.adhoc_channel = std::max(0, std::min(3, settings_.adhoc_channel));
 	theme_dirty_ = true;
+}
+
+void XmbRenderer::SetGamesLoading(bool loading) {
+	std::lock_guard<std::recursive_mutex> lock(mutex_);
+	games_loading_ = loading;
+}
+
+void XmbRenderer::SetSavesLoading(bool loading) {
+	std::lock_guard<std::recursive_mutex> lock(mutex_);
+	saves_loading_ = loading;
+}
+
+void XmbRenderer::SetNetworkStatus(bool connected) {
+	std::lock_guard<std::recursive_mutex> lock(mutex_);
+	network_connected_ = connected;
 }
 
 std::string XmbRenderer::TextOr(const std::string &key, const std::string &fallback) const {
@@ -633,7 +707,19 @@ bool XmbRenderer::LoadWave() {
 }
 
 void XmbRenderer::DrawBackground() {
-	if (background_texture_ == 0 || settings_.bg_mode == 2) {
+	if (settings_.bg_mode == 2) {
+		return;
+	}
+	if (settings_.theme_style == 2 && settings_.color_index == 0 && settings_.bg_mode == 0) {
+		auto cookie_bg = textures_.find("cookies_bg");
+		if (cookie_bg != textures_.end() && cookie_bg->second.id != 0) {
+			const float color[4] = {0.84f, 0.82f, 0.80f, 1.0f};
+			glBindTexture(GL_TEXTURE_2D, cookie_bg->second.id);
+			DrawQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, color);
+			return;
+		}
+	}
+	if (background_texture_ == 0) {
 		return;
 	}
 	const float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -713,12 +799,12 @@ void XmbRenderer::DrawWave(float dt) {
 	BuildWaveMvp(mvp);
 	glUniformMatrix4fv(wave_mvp_, 1, GL_FALSE, mvp);
 	const float alpha = wave_.alpha * wave_.tint[3] * kWaveBrightness * (0.2f + 0.8f * boot_t_);
-	const float *tint = (settings_.bg_mode == 1 || settings_.theme_style == 1)
-	                        ? kClassicBlueTint
-	                        : kMonthGradients[EffectiveColorIndex()];
-	glUniform4f(wave_color_, wave_.diffuse[0] * wave_.tint[0] * alpha * tint[0] * 1.5f,
-	            wave_.diffuse[1] * wave_.tint[1] * alpha * tint[1] * 1.5f,
-	            wave_.diffuse[2] * wave_.tint[2] * alpha * tint[2] * 1.5f, 1.0f);
+	const float wr = std::max(0.24f, wave_tint_[0]);
+	const float wg = std::max(0.24f, wave_tint_[1]);
+	const float wb = std::max(0.24f, wave_tint_[2]);
+	glUniform4f(wave_color_, wave_.diffuse[0] * wave_.tint[0] * alpha * wr * 1.45f,
+	            wave_.diffuse[1] * wave_.tint[1] * alpha * wg * 1.45f,
+	            wave_.diffuse[2] * wave_.tint[2] * alpha * wb * 1.45f, 1.0f);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, wave_texture_);
 	glUniform1i(wave_sampler_, 0);
@@ -1021,37 +1107,127 @@ float XmbRenderer::DrawText(const std::string &text, float x, float baseline, fl
 	return x - start;
 }
 
+std::array<float, 3> XmbRenderer::ColorSwatchForChoice(int choice_index) const {
+	if (choice_index >= 13 && choice_index <= 34) {
+		const float *s = kExtColorSwatches[choice_index - 13];
+		return {s[0], s[1], s[2]};
+	}
+	const int m = (choice_index >= 1 && choice_index <= 12) ? (choice_index - 1) : EffectiveColorIndex();
+	const float *s = kMonthGradients[m];
+	return {s[0], s[1], s[2]};
+}
+
+std::vector<std::string> XmbRenderer::WrapText(const std::string &text, float scale, float max_width) {
+	std::vector<std::string> lines;
+	if (text.empty()) {
+		return lines;
+	}
+	size_t start = 0;
+	while (start <= text.size()) {
+		size_t nl = text.find('\n', start);
+		if (nl == std::string::npos) {
+			nl = text.size();
+		}
+		const std::string para = text.substr(start, nl - start);
+		if (para.empty()) {
+			lines.emplace_back();
+		} else {
+			std::string cur;
+			size_t pos = 0;
+			while (pos < para.size()) {
+				while (pos < para.size() && para[pos] == ' ') ++pos;
+				if (pos >= para.size()) break;
+				size_t end = para.find(' ', pos);
+				if (end == std::string::npos) end = para.size();
+				const std::string word = para.substr(pos, end - pos);
+				const std::string candidate = cur.empty() ? word : (cur + " " + word);
+				if (cur.empty() || MeasureText(candidate, scale) <= max_width) {
+					cur = candidate;
+				} else {
+					lines.push_back(cur);
+					cur = word;
+				}
+				pos = end;
+			}
+			if (!cur.empty()) {
+				lines.push_back(cur);
+			}
+		}
+		if (nl >= text.size()) break;
+		start = nl + 1;
+	}
+	return lines;
+}
+
+void XmbRenderer::OpenNoticeDialog(const std::string &title, const std::vector<std::string> &lines) {
+	info_notice_title_ = title;
+	info_notice_lines_ = lines;
+	info_notice_active_ = true;
+}
+
 void XmbRenderer::UpdateThemeColor() {
 	if (background_texture_ == 0) {
 		glGenTextures(1, &background_texture_);
 	}
-	const bool use_classic = (settings_.bg_mode == 1 || settings_.theme_style == 1);
-	const int month_index = EffectiveColorIndex();
-	const float *tint = use_classic ? kClassicBlueTint : kMonthGradients[month_index];
-	const bool exact_november = (!use_classic && month_index == 10);
+	if (settings_.theme_style == 2 && settings_.color_index == 0 && settings_.bg_mode == 0) {
+		wave_tint_ = {0.76f, 0.62f, 0.46f};
+		return;
+	}
 
-	constexpr size_t row_count = sizeof(kBackgroundRows) / sizeof(kBackgroundRows[0]);
-	std::vector<uint8_t> rgba(row_count * 4);
-	for (size_t i = 0; i < row_count; ++i) {
-		if (exact_november) {
-			rgba[i * 4 + 0] = kBackgroundRows[i][0];
-			rgba[i * 4 + 1] = kBackgroundRows[i][1];
-			rgba[i * 4 + 2] = kBackgroundRows[i][2];
-		} else {
-			const float v = (float)kBackgroundRows[i][0] / 185.0f;
-			const float haze = (i < 8) ? (8.0f - (float)i) * 0.010f : 0.0f;
-			const float r = std::clamp(tint[0] * v + haze, 0.0f, 1.0f);
-			const float g = std::clamp(tint[1] * v + haze, 0.0f, 1.0f);
-			const float b = std::clamp(tint[2] * v + haze, 0.0f, 1.0f);
-			rgba[i * 4 + 0] = (uint8_t)(r * 255.0f + 0.5f);
-			rgba[i * 4 + 1] = (uint8_t)(g * 255.0f + 0.5f);
-			rgba[i * 4 + 2] = (uint8_t)(b * 255.0f + 0.5f);
+	const bool use_classic = (settings_.bg_mode == 1 || settings_.theme_style == 1);
+	char rel_path[64] = {0};
+	if (settings_.theme_style == 3 && settings_.color_index == 0 && settings_.bg_mode == 0) {
+		std::snprintf(rel_path, sizeof(rel_path), "images/themes/ext_15.png");
+	} else if (settings_.color_index >= 13 && settings_.color_index <= 34) {
+		std::snprintf(rel_path, sizeof(rel_path), "images/themes/ext_%02d.png", settings_.color_index - 13);
+	} else {
+		const int month_index = EffectiveColorIndex();
+		std::snprintf(rel_path, sizeof(rel_path), "images/themes/%s_%02d.png",
+		              use_classic ? "classic" : "orig", month_index);
+	}
+
+	std::vector<uint8_t> png_file;
+	std::vector<uint8_t> rgba;
+	int w = 0;
+	int h = 0;
+	if (!root_.empty() && ReadFile(root_ + "/" + rel_path, &png_file) &&
+	    DecodePng(png_file, &w, &h, &rgba) && w > 0 && h > 0) {
+		const size_t mid = ((size_t)(h / 2) * (size_t)w + (size_t)(w / 2)) * 4;
+		if (mid + 2 < rgba.size()) {
+			wave_tint_ = {
+				(float)rgba[mid + 0] / 255.0f,
+				(float)rgba[mid + 1] / 255.0f,
+				(float)rgba[mid + 2] / 255.0f,
+			};
 		}
-		rgba[i * 4 + 3] = 255;
+		glBindTexture(GL_TEXTURE_2D, background_texture_);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		return;
+	}
+
+	// Fallback if extracted theme image is missing
+	const std::array<float, 3> swatch = (settings_.theme_style == 3 && settings_.color_index == 0)
+	                                        ? std::array<float, 3>{0.06f, 0.06f, 0.12f}
+	                                        : (use_classic && settings_.color_index == 0
+	                                               ? std::array<float, 3>{kClassicBlueTint[0], kClassicBlueTint[1], kClassicBlueTint[2]}
+	                                               : ColorSwatchForChoice(settings_.color_index));
+	wave_tint_ = swatch;
+	constexpr size_t row_count = sizeof(kBackgroundRows) / sizeof(kBackgroundRows[0]);
+	std::vector<uint8_t> fb_rgba(row_count * 4);
+	for (size_t i = 0; i < row_count; ++i) {
+		const float v = (float)kBackgroundRows[i][0] / 185.0f;
+		const float haze = (i < 8) ? (8.0f - (float)i) * 0.010f : 0.0f;
+		fb_rgba[i * 4 + 0] = (uint8_t)(std::clamp(swatch[0] * v + haze, 0.0f, 1.0f) * 255.0f + 0.5f);
+		fb_rgba[i * 4 + 1] = (uint8_t)(std::clamp(swatch[1] * v + haze, 0.0f, 1.0f) * 255.0f + 0.5f);
+		fb_rgba[i * 4 + 2] = (uint8_t)(std::clamp(swatch[2] * v + haze, 0.0f, 1.0f) * 255.0f + 0.5f);
+		fb_rgba[i * 4 + 3] = 255;
 	}
 	glBindTexture(GL_TEXTURE_2D, background_texture_);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, (GLsizei)(sizeof(kBackgroundRows) / sizeof(kBackgroundRows[0])),
-	             0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, (GLsizei)row_count, 0, GL_RGBA, GL_UNSIGNED_BYTE, fb_rgba.data());
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -1202,7 +1378,14 @@ void XmbRenderer::DrawSavedDataPage() {
 	auto cat_icon = textures_.find("item_savedata");
 
 	if (saves_.empty()) {
-		if (font_loaded_) {
+		if (saves_loading_) {
+			auto ld = textures_.find("item_loading");
+			if (ld != textures_.end()) {
+				const float pulse = 0.45f + 0.40f * std::sin(time_elapsed_ * 5.0f);
+				const float lcol[4] = {1.0f, 1.0f, 1.0f, pulse};
+				DrawTexture(ld->second, 92.0f, 136.0f, 0.85f, lcol);
+			}
+		} else if (font_loaded_) {
 			const float empty_col[4] = {1.0f, 1.0f, 1.0f, 0.78f};
 			DrawText(TextOr("msg_no_saved_data", "There is no saved data."), 174.0f, 145.0f, 0.82f, empty_col, true);
 		}
@@ -1303,6 +1486,10 @@ void XmbRenderer::DrawEmptyMediaPage() {
 		cat_tex = "video";
 		msg_key = "xmb_no_videos";
 		msg_fb = "There are no videos.";
+	} else if (empty_media_kind_ == EmptyMediaKind::Comics) {
+		cat_tex = "item_comics";
+		msg_key = "xmb_no_content";
+		msg_fb = "There is no content.";
 	}
 	auto cat_icon = textures_.find(cat_tex);
 	if (cat_icon != textures_.end() && cat_icon->second.width > 0 && cat_icon->second.height > 0) {
@@ -1313,6 +1500,135 @@ void XmbRenderer::DrawEmptyMediaPage() {
 	if (font_loaded_) {
 		const float empty_col[4] = {1.0f, 1.0f, 1.0f, 0.78f};
 		DrawText(TextOr(msg_key, msg_fb), 174.0f, 145.0f, 0.82f, empty_col, true);
+	}
+}
+
+int XmbRenderer::SettingsRowCount() const {
+	switch (settings_kind_) {
+	case SettingsKind::Theme: return 4;
+	case SettingsKind::System: return 3;
+	case SettingsKind::Sound: return 3;
+	case SettingsKind::Video: return 2;
+	case SettingsKind::Photo: return 2;
+	case SettingsKind::DateTime: return 2;
+	case SettingsKind::PowerSave: return 2;
+	case SettingsKind::Security: return 1;
+	case SettingsKind::Network: return 2;
+	case SettingsKind::Rss: return 1;
+	case SettingsKind::Display: return 1;
+	}
+	return 1;
+}
+
+int XmbRenderer::SettingsPickerCount() const {
+	switch (settings_kind_) {
+	case SettingsKind::Theme:
+		if (settings_sub_index_ == 0) return 4;
+		if (settings_sub_index_ == 1) return 35;
+		if (settings_sub_index_ == 2) return 3;
+		return 4;
+	case SettingsKind::System:
+		return 2;
+	case SettingsKind::Sound:
+		return 2;
+	case SettingsKind::Video:
+		return 2;
+	case SettingsKind::Photo:
+		return 3;
+	case SettingsKind::DateTime:
+		return settings_sub_index_ == 0 ? 3 : 2;
+	case SettingsKind::PowerSave:
+		return settings_sub_index_ == 0 ? 3 : 2;
+	case SettingsKind::Security:
+		return 10;
+	case SettingsKind::Network:
+		return settings_sub_index_ == 1 ? 4 : 0;
+	case SettingsKind::Rss:
+		return 2;
+	case SettingsKind::Display:
+		return 2;
+	}
+	return 2;
+}
+
+int XmbRenderer::SettingsCurrentValue() const {
+	switch (settings_kind_) {
+	case SettingsKind::Theme:
+		if (settings_sub_index_ == 0) return settings_.theme_style;
+		if (settings_sub_index_ == 1) return settings_.color_index;
+		if (settings_sub_index_ == 2) return settings_.bg_mode;
+		return settings_.wave_mode;
+	case SettingsKind::System:
+		if (settings_sub_index_ == 1) return settings_.swap_confirm ? 1 : 0;
+		return 0;
+	case SettingsKind::Sound:
+		if (settings_sub_index_ == 0) return settings_.key_tone ? 0 : 1;
+		if (settings_sub_index_ == 1) return settings_.bgm_enabled ? 0 : 1;
+		return settings_.avls_enabled ? 0 : 1;
+	case SettingsKind::Video:
+		return settings_sub_index_ == 0 ? settings_.aspect_mode : 0;
+	case SettingsKind::Photo:
+		return settings_sub_index_ == 0 ? settings_.slideshow_speed : settings_.slideshow_effect;
+	case SettingsKind::DateTime:
+		if (settings_sub_index_ == 0) return settings_.date_format;
+		return settings_.time_24h ? 0 : 1;
+	case SettingsKind::PowerSave:
+		return settings_sub_index_ == 0 ? settings_.keep_screen_mode : 0;
+	case SettingsKind::Security:
+		return settings_.parental_level;
+	case SettingsKind::Network:
+		return settings_sub_index_ == 1 ? settings_.adhoc_channel : 0;
+	case SettingsKind::Rss:
+		return settings_.rss_auto_update ? 0 : 1;
+	case SettingsKind::Display:
+		return settings_.aspect_mode;
+	}
+	return 0;
+}
+
+void XmbRenderer::ApplySettingsPickerChoice(int v) {
+	switch (settings_kind_) {
+	case SettingsKind::Theme:
+		if (settings_sub_index_ == 0) settings_.theme_style = v;
+		else if (settings_sub_index_ == 1) settings_.color_index = v;
+		else if (settings_sub_index_ == 2) settings_.bg_mode = v;
+		else settings_.wave_mode = v;
+		theme_dirty_ = true;
+		break;
+	case SettingsKind::System:
+		if (settings_sub_index_ == 1) settings_.swap_confirm = (v == 1);
+		break;
+	case SettingsKind::Sound:
+		if (settings_sub_index_ == 0) settings_.key_tone = (v == 0);
+		else if (settings_sub_index_ == 1) settings_.bgm_enabled = (v == 0);
+		else settings_.avls_enabled = (v == 0);
+		break;
+	case SettingsKind::Video:
+		if (settings_sub_index_ == 0) settings_.aspect_mode = v;
+		break;
+	case SettingsKind::Photo:
+		if (settings_sub_index_ == 0) settings_.slideshow_speed = v;
+		else settings_.slideshow_effect = v;
+		break;
+	case SettingsKind::DateTime:
+		if (settings_sub_index_ == 0) settings_.date_format = v;
+		else settings_.time_24h = (v == 0);
+		break;
+	case SettingsKind::PowerSave:
+		if (settings_sub_index_ == 0) settings_.keep_screen_mode = v;
+		break;
+	case SettingsKind::Security:
+		settings_.parental_level = v;
+		break;
+	case SettingsKind::Network:
+		if (settings_sub_index_ == 1) settings_.adhoc_channel = v;
+		break;
+	case SettingsKind::Rss:
+		settings_.rss_auto_update = (v == 0);
+		break;
+	case SettingsKind::Display:
+		settings_.aspect_mode = v;
+		break;
 	}
 }
 
@@ -1327,9 +1643,16 @@ void XmbRenderer::DrawSettingsSubPage() {
 	}
 
 	const char *cat_tex_name = "item_theme_settings";
-	if (settings_kind_ == SettingsKind::System) cat_tex_name = "item_system_settings";
-	else if (settings_kind_ == SettingsKind::Sound) cat_tex_name = "item_sound_settings";
+	if (settings_kind_ == SettingsKind::Video) cat_tex_name = "item_video_settings";
+	else if (settings_kind_ == SettingsKind::Photo) cat_tex_name = "item_photo_settings";
+	else if (settings_kind_ == SettingsKind::System) cat_tex_name = "item_system_settings";
 	else if (settings_kind_ == SettingsKind::DateTime) cat_tex_name = "item_date_settings";
+	else if (settings_kind_ == SettingsKind::PowerSave) cat_tex_name = "item_power_settings";
+	else if (settings_kind_ == SettingsKind::Sound) cat_tex_name = "item_sound_settings";
+	else if (settings_kind_ == SettingsKind::Security) cat_tex_name = "item_security_settings";
+	else if (settings_kind_ == SettingsKind::Network) cat_tex_name = "item_network_settings";
+	else if (settings_kind_ == SettingsKind::Rss) cat_tex_name = "item_rss_settings";
+	else if (settings_kind_ == SettingsKind::Display) cat_tex_name = "item_display_settings";
 	auto cat_tex = textures_.find(cat_tex_name);
 	if (cat_tex != textures_.end() && cat_tex->second.width > 0 && cat_tex->second.height > 0) {
 		const float cat_color[4] = {1.0f, 1.0f, 1.0f, 0.48f};
@@ -1344,21 +1667,33 @@ void XmbRenderer::DrawSettingsSubPage() {
 	std::vector<SettingRow> rows;
 	const std::string opt_orig = TextOr("xmb_opt_original", "Original");
 	const std::string opt_classic = TextOr("xmb_opt_classic", "Classic");
+	const std::string opt_cookie = TextOr("xmb_theme_cookie", "Cookie");
+	const std::string opt_piano = TextOr("xmb_theme_piano", "Piano Black");
 	const std::string opt_on = TextOr("xmb_opt_on", "On");
 	const std::string opt_off = TextOr("xmb_opt_off", "Off");
+	const std::string opt_16_9 = TextOr("xmb_opt_16_9", "16:9 Full");
+	const std::string opt_4_3 = TextOr("xmb_opt_4_3", "4:3 Original");
+
+	auto color_label = [&](int idx) -> std::string {
+		if (idx == 0) return TextOr("xmb_opt_month_auto", "Month (Auto)");
+		if (idx >= 1 && idx <= 12) return TextOr(kMonthKeys[idx - 1], kMonthFallbacks[idx - 1]);
+		if (idx >= 13 && idx <= 34) return TextOr(kExtColorKeys[idx - 13], kExtColorFallbacks[idx - 13]);
+		return TextOr("xmb_opt_month_auto", "Month (Auto)");
+	};
 
 	if (settings_kind_ == SettingsKind::Theme) {
-		std::string color_val = settings_.color_index == 0
-		                            ? TextOr("xmb_opt_month_auto", "Month (Auto)")
-		                            : TextOr(kMonthKeys[settings_.color_index - 1], kMonthFallbacks[settings_.color_index - 1]);
+		std::string theme_val = opt_orig;
+		if (settings_.theme_style == 1) theme_val = opt_classic;
+		else if (settings_.theme_style == 2) theme_val = opt_cookie;
+		else if (settings_.theme_style == 3) theme_val = opt_piano;
 		std::string bg_val = settings_.bg_mode == 0 ? opt_orig : (settings_.bg_mode == 1 ? opt_classic : opt_off);
 		std::string wave_val = opt_orig;
 		if (settings_.wave_mode == 1) wave_val = TextOr("xmb_opt_slow", "Slow");
 		else if (settings_.wave_mode == 2) wave_val = TextOr("xmb_opt_static", "Static");
 		else if (settings_.wave_mode == 3) wave_val = opt_off;
 		rows = {
-			{ TextOr("xmb_setting_theme", "Theme"), settings_.theme_style == 0 ? opt_orig : opt_classic },
-			{ TextOr("xmb_setting_color", "Color"), color_val },
+			{ TextOr("xmb_setting_theme", "Theme"), theme_val },
+			{ TextOr("xmb_setting_color", "Color"), color_label(settings_.color_index) },
 			{ TextOr("xmb_setting_background", "Background"), bg_val },
 			{ TextOr("xmb_setting_wave", "Wave Animation"), wave_val },
 		};
@@ -1368,11 +1703,29 @@ void XmbRenderer::DrawSettingsSubPage() {
 			{ TextOr("xmb_setting_confirm_btn", "Confirmation Button"),
 			  settings_.swap_confirm ? TextOr("xmb_btn_circle_lbl", "O Button")
 			                         : TextOr("xmb_btn_cross_lbl", "X Button") },
+			{ TextOr("xmb_setting_restore", "Restore Default Settings"), "" },
 		};
 	} else if (settings_kind_ == SettingsKind::Sound) {
 		rows = {
 			{ TextOr("xmb_setting_keytone", "Key Tone"), settings_.key_tone ? opt_on : opt_off },
 			{ TextOr("xmb_setting_bgm", "Game Preview Audio"), settings_.bgm_enabled ? opt_on : opt_off },
+			{ TextOr("xmb_setting_avls", "AVLS"), settings_.avls_enabled ? opt_on : opt_off },
+		};
+	} else if (settings_kind_ == SettingsKind::Video) {
+		rows = {
+			{ TextOr("xmb_setting_aspect", "Aspect Ratio"), settings_.aspect_mode == 0 ? opt_16_9 : opt_4_3 },
+			{ TextOr("xmb_setting_seq_play", "Sequential Playback"), opt_on },
+		};
+	} else if (settings_kind_ == SettingsKind::Photo) {
+		std::string spd = TextOr("xmb_opt_normal", "Normal");
+		if (settings_.slideshow_speed == 1) spd = TextOr("xmb_opt_slow", "Slow");
+		else if (settings_.slideshow_speed == 2) spd = TextOr("xmb_opt_fast", "Fast");
+		std::string eff = TextOr("xmb_opt_slide", "Slide");
+		if (settings_.slideshow_effect == 1) eff = TextOr("xmb_opt_fade", "Fade");
+		else if (settings_.slideshow_effect == 2) eff = opt_off;
+		rows = {
+			{ TextOr("xmb_setting_ss_speed", "Slideshow Speed"), spd },
+			{ TextOr("xmb_setting_ss_effect", "Slideshow Effect"), eff },
 		};
 	} else if (settings_kind_ == SettingsKind::DateTime) {
 		const char *df = settings_.date_format == 1 ? "MM/DD/YYYY" : (settings_.date_format == 2 ? "YYYY/MM/DD" : "DD/MM/YYYY");
@@ -1380,6 +1733,40 @@ void XmbRenderer::DrawSettingsSubPage() {
 			{ TextOr("xmb_setting_date_fmt", "Date Format"), df },
 			{ TextOr("xmb_setting_time_fmt", "Time Format"),
 			  settings_.time_24h ? TextOr("xmb_opt_24h", "24-Hour Clock") : TextOr("xmb_opt_12h", "12-Hour Clock") },
+		};
+	} else if (settings_kind_ == SettingsKind::PowerSave) {
+		std::string bl = opt_off;
+		if (settings_.keep_screen_mode == 1) bl = TextOr("xmb_opt_2min", "2 Minutes");
+		else if (settings_.keep_screen_mode == 2) bl = TextOr("xmb_opt_5min", "5 Minutes");
+		rows = {
+			{ TextOr("xmb_setting_backlight", "Backlight Auto-Off"), bl },
+			{ TextOr("xmb_setting_wlan_ps", "WLAN Power Save"), opt_on },
+		};
+	} else if (settings_kind_ == SettingsKind::Security) {
+		const std::string pval = settings_.parental_level == 0
+		                             ? opt_off
+		                             : (TextOr("xmb_level_prefix", "Level") + " " + std::to_string(settings_.parental_level));
+		rows = {
+			{ TextOr("xmb_setting_parental", "Parental Control"), pval },
+		};
+	} else if (settings_kind_ == SettingsKind::Network) {
+		const std::string ch = settings_.adhoc_channel == 0
+		                           ? TextOr("xmb_opt_auto", "Automatic")
+		                           : (TextOr("xmb_ch_prefix", "Ch") + " " +
+		                              (settings_.adhoc_channel == 1 ? "1" : (settings_.adhoc_channel == 2 ? "6" : "11")));
+		rows = {
+			{ TextOr("xmb_setting_net_status", "Internet Connection"),
+			  network_connected_ ? TextOr("xmb_net_connected", "Connected")
+			                     : TextOr("xmb_net_disconnected", "Not Connected") },
+			{ TextOr("xmb_setting_adhoc_ch", "Ad Hoc Channel"), ch },
+		};
+	} else if (settings_kind_ == SettingsKind::Rss) {
+		rows = {
+			{ TextOr("xmb_setting_rss_auto", "Auto-Update"), settings_.rss_auto_update ? opt_on : opt_off },
+		};
+	} else if (settings_kind_ == SettingsKind::Display) {
+		rows = {
+			{ TextOr("xmb_setting_aspect", "Aspect Ratio"), settings_.aspect_mode == 0 ? opt_16_9 : opt_4_3 },
 		};
 	}
 
@@ -1396,16 +1783,16 @@ void XmbRenderer::DrawSettingsSubPage() {
 				const float glow_bg[4] = {1.0f, 1.0f, 1.0f, 0.16f * focus};
 				DrawSolidQuad(70.0f, y - 16.0f, row_w, 26.0f, glow_bg);
 			}
-			DrawText(rows[i].label, 78.0f, y + 3.0f, 0.76f, col, true);
+			DrawText(rows[i].label, 78.0f, y + 3.0f, 0.74f, col, true);
 			if (!rows[i].value.empty()) {
 				const float val_col[4] = {1.0f, 1.0f, 1.0f, alpha * 0.85f};
-				const float vw = MeasureText(rows[i].value, 0.66f);
+				const float vw = MeasureText(rows[i].value, 0.64f);
 				float val_x = val_right - vw;
 				if (!settings_picker_open_) {
-					const float label_end = 78.0f + MeasureText(rows[i].label, 0.76f) + 12.0f;
+					const float label_end = 78.0f + MeasureText(rows[i].label, 0.74f) + 12.0f;
 					val_x = std::max(val_x, label_end);
 				}
-				DrawText(rows[i].value, val_x, y + 3.0f, 0.66f, val_col, true);
+				DrawText(rows[i].value, val_x, y + 3.0f, 0.64f, val_col, true);
 			}
 		}
 	}
@@ -1413,23 +1800,42 @@ void XmbRenderer::DrawSettingsSubPage() {
 	// Right-side PSP value picker panel when open
 	if (settings_picker_open_ && font_loaded_) {
 		std::vector<std::string> choices;
+		const bool is_color_picker = (settings_kind_ == SettingsKind::Theme && settings_sub_index_ == 1);
 		if (settings_kind_ == SettingsKind::Theme) {
-			if (settings_sub_index_ == 0) choices = {opt_orig, opt_classic};
+			if (settings_sub_index_ == 0) choices = {opt_orig, opt_classic, opt_cookie, opt_piano};
 			else if (settings_sub_index_ == 1) {
-				choices.push_back(TextOr("xmb_opt_month_auto", "Month (Auto)"));
-				for (int m = 0; m < 12; ++m) choices.push_back(TextOr(kMonthKeys[m], kMonthFallbacks[m]));
+				for (int c = 0; c <= 34; ++c) choices.push_back(color_label(c));
 			} else if (settings_sub_index_ == 2) choices = {opt_orig, opt_classic, opt_off};
-			else if (settings_sub_index_ == 3) choices = {opt_orig, TextOr("xmb_opt_slow", "Slow"), TextOr("xmb_opt_static", "Static"), opt_off};
-		} else if (settings_kind_ == SettingsKind::System) {
-			if (settings_sub_index_ == 1) {
-				choices = {TextOr("xmb_btn_cross_lbl", "X Button"), TextOr("xmb_btn_circle_lbl", "O Button")};
-			}
-		} else if (settings_kind_ == SettingsKind::Sound) {
+			else choices = {opt_orig, TextOr("xmb_opt_slow", "Slow"), TextOr("xmb_opt_static", "Static"), opt_off};
+		} else if (settings_kind_ == SettingsKind::System && settings_sub_index_ == 1) {
+			choices = {TextOr("xmb_btn_cross_lbl", "X Button"), TextOr("xmb_btn_circle_lbl", "O Button")};
+		} else if (settings_kind_ == SettingsKind::Sound || settings_kind_ == SettingsKind::Rss ||
+		           (settings_kind_ == SettingsKind::Video && settings_sub_index_ == 1) ||
+		           (settings_kind_ == SettingsKind::PowerSave && settings_sub_index_ == 1)) {
 			choices = {opt_on, opt_off};
+		} else if (settings_kind_ == SettingsKind::Video || settings_kind_ == SettingsKind::Display) {
+			choices = {opt_16_9, opt_4_3};
+		} else if (settings_kind_ == SettingsKind::Photo) {
+			if (settings_sub_index_ == 0) {
+				choices = {TextOr("xmb_opt_normal", "Normal"), TextOr("xmb_opt_slow", "Slow"), TextOr("xmb_opt_fast", "Fast")};
+			} else {
+				choices = {TextOr("xmb_opt_slide", "Slide"), TextOr("xmb_opt_fade", "Fade"), opt_off};
+			}
 		} else if (settings_kind_ == SettingsKind::DateTime) {
 			if (settings_sub_index_ == 0) choices = {"DD/MM/YYYY", "MM/DD/YYYY", "YYYY/MM/DD"};
-			else if (settings_sub_index_ == 1) choices = {TextOr("xmb_opt_24h", "24-Hour Clock"), TextOr("xmb_opt_12h", "12-Hour Clock")};
+			else choices = {TextOr("xmb_opt_24h", "24-Hour Clock"), TextOr("xmb_opt_12h", "12-Hour Clock")};
+		} else if (settings_kind_ == SettingsKind::PowerSave) {
+			choices = {opt_off, TextOr("xmb_opt_2min", "2 Minutes"), TextOr("xmb_opt_5min", "5 Minutes")};
+		} else if (settings_kind_ == SettingsKind::Security) {
+			choices.push_back(opt_off);
+			for (int lvl = 1; lvl <= 9; ++lvl) {
+				choices.push_back(TextOr("xmb_level_prefix", "Level") + " " + std::to_string(lvl));
+			}
+		} else if (settings_kind_ == SettingsKind::Network && settings_sub_index_ == 1) {
+			const std::string chp = TextOr("xmb_ch_prefix", "Ch") + " ";
+			choices = {TextOr("xmb_opt_auto", "Automatic"), chp + "1", chp + "6", chp + "11"};
 		}
+
 		if (!choices.empty()) {
 			const float panel_x = 342.0f;
 			const float panel_w = kScreenWidth - panel_x;
@@ -1446,8 +1852,19 @@ void XmbRenderer::DrawSettingsSubPage() {
 					const float focus_col[4] = {1.0f, 1.0f, 1.0f, 0.22f};
 					DrawSolidQuad(panel_x + 1.5f, y - 16.0f, panel_w - 1.5f, 22.0f, focus_col);
 				}
+				float text_x = panel_x + 12.0f;
+				float text_scale = 0.65f;
+				if (is_color_picker) {
+					const auto sw = ColorSwatchForChoice(i);
+					const float sw_border[4] = {1.0f, 1.0f, 1.0f, sel ? 0.95f : 0.55f};
+					const float sw_fill[4] = {sw[0], sw[1], sw[2], 1.0f};
+					DrawSolidQuad(panel_x + 8.0f, y - 10.0f, 14.0f, 10.0f, sw_border);
+					DrawSolidQuad(panel_x + 9.0f, y - 9.0f, 12.0f, 8.0f, sw_fill);
+					text_x = panel_x + 28.0f;
+					text_scale = 0.58f;
+				}
 				const float tcol[4] = {1.0f, 1.0f, 1.0f, sel ? 1.0f : 0.62f};
-				DrawText(choices[i], panel_x + 14.0f, y, 0.68f, tcol, true);
+				DrawText(choices[i], text_x, y, text_scale, tcol, true);
 			}
 		}
 	}
@@ -1455,27 +1872,58 @@ void XmbRenderer::DrawSettingsSubPage() {
 
 void XmbRenderer::DrawSystemInfoDialog() {
 	if (!system_info_dialog_) return;
-	const float box_x = 56.0f;
-	const float box_y = 54.0f;
-	const float box_w = 368.0f;
-	const float box_h = 164.0f;
+	const float box_x = 50.0f;
+	const float box_y = 38.0f;
+	const float box_w = 380.0f;
+	const float box_h = 196.0f;
 	DrawDialogFrame(box_x, box_y, box_w, box_h);
 
 	if (font_loaded_) {
 		const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 		const float label_col[4] = {1.0f, 1.0f, 1.0f, 0.68f};
 		const float border[4] = {1.0f, 1.0f, 1.0f, 0.30f};
-		DrawText(TextOr("xmb_setting_sysinfo", "System Information"), box_x + 18.0f, box_y + 28.0f, 0.78f, white, true);
-		DrawSolidQuad(box_x + 16.0f, box_y + 36.0f, box_w - 32.0f, 1.0f, border);
+		DrawText(TextOr("xmb_setting_sysinfo", "System Information"), box_x + 18.0f, box_y + 26.0f, 0.78f, white, true);
+		DrawSolidQuad(box_x + 16.0f, box_y + 34.0f, box_w - 32.0f, 1.0f, border);
 
 		auto row = [&](float y, const std::string &k, const std::string &v) {
 			DrawText(k, box_x + 20.0f, y, 0.64f, label_col, true);
-			DrawText(v, box_x + 150.0f, y, 0.64f, white, true);
+			DrawText(v, box_x + 158.0f, y, 0.64f, white, true);
 		};
-		row(box_y + 66.0f, TextOr("xmb_sysinfo_fw", "System Software"), "Version 6.60 (EmuCoreA)");
-		row(box_y + 92.0f, TextOr("xmb_sysinfo_name", "Nickname"), device_name_);
-		row(box_y + 118.0f, TextOr("msgshare_info_space", "Free Space"), free_space_text_);
+		row(box_y + 62.0f, TextOr("xmb_sysinfo_fw", "System Software"), "Version 7.1 (EmuCoreA)");
+		row(box_y + 86.0f, TextOr("xmb_sysinfo_model", "Model"), "PSP\u2122 4000");
+		row(box_y + 110.0f, TextOr("xmb_sysinfo_name", "Nickname"), device_name_);
+		row(box_y + 134.0f, TextOr("msgshare_info_space", "Free Space"), free_space_text_);
 
+		DrawDialogHints(box_x, box_y, box_w, box_h, false);
+	}
+}
+
+void XmbRenderer::DrawNoticeDialog() {
+	if (!info_notice_active_) return;
+	const float box_x = 42.0f;
+	const float box_y = 40.0f;
+	const float box_w = 396.0f;
+	const float box_h = 192.0f;
+	DrawDialogFrame(box_x, box_y, box_w, box_h);
+
+	if (font_loaded_) {
+		const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+		const float body_col[4] = {1.0f, 1.0f, 1.0f, 0.88f};
+		const float border[4] = {1.0f, 1.0f, 1.0f, 0.30f};
+		DrawText(info_notice_title_, box_x + 18.0f, box_y + 26.0f, 0.76f, white, true);
+		DrawSolidQuad(box_x + 16.0f, box_y + 34.0f, box_w - 32.0f, 1.0f, border);
+
+		float y = box_y + 58.0f;
+		const float max_y = box_y + box_h - 32.0f;
+		for (const auto &raw_line : info_notice_lines_) {
+			const auto wrapped = WrapText(raw_line, 0.62f, box_w - 36.0f);
+			for (const auto &line : wrapped) {
+				if (y > max_y) break;
+				DrawText(line, box_x + 18.0f, y, 0.62f, body_col, true);
+				y += 20.0f;
+			}
+			if (y > max_y) break;
+		}
 		DrawDialogHints(box_x, box_y, box_w, box_h, false);
 	}
 }
@@ -1591,6 +2039,7 @@ void XmbRenderer::KeyPressed(Key key) {
 	int do_delete_save = -1;
 	int do_delete_game = -1;
 	bool do_settings_changed = false;
+	std::string do_open_browser;
 	XmbSettings new_settings;
 
 	{
@@ -1601,6 +2050,88 @@ void XmbRenderer::KeyPressed(Key key) {
 			if (IsBackKey(key) || IsConfirmKey(key)) {
 				PlaySound(2);
 				system_info_dialog_ = false;
+			}
+			goto dispatch_callbacks;
+		}
+
+		// 1b. Notice dialog (System Update, USB, Firmware notices, Information Board, etc.)
+		if (info_notice_active_) {
+			if (IsBackKey(key) || IsConfirmKey(key)) {
+				PlaySound(2);
+				info_notice_active_ = false;
+			}
+			goto dispatch_callbacks;
+		}
+
+		// 1c. Restore Default Settings confirmation
+		if (restore_confirm_active_) {
+			switch (key) {
+			case Key::Left:
+				if (restore_confirm_selected_ != 0) {
+					restore_confirm_selected_ = 0;
+					PlaySound(0);
+				}
+				break;
+			case Key::Right:
+				if (restore_confirm_selected_ != 1) {
+					restore_confirm_selected_ = 1;
+					PlaySound(0);
+				}
+				break;
+			case Key::Confirm:
+				if (restore_confirm_selected_ == 0) {
+					PlaySound(1);
+					restore_confirm_active_ = false;
+					settings_ = XmbSettings{};
+					theme_dirty_ = true;
+					new_settings = settings_;
+					do_settings_changed = true;
+				} else {
+					PlaySound(2);
+					restore_confirm_active_ = false;
+				}
+				break;
+			case Key::Back:
+				PlaySound(2);
+				restore_confirm_active_ = false;
+				break;
+			default:
+				break;
+			}
+			goto dispatch_callbacks;
+		}
+
+		// 1d. Browser launch confirmation
+		if (browser_confirm_active_) {
+			switch (key) {
+			case Key::Left:
+				if (browser_confirm_selected_ != 0) {
+					browser_confirm_selected_ = 0;
+					PlaySound(0);
+				}
+				break;
+			case Key::Right:
+				if (browser_confirm_selected_ != 1) {
+					browser_confirm_selected_ = 1;
+					PlaySound(0);
+				}
+				break;
+			case Key::Confirm:
+				if (browser_confirm_selected_ == 0) {
+					PlaySound(1);
+					browser_confirm_active_ = false;
+					do_open_browser = pending_browser_url_;
+				} else {
+					PlaySound(2);
+					browser_confirm_active_ = false;
+				}
+				break;
+			case Key::Back:
+				PlaySound(2);
+				browser_confirm_active_ = false;
+				break;
+			default:
+				break;
 			}
 			goto dispatch_callbacks;
 		}
@@ -1737,44 +2268,9 @@ void XmbRenderer::KeyPressed(Key key) {
 
 		// 6. Settings sub-menu
 		if (settings_sub_active_) {
-			int row_count = 2;
-			if (settings_kind_ == SettingsKind::Theme) row_count = 4;
-
-			auto current_value_index = [&]() -> int {
-				if (settings_kind_ == SettingsKind::Theme) {
-					if (settings_sub_index_ == 0) return settings_.theme_style;
-					if (settings_sub_index_ == 1) return settings_.color_index;
-					if (settings_sub_index_ == 2) return settings_.bg_mode;
-					if (settings_sub_index_ == 3) return settings_.wave_mode;
-				} else if (settings_kind_ == SettingsKind::System) {
-					if (settings_sub_index_ == 1) return settings_.swap_confirm ? 1 : 0;
-				} else if (settings_kind_ == SettingsKind::Sound) {
-					if (settings_sub_index_ == 0) return settings_.key_tone ? 0 : 1;
-					if (settings_sub_index_ == 1) return settings_.bgm_enabled ? 0 : 1;
-				} else if (settings_kind_ == SettingsKind::DateTime) {
-					if (settings_sub_index_ == 0) return settings_.date_format;
-					if (settings_sub_index_ == 1) return settings_.time_24h ? 0 : 1;
-				}
-				return 0;
-			};
-			auto picker_count = [&]() -> int {
-				if (settings_kind_ == SettingsKind::Theme) {
-					if (settings_sub_index_ == 0) return 2;
-					if (settings_sub_index_ == 1) return 13;
-					if (settings_sub_index_ == 2) return 3;
-					if (settings_sub_index_ == 3) return 4;
-				} else if (settings_kind_ == SettingsKind::System) {
-					return 2;
-				} else if (settings_kind_ == SettingsKind::Sound) {
-					return 2;
-				} else if (settings_kind_ == SettingsKind::DateTime) {
-					return settings_sub_index_ == 0 ? 3 : 2;
-				}
-				return 2;
-			};
-
+			const int row_count = SettingsRowCount();
 			if (settings_picker_open_) {
-				const int max_c = picker_count();
+				const int max_c = SettingsPickerCount();
 				switch (key) {
 				case Key::Up:
 					if (settings_picker_index_ > 0) {
@@ -1789,21 +2285,7 @@ void XmbRenderer::KeyPressed(Key key) {
 					}
 					break;
 				case Key::Confirm:
-					if (settings_kind_ == SettingsKind::Theme) {
-						if (settings_sub_index_ == 0) settings_.theme_style = settings_picker_index_;
-						else if (settings_sub_index_ == 1) settings_.color_index = settings_picker_index_;
-						else if (settings_sub_index_ == 2) settings_.bg_mode = settings_picker_index_;
-						else if (settings_sub_index_ == 3) settings_.wave_mode = settings_picker_index_;
-						theme_dirty_ = true;
-					} else if (settings_kind_ == SettingsKind::System) {
-						if (settings_sub_index_ == 1) settings_.swap_confirm = (settings_picker_index_ == 1);
-					} else if (settings_kind_ == SettingsKind::Sound) {
-						if (settings_sub_index_ == 0) settings_.key_tone = (settings_picker_index_ == 0);
-						else if (settings_sub_index_ == 1) settings_.bgm_enabled = (settings_picker_index_ == 0);
-					} else if (settings_kind_ == SettingsKind::DateTime) {
-						if (settings_sub_index_ == 0) settings_.date_format = settings_picker_index_;
-						else if (settings_sub_index_ == 1) settings_.time_24h = (settings_picker_index_ == 0);
-					}
+					ApplySettingsPickerChoice(settings_picker_index_);
 					settings_picker_open_ = false;
 					new_settings = settings_;
 					do_settings_changed = true;
@@ -1836,9 +2318,15 @@ void XmbRenderer::KeyPressed(Key key) {
 					if (settings_kind_ == SettingsKind::System && settings_sub_index_ == 0) {
 						system_info_dialog_ = true;
 						PlaySound(1);
-					} else {
+					} else if (settings_kind_ == SettingsKind::System && settings_sub_index_ == 2) {
+						restore_confirm_active_ = true;
+						restore_confirm_selected_ = 1;
+						PlaySound(0);
+					} else if (SettingsPickerCount() > 0) {
 						settings_picker_open_ = true;
-						settings_picker_index_ = current_value_index();
+						settings_picker_index_ = SettingsCurrentValue();
+						PlaySound(1);
+					} else {
 						PlaySound(1);
 					}
 					break;
@@ -1994,7 +2482,106 @@ void XmbRenderer::KeyPressed(Key key) {
 		case Key::Confirm:
 			if (item_ >= 0 && item_ < (int)items_.size()) {
 				const std::string &tex = items_[item_].texture_name;
-				if (category_ == 5) {
+				const std::string &title = items_[item_].title;
+				if (category_ == 0) {
+					if (tex == "item_update") {
+						OpenNoticeDialog(title, {
+							TextOr("xmb_notice_update_1", "The system software of your PSP\u2122 4000 system is version 7.1."),
+							TextOr("xmb_notice_update_2", "There is no need to update."),
+						});
+						PlaySound(1);
+						break;
+					}
+					if (tex == "item_usb") {
+						OpenNoticeDialog(title, {
+							TextOr("xmb_usb_status", "Memory Stick\u2122 USB Mode"),
+							TextOr("xmb_games_count_lbl", "Installed Games") + ": " + std::to_string(games_.size()),
+							TextOr("msgshare_info_space", "Free Space") + ": " + free_space_text_,
+							TextOr("xmb_sysinfo_name", "Nickname") + ": " + device_name_,
+						});
+						PlaySound(1);
+						break;
+					}
+					static const struct {
+						const char *tex_name;
+						SettingsKind kind;
+					} kSettingsMap[] = {
+						{"item_video_settings", SettingsKind::Video},
+						{"item_photo_settings", SettingsKind::Photo},
+						{"item_system_settings", SettingsKind::System},
+						{"item_theme_settings", SettingsKind::Theme},
+						{"item_date_settings", SettingsKind::DateTime},
+						{"item_power_settings", SettingsKind::PowerSave},
+						{"item_sound_settings", SettingsKind::Sound},
+						{"item_security_settings", SettingsKind::Security},
+						{"item_network_settings", SettingsKind::Network},
+						{"item_rss_settings", SettingsKind::Rss},
+						{"item_display_settings", SettingsKind::Display},
+					};
+					bool opened_sub = false;
+					for (const auto &entry : kSettingsMap) {
+						if (tex == entry.tex_name) {
+							settings_sub_active_ = true;
+							settings_kind_ = entry.kind;
+							settings_sub_index_ = 0;
+							settings_sub_scroll_ = 0.0f;
+							settings_picker_open_ = false;
+							PlaySound(1);
+							opened_sub = true;
+							break;
+						}
+					}
+					if (opened_sub) break;
+				} else if (category_ == 1) {
+					if (tex == "item_comics") {
+						empty_media_kind_ = EmptyMediaKind::Comics;
+						PlaySound(1);
+						break;
+					}
+					if (tex == "item_1seg") {
+						OpenNoticeDialog(title, {TextOr("xmb_notice_1seg", "1Seg tuner is not connected.")});
+						PlaySound(1);
+						break;
+					}
+				} else if (category_ == 2) {
+					if (tex == "item_camera") {
+						OpenNoticeDialog(title, {TextOr("xmb_notice_camera", "Connect a camera compatible with the PSP\u2122 system.")});
+						PlaySound(1);
+						break;
+					}
+					if (tex == "item_memstick") {
+						empty_media_kind_ = EmptyMediaKind::Photo;
+						PlaySound(1);
+						break;
+					}
+				} else if (category_ == 3) {
+					if (tex == "item_sensme" || tex == "item_memstick") {
+						empty_media_kind_ = EmptyMediaKind::Music;
+						PlaySound(1);
+						break;
+					}
+				} else if (category_ == 4) {
+					if (tex == "item_memstick") {
+						empty_media_kind_ = EmptyMediaKind::Video;
+						PlaySound(1);
+						break;
+					}
+				} else if (category_ == 5) {
+					if (tex == "item_game_sharing") {
+						OpenNoticeDialog(title, {
+							TextOr("xmb_notice_gamesharing_1", "Searching for a nearby PSP\u2122 system..."),
+							TextOr("xmb_notice_gamesharing_2", "No Game Sharing sessions found."),
+						});
+						PlaySound(1);
+						break;
+					}
+					if (tex == "item_savedata") {
+						saved_data_page_ = true;
+						save_page_index_ = 0;
+						save_scroll_ = 0.0f;
+						PlaySound(1);
+						break;
+					}
 					if (tex == "item_memstick") {
 						memory_stick_page_ = true;
 						game_page_index_ = 0;
@@ -2005,59 +2592,83 @@ void XmbRenderer::KeyPressed(Key key) {
 						}
 						break;
 					}
-					if (tex == "item_savedata") {
-						saved_data_page_ = true;
-						save_page_index_ = 0;
-						save_scroll_ = 0.0f;
+				} else if (category_ == 6) {
+					if (tex == "item_manuals") {
+						OpenNoticeDialog(title, {
+							TextOr("xmb_notice_manual_1", "D-Pad / Swipe: Navigate XMB"),
+							TextOr("xmb_notice_manual_2", "X / Tap: Start game or confirm"),
+							TextOr("xmb_notice_manual_3", "Triangle / Menu: Options (Delete / Info)"),
+							TextOr("xmb_notice_manual_4", "O / Back: Return or exit"),
+						});
 						PlaySound(1);
 						break;
 					}
-				} else if (category_ == 0) {
-					if (tex == "item_theme_settings") {
-						settings_sub_active_ = true;
-						settings_kind_ = SettingsKind::Theme;
-						settings_sub_index_ = 0;
-						settings_sub_scroll_ = 0.0f;
-						settings_picker_open_ = false;
+					if (tex == "item_locationfree") {
+						OpenNoticeDialog(title, {TextOr("xmb_notice_locationfree", "No LocationFree\u2122 Base Station is registered.")});
 						PlaySound(1);
 						break;
 					}
-					if (tex == "item_system_settings") {
-						settings_sub_active_ = true;
-						settings_kind_ = SettingsKind::System;
-						settings_sub_index_ = 0;
-						settings_sub_scroll_ = 0.0f;
-						settings_picker_open_ = false;
+					if (tex == "item_remoteplay") {
+						OpenNoticeDialog(title, {TextOr("xmb_notice_remoteplay", "Register a PS3\u2122 system to start Remote Play.")});
 						PlaySound(1);
 						break;
 					}
-					if (tex == "item_sound_settings") {
-						settings_sub_active_ = true;
-						settings_kind_ = SettingsKind::Sound;
-						settings_sub_index_ = 0;
-						settings_sub_scroll_ = 0.0f;
-						settings_picker_open_ = false;
+					if (tex == "item_rss") {
+						OpenNoticeDialog(title, {TextOr("xmb_notice_rss", "No RSS channels have been added.")});
 						PlaySound(1);
 						break;
 					}
-					if (tex == "item_date_settings") {
-						settings_sub_active_ = true;
-						settings_kind_ = SettingsKind::DateTime;
-						settings_sub_index_ = 0;
-						settings_sub_scroll_ = 0.0f;
-						settings_picker_open_ = false;
+					if (tex == "item_internet_browser") {
+						browser_confirm_active_ = true;
+						browser_confirm_selected_ = 0;
+						pending_browser_url_ = "https://www.playstation.com";
 						PlaySound(1);
 						break;
 					}
-				} else if ((category_ == 2 || category_ == 3 || category_ == 4) && tex == "item_memstick") {
-					empty_media_kind_ = category_ == 2 ? EmptyMediaKind::Photo
-					                    : (category_ == 3 ? EmptyMediaKind::Music : EmptyMediaKind::Video);
-					PlaySound(1);
-					break;
+					if (tex == "item_internet_search") {
+						browser_confirm_active_ = true;
+						browser_confirm_selected_ = 0;
+						pending_browser_url_ = "https://www.google.com";
+						PlaySound(1);
+						break;
+					}
+					if (tex == "item_internet_radio") {
+						OpenNoticeDialog(title, {TextOr("xmb_notice_radio", "No Internet Radio player stations saved.")});
+						PlaySound(1);
+						break;
+					}
+					if (tex == "item_skype") {
+						OpenNoticeDialog(title, {TextOr("xmb_notice_skype", "Skype\u2122 service for PSP\u2122 has been discontinued.")});
+						PlaySound(1);
+						break;
+					}
+				} else if (category_ == 7) {
+					if (tex == "item_psn_signup") {
+						OpenNoticeDialog(title, {TextOr("xmb_notice_psn", "PlayStation\u00aeNetwork is unavailable in offline emulator mode.")});
+						PlaySound(1);
+						break;
+					}
+					if (tex == "item_psn_store") {
+						OpenNoticeDialog(title, {TextOr("xmb_notice_ps_store", "PlayStation\u00aeStore cannot be accessed in offline emulator mode.")});
+						PlaySound(1);
+						break;
+					}
+					if (tex == "item_info_board") {
+						OpenNoticeDialog(title, {
+							"PSP\u2122 4000  |  Version 7.1 (EmuCoreA)",
+							TextOr("xmb_games_count_lbl", "Installed Games") + ": " + std::to_string(games_.size()) +
+							    "   " + TextOr("xmb_saves_count_lbl", "Saved Data") + ": " + std::to_string(saves_.size()),
+							TextOr("msgshare_info_space", "Free Space") + ": " + free_space_text_,
+							TextOr("xmb_setting_net_status", "Internet Connection") + ": " +
+							    (network_connected_ ? TextOr("xmb_net_connected", "Connected")
+							                        : TextOr("xmb_net_disconnected", "Not Connected")),
+						});
+						PlaySound(1);
+						break;
+					}
 				}
 			}
 			PlaySound(5);
-			ShowToast(TextOr("msg_feature_unavailable", "This feature is not available in this build."));
 			break;
 		case Key::Back:
 			exit_dialog_active_ = true;
@@ -2088,16 +2699,29 @@ dispatch_callbacks:
 	if (do_settings_changed) {
 		SettingsChanged(new_settings);
 	}
+	if (!do_open_browser.empty()) {
+		OpenBrowserRequested(do_open_browser);
+	}
 }
 
 void XmbRenderer::DrawCategoryRow() {
 	const char *order[] = {"settings", "extras", "photo", "music", "video", "game", "network", "psn"};
+	const char *cookie_order[] = {
+		"cookies_cat_0", "cookies_cat_1", "cookies_cat_2", "cookies_cat_3",
+		"cookies_cat_4", "cookies_cat_5", "cookies_cat_6", "cookies_cat_7",
+	};
 	const bool same = category_ == category_from_ || category_t_ >= 1.0f;
 	const float shift_from = kCategoryX[category_from_] - kCategoryAnchorX;
 	const float shift_to = kCategoryX[category_] - kCategoryAnchorX;
 	const float shift = Lerp(shift_from, shift_to, category_t_);
 	for (int index = 0; index < 8; ++index) {
-		auto texture = textures_.find(order[index]);
+		auto texture = textures_.end();
+		if (settings_.theme_style == 2) {
+			texture = textures_.find(cookie_order[index]);
+		}
+		if (texture == textures_.end()) {
+			texture = textures_.find(order[index]);
+		}
 		if (texture == textures_.end()) {
 			continue;
 		}
@@ -2122,7 +2746,8 @@ void XmbRenderer::DrawCategoryRow() {
 			const float glow_color[4] = {1.0f, 1.0f, 1.0f, 0.62f};
 			DrawTexture(glow->second, x, kCategoryY, 1.0f, glow_color);
 		}
-		DrawTexture(texture->second, x, kCategoryY, icon_scale, icon_color);
+		const float fit = (texture->second.height > 44) ? (34.0f / (float)texture->second.height) : 1.0f;
+		DrawTexture(texture->second, x, kCategoryY, icon_scale * fit, icon_color);
 		if (!font_loaded_) {
 			continue;
 		}
@@ -2147,6 +2772,9 @@ void XmbRenderer::DrawCategoryRow() {
 void XmbRenderer::SetGames(const std::vector<GameInfo> &games) {
 	std::lock_guard<std::recursive_mutex> lock(mutex_);
 	games_ = games;
+	if (!games_.empty()) {
+		games_loading_ = false;
+	}
 	if (game_page_index_ >= (int)games_.size()) {
 		game_page_index_ = std::max(0, (int)games_.size() - 1);
 	}
@@ -2163,6 +2791,9 @@ void XmbRenderer::SetGames(const std::vector<GameInfo> &games) {
 void XmbRenderer::SetSaveStates(const std::vector<SaveStateInfo> &saves) {
 	std::lock_guard<std::recursive_mutex> lock(mutex_);
 	saves_ = saves;
+	if (!saves_.empty()) {
+		saves_loading_ = false;
+	}
 	if (save_page_index_ >= (int)saves_.size()) {
 		save_page_index_ = std::max(0, (int)saves_.size() - 1);
 	}
@@ -2250,7 +2881,14 @@ void XmbRenderer::DrawMemoryStickPage() {
 	}
 
 	if (games_.empty()) {
-		if (font_loaded_) {
+		if (games_loading_) {
+			auto ld = textures_.find("item_loading");
+			if (ld != textures_.end()) {
+				const float pulse = 0.45f + 0.40f * std::sin(time_elapsed_ * 5.0f);
+				const float lcol[4] = {1.0f, 1.0f, 1.0f, pulse};
+				DrawTexture(ld->second, 92.0f, 136.0f, 0.85f, lcol);
+			}
+		} else if (font_loaded_) {
 			const float empty_col[4] = {1.0f, 1.0f, 1.0f, 0.78f};
 			DrawText(TextOr("msgshare_error_no_game", "There are no games."), 174.0f, 145.0f, 0.82f, empty_col, true);
 		}
@@ -2436,8 +3074,14 @@ void XmbRenderer::Draw() {
 			items_fade_t_ = std::min(1.0f, items_fade_t_ + dt / 0.18f);
 		}
 
-		const float scale = std::min(surface_width_ / kScreenWidth, surface_height_ / kScreenHeight);
-		const int view_width = (int)std::lround(kScreenWidth * scale);
+		if (theme_dirty_) {
+			theme_dirty_ = false;
+			UpdateThemeColor();
+		}
+
+		const float target_w = (settings_.aspect_mode == 1) ? (kScreenHeight * (4.0f / 3.0f)) : kScreenWidth;
+		const float scale = std::min(surface_width_ / target_w, surface_height_ / kScreenHeight);
+		const int view_width = (int)std::lround(target_w * scale);
 		const int view_height = (int)std::lround(kScreenHeight * scale);
 		const int view_x = (surface_width_ - view_width) / 2;
 		const int view_y = (surface_height_ - view_height) / 2;
@@ -2453,10 +3097,7 @@ void XmbRenderer::Draw() {
 		if (settings_.bg_mode == 2) {
 			glClearColor(0.08f, 0.08f, 0.10f, 1.0f);
 		} else {
-			const float *tint = (settings_.bg_mode == 1 || settings_.theme_style == 1)
-			                        ? kClassicBlueTint
-			                        : kMonthGradients[EffectiveColorIndex()];
-			glClearColor(tint[0] * 0.22f, tint[1] * 0.22f, tint[2] * 0.22f, 1.0f);
+			glClearColor(wave_tint_[0] * 0.22f, wave_tint_[1] * 0.22f, wave_tint_[2] * 0.22f, 1.0f);
 		}
 		glClear(GL_COLOR_BUFFER_BIT);
 		glDisable(GL_SCISSOR_TEST);
@@ -2466,10 +3107,6 @@ void XmbRenderer::Draw() {
 		glUniform1i(u_texture_, 0);
 		glActiveTexture(GL_TEXTURE0);
 		glBindVertexArray(vertex_array_);
-		if (theme_dirty_) {
-			theme_dirty_ = false;
-			UpdateThemeColor();
-		}
 		DrawBackground();
 
 		DrawWave(dt);
@@ -2504,6 +3141,19 @@ void XmbRenderer::Draw() {
 		DrawDeleteDialog();
 		DrawInfoDialog();
 		DrawSystemInfoDialog();
+		DrawNoticeDialog();
+		if (restore_confirm_active_) {
+			DrawYesNoDialog(
+				TextOr("xmb_restore_confirm_1", "Restore default settings?"),
+				TextOr("xmb_restore_confirm_2", "All settings will return to defaults."),
+				restore_confirm_selected_);
+		}
+		if (browser_confirm_active_) {
+			DrawYesNoDialog(
+				TextOr("xmb_browser_confirm_1", "Do you want to start the Internet browser?"),
+				TextOr("xmb_browser_confirm_2", "Opens outside EmuCoreA in your device browser."),
+				browser_confirm_selected_);
+		}
 
 		if (launching_) {
 			launch_t_ += dt / 0.35f;
