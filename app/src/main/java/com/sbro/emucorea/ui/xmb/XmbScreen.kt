@@ -144,6 +144,9 @@ fun XmbScreen(
                 currentSelection.value(index)
             }
         }
+        XmbHost.setKeyListener { XmbNative.nativeKey(it) }
+        val window = (context as? android.app.Activity)?.window
+        window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> surface.onResume()
@@ -159,6 +162,7 @@ fun XmbScreen(
             saveState()
             lifecycleOwner.lifecycle.removeObserver(observer)
             XmbHost.setGameListener(null)
+            XmbHost.setKeyListener(null)
         }
     }
 

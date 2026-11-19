@@ -36,6 +36,7 @@ import com.sbro.emucorea.core.LocalTvUiEnvironment
 import com.sbro.emucorea.core.TvInterfaceMode
 import com.sbro.emucorea.core.TvUiPolicy
 import com.sbro.emucorea.core.UiSoundManager
+import com.sbro.emucorea.xmb.XmbHost
 import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.AppFontChoice
 import com.sbro.emucorea.data.CustomFontRepository
@@ -388,6 +389,7 @@ open class MainActivity : ComponentActivity() {
 
     @SuppressLint("RestrictedApi", "GestureBackNavigation")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (XmbHost.handleKeyEvent(event)) return true
         if (KeyboardMouseManager.handleKeyBindingCapture(event)) return true
 
         if (GamepadManager.isGameController(event.device)) {

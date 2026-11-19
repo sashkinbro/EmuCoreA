@@ -89,6 +89,7 @@ private:
 	               const float color[4], bool shadow);
 	void DrawCategoryRow();
 	void DrawItems();
+	void DrawMemoryStickPage();
 	void DrawItemColumn(const std::vector<Item> &list, int selected, float scroll, float global_alpha);
 
 	GLuint program_ = 0;
@@ -125,6 +126,9 @@ private:
 	std::vector<Item> items_;
 	std::vector<Item> previous_items_;
 	std::vector<std::string> game_titles_;
+	std::vector<std::string> game_icons_;
+	bool memory_stick_page_ = false;
+	int game_page_index_ = 0;
 	std::array<std::vector<Item>, 8> categories_;
 	std::array<int, 8> category_selected_{};
 	int previous_item_ = 0;

@@ -216,6 +216,11 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"item_psn_signup", "images/topmenu_icon/FU.png"},
 		{"item_psn_store", "images/topmenu_icon/FV.png"},
 		{"item_game", "images/system_plugin/tex_default_game_icon.png"},
+		{"frame_subs", "images/game_plugin/tex_subs_frame.png"},
+		{"arrow_l", "images/game_plugin/tex_arrow_l.png"},
+		{"arrow_l_shadow", "images/game_plugin/tex_arrow_l_shadow.png"},
+		{"arrow_r", "images/game_plugin/tex_arrow_r.png"},
+		{"arrow_r_shadow", "images/game_plugin/tex_arrow_r_shadow.png"},
 	};
 	for (const auto &asset : assets) {
 		LoadTexture(asset.name, asset.path);
@@ -676,6 +681,36 @@ float XmbRenderer::DrawText(const std::string &text, float x, float baseline, fl
 
 void XmbRenderer::KeyPressed(Key key) {
 	std::lock_guard<std::mutex> lock(mutex_);
+	if (memory_stick_page_) {
+		switch (key) {
+		case Key::Left:
+			if (game_page_index_ > 0) {
+				game_page_index_ -= 1;
+				PlaySound(0);
+			}
+			break;
+		case Key::Right:
+			if (game_page_index_ + 1 < (int)game_titles_.size()) {
+				game_page_index_ += 1;
+				PlaySound(0);
+			}
+			break;
+		case Key::Confirm:
+			if (game_page_index_ >= 0 && game_page_index_ < (int)game_titles_.size()) {
+				GameSelected(game_page_index_);
+			}
+			PlaySound(1);
+			break;
+		case Key::Back:
+			memory_stick_page_ = false;
+			PlaySound(2);
+			break;
+		case Key::Up:
+		case Key::Down:
+			break;
+		}
+		return;
+	}
 	switch (key) {
 	case Key::Up:
 		if (item_ > 0) {
@@ -726,6 +761,13 @@ void XmbRenderer::KeyPressed(Key key) {
 		}
 		break;
 	case Key::Confirm:
+		if (category_ == 5 && item_ >= 0 && item_ < (int)items_.size() &&
+		    items_[item_].texture_name == "item_memstick" && !game_titles_.empty()) {
+			memory_stick_page_ = true;
+			game_page_index_ = 0;
+			PlaySound(1);
+			break;
+		}
 		if (category_ == 5 && item_ >= 0 && item_ < (int)items_.size() && items_[item_].is_game) {
 			GameSelected(items_[item_].game_index);
 		}
@@ -794,31 +836,12 @@ void XmbRenderer::SetGames(const std::vector<std::string> &titles,
                            const std::vector<std::string> &icon_paths) {
 	std::lock_guard<std::mutex> lock(mutex_);
 	game_titles_ = titles;
-	std::vector<Item> column;
-	column.reserve(titles.size() + 2);
-	for (int index = 0; index < (int)titles.size(); ++index) {
-		Item item;
-		item.title = titles[index];
-		item.texture_name = "item_game";
-		item.icon_path = index < (int)icon_paths.size() ? icon_paths[index] : std::string();
-		item.is_game = true;
-		item.game_index = index;
-		column.push_back(item);
+	game_icons_ = icon_paths;
+	if (game_page_index_ >= (int)game_titles_.size()) {
+		game_page_index_ = std::max(0, (int)game_titles_.size() - 1);
 	}
-	column.push_back({ "Saved Data Utility", "", "item_savedata" });
-	column.push_back({ "Memory Stick\u2122", "Free Space 1459 MB", "item_memstick" });
-	categories_[5] = std::move(column);
-	if (category_ == 5) {
-		previous_items_ = items_;
-		previous_item_ = item_;
-		items_fade_t_ = 0.0f;
-		items_ = categories_[5];
-		item_ = 0;
-		item_from_ = 0;
-		item_t_ = 1.0f;
-		category_selected_[5] = 0;
-	} else if (category_selected_[5] >= (int)categories_[5].size()) {
-		category_selected_[5] = 0;
+	if (game_titles_.empty()) {
+		memory_stick_page_ = false;
 	}
 }
 
@@ -845,6 +868,46 @@ void XmbRenderer::SetState(int category, int item) {
 	previous_items_ = items_;
 	previous_item_ = item_;
 	items_fade_t_ = 1.0f;
+}
+
+void XmbRenderer::DrawMemoryStickPage() {
+	if (game_titles_.empty()) {
+		return;
+	}
+	game_page_index_ = std::max(0, std::min((int)game_titles_.size() - 1, game_page_index_));
+	const float frame_x = 92.0f;
+	const float frame_y = 136.0f;
+	const float white[4] = {1.0f, 1.0f, 1.0f, 0.92f};
+	auto frame = textures_.find("frame_subs");
+	if (frame != textures_.end()) {
+		DrawTexture(frame->second, frame_x, frame_y, 1.0f, white);
+	}
+	const std::string &icon_path = game_page_index_ < (int)game_icons_.size()
+		? game_icons_[game_page_index_] : std::string();
+	if (const Texture *icon = icon_path.empty() ? nullptr : TextureForPath(icon_path)) {
+		const float scale = std::min(144.0f / std::max(1, icon->width),
+		                             80.0f / std::max(1, icon->height));
+		DrawTexture(*icon, frame_x, frame_y, scale, white);
+	}
+	if (font_loaded_) {
+		DrawText(game_titles_[game_page_index_], 174.0f, 145.0f, 0.82f, white, true);
+	}
+	auto draw_arrow = [&](const char *name, float x, float alpha) {
+		auto shadow = textures_.find("arrow_l_shadow");
+		if (shadow != textures_.end()) {
+			const float shadow_color[4] = {0.0f, 0.0f, 0.0f, 0.55f * alpha};
+			DrawTexture(shadow->second, x + 1.0f, frame_y + 1.0f, 1.0f, shadow_color);
+		}
+		auto arrow = textures_.find(name);
+		if (arrow != textures_.end()) {
+			const float color[4] = {1.0f, 1.0f, 1.0f, alpha};
+			DrawTexture(arrow->second, x, frame_y, 1.0f, color);
+		}
+	};
+	draw_arrow("arrow_l", 6.0f, 1.0f);
+	if (game_page_index_ + 1 < (int)game_titles_.size()) {
+		draw_arrow("arrow_r", 474.0f, 1.0f);
+	}
 }
 
 void XmbRenderer::DrawItems() {
@@ -959,9 +1022,14 @@ void XmbRenderer::Draw() {
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(vertex_array_);
 
-	DrawItems();
-	DrawCategoryRow();
-	DrawStatusBar();
+	if (memory_stick_page_) {
+		DrawMemoryStickPage();
+		DrawStatusBar();
+	} else {
+		DrawItems();
+		DrawCategoryRow();
+		DrawStatusBar();
+	}
 
 	glBindVertexArray(0);
 	if (!logged_gl_error_) {
