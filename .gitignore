@@ -37,6 +37,13 @@ ehthumbs.db
 /bios/
 *.bin
 
+# Native PSP XMB reconstruction: local firmware dumps, extracted resources and
+# generated packs stay out of Git; only tooling and source are tracked.
+/native-ui/firmware/
+/native-ui/resources/
+/native-ui/**/build/
+/native-ui/**/.cxx/
+
 # Commercial game images - never commit
 *.iso
 *.cso
