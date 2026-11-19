@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <array>
+#include <mutex>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -15,6 +16,9 @@ namespace xmb {
 
 // Implemented in xmb_jni.cpp; forwards a sound event to the Kotlin audio host.
 void PlaySound(int sound);
+
+// Implemented in xmb_jni.cpp; forwards the selected library game to the host.
+void GameSelected(int index);
 
 // The first native scene. It draws the measured Game-column anchors with the
 // original topmenu_icon textures and PGF text. Input drives a local selection
@@ -35,6 +39,7 @@ public:
 	void Resize(int width, int height);
 	void Draw();
 	void KeyPressed(Key key);
+	void SetGames(const std::vector<std::string> &titles);
 	void Shutdown();
 
 private:
@@ -49,6 +54,8 @@ private:
 		std::string subtitle;
 		std::string texture_name;
 		bool disabled = false;
+		bool is_game = false;
+		int game_index = -1;
 	};
 
 	bool BuildProgram();
@@ -106,6 +113,7 @@ private:
 
 	std::vector<Item> items_;
 	std::vector<Item> previous_items_;
+	std::vector<std::string> game_titles_;
 	std::array<std::vector<Item>, 8> categories_;
 	std::array<int, 8> category_selected_{};
 	int previous_item_ = 0;
@@ -117,6 +125,7 @@ private:
 	int item_from_ = 0;
 	float item_t_ = 1.0f;
 	std::chrono::steady_clock::time_point last_draw_ = std::chrono::steady_clock::now();
+	std::mutex mutex_;
 };
 
 }  // namespace xmb

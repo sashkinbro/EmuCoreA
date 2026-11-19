@@ -3,6 +3,7 @@
 #include <android/log.h>
 
 #include <string>
+#include <vector>
 
 #include "xmb_renderer.h"
 
@@ -14,6 +15,8 @@ xmb::XmbRenderer g_renderer;
 JavaVM *g_vm = nullptr;
 jclass g_audio_class = nullptr;
 jmethodID g_audio_play = nullptr;
+jclass g_host_class = nullptr;
+jmethodID g_host_game_selected = nullptr;
 
 }  // namespace
 
@@ -52,7 +55,58 @@ void PlaySound(int sound) {
 	}
 }
 
+void GameSelected(int index) {
+	if (g_vm == nullptr) {
+		return;
+	}
+	JNIEnv *env = nullptr;
+	if (g_vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK || env == nullptr) {
+		return;
+	}
+	if (g_host_class == nullptr) {
+		jclass local = env->FindClass("com/sbro/emucorea/xmb/XmbHost");
+		if (local == nullptr) {
+			env->ExceptionClear();
+			return;
+		}
+		g_host_class = reinterpret_cast<jclass>(env->NewGlobalRef(local));
+		env->DeleteLocalRef(local);
+		if (g_host_class != nullptr) {
+			g_host_game_selected = env->GetStaticMethodID(g_host_class, "onGameSelected", "(I)V");
+		}
+	}
+	if (g_host_class != nullptr && g_host_game_selected != nullptr) {
+		env->CallStaticVoidMethod(g_host_class, g_host_game_selected, index);
+		if (env->ExceptionCheck()) {
+			env->ExceptionClear();
+		}
+	}
+}
+
 }  // namespace xmb
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeSetGames(JNIEnv *env, jclass, jobjectArray games) {
+	std::vector<std::string> titles;
+	if (games != nullptr) {
+		const jsize count = env->GetArrayLength(games);
+		titles.reserve((size_t)count);
+		for (jsize i = 0; i < count; ++i) {
+			auto title = reinterpret_cast<jstring>(env->GetObjectArrayElement(games, i));
+			if (title == nullptr) {
+				titles.emplace_back();
+				continue;
+			}
+			const char *chars = env->GetStringUTFChars(title, nullptr);
+			if (chars != nullptr) {
+				titles.emplace_back(chars);
+				env->ReleaseStringUTFChars(title, chars);
+			}
+			env->DeleteLocalRef(title);
+		}
+	}
+	g_renderer.SetGames(titles);
+}
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_sbro_emucorea_xmb_XmbNative_nativeVersion(JNIEnv *env, jclass) {

@@ -70,6 +70,12 @@ The gestures feed the same `KeyPressed` path as the physical D-pad, so the
 animation, sounds and selection state are identical. Thresholds and velocity
 handling live in the host, not in the firmware renderer.
 
+The integration is allowed to extend the existing core hand-off where it is
+needed for this mode: read the selected game's ICON0/PIC1/SND0, start it through
+the same path as the current home screen, and carry the return state back. It
+must not change emulator behaviour, graphics settings or the core's game list;
+only the glue needed for the XMB launch/metadata path.
+
 ## Opening transition
 
 Entering the mode from the app must play the short PSP opening animation, not

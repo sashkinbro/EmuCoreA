@@ -215,6 +215,7 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"item_internet_browser", "images/topmenu_icon/EU.png"},
 		{"item_psn_signup", "images/topmenu_icon/FU.png"},
 		{"item_psn_store", "images/topmenu_icon/FV.png"},
+		{"item_game", "images/system_plugin/tex_default_game_icon.png"},
 	};
 	for (const auto &asset : assets) {
 		LoadTexture(asset.name, asset.path);
@@ -647,6 +648,7 @@ float XmbRenderer::DrawText(const std::string &text, float x, float baseline, fl
 }
 
 void XmbRenderer::KeyPressed(Key key) {
+	std::lock_guard<std::mutex> lock(mutex_);
 	switch (key) {
 	case Key::Up:
 		if (item_ > 0) {
@@ -697,6 +699,9 @@ void XmbRenderer::KeyPressed(Key key) {
 		}
 		break;
 	case Key::Confirm:
+		if (category_ == 5 && item_ >= 0 && item_ < (int)items_.size() && items_[item_].is_game) {
+			GameSelected(items_[item_].game_index);
+		}
 		PlaySound(1);
 		break;
 	case Key::Back:
@@ -758,6 +763,36 @@ void XmbRenderer::DrawCategoryRow() {
 	}
 }
 
+void XmbRenderer::SetGames(const std::vector<std::string> &titles) {
+	std::lock_guard<std::mutex> lock(mutex_);
+	game_titles_ = titles;
+	std::vector<Item> column;
+	column.reserve(titles.size() + 2);
+	for (int index = 0; index < (int)titles.size(); ++index) {
+		Item item;
+		item.title = titles[index];
+		item.texture_name = "item_game";
+		item.is_game = true;
+		item.game_index = index;
+		column.push_back(item);
+	}
+	column.push_back({ "Saved Data Utility", "", "item_savedata" });
+	column.push_back({ "Memory Stick\u2122", "Free Space 1459 MB", "item_memstick" });
+	categories_[5] = std::move(column);
+	if (category_ == 5) {
+		previous_items_ = items_;
+		previous_item_ = item_;
+		items_fade_t_ = 0.0f;
+		items_ = categories_[5];
+		item_ = 0;
+		item_from_ = 0;
+		item_t_ = 1.0f;
+		category_selected_[5] = 0;
+	} else if (category_selected_[5] >= (int)categories_[5].size()) {
+		category_selected_[5] = 0;
+	}
+}
+
 void XmbRenderer::DrawItems() {
 	const float fade = items_fade_t_;
 	const float eased = 1.0f - (1.0f - fade) * (1.0f - fade);
@@ -815,6 +850,7 @@ void XmbRenderer::Draw() {
 	if (surface_width_ <= 0 || surface_height_ <= 0 || program_ == 0) {
 		return;
 	}
+	std::lock_guard<std::mutex> lock(mutex_);
 	const auto now = std::chrono::steady_clock::now();
 	float dt = std::chrono::duration<float>(now - last_draw_).count();
 	last_draw_ = now;
