@@ -1137,7 +1137,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     currentGameCrc = metadata.serialWithCrc.extractCrc().orEmpty()
                     currentGameSource = when {
                         safePath.startsWith("content://") -> "content_uri"
-                        launchPath?.startsWith("/") == true -> "file"
+                        launchPath.startsWith("/") -> "file"
                         else -> "unknown"
                     }
                     pendingPerGameCoreOptions = (

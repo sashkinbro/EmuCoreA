@@ -750,13 +750,11 @@ private fun SideNavigation(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = 4.dp)
                 )
-                if (launchGame != null && DrawerItemId.LAUNCH_GAME !in hiddenDrawerItems) {
-                    ShellAction(
-                        icon = Icons.Rounded.PlayArrow,
-                        label = stringResource(R.string.shell_launch_game),
-                        onClick = launchGame
-                    )
-                }
+                ShellAction(
+                    icon = Icons.Rounded.PlayArrow,
+                    label = stringResource(R.string.shell_launch_game),
+                    onClick = launchGame
+                )
             }
             }
             if (showAppActions) {

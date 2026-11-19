@@ -16,7 +16,8 @@
 # --- JNI --------------------------------------------------------------------
 # Native entry points are resolved by their mangled names
 # (Java_com_sbro_emucorea_core_NativePpsspp_*,
-#  Java_com_sbro_emucorea_discord_DiscordNative_*), so class and method names
+#  Java_com_sbro_emucorea_discord_DiscordNative_*,
+#  Java_com_sbro_emucorea_xmb_XmbNative_*), so class and method names
 # must stay stable in release builds.
 -keepclasseswithmembers,includedescriptorclasses class com.sbro.emucorea.core.NativePpsspp {
     native <methods>;
@@ -24,10 +25,19 @@
 -keepclasseswithmembers,includedescriptorclasses class com.sbro.emucorea.discord.DiscordNative {
     native <methods>;
 }
+-keepclasseswithmembers,includedescriptorclasses class com.sbro.emucorea.xmb.XmbNative {
+    native <methods>;
+}
 # The core resolves these by name from the native side: TextRenderer draws the
 # PPGe dialogs and PspStorageBridge opens SAF descriptors.
 -keep class org.ppsspp.ppsspp.TextRenderer { *; }
 -keep class com.sbro.emucorea.core.PspStorageBridge { *; }
+# The native XMB UI (libemucorea_xmb.so / xmb_jni.cpp) resolves these classes
+# and static methods via FindClass / GetStaticMethodID for host callbacks,
+# UI sound playback, and system font glyph rasterization.
+-keep class com.sbro.emucorea.xmb.XmbHost { *; }
+-keep class com.sbro.emucorea.xmb.XmbAudio { *; }
+-keep class com.sbro.emucorea.xmb.XmbFontFallback { *; }
 
 # --- RetroAchievements ------------------------------------------------------
 # achievements_bridge.cpp resolves the HTTP bridge object, its static request
