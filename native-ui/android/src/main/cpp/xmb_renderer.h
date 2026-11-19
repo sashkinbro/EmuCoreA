@@ -40,7 +40,7 @@ public:
 	void Resize(int width, int height);
 	void Draw();
 	void KeyPressed(Key key);
-	void SetGames(const std::vector<std::string> &titles);
+	void SetGames(const std::vector<std::string> &titles, const std::vector<std::string> &icon_paths);
 	std::pair<int, int> GetState();
 	void SetState(int category, int item);
 	void Shutdown();
@@ -56,9 +56,15 @@ private:
 		std::string title;
 		std::string subtitle;
 		std::string texture_name;
+		std::string icon_path;
 		bool disabled = false;
 		bool is_game = false;
 		int game_index = -1;
+
+		Item() = default;
+		Item(std::string title, std::string subtitle, std::string texture, bool disabled_item = false)
+			: title(std::move(title)), subtitle(std::move(subtitle)),
+			  texture_name(std::move(texture)), disabled(disabled_item) {}
 	};
 
 	bool BuildProgram();
@@ -70,6 +76,7 @@ private:
 	bool LoadTexture(const std::string &name, const std::string &relative_path);
 	const Texture *GlyphTexture(uint32_t codepoint);
 	const Texture *ShadowGlyphTexture(uint32_t codepoint);
+	const Texture *TextureForPath(const std::string &path);
 	void DrawTexture(const Texture &texture, float center_x, float center_y, float scale, const float color[4]);
 	void DrawTextureUv(const Texture &texture, float center_x, float center_y, float scale,
 	                   const float color[4], float u0, float v0, float u1, float v1);
@@ -91,6 +98,7 @@ private:
 	GLint u_color_ = -1;
 	GLint u_texture_ = -1;
 	std::unordered_map<std::string, Texture> textures_;
+	std::unordered_map<std::string, Texture> image_textures_;
 	std::unordered_map<uint32_t, Texture> glyph_textures_;
 	std::unordered_map<uint32_t, Texture> shadow_glyph_textures_;
 	PgfFont font_;

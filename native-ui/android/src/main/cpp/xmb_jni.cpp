@@ -86,26 +86,31 @@ void GameSelected(int index) {
 }  // namespace xmb
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_sbro_emucorea_xmb_XmbNative_nativeSetGames(JNIEnv *env, jclass, jobjectArray games) {
-	std::vector<std::string> titles;
-	if (games != nullptr) {
-		const jsize count = env->GetArrayLength(games);
-		titles.reserve((size_t)count);
+Java_com_sbro_emucorea_xmb_XmbNative_nativeSetGames(JNIEnv *env, jclass, jobjectArray games,
+                                                     jobjectArray icons) {
+	auto collect = [&](jobjectArray array) {
+		std::vector<std::string> values;
+		if (array == nullptr) {
+			return values;
+		}
+		const jsize count = env->GetArrayLength(array);
+		values.reserve((size_t)count);
 		for (jsize i = 0; i < count; ++i) {
-			auto title = reinterpret_cast<jstring>(env->GetObjectArrayElement(games, i));
-			if (title == nullptr) {
-				titles.emplace_back();
+			auto value = reinterpret_cast<jstring>(env->GetObjectArrayElement(array, i));
+			if (value == nullptr) {
+				values.emplace_back();
 				continue;
 			}
-			const char *chars = env->GetStringUTFChars(title, nullptr);
+			const char *chars = env->GetStringUTFChars(value, nullptr);
 			if (chars != nullptr) {
-				titles.emplace_back(chars);
-				env->ReleaseStringUTFChars(title, chars);
+				values.emplace_back(chars);
+				env->ReleaseStringUTFChars(value, chars);
 			}
-			env->DeleteLocalRef(title);
+			env->DeleteLocalRef(value);
 		}
-	}
-	g_renderer.SetGames(titles);
+		return values;
+	};
+	g_renderer.SetGames(collect(games), collect(icons));
 }
 
 extern "C" JNIEXPORT jstring JNICALL

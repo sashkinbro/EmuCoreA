@@ -7,6 +7,8 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -15,10 +17,13 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import com.sbro.emucorea.core.PspGameMetadataReader
 import com.sbro.emucorea.data.GameItem
 import com.sbro.emucorea.xmb.XmbHost
 import com.sbro.emucorea.xmb.XmbNative
 import com.sbro.emucorea.xmb.XmbSurfaceRenderer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Compose host for the native PSP XMB. The GL scene owns the rendering; this
@@ -34,6 +39,14 @@ fun XmbScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentGames = rememberUpdatedState(games)
     val currentSelection = rememberUpdatedState(onGameSelected)
+    val iconPaths by produceState(initialValue = emptyArray<String>(), games, context) {
+        value = withContext(Dispatchers.IO) {
+            games.map { game ->
+                runCatching { PspGameMetadataReader.extractIcon0(context, game.path) }.getOrNull().orEmpty()
+            }.toTypedArray()
+        }
+    }
+    val currentIcons = rememberUpdatedState(iconPaths)
     val preferences = remember(context) {
         context.getSharedPreferences("xmb_state", Context.MODE_PRIVATE)
     }
@@ -55,6 +68,7 @@ fun XmbScreen(
     }
 
     val lastAppliedTitles = remember { object { var value: Array<String>? = null } }
+    val lastAppliedIcons = remember { object { var value: Array<String>? = null } }
     val surface = remember(context) {
         var downX = 0f
         var downY = 0f
@@ -66,8 +80,8 @@ fun XmbScreen(
                     queueEvent {
                         // onReady can arrive after the first recomposition; always
                         // use the latest list, not the empty initial capture.
-                        val latest = currentGames.value.map { game -> game.title }.toTypedArray()
-                        XmbNative.nativeSetGames(latest)
+                        val latestTitles = currentGames.value.map { game -> game.title }.toTypedArray()
+                        XmbNative.nativeSetGames(latestTitles, currentIcons.value)
                         XmbNative.nativeSetState(initialState[0], initialState[1])
                     }
                 }
@@ -154,10 +168,14 @@ fun XmbScreen(
         update = {
             // The list can change after a rescan or install; the scene replaces
             // its Game column in place and keeps the rest of the state.
-            val latest = currentGames.value.map { game -> game.title }.toTypedArray()
-            if (!latest.contentEquals(lastAppliedTitles.value)) {
-                lastAppliedTitles.value = latest
-                it.queueEvent { XmbNative.nativeSetGames(latest) }
+            val latestTitles = currentGames.value.map { game -> game.title }.toTypedArray()
+            val latestIcons = currentIcons.value
+            val changed = !latestTitles.contentEquals(lastAppliedTitles.value) ||
+                !latestIcons.contentEquals(lastAppliedIcons.value)
+            if (changed) {
+                lastAppliedTitles.value = latestTitles
+                lastAppliedIcons.value = latestIcons
+                it.queueEvent { XmbNative.nativeSetGames(latestTitles, latestIcons) }
             }
         },
     )

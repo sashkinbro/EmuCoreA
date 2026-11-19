@@ -21,7 +21,7 @@ object XmbNative {
 
     external fun nativeDraw()
 
-    external fun nativeSetGames(titles: Array<String>)
+    external fun nativeSetGames(titles: Array<String>, icons: Array<String>)
 
     external fun nativeGetState(): IntArray
 

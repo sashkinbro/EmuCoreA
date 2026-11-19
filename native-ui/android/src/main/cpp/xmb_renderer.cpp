@@ -553,6 +553,33 @@ void XmbRenderer::DrawTextureCrop(const Texture &texture, float center_x, float 
 	           width * scale, height * scale, color, u0, v0, u1, v1);
 }
 
+const XmbRenderer::Texture *XmbRenderer::TextureForPath(const std::string &path) {
+	auto found = image_textures_.find(path);
+	if (found != image_textures_.end()) {
+		return found->second.id != 0 ? &found->second : nullptr;
+	}
+	Texture texture;
+	std::vector<uint8_t> file;
+	int width = 0;
+	int height = 0;
+	std::vector<uint8_t> rgba;
+	if (ReadFile(path, &file) && DecodePng(file, &width, &height, &rgba)) {
+		texture.width = width;
+		texture.height = height;
+		glGenTextures(1, &texture.id);
+		glBindTexture(GL_TEXTURE_2D, texture.id);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	} else {
+		__android_log_print(ANDROID_LOG_WARN, kTag, "cannot load game icon %s", path.c_str());
+	}
+	const auto inserted = image_textures_.emplace(path, texture);
+	return inserted.first->second.id != 0 ? &inserted.first->second : nullptr;
+}
+
 const XmbRenderer::Texture *XmbRenderer::GlyphTexture(uint32_t codepoint) {
 	auto found = glyph_textures_.find(codepoint);
 	if (found != glyph_textures_.end()) {
@@ -763,7 +790,8 @@ void XmbRenderer::DrawCategoryRow() {
 	}
 }
 
-void XmbRenderer::SetGames(const std::vector<std::string> &titles) {
+void XmbRenderer::SetGames(const std::vector<std::string> &titles,
+                           const std::vector<std::string> &icon_paths) {
 	std::lock_guard<std::mutex> lock(mutex_);
 	game_titles_ = titles;
 	std::vector<Item> column;
@@ -772,6 +800,7 @@ void XmbRenderer::SetGames(const std::vector<std::string> &titles) {
 		Item item;
 		item.title = titles[index];
 		item.texture_name = "item_game";
+		item.icon_path = index < (int)icon_paths.size() ? icon_paths[index] : std::string();
 		item.is_game = true;
 		item.game_index = index;
 		column.push_back(item);
@@ -848,10 +877,16 @@ void XmbRenderer::DrawItemColumn(const std::vector<Item> &list, int selected, fl
 		}
 		const float color[4] = {1.0f, 1.0f, 1.0f, alpha};
 		auto texture = textures_.find(list[index].texture_name);
-		if (texture != textures_.end()) {
+		const Texture *icon_texture = texture != textures_.end() ? &texture->second : nullptr;
+		if (list[index].is_game && !list[index].icon_path.empty()) {
+			if (const Texture *embedded = TextureForPath(list[index].icon_path)) {
+				icon_texture = embedded;
+			}
+		}
+		if (icon_texture != nullptr) {
 			float icon_scale = 1.0f;
 			if (list[index].is_game) {
-				const float max_dimension = std::max(1, std::max(texture->second.width, texture->second.height));
+				const float max_dimension = std::max(1, std::max(icon_texture->width, icon_texture->height));
 				icon_scale = 48.0f / max_dimension;
 			}
 			auto glow = textures_.find("focus_glow");
@@ -859,7 +894,7 @@ void XmbRenderer::DrawItemColumn(const std::vector<Item> &list, int selected, fl
 				const float glow_color[4] = {1.0f, 1.0f, 1.0f, 0.65f * focus * global_alpha};
 				DrawTexture(glow->second, kItemIconX, y, list[index].is_game ? 0.8f : 0.65f, glow_color);
 			}
-			DrawTexture(texture->second, kItemIconX, y, icon_scale, color);
+			DrawTexture(*icon_texture, kItemIconX, y, icon_scale, color);
 		}
 		if (!font_loaded_) {
 			continue;
@@ -939,6 +974,12 @@ void XmbRenderer::Draw() {
 }
 
 void XmbRenderer::Shutdown() {
+	for (auto &entry : image_textures_) {
+		if (entry.second.id) {
+			glDeleteTextures(1, &entry.second.id);
+		}
+	}
+	image_textures_.clear();
 	for (auto &entry : shadow_glyph_textures_) {
 		if (entry.second.id) {
 			glDeleteTextures(1, &entry.second.id);
