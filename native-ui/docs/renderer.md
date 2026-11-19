@@ -25,8 +25,10 @@ MainActivity (preview)
 - `pgf_font.cpp`: a reader for the firmware fonts, ported from the inspected
   PGF layout. It decodes the char map, the compact metric tables, the
   nibble-RLE glyph bitmaps and the V_ROWS-to-row-major transposition. Glyph
-  textures are created lazily, one per codepoint; the shadow pass reuses the
-  same glyph with a 1-pixel offset.
+  textures are created lazily, one per codepoint. Text shadows are a one-pixel
+  offset copy of the main glyph; the PGF shadow sub-glyph records are not used
+  because their layout is still unresolved and reading them as main glyphs
+  produced the black stripes seen in testing.
 - `xmb_renderer.cpp`: GLES 3 shader, one dynamic quad buffer, a texture cache,
   and the measured category/item anchors from `scene/categories.json`.
 - The wave is the firmware's own `mdl_bg.gmo` (22x11 control grid, two morph

@@ -605,17 +605,8 @@ float XmbRenderer::DrawText(const std::string &text, float x, float baseline, fl
 			const float width = glyph->width * scale;
 			const float height = glyph->height * scale;
 			if (shadow) {
-				const FontGlyph *shadow_glyph = font_.Glyph(codepoint, true);
-				const Texture *shadow_texture = ShadowGlyphTexture(codepoint);
-				if (shadow_glyph && shadow_texture) {
-					glBindTexture(GL_TEXTURE_2D, shadow_texture->id);
-					DrawQuad(x + shadow_glyph->left * scale, baseline - shadow_glyph->top * scale,
-					         shadow_glyph->width * scale, shadow_glyph->height * scale, shadow_color);
-				} else {
-					glBindTexture(GL_TEXTURE_2D, texture->id);
-					DrawQuad(glyph_x + 1.0f, glyph_y + 1.0f, width, height, shadow_color);
-				}
 				glBindTexture(GL_TEXTURE_2D, texture->id);
+				DrawQuad(glyph_x + 1.0f, glyph_y + 1.0f, width, height, shadow_color);
 			}
 			DrawQuad(glyph_x, glyph_y, width, height, color);
 		}
