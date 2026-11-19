@@ -6,6 +6,13 @@ add_library(emucorea_xmb SHARED
     xmb_renderer.cpp
     png_image.cpp
     pgf_font.cpp
+    third_party/vlnky/psp_wave.cpp
+    third_party/vlnky/rco_error.cpp
+    third_party/vlnky/rco/rco_reader.cpp
+)
+
+target_include_directories(emucorea_xmb PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/vlnky
 )
 
 target_compile_features(emucorea_xmb PRIVATE cxx_std_17)

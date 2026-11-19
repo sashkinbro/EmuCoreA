@@ -82,9 +82,10 @@ def extract_into(flash0: Path, staging: Path) -> dict:
     (staging / "audio").mkdir()
     (staging / "fonts").mkdir()
     (staging / "models").mkdir()
+    (staging / "rco").mkdir()
 
     files: list[dict] = []
-    counts = {"images": 0, "audio": 0, "models": 0, "fonts": 0, "raw": 0}
+    counts = {"images": 0, "audio": 0, "models": 0, "fonts": 0, "raw": 0, "rco": 0}
 
     for name in RCO_FILES:
         path = resource_dir / name
@@ -193,6 +194,20 @@ def extract_into(flash0: Path, staging: Path) -> dict:
         })
         counts["fonts"] += 1
 
+    # The wave needs the RCO's ModelObject transform (position/scale/tint), not
+    # just the GMO vertices. Keep this small container so the runtime can load
+    # the exact transform instead of guessing it.
+    background = resource_dir / "system_plugin_bg.rco"
+    if background.is_file():
+        destination = staging / "rco" / background.name
+        destination.write_bytes(background.read_bytes())
+        files.append({
+            "kind": "rco", "file": str(destination.relative_to(staging)),
+            "sha256_file": sha256(destination.read_bytes()),
+            "sha256_source": sha256(background.read_bytes()),
+        })
+        counts["rco"] += 1
+
     manifest = {
         "schema": 1,
         "generated_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -225,7 +240,7 @@ def main(argv: list[str]) -> int:
     print(f"wrote {args.out}: "
           f"{manifest['counts']['images']} images, {manifest['counts']['audio']} sounds, "
           f"{manifest['counts']['models']} models, {manifest['counts']['fonts']} fonts, "
-          f"{manifest['counts']['raw']} raw fallbacks")
+          f"{manifest['counts']['rco']} rco, {manifest['counts']['raw']} raw fallbacks")
     return 0
 
 

@@ -109,8 +109,10 @@ native-ui/
 - [x] PGF font reader and native text with original glyph bitmaps
 - [x] Live navigation: D-pad/touch, measured scroll/slide easing, original
       navigation sounds
-- [ ] Game column renderer, animations and sounds (wave, focus glow, clock and
-      the game backgrounds are still missing)
+- [x] Live wave mesh, background ramp, clock and battery (wave placement and
+      glow are not yet pixel-exact)
+- [ ] Game column renderer parity (focus glow, wave/theme exactness, game
+      backgrounds)
 - [ ] Frame-for-frame comparison against the firmware XMB
 - [ ] Host integration in place of the current 3D carousel
 

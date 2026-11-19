@@ -29,6 +29,15 @@ MainActivity (preview)
   same glyph with a 1-pixel offset.
 - `xmb_renderer.cpp`: GLES 3 shader, one dynamic quad buffer, a texture cache,
   and the measured category/item anchors from `scene/categories.json`.
+- The wave is the firmware's own `mdl_bg.gmo` (22x11 control grid, two morph
+  targets, a 128x128 reflection map, a 1500-frame track at 30 fps), parsed by
+  the vendored Vlnky reader and tessellated every frame. It is drawn with the
+  PSP's sphere-map/additive blend. The background ramp behind it is measured
+  from the reference frames; its placement and intensity are still being
+  matched and are not yet a pixel-exact wave.
+- The clock uses the firmware PGF font and the battery the original
+  `system_plugin_fg/tex_battery` sheet (top frame). Selected item icons get a
+  low-alpha multi-sample halo.
 - The viewport keeps the 480x272 aspect ratio and letterboxes on wider
   surfaces. Coordinates in the scene are always PSP pixels.
 
@@ -69,17 +78,19 @@ sequence and does not crash.
 
 ## Deliberately not here yet
 
-- The wave background (`system_plugin_bg.rco` model and curves).
-- Focus glow, shadows, reflections, icon cross-fades and row scrolling.
-- The clock, battery and media indicators.
+- Exact wave placement/colour and the real theme ramp (the current geometry is
+  the original mesh but the camera offset and additive strength are
+  approximations).
+- Real focus glow/shadow filtering (the current halo is a cheap multi-sample
+  approximation), reflections and icon cross-fades.
 - Game backgrounds and preview playback when a game is selected.
 - Exact per-element font sizes for every text style and the real shadow
   rendering (the glyphs are exact, the scale/baseline of each style is still
   being matched).
 
 Those are parity work, and none of them is represented by an approximation in
-the scene. The provisional flat colour is visibly different from the reference
-and is listed here instead of being called done.
+the scene. The provisional wave/background values are visibly different from
+the reference and are listed here instead of being called done.
 
 ## Running the preview
 

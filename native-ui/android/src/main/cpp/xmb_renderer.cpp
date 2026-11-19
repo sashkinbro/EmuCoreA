@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <ctime>
 #include <vector>
 
 #include "png_image.h"
@@ -64,6 +65,86 @@ void main() {
 }
 )";
 
+const char *kWaveVertexShader = R"(#version 300 es
+layout(location = 0) in vec3 aPos;
+layout(location = 1) in vec3 aNormal;
+uniform mat4 uMvp;
+out vec3 vNormal;
+void main() {
+	vNormal = aNormal;
+	gl_Position = uMvp * vec4(aPos, 1.0);
+}
+)";
+
+const char *kWaveFragmentShader = R"(#version 300 es
+precision mediump float;
+in vec3 vNormal;
+uniform sampler2D uTexture;
+uniform vec4 uColor;
+out vec4 fragColor;
+void main() {
+	vec3 n = normalize(vNormal);
+	vec2 uv = vec2(n.x, -n.y) * 0.5 + 0.5;
+	vec3 tex = texture(uTexture, uv).rgb;
+	fragColor = vec4(tex * uColor.rgb, 0.0);
+}
+)";
+
+constexpr float kWaveYOffsetPixels = 0.0f;
+constexpr float kWaveBrightness = 0.45f;
+constexpr float kWaveTint[3] = {1.0f, 0.55f, 0.20f};
+constexpr float kWaveNdcScaleY = 0.68f;
+constexpr float kWaveNdcOffsetY = -0.40f;
+
+// Row medians measured from the 6.60 default theme. The wave adds moving
+// highlights on top rather than carrying the whole lower-half colour.
+const uint8_t kBackgroundRows[17][3] = {
+	{107, 46, 27}, {99, 39, 23}, {96, 37, 22}, {90, 33, 20}, {86, 30, 18},
+	{81, 27, 16}, {77, 24, 14}, {74, 21, 12}, {96, 29, 12}, {144, 49, 12},
+	{153, 52, 12}, {169, 58, 12}, {182, 62, 12}, {185, 63, 12}, {183, 62, 11},
+	{182, 62, 10}, {182, 62, 10},
+};
+
+void MultiplyMatrix(const float a[16], const float b[16], float out[16]) {
+	for (int column = 0; column < 4; ++column) {
+		for (int row = 0; row < 4; ++row) {
+			float value = 0.0f;
+			for (int k = 0; k < 4; ++k) {
+				value += a[k * 4 + row] * b[column * 4 + k];
+			}
+			out[column * 4 + row] = value;
+		}
+	}
+}
+
+void BuildWaveMvp(float out[16]) {
+	constexpr float kFovY = 30.0f;
+	constexpr float kNearFactor = 0.1f;
+	constexpr float kFarFactor = 4.0f;
+	const float aspect = kScreenWidth / kScreenHeight;
+	const float distance = (kScreenHeight * 0.5f) / std::tan(kFovY * 0.5f * 3.14159265358979323846f / 180.0f);
+	const float f = 1.0f / std::tan(kFovY * 0.5f * 3.14159265358979323846f / 180.0f);
+	const float near_plane = distance * kNearFactor;
+	const float far_plane = distance * kFarFactor;
+	float projection[16] = {0.0f};
+	projection[0] = f / aspect;
+	projection[5] = f;
+	projection[10] = (far_plane + near_plane) / (near_plane - far_plane);
+	projection[11] = -1.0f;
+	projection[14] = (2.0f * far_plane * near_plane) / (near_plane - far_plane);
+	float view[16] = {1.0f, 0.0f, 0.0f, 0.0f,
+	                  0.0f, 1.0f, 0.0f, 0.0f,
+	                  0.0f, 0.0f, 1.0f, 0.0f,
+	                  0.0f, 0.0f, -distance, 1.0f};
+	MultiplyMatrix(projection, view, out);
+	// Place the sheet in the lower half of the screen; the raw model is centred.
+	for (int column = 0; column < 4; ++column) {
+		out[column * 4 + 1] *= kWaveNdcScaleY;
+	}
+	out[13] = out[13] * kWaveNdcScaleY + kWaveNdcOffsetY;
+	out[13] -= 2.0f * kWaveYOffsetPixels / kScreenHeight;
+}
+
 GLuint CompileShader(GLenum type, const char *source) {
 	GLuint shader = glCreateShader(type);
 	glShaderSource(shader, 1, &source, nullptr);
@@ -121,6 +202,7 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"item_savedata", "images/topmenu_icon/EJ.png"},
 		{"item_memstick", "images/topmenu_icon/BI.png"},
 		{"item_update", "images/topmenu_icon/EH.png"},
+		{"battery", "images/system_plugin_fg/tex_battery.png"},
 	};
 	for (const auto &asset : assets) {
 		LoadTexture(asset.name, asset.path);
@@ -141,6 +223,24 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		__android_log_print(ANDROID_LOG_INFO, kTag, "font loaded: %s", font_.name().c_str());
 	} else {
 		__android_log_print(ANDROID_LOG_WARN, kTag, "fonts/ltn0.pgf could not be loaded");
+	}
+	wave_loaded_ = LoadWave();
+	if (background_texture_ == 0) {
+		std::vector<uint8_t> rgba(sizeof(kBackgroundRows) / sizeof(kBackgroundRows[0]) * 4);
+		for (size_t i = 0; i < sizeof(kBackgroundRows) / sizeof(kBackgroundRows[0]); ++i) {
+			rgba[i * 4 + 0] = kBackgroundRows[i][0];
+			rgba[i * 4 + 1] = kBackgroundRows[i][1];
+			rgba[i * 4 + 2] = kBackgroundRows[i][2];
+			rgba[i * 4 + 3] = 255;
+		}
+		glGenTextures(1, &background_texture_);
+		glBindTexture(GL_TEXTURE_2D, background_texture_);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, (GLsizei)(sizeof(kBackgroundRows) / sizeof(kBackgroundRows[0])),
+		             0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	}
 	__android_log_print(ANDROID_LOG_INFO, kTag, "scene initialized with %zu textures", textures_.size());
 	return true;
@@ -176,6 +276,167 @@ bool XmbRenderer::BuildProgram() {
 	return true;
 }
 
+bool XmbRenderer::BuildWaveProgram() {
+	GLuint vertex = CompileShader(GL_VERTEX_SHADER, kWaveVertexShader);
+	GLuint fragment = CompileShader(GL_FRAGMENT_SHADER, kWaveFragmentShader);
+	if (!vertex || !fragment) {
+		return false;
+	}
+	wave_program_ = glCreateProgram();
+	glAttachShader(wave_program_, vertex);
+	glAttachShader(wave_program_, fragment);
+	glLinkProgram(wave_program_);
+	glDeleteShader(vertex);
+	glDeleteShader(fragment);
+	GLint linked = 0;
+	glGetProgramiv(wave_program_, GL_LINK_STATUS, &linked);
+	if (!linked) {
+		GLint length = 0;
+		glGetProgramiv(wave_program_, GL_INFO_LOG_LENGTH, &length);
+		std::string log((size_t)length + 1, '\0');
+		glGetProgramInfoLog(wave_program_, length, nullptr, log.data());
+		__android_log_print(ANDROID_LOG_ERROR, kTag, "wave link: %s", log.c_str());
+		glDeleteProgram(wave_program_);
+		wave_program_ = 0;
+		return false;
+	}
+	wave_mvp_ = glGetUniformLocation(wave_program_, "uMvp");
+	wave_color_ = glGetUniformLocation(wave_program_, "uColor");
+	wave_sampler_ = glGetUniformLocation(wave_program_, "uTexture");
+	return true;
+}
+
+bool XmbRenderer::LoadWave() {
+	PspWaveLoadResult result;
+	std::vector<uint8_t> gmo;
+	if (!ReadFile(root_ + "/models/system_plugin_bg/mdl_bg.gmo", &gmo)) {
+		__android_log_print(ANDROID_LOG_WARN, kTag, "missing mdl_bg.gmo");
+		return false;
+	}
+	result = parsePspWaveGmo(gmo, wave_);
+	__android_log_print(ANDROID_LOG_INFO, kTag, "wave: ok=%d %s", result.ok ? 1 : 0, result.error.c_str());
+	if (!result.ok) {
+		return false;
+	}
+	__android_log_print(ANDROID_LOG_INFO, kTag,
+	                    "wave %dx%d morph=%d tex=%dx%d loop=%.1f @%.1f alpha=%.2f pos=%.2f,%.2f,%.2f scale=%.2f",
+	                    wave_.uCount, wave_.vCount, wave_.morphCount, wave_.texW, wave_.texH,
+	                    wave_.loopFrames(), wave_.frameRate, wave_.alpha,
+	                    wave_.modelPos[0], wave_.modelPos[1], wave_.modelPos[2], wave_.modelScale[0]);
+	if (!wave_.rgba.empty()) {
+		unsigned long long sum[3] = {0, 0, 0};
+		uint8_t high[3] = {0, 0, 0};
+		for (size_t i = 0; i + 3 < wave_.rgba.size(); i += 4) {
+			for (int c = 0; c < 3; ++c) {
+				sum[c] += wave_.rgba[i + c];
+				high[c] = std::max(high[c], wave_.rgba[i + c]);
+			}
+		}
+		const size_t pixels = wave_.rgba.size() / 4;
+		__android_log_print(ANDROID_LOG_INFO, kTag, "wave texture avg %.0f,%.0f,%.0f max %d,%d,%d",
+		                    (double)sum[0] / (double)pixels, (double)sum[1] / (double)pixels,
+		                    (double)sum[2] / (double)pixels, high[0], high[1], high[2]);
+	}
+	wave_tessellator_.setup(wave_, 64, 24);
+	if (!wave_tessellator_.valid()) {
+		return false;
+	}
+	wave_vertices_.resize((size_t)wave_tessellator_.uSamples() * wave_tessellator_.vSamples() * 6);
+	if (!BuildWaveProgram()) {
+		return false;
+	}
+
+	glGenVertexArrays(1, &wave_vao_);
+	glGenBuffers(1, &wave_vbo_);
+	glGenBuffers(1, &wave_ebo_);
+	glBindVertexArray(wave_vao_);
+	glBindBuffer(GL_ARRAY_BUFFER, wave_vbo_);
+	glBufferData(GL_ARRAY_BUFFER, wave_vertices_.size() * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (const void *)0);
+	glEnableVertexAttribArray(1);
+	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (const void *)(sizeof(float) * 3));
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, wave_ebo_);
+	const auto &indices = wave_tessellator_.indices();
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), indices.data(), GL_STATIC_DRAW);
+	glBindVertexArray(0);
+
+	if (!wave_.rgba.empty() && wave_.texW > 0 && wave_.texH > 0) {
+		glGenTextures(1, &wave_texture_);
+		glBindTexture(GL_TEXTURE_2D, wave_texture_);
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, wave_.texW, wave_.texH, 0, GL_RGBA, GL_UNSIGNED_BYTE, wave_.rgba.data());
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	}
+	return true;
+}
+
+void XmbRenderer::DrawBackground() {
+	if (background_texture_ == 0) {
+		return;
+	}
+	const float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+	glBindTexture(GL_TEXTURE_2D, background_texture_);
+	DrawQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, color);
+}
+
+void XmbRenderer::DrawStatusBar() {
+	if (!font_loaded_) {
+		return;
+	}
+	char clock[32] = {0};
+	const std::time_t now = std::time(nullptr);
+	std::tm local{};
+	localtime_r(&now, &local);
+	std::strftime(clock, sizeof(clock), "%d/%m %H:%M", &local);
+	const float scale = 0.90f;
+	const float width = font_.TextWidth(clock, scale);
+	const float color[4] = {1.0f, 1.0f, 1.0f, 0.95f};
+	DrawText(clock, 444.0f - width, 20.0f, scale, color, true);
+	auto battery = textures_.find("battery");
+	if (battery != textures_.end()) {
+		DrawTextureUv(battery->second, 464.0f, 12.0f, 1.0f, color, 0.0f, 0.0f, 1.0f, 0.25f);
+	}
+}
+
+void XmbRenderer::DrawWave(float dt) {
+	if (!wave_loaded_ || wave_program_ == 0) {
+		return;
+	}
+	const float loop = wave_.loopFrames();
+	if (loop > 0.0f) {
+		wave_frame_ = std::fmod(wave_frame_ + dt * wave_.frameRate, loop);
+	}
+	wave_tessellator_.evaluate(wave_, wave_.frameStart + wave_frame_, wave_vertices_);
+	if (wave_vertices_.empty()) {
+		return;
+	}
+
+	glUseProgram(wave_program_);
+	glBindVertexArray(wave_vao_);
+	glBindBuffer(GL_ARRAY_BUFFER, wave_vbo_);
+	glBufferSubData(GL_ARRAY_BUFFER, 0, wave_vertices_.size() * sizeof(float), wave_vertices_.data());
+	float mvp[16];
+	BuildWaveMvp(mvp);
+	glUniformMatrix4fv(wave_mvp_, 1, GL_FALSE, mvp);
+	const float alpha = wave_.alpha * wave_.tint[3] * kWaveBrightness;
+	glUniform4f(wave_color_, wave_.diffuse[0] * wave_.tint[0] * alpha * kWaveTint[0],
+	            wave_.diffuse[1] * wave_.tint[1] * alpha * kWaveTint[1],
+	            wave_.diffuse[2] * wave_.tint[2] * alpha * kWaveTint[2], 1.0f);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, wave_texture_);
+	glUniform1i(wave_sampler_, 0);
+	glEnable(GL_BLEND);
+	glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE);
+	glDrawElements(GL_TRIANGLES, (GLsizei)wave_tessellator_.indices().size(), GL_UNSIGNED_INT, nullptr);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glBindVertexArray(0);
+}
+
 bool XmbRenderer::LoadTexture(const std::string &name, const std::string &relative_path) {
 	std::vector<uint8_t> file;
 	if (!ReadFile(root_ + "/" + relative_path, &file)) {
@@ -209,15 +470,20 @@ void XmbRenderer::Resize(int width, int height) {
 }
 
 void XmbRenderer::DrawQuad(float x, float y, float width, float height, const float color[4]) {
+	DrawQuadUv(x, y, width, height, color, 0.0f, 0.0f, 1.0f, 1.0f);
+}
+
+void XmbRenderer::DrawQuadUv(float x, float y, float width, float height, const float color[4],
+                             float u0, float v0, float u1, float v1) {
 	const float x1 = x + width;
 	const float y1 = y + height;
 	const float vertices[24] = {
-		x, y, 0.0f, 0.0f,
-		x1, y, 1.0f, 0.0f,
-		x, y1, 0.0f, 1.0f,
-		x1, y, 1.0f, 0.0f,
-		x1, y1, 1.0f, 1.0f,
-		x, y1, 0.0f, 1.0f,
+		x, y, u0, v0,
+		x1, y, u1, v0,
+		x, y1, u0, v1,
+		x1, y, u1, v0,
+		x1, y1, u1, v1,
+		x, y1, u0, v1,
 	};
 	glUniform4fv(u_color_, 1, color);
 	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
@@ -227,13 +493,18 @@ void XmbRenderer::DrawQuad(float x, float y, float width, float height, const fl
 
 void XmbRenderer::DrawTexture(const Texture &texture, float center_x, float center_y, float scale,
                               const float color[4]) {
+	DrawTextureUv(texture, center_x, center_y, scale, color, 0.0f, 0.0f, 1.0f, 1.0f);
+}
+
+void XmbRenderer::DrawTextureUv(const Texture &texture, float center_x, float center_y, float scale,
+                                const float color[4], float u0, float v0, float u1, float v1) {
 	if (texture.id == 0) {
 		return;
 	}
 	const float width = texture.width * scale;
 	const float height = texture.height * scale;
 	glBindTexture(GL_TEXTURE_2D, texture.id);
-	DrawQuad(center_x - width * 0.5f, center_y - height * 0.5f, width, height, color);
+	DrawQuadUv(center_x - width * 0.5f, center_y - height * 0.5f, width, height, color, u0, v0, u1, v1);
 }
 
 const XmbRenderer::Texture *XmbRenderer::GlyphTexture(uint32_t codepoint) {
@@ -401,11 +672,18 @@ void XmbRenderer::DrawItems() {
 		if (y < -48.0f || y > kScreenHeight + 48.0f) {
 			continue;
 		}
-		const float focus = 1.0f - std::min(1.0f, std::fabs((float)index - scroll));
+		float focus = 1.0f - std::min(1.0f, std::fabs((float)index - scroll));
 		const float alpha = 0.55f + 0.45f * focus;
 		const float color[4] = {1.0f, 1.0f, 1.0f, alpha};
 		auto texture = textures_.find(items_[index].texture_name);
 		if (texture != textures_.end()) {
+			if (focus > 0.6f) {
+				const float glow[4] = {1.0f, 1.0f, 1.0f, 0.10f * focus};
+				const float offsets[5][2] = {{0.0f, 0.0f}, {-3.0f, 0.0f}, {3.0f, 0.0f}, {0.0f, -3.0f}, {0.0f, 3.0f}};
+				for (const auto &offset : offsets) {
+					DrawTexture(texture->second, kItemIconX + offset[0], y + offset[1], 1.35f, glow);
+				}
+			}
 			DrawTexture(texture->second, kItemIconX, y, 1.0f, color);
 		}
 		if (!font_loaded_) {
@@ -457,9 +735,19 @@ void XmbRenderer::Draw() {
 	glUniform1i(u_texture_, 0);
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(vertex_array_);
+	DrawBackground();
+
+	DrawWave(dt);
+
+	glUseProgram(program_);
+	glUniform2f(u_screen_, kScreenWidth, kScreenHeight);
+	glUniform1i(u_texture_, 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindVertexArray(vertex_array_);
 
 	DrawItems();
 	DrawCategoryRow();
+	DrawStatusBar();
 
 	glBindVertexArray(0);
 	if (!logged_gl_error_) {
