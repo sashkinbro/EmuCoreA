@@ -2086,7 +2086,7 @@
     <string name="xmb_opt_auto">Automaticky</string>
     <string name="xmb_ch_prefix">Kan.</string>
     <string name="xmb_setting_rss_auto">Automatická aktualizace</string>
-    <string name="xmb_notice_update_1">Systémový software PSP™ 4000 má verzi 7.1.</string>
+    <string name="xmb_notice_update_1">Systémový software vašeho systému PSP™ 4000 je verze 7.1 EmuCore Edition</string>
     <string name="xmb_notice_update_2">Aktualizace není nutná.</string>
     <string name="xmb_usb_status">Režim USB Memory Stick™</string>
     <string name="xmb_games_count_lbl">Nainstalované hry</string>
@@ -2121,4 +2121,13 @@
     <string name="xmb_bt_connected">Připojeno</string>
     <string name="xmb_notice_bt_on">Bluetooth® je zapnutý. Spárované ovladače a zvuková zařízení jsou aktivní.</string>
     <string name="xmb_notice_bt_off">Bluetooth® je na tomto zařízení vypnutý.</string>
+    <string name="xmb_opt_aspect_auto">Auto (Celá obrazovka)</string>
+    <string name="xmb_touch_guide_title">Dotykové ovládání a gesta</string>
+    <string name="xmb_touch_guide_1">Přejetí Nahoru / Dolů / Vlevo / Vpravo: Navigace v XMB</string>
+    <string name="xmb_touch_guide_2">Klepnutí: Potvrdit nebo spustit hru</string>
+    <string name="xmb_touch_guide_3">Dlouhé podržení (nebo △): Nabídka možností</string>
+    <string name="xmb_touch_guide_4">Klepnutí 2 prsty (nebo ○): Zpět nebo ukončit režim PSP</string>
+    <string name="xmb_touch_guide_skip">Klepnutím zavřete</string>
+    <string name="xmb_hint_options">Možnosti</string>
+    <string name="xmb_setting_touch_ctrl">Dotykové ovládání</string>
 </resources>

@@ -2065,7 +2065,7 @@
     <string name="xmb_opt_auto">Otomatik</string>
     <string name="xmb_ch_prefix">Kan.</string>
     <string name="xmb_setting_rss_auto">Oto-Güncelleme</string>
-    <string name="xmb_notice_update_1">PSP™ 4000 sistem yazılımınız 7.1 sürümündedir.</string>
+    <string name="xmb_notice_update_1">PSP™ 4000 sistem yazılımınız sürüm 7.1 EmuCore Edition</string>
     <string name="xmb_notice_update_2">Güncelleme gerekmemektedir.</string>
     <string name="xmb_usb_status">Memory Stick™ USB Modu</string>
     <string name="xmb_games_count_lbl">Yüklü Oyunlar</string>
@@ -2100,4 +2100,13 @@
     <string name="xmb_bt_connected">Bağlı</string>
     <string name="xmb_notice_bt_on">Bluetooth® etkin. Eşleştirilmiş kontrolcüler ve ses cihazları hazır.</string>
     <string name="xmb_notice_bt_off">Bu cihazda Bluetooth® kapalı.</string>
+    <string name="xmb_opt_aspect_auto">Otomatik (Tam Ekran)</string>
+    <string name="xmb_touch_guide_title">Dokunmatik ve Hareket Kontrolleri</string>
+    <string name="xmb_touch_guide_1">Yukarı / Aşağı / Sola / Sağa Kaydır: XMB Gezinme</string>
+    <string name="xmb_touch_guide_2">Dokun: Onayla veya oyunu başlat</string>
+    <string name="xmb_touch_guide_3">Uzun Bas (veya △): Seçenekler menüsü</string>
+    <string name="xmb_touch_guide_4">2 Parmakla Dokun (veya ○): Geri veya PSP modundan çık</string>
+    <string name="xmb_touch_guide_skip">Kapatmak için dokunun</string>
+    <string name="xmb_hint_options">Seçenekler</string>
+    <string name="xmb_setting_touch_ctrl">Dokunmatik Kontroller</string>
 </resources>

@@ -2064,7 +2064,7 @@
     <string name="xmb_opt_auto">自動</string>
     <string name="xmb_ch_prefix">Ch</string>
     <string name="xmb_setting_rss_auto">自動アップデート</string>
-    <string name="xmb_notice_update_1">お使いのPSP™ 4000のシステムソフトウェアはバージョン7.1です。</string>
+    <string name="xmb_notice_update_1">お使いのPSP™ 4000のシステムソフトウェアはバージョン 7.1 EmuCore Edition です</string>
     <string name="xmb_notice_update_2">アップデートの必要はありません。</string>
     <string name="xmb_usb_status">Memory Stick™ USBモード</string>
     <string name="xmb_games_count_lbl">ゲーム数</string>
@@ -2099,4 +2099,13 @@
     <string name="xmb_bt_connected">接続中</string>
     <string name="xmb_notice_bt_on">Bluetooth®は有効です。ペアリングされたコントローラーとオーディオ機器が使用可能です。</string>
     <string name="xmb_notice_bt_off">この機器のBluetooth®はオフになっています。</string>
+    <string name="xmb_opt_aspect_auto">自動 (フルスクリーン)</string>
+    <string name="xmb_touch_guide_title">タッチ＆ジェスチャー操作</string>
+    <string name="xmb_touch_guide_1">上下左右にスワイプ: XMBの移動</string>
+    <string name="xmb_touch_guide_2">タップ: 決定 / ゲーム起動</string>
+    <string name="xmb_touch_guide_3">長押し (または △): オプションメニュー</string>
+    <string name="xmb_touch_guide_4">2本指タップ (または ○): 戻る / PSPモード終了</string>
+    <string name="xmb_touch_guide_skip">タップして閉じる</string>
+    <string name="xmb_hint_options">オプション</string>
+    <string name="xmb_setting_touch_ctrl">タッチ操作</string>
 </resources>

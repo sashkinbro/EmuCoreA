@@ -2079,7 +2079,7 @@
     <string name="xmb_opt_auto">Otomatis</string>
     <string name="xmb_ch_prefix">Sal.</string>
     <string name="xmb_setting_rss_auto">Pembaruan Otomatis</string>
-    <string name="xmb_notice_update_1">Perangkat lunak sistem PSP™ 4000 Anda adalah versi 7.1.</string>
+    <string name="xmb_notice_update_1">Perangkat lunak sistem PSP™ 4000 Anda adalah versi 7.1 EmuCore Edition</string>
     <string name="xmb_notice_update_2">Tidak perlu memperbarui.</string>
     <string name="xmb_usb_status">Mode USB Memory Stick™</string>
     <string name="xmb_games_count_lbl">Game Terpasang</string>
@@ -2114,4 +2114,13 @@
     <string name="xmb_bt_connected">Terhubung</string>
     <string name="xmb_notice_bt_on">Bluetooth® aktif. Kontroler dan perangkat audio yang dipasangkan siap digunakan.</string>
     <string name="xmb_notice_bt_off">Bluetooth® dinonaktifkan di perangkat ini.</string>
+    <string name="xmb_opt_aspect_auto">Otomatis (Layar Penuh)</string>
+    <string name="xmb_touch_guide_title">Kontrol Sentuh &amp; Gestur</string>
+    <string name="xmb_touch_guide_1">Geser Atas / Bawah / Kiri / Kanan: Navigasi XMB</string>
+    <string name="xmb_touch_guide_2">Ketuk: Konfirmasi atau mulai game</string>
+    <string name="xmb_touch_guide_3">Tekan Lama (atau △): Buka menu Opsi</string>
+    <string name="xmb_touch_guide_4">Ketuk 2 Jari (atau ○): Kembali atau keluar mode PSP</string>
+    <string name="xmb_touch_guide_skip">Ketuk untuk Menutup</string>
+    <string name="xmb_hint_options">Opsi</string>
+    <string name="xmb_setting_touch_ctrl">Kontrol Sentuh</string>
 </resources>

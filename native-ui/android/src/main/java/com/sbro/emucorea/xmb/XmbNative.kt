@@ -66,6 +66,10 @@ object XmbNative {
 
     external fun nativeTriggerTransition(kind: Int)
 
+    external fun nativeSetTouchMode(active: Boolean, showTutorial: Boolean)
+
+    external fun nativeTouchTap(normX: Float, normY: Float)
+
     external fun nativeSetSettings(
         themeStyle: Int,
         colorIndex: Int,
@@ -84,6 +88,7 @@ object XmbNative {
         parentalLevel: Int,
         adhocChannel: Int,
         rssAutoUpdate: Boolean,
+        touchControlsEnabled: Boolean = true,
     )
 
     external fun nativeGetState(): IntArray

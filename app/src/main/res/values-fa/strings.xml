@@ -2080,7 +2080,7 @@
     <string name="xmb_opt_auto">خودکار</string>
     <string name="xmb_ch_prefix">کانال</string>
     <string name="xmb_setting_rss_auto">به‌روزرسانی خودکار</string>
-    <string name="xmb_notice_update_1">نرم‌افزار سیستم PSP™ 4000 شما نسخه 7.1 است.</string>
+    <string name="xmb_notice_update_1">نرم‌افزار سیستم PSP™ 4000 شما نسخه 7.1 EmuCore Edition است</string>
     <string name="xmb_notice_update_2">نیازی به به‌روزرسانی نیست.</string>
     <string name="xmb_usb_status">حالت USB برای Memory Stick™</string>
     <string name="xmb_games_count_lbl">بازی‌های نصب‌شده</string>
@@ -2115,4 +2115,13 @@
     <string name="xmb_bt_connected">متصل</string>
     <string name="xmb_notice_bt_on">Bluetooth® فعال است. دسته‌ها و دستگاه‌های صوتی جفت‌شده آماده هستند.</string>
     <string name="xmb_notice_bt_off">Bluetooth® در این دستگاه خاموش است.</string>
+    <string name="xmb_opt_aspect_auto">خودکار (تمام‌صفحه)</string>
+    <string name="xmb_touch_guide_title">کنترل‌های لمسی و حرکتی</string>
+    <string name="xmb_touch_guide_1">کشیدن به بالا / پایین / چپ / راست: پیمایش XMB</string>
+    <string name="xmb_touch_guide_2">ضربه: تأیید یا شروع بازی</string>
+    <string name="xmb_touch_guide_3">لمس طولانی (یا △): منوی گزینه‌ها</string>
+    <string name="xmb_touch_guide_4">ضربه با ۲ انگشت (یا ○): بازگشت یا خروج از حالت PSP</string>
+    <string name="xmb_touch_guide_skip">برای بستن ضربه بزنید</string>
+    <string name="xmb_hint_options">گزینه‌ها</string>
+    <string name="xmb_setting_touch_ctrl">کنترل‌های لمسی</string>
 </resources>

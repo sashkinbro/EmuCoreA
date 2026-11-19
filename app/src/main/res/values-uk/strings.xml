@@ -2071,7 +2071,7 @@
     <string name="xmb_opt_auto">Автоматично</string>
     <string name="xmb_ch_prefix">Кан.</string>
     <string name="xmb_setting_rss_auto">Автооновлення</string>
-    <string name="xmb_notice_update_1">Системне ПЗ вашої консолі PSP™ 4000 має версію 7.1.</string>
+    <string name="xmb_notice_update_1">Системне ПЗ вашої PSP™ 4000 — версія 7.1 EmuCore Edition</string>
     <string name="xmb_notice_update_2">Оновлення не потрібне.</string>
     <string name="xmb_usb_status">Режим USB для Memory Stick™</string>
     <string name="xmb_games_count_lbl">Встановлені ігри</string>
@@ -2106,4 +2106,13 @@
     <string name="xmb_bt_connected">Підключено</string>
     <string name="xmb_notice_bt_on">Bluetooth® увімкнено. Підключені контролери та аудіопристрої активні.</string>
     <string name="xmb_notice_bt_off">Bluetooth® вимкнено на цьому пристрої.</string>
+    <string name="xmb_opt_aspect_auto">Авто (На весь екран)</string>
+    <string name="xmb_touch_guide_title">Сенсорне керування та жести</string>
+    <string name="xmb_touch_guide_1">Свайп вгору / вниз / вліво / вправо: Навігація XMB</string>
+    <string name="xmb_touch_guide_2">Дотик: Підтвердити або запустити гру</string>
+    <string name="xmb_touch_guide_3">Довге натискання (або △): Меню опцій</string>
+    <string name="xmb_touch_guide_4">Дотик 2 пальцями (або ○): Назад або вихід із режиму PSP</string>
+    <string name="xmb_touch_guide_skip">Натисніть, щоб закрити</string>
+    <string name="xmb_hint_options">Опції</string>
+    <string name="xmb_setting_touch_ctrl">Сенсорне керування</string>
 </resources>

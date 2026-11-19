@@ -2065,7 +2065,7 @@
     <string name="xmb_opt_auto">स्वचालित</string>
     <string name="xmb_ch_prefix">चैनल</string>
     <string name="xmb_setting_rss_auto">ऑटो-अपडेट</string>
-    <string name="xmb_notice_update_1">आपके PSP™ 4000 का सिस्टम सॉफ़्टवेयर संस्करण 7.1 है।</string>
+    <string name="xmb_notice_update_1">आपके PSP™ 4000 सिस्टम का सॉफ़्टवेयर वर्शन 7.1 EmuCore Edition है</string>
     <string name="xmb_notice_update_2">अपडेट करने की आवश्यकता नहीं है।</string>
     <string name="xmb_usb_status">Memory Stick™ USB मोड</string>
     <string name="xmb_games_count_lbl">इंस्टॉल किए गए गेम</string>
@@ -2100,4 +2100,13 @@
     <string name="xmb_bt_connected">कनेक्टेड</string>
     <string name="xmb_notice_bt_on">Bluetooth® चालू है। पेयर किए गए कंट्रोलर और ऑडियो डिवाइस सक्रिय हैं।</string>
     <string name="xmb_notice_bt_off">इस डिवाइस पर Bluetooth® बंद है।</string>
+    <string name="xmb_opt_aspect_auto">ऑटो (फ़ुल स्क्रीन)</string>
+    <string name="xmb_touch_guide_title">टच और जेस्चर कंट्रोल</string>
+    <string name="xmb_touch_guide_1">ऊपर / नीचे / बाएँ / दाएँ स्वाइप करें: XMB नेविगेट करें</string>
+    <string name="xmb_touch_guide_2">टैप: पुष्टि करें या गेम शुरू करें</string>
+    <string name="xmb_touch_guide_3">लॉन्ग प्रेस (या △): विकल्प मेनू खोलें</string>
+    <string name="xmb_touch_guide_4">2-उंगली टैप (या ○): वापस या PSP मोड से बाहर निकलें</string>
+    <string name="xmb_touch_guide_skip">बंद करने के लिए टैप करें</string>
+    <string name="xmb_hint_options">विकल्प</string>
+    <string name="xmb_setting_touch_ctrl">टच कंट्रोल</string>
 </resources>

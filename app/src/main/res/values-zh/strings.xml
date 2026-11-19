@@ -2066,7 +2066,7 @@
     <string name="xmb_opt_auto">自动</string>
     <string name="xmb_ch_prefix">频道</string>
     <string name="xmb_setting_rss_auto">自动更新</string>
-    <string name="xmb_notice_update_1">您的 PSP™ 4000 系统软件版本为 7.1。</string>
+    <string name="xmb_notice_update_1">您的 PSP™ 4000 系统软件版本为 7.1 EmuCore Edition</string>
     <string name="xmb_notice_update_2">无需进行更新。</string>
     <string name="xmb_usb_status">Memory Stick™ USB 模式</string>
     <string name="xmb_games_count_lbl">已安装游戏</string>
@@ -2101,4 +2101,13 @@
     <string name="xmb_bt_connected">已连接</string>
     <string name="xmb_notice_bt_on">Bluetooth®已启用。已配对的控制器与音频设备处于活动状态。</string>
     <string name="xmb_notice_bt_off">此设备上的Bluetooth®已关闭。</string>
+    <string name="xmb_opt_aspect_auto">自动 (全屏)</string>
+    <string name="xmb_touch_guide_title">触控与手势操作</string>
+    <string name="xmb_touch_guide_1">向上 / 下 / 左 / 右滑动：浏览 XMB</string>
+    <string name="xmb_touch_guide_2">轻触：确认或启动游戏</string>
+    <string name="xmb_touch_guide_3">长按 (或 △)：打开选项菜单</string>
+    <string name="xmb_touch_guide_4">双指轻触 (或 ○)：返回或退出 PSP 模式</string>
+    <string name="xmb_touch_guide_skip">轻触关闭</string>
+    <string name="xmb_hint_options">选项</string>
+    <string name="xmb_setting_touch_ctrl">触控操作</string>
 </resources>

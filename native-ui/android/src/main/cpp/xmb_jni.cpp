@@ -185,9 +185,9 @@ void SettingsChanged(const XmbSettings &s) {
 	if (g_vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6) != JNI_OK || env == nullptr) return;
 	EnsureHostClass(env);
 	if (g_host_class == nullptr || g_host_settings_changed == nullptr) return;
-	jintArray arr = env->NewIntArray(17);
+	jintArray arr = env->NewIntArray(18);
 	if (arr == nullptr) return;
-	jint values[17] = {
+	jint values[18] = {
 		s.theme_style,
 		s.color_index,
 		s.bg_mode,
@@ -205,8 +205,9 @@ void SettingsChanged(const XmbSettings &s) {
 		s.parental_level,
 		s.adhoc_channel,
 		s.rss_auto_update ? 1 : 0,
+		s.touch_controls_enabled ? 1 : 0,
 	};
-	env->SetIntArrayRegion(arr, 0, 17, values);
+	env->SetIntArrayRegion(arr, 0, 18, values);
 	env->CallStaticVoidMethod(g_host_class, g_host_settings_changed, arr);
 	if (env->ExceptionCheck()) env->ExceptionClear();
 	env->DeleteLocalRef(arr);
@@ -419,7 +420,8 @@ Java_com_sbro_emucorea_xmb_XmbNative_nativeSetSettings(JNIEnv *, jclass,
                                                        jint slideshow_effect,
                                                        jint parental_level,
                                                        jint adhoc_channel,
-                                                       jboolean rss_auto_update) {
+                                                       jboolean rss_auto_update,
+                                                       jboolean touch_controls_enabled) {
 	xmb::XmbSettings s;
 	s.theme_style = (int)theme_style;
 	s.color_index = (int)color_index;
@@ -438,6 +440,7 @@ Java_com_sbro_emucorea_xmb_XmbNative_nativeSetSettings(JNIEnv *, jclass,
 	s.parental_level = (int)parental_level;
 	s.adhoc_channel = (int)adhoc_channel;
 	s.rss_auto_update = (rss_auto_update == JNI_TRUE);
+	s.touch_controls_enabled = (touch_controls_enabled == JNI_TRUE);
 	g_renderer.ApplySettings(s);
 }
 
@@ -568,6 +571,16 @@ Java_com_sbro_emucorea_xmb_XmbNative_nativeSetWirelessStatus(
 extern "C" JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_xmb_XmbNative_nativeTriggerTransition(JNIEnv *, jclass, jint kind) {
 	g_renderer.TriggerTransition((int)kind);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeSetTouchMode(JNIEnv *, jclass, jboolean active, jboolean show_tutorial) {
+	g_renderer.SetTouchMode(active == JNI_TRUE, show_tutorial == JNI_TRUE);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeTouchTap(JNIEnv *, jclass, jfloat norm_x, jfloat norm_y) {
+	g_renderer.TouchTap((float)norm_x, (float)norm_y);
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -2067,7 +2067,7 @@
     <string name="xmb_opt_auto">Automatique</string>
     <string name="xmb_ch_prefix">Can.</string>
     <string name="xmb_setting_rss_auto">Mise à jour auto</string>
-    <string name="xmb_notice_update_1">Le logiciel système de votre PSP™ 4000 est la version 7.1.</string>
+    <string name="xmb_notice_update_1">Le logiciel système de votre PSP™ 4000 est la version 7.1 EmuCore Edition</string>
     <string name="xmb_notice_update_2">Il n\'est pas nécessaire d\'effectuer une mise à jour.</string>
     <string name="xmb_usb_status">Mode USB Memory Stick™</string>
     <string name="xmb_games_count_lbl">Jeux installés</string>
@@ -2102,4 +2102,13 @@
     <string name="xmb_bt_connected">Connecté</string>
     <string name="xmb_notice_bt_on">Bluetooth® est activé. Les manettes et périphériques audio associés sont actifs.</string>
     <string name="xmb_notice_bt_off">Bluetooth® est désactivé sur cet appareil.</string>
+    <string name="xmb_opt_aspect_auto">Auto (Plein écran)</string>
+    <string name="xmb_touch_guide_title">Commandes tactiles et gestes</string>
+    <string name="xmb_touch_guide_1">Glisser Haut / Bas / Gauche / Droite : Naviguer dans le XMB</string>
+    <string name="xmb_touch_guide_2">Toucher : Confirmer ou lancer le jeu</string>
+    <string name="xmb_touch_guide_3">Appui long (ou △) : Menu d’options</string>
+    <string name="xmb_touch_guide_4">Toucher à 2 doigts (ou ○) : Retour ou quitter le mode PSP</string>
+    <string name="xmb_touch_guide_skip">Toucher pour fermer</string>
+    <string name="xmb_hint_options">Options</string>
+    <string name="xmb_setting_touch_ctrl">Commandes tactiles</string>
 </resources>

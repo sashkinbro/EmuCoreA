@@ -2073,7 +2073,7 @@
     <string name="xmb_opt_auto">تلقائي</string>
     <string name="xmb_ch_prefix">قناة</string>
     <string name="xmb_setting_rss_auto">تحديث تلقائي</string>
-    <string name="xmb_notice_update_1">برنامج النظام لجهاز PSP™ 4000 هو الإصدار 7.1.</string>
+    <string name="xmb_notice_update_1">برمجيات النظام لجهاز PSP™ 4000 هي الإصدار 7.1 EmuCore Edition</string>
     <string name="xmb_notice_update_2">ليست هناك حاجة للتحديث.</string>
     <string name="xmb_usb_status">وضع USB لبطاقة Memory Stick™</string>
     <string name="xmb_games_count_lbl">الألعاب المثبتة</string>
@@ -2108,4 +2108,13 @@
     <string name="xmb_bt_connected">متصل</string>
     <string name="xmb_notice_bt_on">تم تفعيل Bluetooth®. وحدات التحكم وأجهزة الصوت المقترنة نشطة.</string>
     <string name="xmb_notice_bt_off">تم إيقاف Bluetooth® على هذا الجهاز.</string>
+    <string name="xmb_opt_aspect_auto">تلقائي (ملء الشاشة)</string>
+    <string name="xmb_touch_guide_title">تحكم اللمس والإيماءات</string>
+    <string name="xmb_touch_guide_1">اسحب لأعلى / لأسفل / لليسار / لليمين: التنقل في XMB</string>
+    <string name="xmb_touch_guide_2">لمس: تأكيد أو بدء اللعبة</string>
+    <string name="xmb_touch_guide_3">ضغط مطول (أو △): قائمة الخيارات</string>
+    <string name="xmb_touch_guide_4">لمس بإصبعين (أو ○): رجوع أو الخروج من وضع PSP</string>
+    <string name="xmb_touch_guide_skip">المس للإغلاق</string>
+    <string name="xmb_hint_options">خيارات</string>
+    <string name="xmb_setting_touch_ctrl">تحكم اللمس</string>
 </resources>

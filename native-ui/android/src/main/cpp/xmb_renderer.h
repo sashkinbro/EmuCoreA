@@ -33,6 +33,7 @@ struct XmbSettings {
 	int parental_level = 0;   // 0 = Off, 1..9 = Level 1..9
 	int adhoc_channel = 0;    // 0 = Automatic, 1 = Ch 1, 2 = Ch 6, 3 = Ch 11
 	bool rss_auto_update = false;
+	bool touch_controls_enabled = true;
 };
 
 struct FallbackGlyph {
@@ -103,6 +104,8 @@ public:
 	void SetNetworkStatus(bool connected);
 	void SetWirelessStatus(bool wifi_connected, bool bluetooth_enabled, bool bluetooth_connected, bool audio_muted);
 	void TriggerTransition(int kind);
+	void SetTouchMode(bool active, bool show_tutorial);
+	void TouchTap(float norm_x, float norm_y);
 	void SetBattery(int level, bool charging);
 	void SetStrings(const std::unordered_map<std::string, std::string> &strings);
 	void SetStorageInfo(const std::string &free_space_text, const std::string &device_name);
@@ -212,6 +215,8 @@ private:
 	void DrawOptionsMenu();
 	void DrawDeleteDialog();
 	void DrawInfoDialog();
+	void DrawTouchTutorialDialog();
+	void DrawTouchControlsBar();
 	void DrawToast();
 	void ShowToast(const std::string &message);
 	void UpdateThemeColor();
@@ -254,6 +259,9 @@ private:
 	std::string device_name_ = "PSP™";
 	int surface_width_ = 0;
 	int surface_height_ = 0;
+	float screen_width_ = 480.0f;
+	bool touch_mode_active_ = false;
+	bool touch_tutorial_active_ = false;
 	bool logged_gl_error_ = false;
 	bool initialized_once_ = false;
 	bool games_loading_ = true;

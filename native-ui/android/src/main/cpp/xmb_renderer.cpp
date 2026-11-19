@@ -192,11 +192,11 @@ void MultiplyMatrix(const float a[16], const float b[16], float out[16]) {
 	}
 }
 
-void BuildWaveMvp(float out[16]) {
+void BuildWaveMvp(float out[16], float screen_width) {
 	constexpr float kFovY = 30.0f;
 	constexpr float kNearFactor = 0.1f;
 	constexpr float kFarFactor = 4.0f;
-	const float aspect = kScreenWidth / kScreenHeight;
+	const float aspect = screen_width / kScreenHeight;
 	const float distance = (kScreenHeight * 0.5f) / std::tan(kFovY * 0.5f * 3.14159265358979323846f / 180.0f);
 	const float f = 1.0f / std::tan(kFovY * 0.5f * 3.14159265358979323846f / 180.0f);
 	const float near_plane = distance * kNearFactor;
@@ -651,7 +651,7 @@ void XmbRenderer::ApplySettings(const XmbSettings &settings) {
 	settings_.wave_mode = std::max(0, std::min(3, settings_.wave_mode));
 	settings_.date_format = std::max(0, std::min(2, settings_.date_format));
 	settings_.keep_screen_mode = std::max(0, std::min(2, settings_.keep_screen_mode));
-	settings_.aspect_mode = std::max(0, std::min(1, settings_.aspect_mode));
+	settings_.aspect_mode = std::max(0, std::min(2, settings_.aspect_mode));
 	settings_.slideshow_speed = std::max(0, std::min(2, settings_.slideshow_speed));
 	settings_.slideshow_effect = std::max(0, std::min(2, settings_.slideshow_effect));
 	settings_.parental_level = std::max(0, std::min(9, settings_.parental_level));
@@ -694,6 +694,94 @@ void XmbRenderer::TriggerTransition(int kind) {
 		resume_t_ = 0.0f;
 		opening_t_ = 1.0f;
 	}
+}
+
+void XmbRenderer::SetTouchMode(bool active, bool show_tutorial) {
+	std::lock_guard<std::recursive_mutex> lock(mutex_);
+	touch_mode_active_ = active;
+	if (show_tutorial) {
+		touch_tutorial_active_ = true;
+	}
+}
+
+void XmbRenderer::TouchTap(float norm_x, float norm_y) {
+	{
+		std::lock_guard<std::recursive_mutex> lock(mutex_);
+		if (!settings_.touch_controls_enabled || launching_) {
+			return;
+		}
+		if (opening_t_ < 0.72f) {
+			opening_t_ = 0.72f;
+		}
+		if (touch_tutorial_active_) {
+			touch_tutorial_active_ = false;
+			PlaySound(1);
+			return;
+		}
+
+		const float vx = std::clamp(norm_x, 0.0f, 1.0f) * screen_width_;
+		const float vy = std::clamp(norm_y, 0.0f, 1.0f) * kScreenHeight;
+
+		// 1. Direct tap on Yes / No buttons in any PSP confirmation dialog
+		if (exit_dialog_active_ || delete_dialog_active_ || restore_confirm_active_ || browser_confirm_active_) {
+			const float cx = screen_width_ * 0.5f;
+			if (vy >= 130.0f && vy <= 185.0f) {
+				const int choice = (vx < cx) ? 0 : 1;
+				if (exit_dialog_active_) exit_dialog_selected_ = choice;
+				else if (delete_dialog_active_) delete_dialog_selected_ = choice;
+				else if (restore_confirm_active_) restore_confirm_selected_ = choice;
+				else if (browser_confirm_active_) browser_confirm_selected_ = choice;
+			}
+		} else if (options_menu_active_) {
+			const float panel_x = screen_width_ - 130.0f;
+			if (vx < panel_x) {
+				KeyPressed(Key::Back);
+				return;
+			}
+			const float first_y = 106.0f;
+			for (int i = 0; i < 3; ++i) {
+				const float item_y = first_y + i * 30.0f;
+				if (vy >= item_y - 18.0f && vy <= item_y + 10.0f) {
+					options_selected_ = i;
+					break;
+				}
+			}
+		} else if (settings_sub_active_ && settings_picker_open_) {
+			const float panel_x = screen_width_ - 138.0f;
+			if (vx < panel_x) {
+				KeyPressed(Key::Back);
+				return;
+			}
+			const int max_c = SettingsPickerCount();
+			for (int i = 0; i < max_c; ++i) {
+				const float y = kSelectedItemY + (float)(i - settings_picker_index_) * 26.0f;
+				if (vy >= y - 16.0f && vy <= y + 8.0f) {
+					settings_picker_index_ = i;
+					break;
+				}
+			}
+		} else if (!system_info_dialog_ && !info_notice_active_ && !info_dialog_active_) {
+			// Tapping the left '<' back arrow on sub-pages returns to main XMB
+			if ((memory_stick_page_ || saved_data_page_ || settings_sub_active_ || empty_media_kind_ != EmptyMediaKind::None) &&
+			    vx <= 54.0f && vy >= 100.0f && vy <= 172.0f) {
+				KeyPressed(Key::Back);
+				return;
+			}
+			// Tapping the bottom-right touch hint bar triggers Options (Triangle) or Back (Circle)
+			if (vy >= 236.0f) {
+				if (vx >= screen_width_ - 92.0f) {
+					KeyPressed(Key::Back);
+					return;
+				}
+				if ((memory_stick_page_ || saved_data_page_) &&
+				    vx >= screen_width_ - 185.0f && vx < screen_width_ - 92.0f) {
+					KeyPressed(Key::Options);
+					return;
+				}
+			}
+		}
+	}
+	KeyPressed(Key::Confirm);
 }
 
 std::string XmbRenderer::TextOr(const std::string &key, const std::string &fallback) const {
@@ -763,7 +851,7 @@ void XmbRenderer::DrawBackground() {
 		if (cookie_bg != textures_.end() && cookie_bg->second.id != 0) {
 			const float color[4] = {0.84f, 0.82f, 0.80f, 1.0f};
 			glBindTexture(GL_TEXTURE_2D, cookie_bg->second.id);
-			DrawQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, color);
+			DrawQuad(0.0f, 0.0f, screen_width_, kScreenHeight, color);
 			return;
 		}
 	}
@@ -772,7 +860,7 @@ void XmbRenderer::DrawBackground() {
 	}
 	const float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
 	glBindTexture(GL_TEXTURE_2D, background_texture_);
-	DrawQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, color);
+	DrawQuad(0.0f, 0.0f, screen_width_, kScreenHeight, color);
 }
 
 void XmbRenderer::DrawStatusBar() {
@@ -832,7 +920,7 @@ void XmbRenderer::DrawStatusBar() {
 	const float width = MeasureText(clock, scale);
 	const float color[4] = {1.0f, 1.0f, 1.0f, bar_alpha};
 	const float shadow_col[4] = {0.0f, 0.0f, 0.0f, bar_alpha * 0.55f};
-	const float clock_x = 442.0f - width;
+	const float clock_x = (screen_width_ - 38.0f) - width;
 	DrawText(clock, clock_x, 18.0f, scale, color, true);
 
 	// Authentic PSP top status bar indicators to the left of the clock (Bluetooth, Wi-Fi, AVLS, Mute)
@@ -898,7 +986,7 @@ void XmbRenderer::DrawStatusBar() {
 				}
 			}
 		}
-		DrawTextureCrop(battery->second, 464.0f, 12.0f, 1.0f, color, 0, frame * 16, 44, 16);
+		DrawTextureCrop(battery->second, screen_width_ - 16.0f, 12.0f, 1.0f, color, 0, frame * 16, 44, 16);
 	}
 }
 
@@ -924,7 +1012,7 @@ void XmbRenderer::DrawWave(float dt) {
 	glBindBuffer(GL_ARRAY_BUFFER, wave_vbo_);
 	glBufferSubData(GL_ARRAY_BUFFER, 0, wave_vertices_.size() * sizeof(float), wave_vertices_.data());
 	float mvp[16];
-	BuildWaveMvp(mvp);
+	BuildWaveMvp(mvp, screen_width_);
 	glUniformMatrix4fv(wave_mvp_, 1, GL_FALSE, mvp);
 	const float alpha = wave_.alpha * wave_.tint[3] * kWaveBrightness * (0.2f + 0.8f * boot_t_);
 	const float wr = std::max(0.24f, wave_tint_[0]);
@@ -1389,8 +1477,8 @@ void XmbRenderer::DrawToast() {
 	float alpha = std::min(1.0f, toast_timer_ * 2.0f);
 	float scale = 0.72f;
 	float text_width = MeasureText(toast_message_, scale);
-	float pill_width = std::min(kScreenWidth - 32.0f, text_width + 36.0f);
-	float pill_x = (kScreenWidth - pill_width) * 0.5f;
+	float pill_width = std::min(screen_width_ - 32.0f, text_width + 36.0f);
+	float pill_x = (screen_width_ - pill_width) * 0.5f;
 	float pill_y = 224.0f;
 	float pill_h = 26.0f;
 
@@ -1406,7 +1494,7 @@ void XmbRenderer::DrawToast() {
 
 void XmbRenderer::DrawDialogFrame(float box_x, float box_y, float box_w, float box_h) {
 	const float veil[4] = {0.0f, 0.0f, 0.0f, 0.74f};
-	DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, veil);
+	DrawSolidQuad(0.0f, 0.0f, screen_width_, kScreenHeight, veil);
 
 	const float bg_box[4] = {0.10f, 0.10f, 0.12f, 0.96f};
 	DrawSolidQuad(box_x, box_y, box_w, box_h, bg_box);
@@ -1451,9 +1539,9 @@ void XmbRenderer::DrawDialogHints(float box_x, float box_y, float box_w, float b
 }
 
 void XmbRenderer::DrawYesNoDialog(const std::string &line1, const std::string &line2, int selected) {
-	const float box_x = 75.0f;
+	const float box_w = std::min(330.0f, screen_width_ - 28.0f);
+	const float box_x = (screen_width_ - box_w) * 0.5f;
 	const float box_y = 66.0f;
-	const float box_w = 330.0f;
 	const float box_h = 138.0f;
 	DrawDialogFrame(box_x, box_y, box_w, box_h);
 
@@ -1462,12 +1550,12 @@ void XmbRenderer::DrawYesNoDialog(const std::string &line1, const std::string &l
 		const float prompt_scale = 0.72f;
 		if (line2.empty()) {
 			const float w = MeasureText(line1, prompt_scale);
-			DrawText(line1, (kScreenWidth - w) * 0.5f, box_y + 46.0f, prompt_scale, white, true);
+			DrawText(line1, (screen_width_ - w) * 0.5f, box_y + 46.0f, prompt_scale, white, true);
 		} else {
 			const float w1 = MeasureText(line1, 0.68f);
 			const float w2 = MeasureText(line2, 0.68f);
-			DrawText(line1, (kScreenWidth - w1) * 0.5f, box_y + 36.0f, 0.68f, white, true);
-			DrawText(line2, (kScreenWidth - w2) * 0.5f, box_y + 56.0f, 0.68f, white, true);
+			DrawText(line1, (screen_width_ - w1) * 0.5f, box_y + 36.0f, 0.68f, white, true);
+			DrawText(line2, (screen_width_ - w2) * 0.5f, box_y + 56.0f, 0.68f, white, true);
 		}
 
 		const std::string yes_text = TextOr("msg_yes", "Yes");
@@ -1476,8 +1564,9 @@ void XmbRenderer::DrawYesNoDialog(const std::string &line1, const std::string &l
 		const float yes_w = MeasureText(yes_text, btn_scale);
 		const float no_w = MeasureText(no_text, btn_scale);
 
-		const float yes_x = 165.0f - yes_w * 0.5f;
-		const float no_x = 315.0f - no_w * 0.5f;
+		const float cx = screen_width_ * 0.5f;
+		const float yes_x = (cx - 75.0f) - yes_w * 0.5f;
+		const float no_x = (cx + 75.0f) - no_w * 0.5f;
 		const float btn_y = box_y + 94.0f;
 
 		const float focus_color[4] = {1.0f, 1.0f, 1.0f, 0.28f};
@@ -1657,7 +1746,7 @@ int XmbRenderer::SettingsRowCount() const {
 	case SettingsKind::Security: return 1;
 	case SettingsKind::Network: return 2;
 	case SettingsKind::Rss: return 1;
-	case SettingsKind::Display: return 1;
+	case SettingsKind::Display: return 2;
 	case SettingsKind::Bluetooth: return 2;
 	}
 	return 1;
@@ -1675,7 +1764,7 @@ int XmbRenderer::SettingsPickerCount() const {
 	case SettingsKind::Sound:
 		return 2;
 	case SettingsKind::Video:
-		return 2;
+		return settings_sub_index_ == 0 ? 3 : 2;
 	case SettingsKind::Photo:
 		return 3;
 	case SettingsKind::DateTime:
@@ -1689,7 +1778,7 @@ int XmbRenderer::SettingsPickerCount() const {
 	case SettingsKind::Rss:
 		return 2;
 	case SettingsKind::Display:
-		return 2;
+		return settings_sub_index_ == 0 ? 3 : 2;
 	case SettingsKind::Bluetooth:
 		return 0;
 	}
@@ -1726,7 +1815,8 @@ int XmbRenderer::SettingsCurrentValue() const {
 	case SettingsKind::Rss:
 		return settings_.rss_auto_update ? 0 : 1;
 	case SettingsKind::Display:
-		return settings_.aspect_mode;
+		if (settings_sub_index_ == 0) return settings_.aspect_mode;
+		return settings_.touch_controls_enabled ? 0 : 1;
 	case SettingsKind::Bluetooth:
 		return bluetooth_enabled_ ? 0 : 1;
 	}
@@ -1779,7 +1869,8 @@ void XmbRenderer::ApplySettingsPickerChoice(int v) {
 		settings_.rss_auto_update = (v == 0);
 		break;
 	case SettingsKind::Display:
-		settings_.aspect_mode = v;
+		if (settings_sub_index_ == 0) settings_.aspect_mode = v;
+		else settings_.touch_controls_enabled = (v == 0);
 		break;
 	case SettingsKind::Bluetooth:
 		break;
@@ -1826,8 +1917,14 @@ void XmbRenderer::DrawSettingsSubPage() {
 	const std::string opt_piano = TextOr("xmb_theme_piano", "Piano Black");
 	const std::string opt_on = TextOr("xmb_opt_on", "On");
 	const std::string opt_off = TextOr("xmb_opt_off", "Off");
-	const std::string opt_16_9 = TextOr("xmb_opt_16_9", "16:9 Full");
+	const std::string opt_aspect_auto = TextOr("xmb_opt_aspect_auto", "Auto (Full Screen)");
+	const std::string opt_16_9 = TextOr("xmb_opt_16_9", "16:9 Original");
 	const std::string opt_4_3 = TextOr("xmb_opt_4_3", "4:3 Original");
+	auto aspect_label = [&](int mode) -> std::string {
+		if (mode == 1) return opt_16_9;
+		if (mode == 2) return opt_4_3;
+		return opt_aspect_auto;
+	};
 
 	const std::vector<std::string> theme_names = {
 		opt_orig,
@@ -1899,7 +1996,7 @@ void XmbRenderer::DrawSettingsSubPage() {
 		};
 	} else if (settings_kind_ == SettingsKind::Video) {
 		rows = {
-			{ TextOr("xmb_setting_aspect", "Aspect Ratio"), settings_.aspect_mode == 0 ? opt_16_9 : opt_4_3 },
+			{ TextOr("xmb_setting_aspect", "Aspect Ratio"), aspect_label(settings_.aspect_mode) },
 			{ TextOr("xmb_setting_seq_play", "Sequential Playback"), opt_on },
 		};
 	} else if (settings_kind_ == SettingsKind::Photo) {
@@ -1952,7 +2049,8 @@ void XmbRenderer::DrawSettingsSubPage() {
 		};
 	} else if (settings_kind_ == SettingsKind::Display) {
 		rows = {
-			{ TextOr("xmb_setting_aspect", "Aspect Ratio"), settings_.aspect_mode == 0 ? opt_16_9 : opt_4_3 },
+			{ TextOr("xmb_setting_aspect", "Aspect Ratio"), aspect_label(settings_.aspect_mode) },
+			{ TextOr("xmb_setting_touch_ctrl", "Touch Controls"), settings_.touch_controls_enabled ? opt_on : opt_off },
 		};
 	} else if (settings_kind_ == SettingsKind::Bluetooth) {
 		const std::string bt_state = bluetooth_enabled_
@@ -1965,8 +2063,9 @@ void XmbRenderer::DrawSettingsSubPage() {
 	}
 
 	if (font_loaded_) {
-		const float row_w = settings_picker_open_ ? 265.0f : 368.0f;
-		const float val_right = settings_picker_open_ ? 328.0f : 428.0f;
+		const float picker_x = screen_width_ - 138.0f;
+		const float row_w = settings_picker_open_ ? std::max(140.0f, picker_x - 77.0f) : std::max(220.0f, screen_width_ - 112.0f);
+		const float val_right = settings_picker_open_ ? (picker_x - 14.0f) : (screen_width_ - 52.0f);
 		for (int i = 0; i < (int)rows.size(); ++i) {
 			const float y = kSelectedItemY + ((float)i - settings_sub_scroll_) * 48.0f;
 			if (y < 24.0f || y > kScreenHeight - 24.0f) continue;
@@ -2006,10 +2105,11 @@ void XmbRenderer::DrawSettingsSubPage() {
 			choices = {TextOr("xmb_btn_cross_lbl", "X Button"), TextOr("xmb_btn_circle_lbl", "O Button")};
 		} else if (settings_kind_ == SettingsKind::Sound || settings_kind_ == SettingsKind::Rss ||
 		           (settings_kind_ == SettingsKind::Video && settings_sub_index_ == 1) ||
+		           (settings_kind_ == SettingsKind::Display && settings_sub_index_ == 1) ||
 		           (settings_kind_ == SettingsKind::PowerSave && settings_sub_index_ == 1)) {
 			choices = {opt_on, opt_off};
 		} else if (settings_kind_ == SettingsKind::Video || settings_kind_ == SettingsKind::Display) {
-			choices = {opt_16_9, opt_4_3};
+			choices = {opt_aspect_auto, opt_16_9, opt_4_3};
 		} else if (settings_kind_ == SettingsKind::Photo) {
 			if (settings_sub_index_ == 0) {
 				choices = {TextOr("xmb_opt_normal", "Normal"), TextOr("xmb_opt_slow", "Slow"), TextOr("xmb_opt_fast", "Fast")};
@@ -2032,8 +2132,8 @@ void XmbRenderer::DrawSettingsSubPage() {
 		}
 
 		if (!choices.empty()) {
-			const float panel_x = 342.0f;
-			const float panel_w = kScreenWidth - panel_x;
+			const float panel_w = 138.0f;
+			const float panel_x = screen_width_ - panel_w;
 			const float bg_color[4] = {0.08f, 0.08f, 0.10f, 0.94f};
 			DrawSolidQuad(panel_x, 0.0f, panel_w, kScreenHeight, bg_color);
 			const float border_color[4] = {1.0f, 1.0f, 1.0f, 0.35f};
@@ -2067,9 +2167,9 @@ void XmbRenderer::DrawSettingsSubPage() {
 
 void XmbRenderer::DrawSystemInfoDialog() {
 	if (!system_info_dialog_) return;
-	const float box_x = 50.0f;
+	const float box_w = std::min(380.0f, screen_width_ - 28.0f);
+	const float box_x = (screen_width_ - box_w) * 0.5f;
 	const float box_y = 38.0f;
-	const float box_w = 380.0f;
 	const float box_h = 196.0f;
 	DrawDialogFrame(box_x, box_y, box_w, box_h);
 
@@ -2084,7 +2184,7 @@ void XmbRenderer::DrawSystemInfoDialog() {
 			DrawText(k, box_x + 20.0f, y, 0.64f, label_col, true);
 			DrawText(v, box_x + 158.0f, y, 0.64f, white, true);
 		};
-		row(box_y + 62.0f, TextOr("xmb_sysinfo_fw", "System Software"), "Version 7.1 (EmuCoreA)");
+		row(box_y + 62.0f, TextOr("xmb_sysinfo_fw", "System Software"), "7.1 EmuCore Edition");
 		row(box_y + 86.0f, TextOr("xmb_sysinfo_model", "Model"), "PSP\u2122 4000");
 		row(box_y + 110.0f, TextOr("xmb_sysinfo_name", "Nickname"), device_name_);
 		row(box_y + 134.0f, TextOr("msgshare_info_space", "Free Space"), free_space_text_);
@@ -2095,9 +2195,9 @@ void XmbRenderer::DrawSystemInfoDialog() {
 
 void XmbRenderer::DrawNoticeDialog() {
 	if (!info_notice_active_) return;
-	const float box_x = 42.0f;
+	const float box_w = std::min(396.0f, screen_width_ - 28.0f);
+	const float box_x = (screen_width_ - box_w) * 0.5f;
 	const float box_y = 40.0f;
-	const float box_w = 396.0f;
 	const float box_h = 192.0f;
 	DrawDialogFrame(box_x, box_y, box_w, box_h);
 
@@ -2127,8 +2227,8 @@ void XmbRenderer::DrawOptionsMenu() {
 	if (!options_menu_active_) {
 		return;
 	}
-	const float panel_x = 350.0f;
 	const float panel_w = 130.0f;
+	const float panel_x = screen_width_ - panel_w;
 	const float bg_color[4] = {0.08f, 0.08f, 0.10f, 0.94f};
 	DrawSolidQuad(panel_x, 0.0f, panel_w, kScreenHeight, bg_color);
 
@@ -2169,9 +2269,9 @@ void XmbRenderer::DrawInfoDialog() {
 	if (!info_dialog_active_) {
 		return;
 	}
-	const float box_x = 46.0f;
+	const float box_w = std::min(388.0f, screen_width_ - 28.0f);
+	const float box_x = (screen_width_ - box_w) * 0.5f;
 	const float box_y = 26.0f;
-	const float box_w = 388.0f;
 	const float box_h = 220.0f;
 	DrawDialogFrame(box_x, box_y, box_w, box_h);
 
@@ -2207,6 +2307,140 @@ void XmbRenderer::DrawInfoDialog() {
 		}
 
 		DrawDialogHints(box_x, box_y, box_w, box_h, false);
+	}
+}
+
+void XmbRenderer::DrawTouchTutorialDialog() {
+	if (!touch_tutorial_active_) {
+		return;
+	}
+	const float box_w = std::min(416.0f, screen_width_ - 24.0f);
+	const float box_x = (screen_width_ - box_w) * 0.5f;
+	const float box_y = 26.0f;
+	const float box_h = 220.0f;
+	DrawDialogFrame(box_x, box_y, box_w, box_h);
+
+	if (!font_loaded_) {
+		return;
+	}
+	const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+	const float body_col[4] = {1.0f, 1.0f, 1.0f, 0.92f};
+	const float sub_col[4] = {1.0f, 1.0f, 1.0f, 0.78f};
+	const float border[4] = {1.0f, 1.0f, 1.0f, 0.30f};
+
+	DrawText(TextOr("xmb_touch_guide_title", "Touch & Gesture Controls"), box_x + 18.0f, box_y + 24.0f, 0.76f, white, true);
+	DrawSolidQuad(box_x + 16.0f, box_y + 32.0f, box_w - 32.0f, 1.0f, border);
+
+	const char *confirm_key = settings_.swap_confirm ? "btn_circle" : "btn_cross";
+	const char *back_key = settings_.swap_confirm ? "btn_cross" : "btn_circle";
+	auto icon_confirm = textures_.find(confirm_key);
+	auto icon_back = textures_.find(back_key);
+	auto icon_tri = textures_.find("btn_triangle");
+	auto arrow_l = textures_.find("arrow_l");
+	auto arrow_r = textures_.find("arrow_r");
+
+	auto draw_guide_row = [&](float y, const Texture *icon1, const Texture *icon2, const std::string &text) {
+		float ix = box_x + 24.0f;
+		if (icon1 != nullptr) {
+			DrawTexture(*icon1, ix, y - 5.0f, 1.0f, white);
+			ix += 14.0f;
+		}
+		if (icon2 != nullptr) {
+			DrawTexture(*icon2, ix, y - 5.0f, 1.0f, white);
+		}
+		const float text_x = box_x + 48.0f;
+		const float max_w = box_w - 64.0f;
+		float scale = 0.60f;
+		const float measured = MeasureText(text, scale);
+		if (measured > max_w && measured > 1.0f) {
+			scale = std::max(0.46f, scale * (max_w / measured));
+		}
+		DrawText(text, text_x, y, scale, body_col, true);
+	};
+
+	draw_guide_row(box_y + 62.0f,
+	               arrow_l != textures_.end() ? &arrow_l->second : nullptr,
+	               arrow_r != textures_.end() ? &arrow_r->second : nullptr,
+	               TextOr("xmb_touch_guide_1", "Swipe Up / Down / Left / Right: Navigate XMB"));
+	draw_guide_row(box_y + 94.0f,
+	               icon_confirm != textures_.end() ? &icon_confirm->second : nullptr,
+	               nullptr,
+	               TextOr("xmb_touch_guide_2", "Tap: Confirm or start game"));
+	draw_guide_row(box_y + 126.0f,
+	               icon_tri != textures_.end() ? &icon_tri->second : nullptr,
+	               nullptr,
+	               TextOr("xmb_touch_guide_3", "Long Press (or \u25b3): Open Options menu"));
+	draw_guide_row(box_y + 158.0f,
+	               icon_back != textures_.end() ? &icon_back->second : nullptr,
+	               nullptr,
+	               TextOr("xmb_touch_guide_4", "2-Finger Tap (or \u25cb): Back or exit PSP mode"));
+
+	DrawSolidQuad(box_x + 16.0f, box_y + box_h - 30.0f, box_w - 32.0f, 1.0f, border);
+	const std::string skip_lbl = TextOr("xmb_touch_guide_skip", "Tap to Close");
+	const float skip_scale = 0.58f;
+	const float skip_w = MeasureText(skip_lbl, skip_scale);
+	float skip_x = box_x + box_w - skip_w - 16.0f;
+	if (icon_confirm != textures_.end()) {
+		DrawTexture(icon_confirm->second, skip_x - 10.0f, box_y + box_h - 14.0f, 1.0f, sub_col);
+	}
+	DrawText(skip_lbl, skip_x, box_y + box_h - 10.0f, skip_scale, white, true);
+}
+
+void XmbRenderer::DrawTouchControlsBar() {
+	if (!touch_mode_active_ || !settings_.touch_controls_enabled || !font_loaded_ || launching_ || opening_t_ < 0.72f) {
+		return;
+	}
+	if (system_info_dialog_ || info_notice_active_ || info_dialog_active_ ||
+	    exit_dialog_active_ || delete_dialog_active_ || restore_confirm_active_ ||
+	    browser_confirm_active_ || touch_tutorial_active_) {
+		return;
+	}
+
+	const char *confirm_key = settings_.swap_confirm ? "btn_circle" : "btn_cross";
+	const char *back_key = settings_.swap_confirm ? "btn_cross" : "btn_circle";
+	auto confirm_icon = textures_.find(confirm_key);
+	auto back_icon = textures_.find(back_key);
+	auto tri_icon = textures_.find("btn_triangle");
+
+	const std::string enter_lbl = TextOr("xmb_hint_enter", "Enter");
+	const std::string opt_lbl = TextOr("xmb_hint_options", "Options");
+	const std::string back_lbl = TextOr("xmb_hint_back", "Back");
+	const bool show_options = (memory_stick_page_ && !games_.empty()) || (saved_data_page_ && !saves_.empty());
+
+	const float scale = 0.54f;
+	const float col[4] = {1.0f, 1.0f, 1.0f, 0.78f};
+	const float hint_y = kScreenHeight - 10.0f;
+
+	float cur_x = screen_width_ - 14.0f;
+	// 1. Back (Circle) on far right
+	const float back_w = MeasureText(back_lbl, scale);
+	cur_x -= back_w;
+	DrawText(back_lbl, cur_x, hint_y, scale, col, true);
+	if (back_icon != textures_.end()) {
+		cur_x -= 10.0f;
+		DrawTexture(back_icon->second, cur_x, hint_y - 4.0f, 1.0f, col);
+	}
+	cur_x -= 16.0f;
+
+	// 2. Options (Triangle) when inside Games or Saved Data
+	if (show_options) {
+		const float opt_w = MeasureText(opt_lbl, scale);
+		cur_x -= opt_w;
+		DrawText(opt_lbl, cur_x, hint_y, scale, col, true);
+		if (tri_icon != textures_.end()) {
+			cur_x -= 10.0f;
+			DrawTexture(tri_icon->second, cur_x, hint_y - 4.0f, 1.0f, col);
+		}
+		cur_x -= 16.0f;
+	}
+
+	// 3. Enter (Cross)
+	const float enter_w = MeasureText(enter_lbl, scale);
+	cur_x -= enter_w;
+	DrawText(enter_lbl, cur_x, hint_y, scale, col, true);
+	if (confirm_icon != textures_.end()) {
+		cur_x -= 10.0f;
+		DrawTexture(confirm_icon->second, cur_x, hint_y - 4.0f, 1.0f, col);
 	}
 }
 
@@ -2246,6 +2480,13 @@ void XmbRenderer::KeyPressed(Key key) {
 		}
 		if (opening_t_ < 0.72f) {
 			opening_t_ = 0.72f;
+		}
+
+		// 0. Touch & Gesture Controls tutorial dialog (any button skips/closes)
+		if (touch_tutorial_active_) {
+			PlaySound(1);
+			touch_tutorial_active_ = false;
+			goto dispatch_callbacks;
 		}
 
 		// 1. System Info dialog
@@ -2708,7 +2949,7 @@ void XmbRenderer::KeyPressed(Key key) {
 				if (category_ == 0) {
 					if (tex == "item_update") {
 						OpenNoticeDialog(title, {
-							TextOr("xmb_notice_update_1", "The system software of your PSP\u2122 4000 system is version 7.1."),
+							TextOr("xmb_notice_update_1", "The system software of your PSP\u2122 4000 system is version 7.1 EmuCore Edition"),
 							TextOr("xmb_notice_update_2", "There is no need to update."),
 						});
 						PlaySound(1);
@@ -2817,12 +3058,7 @@ void XmbRenderer::KeyPressed(Key key) {
 					}
 				} else if (category_ == 6) {
 					if (tex == "item_manuals") {
-						OpenNoticeDialog(title, {
-							TextOr("xmb_notice_manual_1", "D-Pad / Swipe: Navigate XMB"),
-							TextOr("xmb_notice_manual_2", "X / Tap: Start game or confirm"),
-							TextOr("xmb_notice_manual_3", "Triangle / Menu: Options (Delete / Info)"),
-							TextOr("xmb_notice_manual_4", "O / Back: Return or exit"),
-						});
+						touch_tutorial_active_ = true;
 						PlaySound(1);
 						break;
 					}
@@ -2878,7 +3114,7 @@ void XmbRenderer::KeyPressed(Key key) {
 					}
 					if (tex == "item_info_board") {
 						OpenNoticeDialog(title, {
-							"PSP\u2122 4000  |  Version 7.1 (EmuCoreA)",
+							"PSP\u2122 4000  |  7.1 EmuCore Edition",
 							TextOr("xmb_games_count_lbl", "Installed Games") + ": " + std::to_string(games_.size()) +
 							    "   " + TextOr("xmb_saves_count_lbl", "Saved Data") + ": " + std::to_string(saves_.size()),
 							TextOr("msgshare_info_space", "Free Space") + ": " + free_space_text_,
@@ -3160,7 +3396,7 @@ void XmbRenderer::DrawMemoryStickPage() {
 		pic1_alpha_ = std::min(1.0f, pic1_alpha_ + 0.05f);
 		glBindTexture(GL_TEXTURE_2D, pic1_texture_);
 		const float pic1_color[4] = {1.0f, 1.0f, 1.0f, pic1_alpha_};
-		DrawQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, pic1_color);
+		DrawQuad(0.0f, 0.0f, screen_width_, kScreenHeight, pic1_color);
 	}
 
 	// 2. PIC0.PNG logo banner (and title when no PIC0 banner)
@@ -3175,7 +3411,9 @@ void XmbRenderer::DrawMemoryStickPage() {
 	}
 	if (pic0_texture_ != 0) {
 		glBindTexture(GL_TEXTURE_2D, pic0_texture_);
-		DrawQuad(165.0f, 48.0f, 305.0f, 172.0f, white);
+		const float pic0_w = std::min(305.0f, screen_width_ - 172.0f);
+		const float pic0_h = pic0_w * (172.0f / 305.0f);
+		DrawQuad(165.0f, 134.0f - pic0_h * 0.5f, pic0_w, pic0_h, white);
 	} else if (font_loaded_) {
 		DrawText(selected_game.title, 174.0f, 145.0f, 0.82f, white, true);
 	}
@@ -3285,7 +3523,7 @@ void XmbRenderer::DrawItemColumn(const std::vector<Item> &list, int selected, fl
 			const float subtitle_color[4] = {1.0f, 1.0f, 1.0f, alpha * 0.85f};
 			DrawText(list[index].subtitle, 141.0f, y + 14.0f, 0.62f, subtitle_color, true);
 			const float rule_color[4] = {1.0f, 1.0f, 1.0f, alpha * 0.5f};
-			DrawSolidQuad(141.0f, y + 1.0f, 335.0f, 1.0f, rule_color);
+			DrawSolidQuad(141.0f, y + 1.0f, std::max(180.0f, screen_width_ - 145.0f), 1.0f, rule_color);
 		}
 	}
 }
@@ -3298,12 +3536,13 @@ void XmbRenderer::DrawOpeningTransition() {
 	if (opening_t_ < 0.32f) {
 		const float fade = 1.0f - (opening_t_ / 0.32f);
 		const float black[4] = {0.0f, 0.0f, 0.0f, fade * fade};
-		DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, black);
+		DrawSolidQuad(0.0f, 0.0f, screen_width_, kScreenHeight, black);
 	}
 	// 2. Authentic opening_plugin.rco light-streak glow across the wave (0.05 -> 0.72)
 	if (opening_t_ < 0.74f) {
 		const float u = std::clamp((opening_t_ - 0.04f) / 0.68f, 0.0f, 1.0f);
 		const float bell = std::sin(u * 3.14159265f);
+		const float cx = screen_width_ * 0.5f;
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 
 		auto glow_mid = textures_.find("open_glow_b_mid");
@@ -3311,20 +3550,20 @@ void XmbRenderer::DrawOpeningTransition() {
 		auto glow_bot = textures_.find("open_glow_b_bot");
 		auto glow_a = textures_.find("open_glow_a");
 		if (glow_mid != textures_.end()) {
-			const float gx = 100.0f + u * 280.0f;
+			const float gx = (cx - 140.0f) + u * 280.0f;
 			const float gc[4] = {1.0f, 1.0f, 1.0f, 0.68f * bell};
 			DrawTexture(glow_mid->second, gx, 136.0f, 1.35f, gc);
 		}
 		if (glow_top != textures_.end()) {
 			const float gc[4] = {1.0f, 1.0f, 1.0f, 0.52f * bell};
-			DrawTexture(glow_top->second, 240.0f, 122.0f, 1.0f, gc);
+			DrawTexture(glow_top->second, cx, 122.0f, 1.0f, gc);
 		}
 		if (glow_bot != textures_.end()) {
 			const float gc[4] = {1.0f, 1.0f, 1.0f, 0.52f * bell};
-			DrawTexture(glow_bot->second, 240.0f, 150.0f, 1.0f, gc);
+			DrawTexture(glow_bot->second, cx, 150.0f, 1.0f, gc);
 		}
 		if (glow_a != textures_.end()) {
-			const float gx = 60.0f + u * 360.0f;
+			const float gx = (cx - 180.0f) + u * 360.0f;
 			const float gc[4] = {1.0f, 1.0f, 1.0f, 0.75f * bell};
 			DrawTexture(glow_a->second, gx, 136.0f, 1.6f, gc);
 		}
@@ -3337,7 +3576,7 @@ void XmbRenderer::DrawOpeningTransition() {
 			auto sce = textures_.find("open_sce_logo");
 			if (sce != textures_.end() && l_alpha > 0.02f) {
 				const float sc[4] = {1.0f, 1.0f, 1.0f, l_alpha};
-				DrawTexture(sce->second, 336.0f, 148.0f, 0.90f, sc);
+				DrawTexture(sce->second, cx + 96.0f, 148.0f, 0.90f, sc);
 			}
 		}
 	}
@@ -3351,7 +3590,7 @@ void XmbRenderer::DrawResumeTransition() {
 	if (resume_t_ < 0.48f) {
 		const float fade = 1.0f - (resume_t_ / 0.48f);
 		const float black[4] = {0.0f, 0.0f, 0.0f, fade * fade};
-		DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, black);
+		DrawSolidQuad(0.0f, 0.0f, screen_width_, kScreenHeight, black);
 	}
 	// Authentic 15-frame system_plugin_fg/tex_busy.png spinner in bottom-right corner
 	const float busy_alpha = 1.0f - std::clamp((resume_t_ - 0.55f) / 0.45f, 0.0f, 1.0f);
@@ -3361,10 +3600,10 @@ void XmbRenderer::DrawResumeTransition() {
 		auto busy_sh = textures_.find("status_busy_shadow");
 		auto busy = textures_.find("status_busy");
 		if (busy_sh != textures_.end()) {
-			DrawTextureCrop(busy_sh->second, 453.0f, 249.0f, 0.72f, bcol, 0, frame * 34, 34, 34);
+			DrawTextureCrop(busy_sh->second, screen_width_ - 27.0f, 249.0f, 0.72f, bcol, 0, frame * 34, 34, 34);
 		}
 		if (busy != textures_.end()) {
-			DrawTextureCrop(busy->second, 452.0f, 248.0f, 0.72f, bcol, 0, frame * 34, 34, 34);
+			DrawTextureCrop(busy->second, screen_width_ - 28.0f, 248.0f, 0.72f, bcol, 0, frame * 34, 34, 34);
 		}
 	}
 }
@@ -3374,24 +3613,25 @@ void XmbRenderer::DrawGameBootAnimation() {
 		return;
 	}
 	const float t = std::clamp(launch_t_, 0.0f, 1.0f);
+	const float cx = screen_width_ * 0.5f;
 
 	// 1. Luminous pearl-white & sky-cyan PSP Gameboot backdrop using real Sony 13-27.bmp gradient (ext_10.png)
 	const float bg_in = std::clamp(t / 0.18f, 0.0f, 1.0f);
 	const float bg_ease = bg_in * bg_in * (3.0f - 2.0f * bg_in);
 	const float base_col[4] = {0.90f, 0.96f, 1.0f, bg_ease};
-	DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, base_col);
+	DrawSolidQuad(0.0f, 0.0f, screen_width_, kScreenHeight, base_col);
 
 	auto gb_bg = textures_.find("gameboot_bg");
 	if (gb_bg != textures_.end() && gb_bg->second.id != 0) {
 		glBindTexture(GL_TEXTURE_2D, gb_bg->second.id);
 		const float grad_col[4] = {1.0f, 1.0f, 1.0f, bg_ease * 0.34f};
-		DrawQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, grad_col);
+		DrawQuad(0.0f, 0.0f, screen_width_, kScreenHeight, grad_col);
 	}
 
 	// Render the live 3D PSP wave mesh over the luminous gameboot backdrop
 	DrawWave(0.0f);
 	glUseProgram(program_);
-	glUniform2f(u_screen_, kScreenWidth, kScreenHeight);
+	glUniform2f(u_screen_, screen_width_, kScreenHeight);
 	glUniform1i(u_texture_, 0);
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(vertex_array_);
@@ -3406,24 +3646,24 @@ void XmbRenderer::DrawGameBootAnimation() {
 
 	const float beam_bell = std::sin(std::clamp(t / 0.88f, 0.0f, 1.0f) * 3.14159265f);
 	if (glow_v != textures_.end()) {
-		const float vx1 = 110.0f + t * 260.0f;
-		const float vx2 = 370.0f - t * 240.0f;
+		const float vx1 = (cx - 130.0f) + t * 260.0f;
+		const float vx2 = (cx + 130.0f) - t * 240.0f;
 		const float vc[4] = {0.75f, 0.92f, 1.0f, 0.55f * beam_bell};
 		DrawTexture(glow_v->second, vx1, 136.0f, 1.8f, vc);
 		DrawTexture(glow_v->second, vx2, 136.0f, 1.4f, vc);
 	}
 	if (glow_mid != textures_.end()) {
-		const float gx = 80.0f + t * 320.0f;
+		const float gx = (cx - 160.0f) + t * 320.0f;
 		const float gc[4] = {1.0f, 1.0f, 1.0f, 0.85f * beam_bell};
 		DrawTexture(glow_mid->second, gx, 136.0f, 1.8f, gc);
 	}
 	if (glow_top != textures_.end()) {
 		const float gc[4] = {1.0f, 1.0f, 1.0f, 0.72f * beam_bell};
-		DrawTexture(glow_top->second, 240.0f, 114.0f, 1.0f, gc);
+		DrawTexture(glow_top->second, cx, 114.0f, 1.0f, gc);
 	}
 	if (glow_bot != textures_.end()) {
 		const float gc[4] = {1.0f, 1.0f, 1.0f, 0.72f * beam_bell};
-		DrawTexture(glow_bot->second, 240.0f, 158.0f, 1.0f, gc);
+		DrawTexture(glow_bot->second, cx, 158.0f, 1.0f, gc);
 	}
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -3438,13 +3678,13 @@ void XmbRenderer::DrawGameBootAnimation() {
 		// Crisp dark-navy drop shadow + dark-charcoal/metallic PSP logo over luminous pearl wave
 		const float shadow_c[4] = {0.06f, 0.14f, 0.26f, lalpha * 0.42f};
 		const float logo_c[4] = {0.10f, 0.13f, 0.20f, lalpha * 0.96f};
-		DrawTexture(psp_logo->second, 241.5f, 137.5f, lscale, shadow_c);
-		DrawTexture(psp_logo->second, 240.0f, 136.0f, lscale, logo_c);
+		DrawTexture(psp_logo->second, cx + 1.5f, 137.5f, lscale, shadow_c);
+		DrawTexture(psp_logo->second, cx, 136.0f, lscale, logo_c);
 
 		// Specular highlight sweep across the PSP logo
 		if (glow_a != textures_.end()) {
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-			const float sx = 110.0f + std::clamp((t - 0.15f) / 0.60f, 0.0f, 1.0f) * 260.0f;
+			const float sx = (cx - 130.0f) + std::clamp((t - 0.15f) / 0.60f, 0.0f, 1.0f) * 260.0f;
 			const float sc[4] = {1.0f, 1.0f, 1.0f, 0.75f * lalpha};
 			DrawTexture(glow_a->second, sx, 130.0f, 1.45f, sc);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -3455,7 +3695,7 @@ void XmbRenderer::DrawGameBootAnimation() {
 	if (t > 0.78f) {
 		const float u = std::clamp((t - 0.78f) / 0.20f, 0.0f, 1.0f);
 		const float black[4] = {0.0f, 0.0f, 0.0f, u * u * (3.0f - 2.0f * u)};
-		DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, black);
+		DrawSolidQuad(0.0f, 0.0f, screen_width_, kScreenHeight, black);
 	}
 }
 
@@ -3514,7 +3754,18 @@ void XmbRenderer::Draw() {
 			UpdateThemeColor();
 		}
 
-		const float target_w = (settings_.aspect_mode == 1) ? (kScreenHeight * (4.0f / 3.0f)) : kScreenWidth;
+		if (settings_.aspect_mode == 1) {
+			screen_width_ = kScreenWidth; // 16:9 Original (480x272)
+		} else if (settings_.aspect_mode == 2) {
+			screen_width_ = kScreenHeight * (4.0f / 3.0f); // 4:3 Original (362.67x272)
+		} else {
+			// Auto (Full Screen): adapt virtual width to device aspect ratio (20:9, 16:9, 16:10, 10:7, 4:3)
+			// keeping 1:1 square virtual pixels so icons and text never stretch or distort.
+			const float surf_aspect = (float)surface_width_ / (float)std::max(1, surface_height_);
+			screen_width_ = std::clamp(kScreenHeight * surf_aspect, 360.0f, 680.0f);
+		}
+
+		const float target_w = screen_width_;
 		const float scale = std::min(surface_width_ / target_w, surface_height_ / kScreenHeight);
 		const int view_width = (int)std::lround(target_w * scale);
 		const int view_height = (int)std::lround(kScreenHeight * scale);
@@ -3538,7 +3789,7 @@ void XmbRenderer::Draw() {
 		glDisable(GL_SCISSOR_TEST);
 
 		glUseProgram(program_);
-		glUniform2f(u_screen_, kScreenWidth, kScreenHeight);
+		glUniform2f(u_screen_, screen_width_, kScreenHeight);
 		glUniform1i(u_texture_, 0);
 		glActiveTexture(GL_TEXTURE0);
 		glBindVertexArray(vertex_array_);
@@ -3547,7 +3798,7 @@ void XmbRenderer::Draw() {
 		DrawWave(dt);
 
 		glUseProgram(program_);
-		glUniform2f(u_screen_, kScreenWidth, kScreenHeight);
+		glUniform2f(u_screen_, screen_width_, kScreenHeight);
 		glUniform1i(u_texture_, 0);
 		glActiveTexture(GL_TEXTURE0);
 		glBindVertexArray(vertex_array_);
@@ -3569,6 +3820,7 @@ void XmbRenderer::Draw() {
 			DrawCategoryRow();
 			DrawStatusBar();
 		}
+		DrawTouchControlsBar();
 
 		DrawOpeningTransition();
 		DrawResumeTransition();
@@ -3592,6 +3844,7 @@ void XmbRenderer::Draw() {
 				TextOr("xmb_browser_confirm_2", "Opens outside EmuCoreA in your device browser."),
 				browser_confirm_selected_);
 		}
+		DrawTouchTutorialDialog();
 
 		if (launching_) {
 			launch_t_ = std::min(1.0f, launch_t_ + dt / 2.10f);

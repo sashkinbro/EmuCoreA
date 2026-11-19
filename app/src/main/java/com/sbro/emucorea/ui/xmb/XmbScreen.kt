@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ActivityInfo
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.ConnectivityManager
@@ -17,6 +18,7 @@ import android.os.BatteryManager
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
+import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
@@ -97,6 +99,21 @@ private fun isNetworkAvailable(context: Context): Boolean = runCatching {
     val network = cm.activeNetwork ?: return false
     val caps = cm.getNetworkCapabilities(network) ?: return false
     caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}.getOrDefault(false)
+
+private fun hasPhysicalGamepadConnected(): Boolean = runCatching {
+    InputDevice.getDeviceIds().any { id ->
+        val dev = InputDevice.getDevice(id) ?: return@any false
+        if (dev.isVirtual) return@any false
+        val sources = dev.sources
+        val isGamepad = (sources and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+            (sources and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+        isGamepad && dev.hasKeys(
+            android.view.KeyEvent.KEYCODE_BUTTON_A,
+            android.view.KeyEvent.KEYCODE_BUTTON_B,
+            android.view.KeyEvent.KEYCODE_DPAD_UP,
+        ).any { it }
+    }
 }.getOrDefault(false)
 
 private fun pushWirelessAndAudioStatus(context: Context) {
@@ -332,6 +349,15 @@ private val XMB_STRING_BINDINGS: List<Pair<String, Int>> = listOf(
     "xmb_bt_connected" to R.string.xmb_bt_connected,
     "xmb_notice_bt_on" to R.string.xmb_notice_bt_on,
     "xmb_notice_bt_off" to R.string.xmb_notice_bt_off,
+    "xmb_opt_aspect_auto" to R.string.xmb_opt_aspect_auto,
+    "xmb_touch_guide_title" to R.string.xmb_touch_guide_title,
+    "xmb_touch_guide_1" to R.string.xmb_touch_guide_1,
+    "xmb_touch_guide_2" to R.string.xmb_touch_guide_2,
+    "xmb_touch_guide_3" to R.string.xmb_touch_guide_3,
+    "xmb_touch_guide_4" to R.string.xmb_touch_guide_4,
+    "xmb_touch_guide_skip" to R.string.xmb_touch_guide_skip,
+    "xmb_hint_options" to R.string.xmb_hint_options,
+    "xmb_setting_touch_ctrl" to R.string.xmb_setting_touch_ctrl,
 )
 
 private fun pushLocalizedStrings(context: Context) {
@@ -557,6 +583,7 @@ fun XmbScreen(
         val parentalLevel = preferences.getInt("parental_level", 0)
         val adhocChannel = preferences.getInt("adhoc_channel", 0)
         val rssAutoUpdate = preferences.getBoolean("rss_auto_update", false)
+        val touchControlsEnabled = preferences.getBoolean("touch_controls_enabled", true)
         XmbNative.nativeSetSettings(
             themeStyle = themeStyle,
             colorIndex = colorIndex,
@@ -575,6 +602,7 @@ fun XmbScreen(
             parentalLevel = parentalLevel,
             adhocChannel = adhocChannel,
             rssAutoUpdate = rssAutoUpdate,
+            touchControlsEnabled = touchControlsEnabled,
         )
     }
 
@@ -593,12 +621,36 @@ fun XmbScreen(
         XmbNative.nativeKey(5)
     }
 
+    val activity = context as? Activity
+    val originalRequestedOrientation = remember(activity) {
+        activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+    DisposableEffect(activity) {
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        onDispose {
+            activity?.requestedOrientation = originalRequestedOrientation
+        }
+    }
+
+    fun syncTouchModeToNative() {
+        val touchEnabled = preferences.getBoolean("touch_controls_enabled", true)
+        val touchMode = touchEnabled && !hasPhysicalGamepadConnected()
+        val tutorialShown = preferences.getBoolean("touch_tutorial_shown", false)
+        val shouldShowTutorial = touchMode && !tutorialShown
+        if (shouldShowTutorial) {
+            preferences.edit().putBoolean("touch_tutorial_shown", true).apply()
+        }
+        XmbNative.nativeSetTouchMode(active = touchMode, showTutorial = shouldShowTutorial)
+    }
+
     val lastAppliedAssets = remember { object { var value: List<GameAssets>? = null } }
     val lastAppliedSaves = remember { object { var value: List<SaveStateEntryInfo>? = null } }
 
     val surface = remember(context) {
         var downX = 0f
         var downY = 0f
+        var gestureHandled = false
+        var longPressRunnable: Runnable? = null
         GLSurfaceView(context).apply {
             setEGLContextClientVersion(3)
             preserveEGLContextOnPause = true
@@ -608,6 +660,7 @@ fun XmbScreen(
                     pushStorageInfo()
                     pushWirelessAndAudioStatus(context)
                     pushSettingsToNativeOnGlThread()
+                    syncTouchModeToNative()
                     val assetsSnapshot = currentAssets.value
                     val savesSnapshot = currentSaves.value
                     XmbNative.nativeSetGamesLoading(currentLoadingGames.value && assetsSnapshot.isEmpty())
@@ -632,24 +685,65 @@ fun XmbScreen(
             defaultFocusHighlightEnabled = false
             requestFocus()
             setOnKeyListener { _, _, event -> XmbHost.handleKeyEvent(event) }
-            setOnTouchListener { _, event ->
+            setOnTouchListener { v, event ->
+                if (!preferences.getBoolean("touch_controls_enabled", true)) {
+                    return@setOnTouchListener true
+                }
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
                         downX = event.x
                         downY = event.y
+                        gestureHandled = false
+                        longPressRunnable?.let(v::removeCallbacks)
+                        val lp = Runnable {
+                            if (!gestureHandled) {
+                                gestureHandled = true
+                                XmbNative.nativeKey(6) // Triangle / Options menu
+                            }
+                        }
+                        longPressRunnable = lp
+                        v.postDelayed(lp, 420L)
+                        true
+                    }
+                    MotionEvent.ACTION_POINTER_DOWN -> {
+                        if (event.pointerCount >= 2 && !gestureHandled) {
+                            longPressRunnable?.let(v::removeCallbacks)
+                            gestureHandled = true
+                            XmbNative.nativeKey(5) // Circle / Back
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        if (!gestureHandled && (abs(event.x - downX) > 36f || abs(event.y - downY) > 36f)) {
+                            longPressRunnable?.let(v::removeCallbacks)
+                        }
                         true
                     }
                     MotionEvent.ACTION_UP -> {
-                        val dx = event.x - downX
-                        val dy = event.y - downY
-                        val ax = abs(dx)
-                        val ay = abs(dy)
-                        val code = when {
-                            ax < 40f && ay < 40f -> 4
-                            ax > ay -> if (dx > 0) 3 else 2
-                            else -> if (dy > 0) 1 else 0
+                        longPressRunnable?.let(v::removeCallbacks)
+                        if (!gestureHandled) {
+                            val dx = event.x - downX
+                            val dy = event.y - downY
+                            val ax = abs(dx)
+                            val ay = abs(dy)
+                            if (ax < 40f && ay < 40f) {
+                                val normX = if (v.width > 0) (event.x / v.width.toFloat()) else 0.5f
+                                val normY = if (v.height > 0) (event.y / v.height.toFloat()) else 0.5f
+                                XmbNative.nativeTouchTap(normX, normY)
+                            } else {
+                                val code = if (ax > ay) {
+                                    if (dx > 0) 3 else 2
+                                } else {
+                                    if (dy > 0) 1 else 0
+                                }
+                                XmbNative.nativeKey(code)
+                            }
                         }
-                        XmbNative.nativeKey(code)
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        longPressRunnable?.let(v::removeCallbacks)
+                        gestureHandled = true
                         true
                     }
                     else -> true
@@ -793,6 +887,7 @@ fun XmbScreen(
                 val parentalLevel = arr.getOrElse(14) { 0 }
                 val adhocChannel = arr.getOrElse(15) { 0 }
                 val rssAutoUpdate = arr.getOrElse(16) { 0 } != 0
+                val touchControlsEnabled = arr.getOrElse(17) { 1 } != 0
                 preferences.edit()
                     .putInt("theme_style", arr[0])
                     .putInt("color_index", arr[1])
@@ -811,6 +906,7 @@ fun XmbScreen(
                     .putInt("parental_level", parentalLevel)
                     .putInt("adhoc_channel", adhocChannel)
                     .putBoolean("rss_auto_update", rssAutoUpdate)
+                    .putBoolean("touch_controls_enabled", touchControlsEnabled)
                     .apply()
                 applyAudioAndHostSettings(keyTone, bgmEnabled, swapConfirm, avlsEnabled, keepScreenMode)
             }
@@ -836,11 +932,13 @@ fun XmbScreen(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
+                    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                     surface.onResume()
                     surface.requestFocus()
                     savesRevision++
                     surface.queueEvent {
                         pushWirelessAndAudioStatus(context)
+                        syncTouchModeToNative()
                     }
                 }
                 Lifecycle.Event.ON_PAUSE -> {
