@@ -72,6 +72,7 @@ private:
 	               const float color[4], bool shadow);
 	void DrawCategoryRow();
 	void DrawItems();
+	void DrawItemColumn(const std::vector<Item> &list, int selected, float scroll, float global_alpha);
 
 	GLuint program_ = 0;
 	GLuint vertex_array_ = 0;
@@ -104,8 +105,11 @@ private:
 	bool logged_gl_error_ = false;
 
 	std::vector<Item> items_;
+	std::vector<Item> previous_items_;
 	std::array<std::vector<Item>, 8> categories_;
 	std::array<int, 8> category_selected_{};
+	int previous_item_ = 0;
+	float items_fade_t_ = 1.0f;
 	int category_ = 5;
 	int category_from_ = 5;
 	float category_t_ = 1.0f;

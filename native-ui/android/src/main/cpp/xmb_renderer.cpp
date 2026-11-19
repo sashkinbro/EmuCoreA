@@ -208,7 +208,7 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"item_video_settings", "images/topmenu_icon/CX.png"},
 		{"item_photo_settings", "images/topmenu_icon/CY.png"},
 		{"item_system_settings", "images/topmenu_icon/CZ.png"},
-		{"item_camera", "images/topmenu_icon/DJ.png"},
+		{"item_camera", "images/topmenu_icon/DL.png"},
 		{"item_comics", "images/topmenu_icon/DW.png"},
 		{"item_sensme", "images/topmenu_icon/DM.png"},
 		{"item_internet_search", "images/topmenu_icon/FB.png"},
@@ -667,6 +667,9 @@ void XmbRenderer::KeyPressed(Key key) {
 	case Key::Left:
 		if (category_ > 0) {
 			category_selected_[category_] = item_;
+			previous_items_ = items_;
+			previous_item_ = item_;
+			items_fade_t_ = 0.0f;
 			category_from_ = category_;
 			category_ -= 1;
 			category_t_ = 0.0f;
@@ -680,6 +683,9 @@ void XmbRenderer::KeyPressed(Key key) {
 	case Key::Right:
 		if (category_ < 7) {
 			category_selected_[category_] = item_;
+			previous_items_ = items_;
+			previous_item_ = item_;
+			items_fade_t_ = 0.0f;
 			category_from_ = category_;
 			category_ += 1;
 			category_t_ = 0.0f;
@@ -753,9 +759,23 @@ void XmbRenderer::DrawCategoryRow() {
 }
 
 void XmbRenderer::DrawItems() {
-	if (item_ > 0 && item_ <= (int)items_.size()) {
-		const Item &previous = items_[item_ - 1];
-		const float preview_color[4] = {1.0f, 1.0f, 1.0f, 0.55f};
+	const float fade = items_fade_t_;
+	const float eased = 1.0f - (1.0f - fade) * (1.0f - fade);
+	if (fade < 1.0f) {
+		DrawItemColumn(previous_items_, previous_item_, (float)previous_item_, 1.0f - eased);
+	}
+	const float scroll = Lerp((float)item_from_, (float)item_, item_t_);
+	DrawItemColumn(items_, item_, scroll, eased);
+}
+
+void XmbRenderer::DrawItemColumn(const std::vector<Item> &list, int selected, float scroll,
+                                 float global_alpha) {
+	if (global_alpha <= 0.001f || list.empty()) {
+		return;
+	}
+	if (selected > 0 && selected <= (int)list.size()) {
+		const Item &previous = list[selected - 1];
+		const float preview_color[4] = {1.0f, 1.0f, 1.0f, 0.55f * global_alpha};
 		auto preview_texture = textures_.find(previous.texture_name);
 		if (preview_texture != textures_.end()) {
 			DrawTexture(preview_texture->second, kItemIconX, 6.0f, 1.0f, preview_color);
@@ -764,9 +784,8 @@ void XmbRenderer::DrawItems() {
 			DrawText(previous.title, 141.0f, 17.0f, 0.81f, preview_color, true);
 		}
 	}
-	const float scroll = Lerp((float)item_from_, (float)item_, item_t_);
-	for (int index = 0; index < (int)items_.size(); ++index) {
-		if (index < item_) {
+	for (int index = 0; index < (int)list.size(); ++index) {
+		if (index < selected) {
 			continue;
 		}
 		const float y = kSelectedItemY + ((float)index - scroll) * kItemSpacing;
@@ -774,16 +793,16 @@ void XmbRenderer::DrawItems() {
 			continue;
 		}
 		float focus = 1.0f - std::min(1.0f, std::fabs((float)index - scroll));
-		float alpha = 0.55f + 0.45f * focus;
-		if (items_[index].disabled) {
+		float alpha = (0.55f + 0.45f * focus) * global_alpha;
+		if (list[index].disabled) {
 			alpha *= 0.45f;
 		}
 		const float color[4] = {1.0f, 1.0f, 1.0f, alpha};
-		auto texture = textures_.find(items_[index].texture_name);
+		auto texture = textures_.find(list[index].texture_name);
 		if (texture != textures_.end()) {
 			auto glow = textures_.find("focus_glow");
 			if (glow != textures_.end() && focus > 0.6f) {
-				const float glow_color[4] = {1.0f, 1.0f, 1.0f, 0.65f * focus};
+				const float glow_color[4] = {1.0f, 1.0f, 1.0f, 0.65f * focus * global_alpha};
 				DrawTexture(glow->second, kItemIconX, y, 0.65f, glow_color);
 			}
 			DrawTexture(texture->second, kItemIconX, y, 1.0f, color);
@@ -791,12 +810,12 @@ void XmbRenderer::DrawItems() {
 		if (!font_loaded_) {
 			continue;
 		}
-		const bool has_subtitle = !items_[index].subtitle.empty();
+		const bool has_subtitle = !list[index].subtitle.empty();
 		const float title_baseline = has_subtitle ? y - 5.0f : y + 5.0f;
-		DrawText(items_[index].title, 141.0f, title_baseline, 0.81f, color, true);
+		DrawText(list[index].title, 141.0f, title_baseline, 0.81f, color, true);
 		if (has_subtitle) {
 			const float subtitle_color[4] = {1.0f, 1.0f, 1.0f, alpha * 0.85f};
-			DrawText(items_[index].subtitle, 141.0f, y + 14.0f, 0.62f, subtitle_color, true);
+			DrawText(list[index].subtitle, 141.0f, y + 14.0f, 0.62f, subtitle_color, true);
 			const float rule_color[4] = {1.0f, 1.0f, 1.0f, alpha * 0.5f};
 			DrawQuad(141.0f, y + 1.0f, 335.0f, 1.0f, rule_color);
 		}
@@ -813,6 +832,9 @@ void XmbRenderer::Draw() {
 	dt = std::min(dt, 0.1f);
 	category_t_ = AdvanceTowardsOne(category_t_, dt, kCategoryTau);
 	item_t_ = AdvanceTowardsOne(item_t_, dt, kItemTau);
+	if (items_fade_t_ < 1.0f) {
+		items_fade_t_ = std::min(1.0f, items_fade_t_ + dt / 0.18f);
+	}
 
 	const float scale = std::min(surface_width_ / kScreenWidth, surface_height_ / kScreenHeight);
 	const int view_width = (int)std::lround(kScreenWidth * scale);
