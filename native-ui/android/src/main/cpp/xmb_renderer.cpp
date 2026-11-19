@@ -641,6 +641,13 @@ void XmbRenderer::DrawCategoryRow() {
 			icon_alpha = Lerp(0.55f, 1.0f, category_t_);
 		}
 		const float icon_color[4] = {1.0f, 1.0f, 1.0f, icon_alpha};
+		if (index == category_ && icon_scale >= 0.99f) {
+			const float glow[4] = {1.0f, 1.0f, 1.0f, 0.08f};
+			const float offsets[5][2] = {{0.0f, 0.0f}, {-2.0f, 0.0f}, {2.0f, 0.0f}, {0.0f, -2.0f}, {0.0f, 2.0f}};
+			for (const auto &offset : offsets) {
+				DrawTexture(texture->second, x + offset[0], kCategoryY + offset[1], 1.15f, glow);
+			}
+		}
 		DrawTexture(texture->second, x, kCategoryY, icon_scale, icon_color);
 		if (!font_loaded_) {
 			continue;
@@ -665,15 +672,24 @@ void XmbRenderer::DrawCategoryRow() {
 void XmbRenderer::DrawItems() {
 	const float scroll = Lerp((float)item_from_, (float)item_, item_t_);
 	for (int index = 0; index < (int)items_.size(); ++index) {
-		if (index < item_ && item_t_ >= 0.99f) {
-			continue;  // once the scroll settles, rows above the selection are not drawn
+		const bool above = index < item_;
+		if (above && item_t_ >= 0.99f) {
+			// One slot above is hidden behind the category row; the row two
+			// slots above is the dim preview seen at the top-left.
+			const int slots = item_ - index;
+			if (slots == 1) {
+				continue;
+			}
 		}
 		const float y = kSelectedItemY + ((float)index - scroll) * kItemSpacing;
 		if (y < -48.0f || y > kScreenHeight + 48.0f) {
 			continue;
 		}
 		float focus = 1.0f - std::min(1.0f, std::fabs((float)index - scroll));
-		const float alpha = 0.55f + 0.45f * focus;
+		float alpha = 0.55f + 0.45f * focus;
+		if (above) {
+			alpha *= 0.35f;
+		}
 		const float color[4] = {1.0f, 1.0f, 1.0f, alpha};
 		auto texture = textures_.find(items_[index].texture_name);
 		if (texture != textures_.end()) {
