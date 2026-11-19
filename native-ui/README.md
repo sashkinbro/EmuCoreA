@@ -68,7 +68,8 @@ native-ui/
 
 - [x] Directory, source of truth and build layout
 - [x] UMD updater extraction from an owned disc image
-- [ ] PSAR unpack to a local flash0 tree
+- [x] PSAR unpack to a local flash0 tree
+- [x] RLZ table decoder, verified on all 48 RLZ tables in the 6.60 firmware
 - [ ] RCO/GIM/VAG parsing and resource extraction
 - [ ] Resource pack + first-start installer
 - [ ] Game column renderer, animations and sounds
