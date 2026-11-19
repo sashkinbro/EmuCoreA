@@ -2099,7 +2099,7 @@
     <string name="xmb_bt_connected">연결됨</string>
     <string name="xmb_notice_bt_on">Bluetooth®가 켜져 있습니다. 페어링된 컨트롤러 및 오디오 기기가 활성화되었습니다.</string>
     <string name="xmb_notice_bt_off">이 기기에서 Bluetooth®가 꺼져 있습니다.</string>
-    <string name="xmb_opt_aspect_auto">자동 (전체 화면)</string>
+    <string name="xmb_opt_aspect_auto">자동</string>
     <string name="xmb_touch_guide_title">터치 및 제스처 조작</string>
     <string name="xmb_touch_guide_1">위 / 아래 / 왼쪽 / 오른쪽 스와이프: XMB 탐색</string>
     <string name="xmb_touch_guide_2">탭: 확인 또는 게임 시작</string>

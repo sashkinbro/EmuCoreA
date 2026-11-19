@@ -1539,7 +1539,16 @@ void XmbRenderer::DrawDialogHints(float box_x, float box_y, float box_w, float b
 }
 
 void XmbRenderer::DrawYesNoDialog(const std::string &line1, const std::string &line2, int selected) {
-	const float box_w = std::min(330.0f, screen_width_ - 28.0f);
+	float max_text_w = 0.0f;
+	const float base_scale = line2.empty() ? 0.72f : 0.68f;
+	if (font_loaded_) {
+		max_text_w = MeasureText(line1, base_scale);
+		if (!line2.empty()) {
+			max_text_w = std::max(max_text_w, MeasureText(line2, base_scale));
+		}
+	}
+	const float max_allowed_box_w = std::min(436.0f, screen_width_ - 24.0f);
+	const float box_w = std::clamp(max_text_w + 44.0f, std::min(330.0f, max_allowed_box_w), max_allowed_box_w);
 	const float box_x = (screen_width_ - box_w) * 0.5f;
 	const float box_y = 66.0f;
 	const float box_h = 138.0f;
@@ -1547,15 +1556,22 @@ void XmbRenderer::DrawYesNoDialog(const std::string &line1, const std::string &l
 
 	if (font_loaded_) {
 		const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-		const float prompt_scale = 0.72f;
+		const float inner_max_w = box_w - 32.0f;
+		auto draw_centered_fit = [&](const std::string &txt, float y, float pref_scale) {
+			if (txt.empty()) return;
+			float sc = pref_scale;
+			float w = MeasureText(txt, sc);
+			if (w > inner_max_w && w > 1.0f) {
+				sc = std::max(0.46f, sc * (inner_max_w / w));
+				w = MeasureText(txt, sc);
+			}
+			DrawText(txt, (screen_width_ - w) * 0.5f, y, sc, white, true);
+		};
 		if (line2.empty()) {
-			const float w = MeasureText(line1, prompt_scale);
-			DrawText(line1, (screen_width_ - w) * 0.5f, box_y + 46.0f, prompt_scale, white, true);
+			draw_centered_fit(line1, box_y + 46.0f, 0.72f);
 		} else {
-			const float w1 = MeasureText(line1, 0.68f);
-			const float w2 = MeasureText(line2, 0.68f);
-			DrawText(line1, (screen_width_ - w1) * 0.5f, box_y + 36.0f, 0.68f, white, true);
-			DrawText(line2, (screen_width_ - w2) * 0.5f, box_y + 56.0f, 0.68f, white, true);
+			draw_centered_fit(line1, box_y + 36.0f, 0.68f);
+			draw_centered_fit(line2, box_y + 56.0f, 0.68f);
 		}
 
 		const std::string yes_text = TextOr("msg_yes", "Yes");
@@ -1800,14 +1816,14 @@ int XmbRenderer::SettingsCurrentValue() const {
 		if (settings_sub_index_ == 1) return settings_.bgm_enabled ? 0 : 1;
 		return settings_.avls_enabled ? 0 : 1;
 	case SettingsKind::Video:
-		return settings_sub_index_ == 0 ? settings_.aspect_mode : 0;
+		return settings_sub_index_ == 0 ? settings_.aspect_mode : (seq_play_enabled_ ? 0 : 1);
 	case SettingsKind::Photo:
 		return settings_sub_index_ == 0 ? settings_.slideshow_speed : settings_.slideshow_effect;
 	case SettingsKind::DateTime:
 		if (settings_sub_index_ == 0) return settings_.date_format;
 		return settings_.time_24h ? 0 : 1;
 	case SettingsKind::PowerSave:
-		return settings_sub_index_ == 0 ? settings_.keep_screen_mode : 0;
+		return settings_sub_index_ == 0 ? settings_.keep_screen_mode : (wlan_power_save_ ? 0 : 1);
 	case SettingsKind::Security:
 		return settings_.parental_level;
 	case SettingsKind::Network:
@@ -1847,6 +1863,7 @@ void XmbRenderer::ApplySettingsPickerChoice(int v) {
 		break;
 	case SettingsKind::Video:
 		if (settings_sub_index_ == 0) settings_.aspect_mode = v;
+		else seq_play_enabled_ = (v == 0);
 		break;
 	case SettingsKind::Photo:
 		if (settings_sub_index_ == 0) settings_.slideshow_speed = v;
@@ -1858,6 +1875,7 @@ void XmbRenderer::ApplySettingsPickerChoice(int v) {
 		break;
 	case SettingsKind::PowerSave:
 		if (settings_sub_index_ == 0) settings_.keep_screen_mode = v;
+		else wlan_power_save_ = (v == 0);
 		break;
 	case SettingsKind::Security:
 		settings_.parental_level = v;
@@ -1917,9 +1935,9 @@ void XmbRenderer::DrawSettingsSubPage() {
 	const std::string opt_piano = TextOr("xmb_theme_piano", "Piano Black");
 	const std::string opt_on = TextOr("xmb_opt_on", "On");
 	const std::string opt_off = TextOr("xmb_opt_off", "Off");
-	const std::string opt_aspect_auto = TextOr("xmb_opt_aspect_auto", "Auto (Full Screen)");
-	const std::string opt_16_9 = TextOr("xmb_opt_16_9", "16:9 Original");
-	const std::string opt_4_3 = TextOr("xmb_opt_4_3", "4:3 Original");
+	const std::string opt_aspect_auto = TextOr("xmb_opt_aspect_auto", "Auto");
+	const std::string opt_16_9 = TextOr("xmb_opt_16_9", "16:9");
+	const std::string opt_4_3 = TextOr("xmb_opt_4_3", "4:3");
 	auto aspect_label = [&](int mode) -> std::string {
 		if (mode == 1) return opt_16_9;
 		if (mode == 2) return opt_4_3;
@@ -1997,7 +2015,7 @@ void XmbRenderer::DrawSettingsSubPage() {
 	} else if (settings_kind_ == SettingsKind::Video) {
 		rows = {
 			{ TextOr("xmb_setting_aspect", "Aspect Ratio"), aspect_label(settings_.aspect_mode) },
-			{ TextOr("xmb_setting_seq_play", "Sequential Playback"), opt_on },
+			{ TextOr("xmb_setting_seq_play", "Sequential Playback"), seq_play_enabled_ ? opt_on : opt_off },
 		};
 	} else if (settings_kind_ == SettingsKind::Photo) {
 		std::string spd = TextOr("xmb_opt_normal", "Normal");
@@ -2023,7 +2041,7 @@ void XmbRenderer::DrawSettingsSubPage() {
 		else if (settings_.keep_screen_mode == 2) bl = TextOr("xmb_opt_5min", "5 Minutes");
 		rows = {
 			{ TextOr("xmb_setting_backlight", "Backlight Auto-Off"), bl },
-			{ TextOr("xmb_setting_wlan_ps", "WLAN Power Save"), opt_on },
+			{ TextOr("xmb_setting_wlan_ps", "WLAN Power Save"), wlan_power_save_ ? opt_on : opt_off },
 		};
 	} else if (settings_kind_ == SettingsKind::Security) {
 		const std::string pval = settings_.parental_level == 0
@@ -2182,7 +2200,14 @@ void XmbRenderer::DrawSystemInfoDialog() {
 
 		auto row = [&](float y, const std::string &k, const std::string &v) {
 			DrawText(k, box_x + 20.0f, y, 0.64f, label_col, true);
-			DrawText(v, box_x + 158.0f, y, 0.64f, white, true);
+			const float val_x = std::max(box_x + 158.0f, box_x + 28.0f + MeasureText(k, 0.64f));
+			const float max_val_w = (box_x + box_w - 18.0f) - val_x;
+			float val_scale = 0.64f;
+			const float vw = MeasureText(v, val_scale);
+			if (vw > max_val_w && vw > 1.0f && max_val_w > 20.0f) {
+				val_scale = std::max(0.46f, val_scale * (max_val_w / vw));
+			}
+			DrawText(v, val_x, y, val_scale, white, true);
 		};
 		row(box_y + 62.0f, TextOr("xmb_sysinfo_fw", "System Software"), "7.1 EmuCore Edition");
 		row(box_y + 86.0f, TextOr("xmb_sysinfo_model", "Model"), "PSP\u2122 4000");
@@ -2286,7 +2311,13 @@ void XmbRenderer::DrawInfoDialog() {
 			const std::string display = val.empty() ? TextOr("msgshare_info_none", "-") : val;
 			DrawText(lbl, box_x + 18.0f, y, 0.58f, label_color, true);
 			const float val_x = std::max(box_x + 148.0f, box_x + 28.0f + MeasureText(lbl, 0.58f));
-			DrawText(display, val_x, y, 0.58f, white, true);
+			const float max_val_w = (box_x + box_w - 18.0f) - val_x;
+			float val_scale = 0.58f;
+			const float vw = MeasureText(display, val_scale);
+			if (vw > max_val_w && vw > 1.0f && max_val_w > 20.0f) {
+				val_scale = std::max(0.44f, val_scale * (max_val_w / vw));
+			}
+			DrawText(display, val_x, y, val_scale, white, true);
 		};
 
 		if (saved_data_page_ && save_page_index_ >= 0 && save_page_index_ < (int)saves_.size()) {
@@ -2527,6 +2558,8 @@ void XmbRenderer::KeyPressed(Key key) {
 					PlaySound(1);
 					restore_confirm_active_ = false;
 					settings_ = XmbSettings{};
+					seq_play_enabled_ = true;
+					wlan_power_save_ = true;
 					theme_dirty_ = true;
 					new_settings = settings_;
 					do_settings_changed = true;

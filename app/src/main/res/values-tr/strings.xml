@@ -2100,7 +2100,7 @@
     <string name="xmb_bt_connected">Bağlı</string>
     <string name="xmb_notice_bt_on">Bluetooth® etkin. Eşleştirilmiş kontrolcüler ve ses cihazları hazır.</string>
     <string name="xmb_notice_bt_off">Bu cihazda Bluetooth® kapalı.</string>
-    <string name="xmb_opt_aspect_auto">Otomatik (Tam Ekran)</string>
+    <string name="xmb_opt_aspect_auto">Otomatik</string>
     <string name="xmb_touch_guide_title">Dokunmatik ve Hareket Kontrolleri</string>
     <string name="xmb_touch_guide_1">Yukarı / Aşağı / Sola / Sağa Kaydır: XMB Gezinme</string>
     <string name="xmb_touch_guide_2">Dokun: Onayla veya oyunu başlat</string>

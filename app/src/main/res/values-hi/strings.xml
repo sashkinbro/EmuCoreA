@@ -2100,7 +2100,7 @@
     <string name="xmb_bt_connected">कनेक्टेड</string>
     <string name="xmb_notice_bt_on">Bluetooth® चालू है। पेयर किए गए कंट्रोलर और ऑडियो डिवाइस सक्रिय हैं।</string>
     <string name="xmb_notice_bt_off">इस डिवाइस पर Bluetooth® बंद है।</string>
-    <string name="xmb_opt_aspect_auto">ऑटो (फ़ुल स्क्रीन)</string>
+    <string name="xmb_opt_aspect_auto">ऑटो</string>
     <string name="xmb_touch_guide_title">टच और जेस्चर कंट्रोल</string>
     <string name="xmb_touch_guide_1">ऊपर / नीचे / बाएँ / दाएँ स्वाइप करें: XMB नेविगेट करें</string>
     <string name="xmb_touch_guide_2">टैप: पुष्टि करें या गेम शुरू करें</string>

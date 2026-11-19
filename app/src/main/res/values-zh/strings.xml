@@ -2101,7 +2101,7 @@
     <string name="xmb_bt_connected">已连接</string>
     <string name="xmb_notice_bt_on">Bluetooth®已启用。已配对的控制器与音频设备处于活动状态。</string>
     <string name="xmb_notice_bt_off">此设备上的Bluetooth®已关闭。</string>
-    <string name="xmb_opt_aspect_auto">自动 (全屏)</string>
+    <string name="xmb_opt_aspect_auto">自动</string>
     <string name="xmb_touch_guide_title">触控与手势操作</string>
     <string name="xmb_touch_guide_1">向上 / 下 / 左 / 右滑动：浏览 XMB</string>
     <string name="xmb_touch_guide_2">轻触：确认或启动游戏</string>

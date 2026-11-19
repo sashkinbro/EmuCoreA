@@ -2106,7 +2106,7 @@
     <string name="xmb_bt_connected">Підключено</string>
     <string name="xmb_notice_bt_on">Bluetooth® увімкнено. Підключені контролери та аудіопристрої активні.</string>
     <string name="xmb_notice_bt_off">Bluetooth® вимкнено на цьому пристрої.</string>
-    <string name="xmb_opt_aspect_auto">Авто (На весь екран)</string>
+    <string name="xmb_opt_aspect_auto">Авто</string>
     <string name="xmb_touch_guide_title">Сенсорне керування та жести</string>
     <string name="xmb_touch_guide_1">Свайп вгору / вниз / вліво / вправо: Навігація XMB</string>
     <string name="xmb_touch_guide_2">Дотик: Підтвердити або запустити гру</string>

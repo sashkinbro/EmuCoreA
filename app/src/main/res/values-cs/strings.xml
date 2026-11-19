@@ -2121,7 +2121,7 @@
     <string name="xmb_bt_connected">Připojeno</string>
     <string name="xmb_notice_bt_on">Bluetooth® je zapnutý. Spárované ovladače a zvuková zařízení jsou aktivní.</string>
     <string name="xmb_notice_bt_off">Bluetooth® je na tomto zařízení vypnutý.</string>
-    <string name="xmb_opt_aspect_auto">Auto (Celá obrazovka)</string>
+    <string name="xmb_opt_aspect_auto">Auto</string>
     <string name="xmb_touch_guide_title">Dotykové ovládání a gesta</string>
     <string name="xmb_touch_guide_1">Přejetí Nahoru / Dolů / Vlevo / Vpravo: Navigace v XMB</string>
     <string name="xmb_touch_guide_2">Klepnutí: Potvrdit nebo spustit hru</string>

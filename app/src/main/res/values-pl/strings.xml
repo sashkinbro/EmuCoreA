@@ -2121,7 +2121,7 @@
     <string name="xmb_bt_connected">Połączono</string>
     <string name="xmb_notice_bt_on">Bluetooth® jest włączony. Sparowane kontrolery i urządzenia audio są aktywne.</string>
     <string name="xmb_notice_bt_off">Bluetooth® jest wyłączony na tym urządzeniu.</string>
-    <string name="xmb_opt_aspect_auto">Auto (Pełny ekran)</string>
+    <string name="xmb_opt_aspect_auto">Auto</string>
     <string name="xmb_touch_guide_title">Sterowanie dotykiem i gestami</string>
     <string name="xmb_touch_guide_1">Przesunięcie w górę / dół / lewo / prawo: Nawigacja XMB</string>
     <string name="xmb_touch_guide_2">Dotknięcie: Potwierdź lub uruchom grę</string>

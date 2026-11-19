@@ -2114,7 +2114,7 @@
     <string name="xmb_bt_connected">Terhubung</string>
     <string name="xmb_notice_bt_on">Bluetooth® aktif. Kontroler dan perangkat audio yang dipasangkan siap digunakan.</string>
     <string name="xmb_notice_bt_off">Bluetooth® dinonaktifkan di perangkat ini.</string>
-    <string name="xmb_opt_aspect_auto">Otomatis (Layar Penuh)</string>
+    <string name="xmb_opt_aspect_auto">Otomatis</string>
     <string name="xmb_touch_guide_title">Kontrol Sentuh &amp; Gestur</string>
     <string name="xmb_touch_guide_1">Geser Atas / Bawah / Kiri / Kanan: Navigasi XMB</string>
     <string name="xmb_touch_guide_2">Ketuk: Konfirmasi atau mulai game</string>

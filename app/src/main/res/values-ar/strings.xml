@@ -2108,7 +2108,7 @@
     <string name="xmb_bt_connected">متصل</string>
     <string name="xmb_notice_bt_on">تم تفعيل Bluetooth®. وحدات التحكم وأجهزة الصوت المقترنة نشطة.</string>
     <string name="xmb_notice_bt_off">تم إيقاف Bluetooth® على هذا الجهاز.</string>
-    <string name="xmb_opt_aspect_auto">تلقائي (ملء الشاشة)</string>
+    <string name="xmb_opt_aspect_auto">تلقائي</string>
     <string name="xmb_touch_guide_title">تحكم اللمس والإيماءات</string>
     <string name="xmb_touch_guide_1">اسحب لأعلى / لأسفل / لليسار / لليمين: التنقل في XMB</string>
     <string name="xmb_touch_guide_2">لمس: تأكيد أو بدء اللعبة</string>

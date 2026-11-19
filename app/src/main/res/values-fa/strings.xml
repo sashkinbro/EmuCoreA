@@ -2115,7 +2115,7 @@
     <string name="xmb_bt_connected">متصل</string>
     <string name="xmb_notice_bt_on">Bluetooth® فعال است. دسته‌ها و دستگاه‌های صوتی جفت‌شده آماده هستند.</string>
     <string name="xmb_notice_bt_off">Bluetooth® در این دستگاه خاموش است.</string>
-    <string name="xmb_opt_aspect_auto">خودکار (تمام‌صفحه)</string>
+    <string name="xmb_opt_aspect_auto">خودکار</string>
     <string name="xmb_touch_guide_title">کنترل‌های لمسی و حرکتی</string>
     <string name="xmb_touch_guide_1">کشیدن به بالا / پایین / چپ / راست: پیمایش XMB</string>
     <string name="xmb_touch_guide_2">ضربه: تأیید یا شروع بازی</string>

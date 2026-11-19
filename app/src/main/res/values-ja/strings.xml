@@ -2099,7 +2099,7 @@
     <string name="xmb_bt_connected">接続中</string>
     <string name="xmb_notice_bt_on">Bluetooth®は有効です。ペアリングされたコントローラーとオーディオ機器が使用可能です。</string>
     <string name="xmb_notice_bt_off">この機器のBluetooth®はオフになっています。</string>
-    <string name="xmb_opt_aspect_auto">自動 (フルスクリーン)</string>
+    <string name="xmb_opt_aspect_auto">自動</string>
     <string name="xmb_touch_guide_title">タッチ＆ジェスチャー操作</string>
     <string name="xmb_touch_guide_1">上下左右にスワイプ: XMBの移動</string>
     <string name="xmb_touch_guide_2">タップ: 決定 / ゲーム起動</string>

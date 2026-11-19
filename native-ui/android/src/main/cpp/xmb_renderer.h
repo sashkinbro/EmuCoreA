@@ -262,6 +262,8 @@ private:
 	float screen_width_ = 480.0f;
 	bool touch_mode_active_ = false;
 	bool touch_tutorial_active_ = false;
+	bool seq_play_enabled_ = true;
+	bool wlan_power_save_ = true;
 	bool logged_gl_error_ = false;
 	bool initialized_once_ = false;
 	bool games_loading_ = true;
