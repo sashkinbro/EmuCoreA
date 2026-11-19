@@ -70,6 +70,27 @@ The gestures feed the same `KeyPressed` path as the physical D-pad, so the
 animation, sounds and selection state are identical. Thresholds and velocity
 handling live in the host, not in the firmware renderer.
 
+## Opening transition
+
+Entering the mode from the app must play the short PSP opening animation, not
+cut straight to the menu. The source is `opening_plugin.rco` (already extracted
+with its model and images): the short startup sequence before the XMB, not the
+long cold-boot init. It is rendered by the same native scene, synchronised with
+the boot sound, and must be skippable/consumed exactly like the firmware
+animation. The final frame hands over to the menu without a flash.
+
+## Game library and selection
+
+- The Game column is populated from the application's existing library: every
+  game visible in the app appears with its own title and icon/cover art.
+- Selecting a game shows its PSP-style background: PIC1 image, ICON0 icon,
+  SND0/ATRAC music where the game carries it, and the same focus/transition
+  behaviour as a UMD item.
+- Confirm launches through the existing emulation handoff. Closing the game —
+  Back, in-game exit, emulator shutdown or process death — returns to the XMB
+  at the exact category/item that was selected when the game started.
+- The mode restores that position on a cold start; no reset to the first item.
+
 ## Settings
 
 The settings for the mode live inside the XMB itself, as the PSP's own Settings
