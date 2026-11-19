@@ -250,16 +250,33 @@ class Pgf:
         glyph = self._read_char(bit_pos)
         skip, _ = _consume_bits(self.font_data, bit_pos, 14)
         bit_pos += skip * 8
-        fields, bit_pos = self._skip_glyph_header(bit_pos)
-        pixels = self._decode_bitmap(bit_pos // 8 * 8, fields["width"], fields["height"])
+        # Shadow sub-glyph: 14-bit size, then width/height/left/top; the bitmap
+        # pointer follows immediately, with no flag or metric block.
+        bit_pos += 14
+        width, bit_pos = _consume_bits(self.font_data, bit_pos, 7)
+        height, bit_pos = _consume_bits(self.font_data, bit_pos, 7)
+        left, bit_pos = _consume_bits(self.font_data, bit_pos, 7)
+        top, bit_pos = _consume_bits(self.font_data, bit_pos, 7)
+        if left >= 64:
+            left -= 128
+        if top >= 64:
+            top -= 128
+        pointer = bit_pos // 8
+        pixels = self._decode_bitmap(pointer * 8, width, height)
+        if (glyph.flags & 0x03) == 0x02 and width > 0 and height > 0:
+            pixels = bytes(
+                pixels[x * height + y]
+                for y in range(height)
+                for x in range(width)
+            )
         return Glyph(
-            width=fields["width"], height=fields["height"], left=fields["left"], top=fields["top"],
+            width=width, height=height, left=left, top=top,
             flags=glyph.flags, shadow_flags=glyph.shadow_flags, shadow_id=glyph.shadow_id,
             advance_h=glyph.advance_h, advance_v=glyph.advance_v,
             dimension_width=glyph.dimension_width, dimension_height=glyph.dimension_height,
             x_adjust_h=glyph.x_adjust_h, x_adjust_v=glyph.x_adjust_v,
             y_adjust_h=glyph.y_adjust_h, y_adjust_v=glyph.y_adjust_v,
-            pointer=bit_pos // 8, pixels=pixels,
+            pointer=pointer, pixels=pixels,
         )
 
     def _decode_bitmap(self, bit_pos: int, width: int, height: int) -> bytes:

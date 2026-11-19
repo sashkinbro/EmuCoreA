@@ -211,7 +211,6 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 	items_ = {
 		{ "Saved Data Utility", "", "item_savedata" },
 		{ "Memory Stick", "Free Space 1459 MB", "item_memstick" },
-		{ "PSP Update ver 6.10", "", "item_update" },
 	};
 	item_ = 0;
 	item_from_ = 0;
@@ -722,6 +721,13 @@ void XmbRenderer::DrawCategoryRow() {
 }
 
 void XmbRenderer::DrawItems() {
+	// The media indicator at the top-left is the inserted Memory Stick's icon
+	// (BI); it is not a list row and stays fixed while the utilities scroll.
+	auto top_icon = textures_.find("item_memstick");
+	if (top_icon != textures_.end()) {
+		const float top_color[4] = {1.0f, 1.0f, 1.0f, 0.95f};
+		DrawTexture(top_icon->second, kItemIconX, 7.0f, 1.5f, top_color);
+	}
 	const float scroll = Lerp((float)item_from_, (float)item_, item_t_);
 	for (int index = 0; index < (int)items_.size(); ++index) {
 		const bool above = index < item_;

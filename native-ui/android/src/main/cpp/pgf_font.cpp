@@ -284,8 +284,26 @@ std::optional<FontGlyph> PgfFont::ReadShadow(size_t bit_pos) const {
 		return std::nullopt;
 	}
 	FontGlyph shadow = *glyph;
-	SkipGlyphHeader(bit_pos, shadow);
+	// The shadow sub-glyph stores only its size/bearing before the bitmap; unlike
+	// the main glyph it has no flag/metric block. The pointer must therefore be
+	// taken immediately after these four 7-bit fields.
+	bit_pos += 14;
+	shadow.width = (int)GetBits(bit_pos, 7); bit_pos += 7;
+	shadow.height = (int)GetBits(bit_pos, 7); bit_pos += 7;
+	shadow.left = (int)GetBits(bit_pos, 7); bit_pos += 7;
+	shadow.top = (int)GetBits(bit_pos, 7); bit_pos += 7;
+	if (shadow.left >= 64) shadow.left -= 128;
+	if (shadow.top >= 64) shadow.top -= 128;
 	shadow.pixels = DecodeBitmap(bit_pos / 8 * 8, shadow.width, shadow.height);
+	if ((shadow.flags & 0x03) == 0x02 && shadow.width > 0 && shadow.height > 0) {
+		std::vector<uint8_t> transposed(shadow.pixels.size());
+		for (int y = 0; y < shadow.height; ++y) {
+			for (int x = 0; x < shadow.width; ++x) {
+				transposed[y * shadow.width + x] = shadow.pixels[x * shadow.height + y];
+			}
+		}
+		shadow.pixels = std::move(transposed);
+	}
 	return shadow;
 }
 

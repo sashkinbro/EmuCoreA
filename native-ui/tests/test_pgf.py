@@ -52,6 +52,13 @@ class PgfTest(unittest.TestCase):
         self.assertAlmostEqual(self.font.text_width("Saved Data Utility"), 184.484375, places=3)
         self.assertAlmostEqual(self.font.text_width("Memory Stick"), 139.75, places=3)
 
+    def test_shadow_glyph(self) -> None:
+        shadow = self.font.glyph("S", shadow=True)
+        assert shadow is not None
+        self.assertEqual((shadow.width, shadow.height), (13, 14))
+        self.assertEqual((shadow.left, shadow.top), (-3, 9))
+        self.assertEqual(len(shadow.pixels), 13 * 14)
+
     def test_missing_glyph(self) -> None:
         self.assertIsNone(self.font.glyph("\u2603"))  # not in the Latin font
 
