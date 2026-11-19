@@ -42,6 +42,8 @@ RCO_FILES = (
     "savedata_plugin.rco",
     "opening_plugin.rco",
     "impose_plugin.rco",
+    "sysconf_plugin.rco",
+    "netconf_dialog.rco",
 )
 
 FONT_FILES = ("ltn0.pgf", "ltn1.pgf", "ltn2.pgf", "ltn3.pgf", "ltn4.pgf",
@@ -350,6 +352,52 @@ def extract_theme_assets(resource_dir: Path, staging: Path, files: list[dict], c
                         gim.png_bytes(decoded),
                         sha256(gims[ptf_idx]),
                     )
+
+    # Extract authentic ATRAC3plus gameboot audio stream from flash0 gameboot.pmf
+    pmf_path = resource_dir / "gameboot.pmf"
+    if pmf_path.is_file():
+        pmf_data = pmf_path.read_bytes()
+        stream = bytearray()
+        pos = 0
+        while True:
+            idx = pmf_data.find(b"\x00\x00\x01\xbd", pos)
+            if idx < 0 or idx + 9 > len(pmf_data):
+                break
+            pkt_len = (pmf_data[idx + 4] << 8) | pmf_data[idx + 5]
+            hdr_len = pmf_data[idx + 8]
+            payload_start = idx + 9 + hdr_len
+            payload_end = min(len(pmf_data), idx + 6 + pkt_len)
+            if payload_start + 4 < payload_end:
+                stream.extend(pmf_data[payload_start + 4:payload_end])
+            pos = idx + 4
+        raw_frames = bytearray()
+        for off in range(0, len(stream), 752):
+            if off + 752 <= len(stream) and stream[off:off + 4] == b"\x0f\xd0\x28\x5c":
+                raw_frames.extend(stream[off + 8:off + 752])
+        if raw_frames:
+            block_align = 744
+            sample_rate = 44100
+            channels = 2
+            avg_bps = (sample_rate * block_align) // 2048
+            fmt_chunk = struct.pack("<HHIIHHH", 0xFFFE, channels, sample_rate, avg_bps, block_align, 0, 0)
+            riff_body = (
+                b"WAVE"
+                + b"fmt " + struct.pack("<I", len(fmt_chunk)) + fmt_chunk
+                + b"data" + struct.pack("<I", len(raw_frames)) + bytes(raw_frames)
+            )
+            at3_bytes = b"RIFF" + struct.pack("<I", len(riff_body)) + riff_body
+            dest = staging / "audio" / "system_plugin" / "snd_gameboot.at3"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(at3_bytes)
+            files.append({
+                "kind": "audio", "rco": "gameboot.pmf", "label": "snd_gameboot",
+                "format": "atrac3plus", "channels": channels, "sample_rate": sample_rate,
+                "frames": len(raw_frames) // block_align,
+                "file": str(dest.relative_to(staging)),
+                "sha256_file": sha256(at3_bytes),
+                "sha256_source": sha256(pmf_data),
+            })
+            counts["audio"] += 1
 
 
 def main(argv: list[str]) -> int:

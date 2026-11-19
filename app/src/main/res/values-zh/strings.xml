@@ -2088,4 +2088,17 @@
     <string name="xmb_notice_skype">PSP™ 版 Skype™ 服务已停止。</string>
     <string name="xmb_notice_psn">离线模拟器模式下无法使用 PlayStation®Network。</string>
     <string name="xmb_notice_ps_store">离线模拟器模式下无法访问 PlayStation®Store。</string>
+    <string name="xmb_theme_ceramic">陶瓷白</string>
+    <string name="xmb_theme_radiant_red">艳光红</string>
+    <string name="xmb_theme_vibrant_blue">跃动蓝</string>
+    <string name="xmb_theme_spirited_green">灵动绿</string>
+    <string name="xmb_theme_bright_yellow">明艳黄</string>
+    <string name="xmb_theme_blossom_pink">樱花粉</string>
+    <string name="xmb_theme_turquoise">绿松石</string>
+    <string name="xmb_theme_lilac">丁香紫</string>
+    <string name="xmb_setting_bt_devices">Bluetooth®设备设定</string>
+    <string name="xmb_setting_bt_manage">管理Bluetooth®设备</string>
+    <string name="xmb_bt_connected">已连接</string>
+    <string name="xmb_notice_bt_on">Bluetooth®已启用。已配对的控制器与音频设备处于活动状态。</string>
+    <string name="xmb_notice_bt_off">此设备上的Bluetooth®已关闭。</string>
 </resources>

@@ -2087,4 +2087,17 @@
     <string name="xmb_notice_skype">Il servizio Skype™ su PSP™ non è più attivo.</string>
     <string name="xmb_notice_psn">PlayStation®Network non disponibile in modalità offline.</string>
     <string name="xmb_notice_ps_store">PlayStation®Store non accessibile in modalità offline.</string>
+    <string name="xmb_theme_ceramic">Bianco ceramica</string>
+    <string name="xmb_theme_radiant_red">Rosso brillante</string>
+    <string name="xmb_theme_vibrant_blue">Blu intenso</string>
+    <string name="xmb_theme_spirited_green">Verde smeraldo</string>
+    <string name="xmb_theme_bright_yellow">Giallo brillante</string>
+    <string name="xmb_theme_blossom_pink">Rosa fiore</string>
+    <string name="xmb_theme_turquoise">Turchese</string>
+    <string name="xmb_theme_lilac">Viola lilla</string>
+    <string name="xmb_setting_bt_devices">Impostazioni dei dispositivi Bluetooth®</string>
+    <string name="xmb_setting_bt_manage">Gestisci dispositivi Bluetooth®</string>
+    <string name="xmb_bt_connected">Connesso</string>
+    <string name="xmb_notice_bt_on">Bluetooth® è attivo. I controller e i dispositivi audio associati sono pronti.</string>
+    <string name="xmb_notice_bt_off">Bluetooth® è disattivato su questo dispositivo.</string>
 </resources>

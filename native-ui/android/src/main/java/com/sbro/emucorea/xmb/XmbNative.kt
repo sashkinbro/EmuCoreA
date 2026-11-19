@@ -57,6 +57,15 @@ object XmbNative {
 
     external fun nativeSetNetworkStatus(connected: Boolean)
 
+    external fun nativeSetWirelessStatus(
+        wifiConnected: Boolean,
+        bluetoothEnabled: Boolean,
+        bluetoothConnected: Boolean,
+        audioMuted: Boolean,
+    )
+
+    external fun nativeTriggerTransition(kind: Int)
+
     external fun nativeSetSettings(
         themeStyle: Int,
         colorIndex: Int,

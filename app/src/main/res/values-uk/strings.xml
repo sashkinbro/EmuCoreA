@@ -2093,4 +2093,17 @@
     <string name="xmb_notice_skype">Службу Skype™ для PSP™ припинено постачальником.</string>
     <string name="xmb_notice_psn">PlayStation®Network недоступна в автономному режимі емулятора.</string>
     <string name="xmb_notice_ps_store">PlayStation®Store недоступний в автономному режимі емулятора.</string>
+    <string name="xmb_theme_ceramic">Керамічний білий</string>
+    <string name="xmb_theme_radiant_red">Яскраво-червоний</string>
+    <string name="xmb_theme_vibrant_blue">Насичений синій</string>
+    <string name="xmb_theme_spirited_green">Смарагдовий зелений</string>
+    <string name="xmb_theme_bright_yellow">Яскраво-жовтий</string>
+    <string name="xmb_theme_blossom_pink">Квітучий рожевий</string>
+    <string name="xmb_theme_turquoise">Бірюзовий</string>
+    <string name="xmb_theme_lilac">Бузковий фіолетовий</string>
+    <string name="xmb_setting_bt_devices">Налаштування пристроїв Bluetooth®</string>
+    <string name="xmb_setting_bt_manage">Керування пристроями Bluetooth®</string>
+    <string name="xmb_bt_connected">Підключено</string>
+    <string name="xmb_notice_bt_on">Bluetooth® увімкнено. Підключені контролери та аудіопристрої активні.</string>
+    <string name="xmb_notice_bt_off">Bluetooth® вимкнено на цьому пристрої.</string>
 </resources>

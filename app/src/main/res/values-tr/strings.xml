@@ -2087,4 +2087,17 @@
     <string name="xmb_notice_skype">PSP™ için Skype™ hizmeti sonlandırılmıştır.</string>
     <string name="xmb_notice_psn">Çevrimdışı öykünücü modunda PlayStation®Network kullanılamaz.</string>
     <string name="xmb_notice_ps_store">Çevrimdışı öykünücü modunda PlayStation®Store erişilemez.</string>
+    <string name="xmb_theme_ceramic">Seramik Beyazı</string>
+    <string name="xmb_theme_radiant_red">Parlak Kırmızı</string>
+    <string name="xmb_theme_vibrant_blue">Canlı Mavi</string>
+    <string name="xmb_theme_spirited_green">Zümrüt Yeşili</string>
+    <string name="xmb_theme_bright_yellow">Parlak Sarı</string>
+    <string name="xmb_theme_blossom_pink">Çiçek Pembesi</string>
+    <string name="xmb_theme_turquoise">Turkuaz</string>
+    <string name="xmb_theme_lilac">Leylak Moru</string>
+    <string name="xmb_setting_bt_devices">Bluetooth® Cihaz Ayarları</string>
+    <string name="xmb_setting_bt_manage">Bluetooth® Cihazlarını Yönet</string>
+    <string name="xmb_bt_connected">Bağlı</string>
+    <string name="xmb_notice_bt_on">Bluetooth® etkin. Eşleştirilmiş kontrolcüler ve ses cihazları hazır.</string>
+    <string name="xmb_notice_bt_off">Bu cihazda Bluetooth® kapalı.</string>
 </resources>

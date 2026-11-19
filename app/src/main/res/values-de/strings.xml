@@ -2089,4 +2089,17 @@
     <string name="xmb_notice_skype">Der Skype™-Dienst für PSP™ wurde eingestellt.</string>
     <string name="xmb_notice_psn">PlayStation®Network ist im Offline-Emulatormodus nicht verfügbar.</string>
     <string name="xmb_notice_ps_store">PlayStation®Store ist im Offline-Emulatormodus nicht verfügbar.</string>
+    <string name="xmb_theme_ceramic">Keramikweiß</string>
+    <string name="xmb_theme_radiant_red">Strahlendes Rot</string>
+    <string name="xmb_theme_vibrant_blue">Kräftiges Blau</string>
+    <string name="xmb_theme_spirited_green">Smaragdgrün</string>
+    <string name="xmb_theme_bright_yellow">Leuchtend Gelb</string>
+    <string name="xmb_theme_blossom_pink">Blütenrosa</string>
+    <string name="xmb_theme_turquoise">Türkis</string>
+    <string name="xmb_theme_lilac">Fliederlila</string>
+    <string name="xmb_setting_bt_devices">Bluetooth®-Geräteeinstellungen</string>
+    <string name="xmb_setting_bt_manage">Bluetooth®-Geräte verwalten</string>
+    <string name="xmb_bt_connected">Verbunden</string>
+    <string name="xmb_notice_bt_on">Bluetooth® ist aktiviert. Gekoppelte Controller und Audiogeräte sind bereit.</string>
+    <string name="xmb_notice_bt_off">Bluetooth® ist auf diesem Gerät deaktiviert.</string>
 </resources>

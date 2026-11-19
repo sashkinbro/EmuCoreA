@@ -2102,4 +2102,17 @@
     <string name="xmb_notice_skype">سرویس Skype™ برای PSP™ متوقف شده است.</string>
     <string name="xmb_notice_psn">شبکه PlayStation®Network در حالت آفلاین در دسترس نیست.</string>
     <string name="xmb_notice_ps_store">فروشگاه PlayStation®Store در حالت آفلاین در دسترس نیست.</string>
+    <string name="xmb_theme_ceramic">سفید سرامیکی</string>
+    <string name="xmb_theme_radiant_red">قرمز درخشان</string>
+    <string name="xmb_theme_vibrant_blue">آبی پررنگ</string>
+    <string name="xmb_theme_spirited_green">سبز زمردی</string>
+    <string name="xmb_theme_bright_yellow">زرد روشن</string>
+    <string name="xmb_theme_blossom_pink">صورتی شکوفه‌ای</string>
+    <string name="xmb_theme_turquoise">فیروزه‌ای</string>
+    <string name="xmb_theme_lilac">بنفش یاسی</string>
+    <string name="xmb_setting_bt_devices">تنظیمات دستگاه‌های Bluetooth®</string>
+    <string name="xmb_setting_bt_manage">مدیریت دستگاه‌های Bluetooth®</string>
+    <string name="xmb_bt_connected">متصل</string>
+    <string name="xmb_notice_bt_on">Bluetooth® فعال است. دسته‌ها و دستگاه‌های صوتی جفت‌شده آماده هستند.</string>
+    <string name="xmb_notice_bt_off">Bluetooth® در این دستگاه خاموش است.</string>
 </resources>

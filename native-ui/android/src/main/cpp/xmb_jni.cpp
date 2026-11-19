@@ -551,6 +551,26 @@ Java_com_sbro_emucorea_xmb_XmbNative_nativeSetState(JNIEnv *, jclass, jint categ
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeSetWirelessStatus(
+	JNIEnv *, jclass,
+	jboolean wifi_connected,
+	jboolean bluetooth_enabled,
+	jboolean bluetooth_connected,
+	jboolean audio_muted
+) {
+	g_renderer.SetWirelessStatus(
+		wifi_connected == JNI_TRUE,
+		bluetooth_enabled == JNI_TRUE,
+		bluetooth_connected == JNI_TRUE,
+		audio_muted == JNI_TRUE);
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeTriggerTransition(JNIEnv *, jclass, jint kind) {
+	g_renderer.TriggerTransition((int)kind);
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_xmb_XmbNative_nativeShutdown(JNIEnv *, jclass) {
 	g_renderer.Shutdown();
 }

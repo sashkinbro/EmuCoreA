@@ -24,6 +24,9 @@ object XmbAudio {
     const val CATEGORY_DECIDE = 3
     const val OPTION = 4
     const val ERROR = 5
+    const val SYSTEM_OK = 6
+    const val SYSTEM_NG = 7
+    const val GAMEBOOT = 8
 
     private const val TAG = "XmbAudio"
 
@@ -56,7 +59,7 @@ object XmbAudio {
         }
     }
 
-    private val soundIds = IntArray(6)
+    private val soundIds = IntArray(9)
 
     fun initialize(context: Context, root: File) {
         if (soundPool != null) {
@@ -75,6 +78,16 @@ object XmbAudio {
                 Log.w(TAG, "sound $sampleId failed to load: $status")
             }
         }
+        val audioDir = File(root, "audio/system_plugin")
+        val gamebootWav = File(audioDir, "snd_gameboot.wav")
+        val gamebootAt3 = File(audioDir, "snd_gameboot.at3")
+        if (!gamebootWav.isFile && gamebootAt3.isFile) {
+            runCatching {
+                XmbNative.nativeDecodeAt3Bytes(gamebootAt3.readBytes(), gamebootWav.absolutePath)
+            }.onFailure {
+                Log.w(TAG, "failed to decode snd_gameboot.at3", it)
+            }
+        }
         val files = arrayOf(
             "snd_cursor.wav",
             "snd_decide.wav",
@@ -82,8 +95,10 @@ object XmbAudio {
             "snd_category_decide.wav",
             "snd_option.wav",
             "snd_error.wav",
+            "snd_system_ok.wav",
+            "snd_system_ng.wav",
+            "snd_gameboot.wav",
         )
-        val audioDir = File(root, "audio/system_plugin")
         for (index in files.indices) {
             val file = File(audioDir, files[index])
             if (file.isFile) {
@@ -96,7 +111,10 @@ object XmbAudio {
 
     @JvmStatic
     fun play(sound: Int) {
-        if (!keyToneEnabled) return
+        if (sound == GAMEBOOT) {
+            stopBgm()
+        }
+        if (!keyToneEnabled && sound != GAMEBOOT) return
         val pool = soundPool ?: return
         val id = soundIds.getOrNull(sound) ?: 0
         if (id != 0) {

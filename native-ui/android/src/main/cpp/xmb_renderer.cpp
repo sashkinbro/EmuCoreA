@@ -339,6 +339,7 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"item_network_settings", "images/topmenu_icon/CD.png"},
 		{"item_rss_settings", "images/topmenu_icon/CE.png"},
 		{"item_display_settings", "images/topmenu_icon/CF.png"},
+		{"item_bluetooth_settings", "images/topmenu_icon/CG.png"},
 		{"item_comics", "images/topmenu_icon/DV.png"},
 		{"item_1seg", "images/topmenu_icon/DS.png"},
 		{"item_camera", "images/topmenu_icon/DJ.png"},
@@ -359,6 +360,26 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"item_psn_store", "images/topmenu_icon/FV.png"},
 		{"item_info_board", "images/topmenu_icon/FX.png"},
 		{"battery", "images/system_plugin_fg/tex_battery.png"},
+		{"battery_shadow", "images/system_plugin_fg/tex_battery_shadow.png"},
+		{"status_bt", "images/impose_plugin/tex_bt_mark.png"},
+		{"status_wifi", "images/topmenu_icon/EV.png"},
+		{"status_net", "images/netconf_dialog/tex_netconf_icon.png"},
+		{"status_avls", "images/impose_plugin/tex_avls.png"},
+		{"status_mute", "images/system_plugin_fg/tex_mute.png"},
+		{"status_mute_shadow", "images/system_plugin_fg/tex_mute_shadow.png"},
+		{"status_ms", "images/sysconf_plugin/tex_ms.png"},
+		{"status_busy", "images/system_plugin_fg/tex_busy.png"},
+		{"status_busy_shadow", "images/system_plugin_fg/tex_busy_shadow.png"},
+		{"open_psp_logo", "images/opening_plugin/tex_psp_logo.png"},
+		{"open_sce_logo", "images/opening_plugin/tex_logo.png"},
+		{"open_glow", "images/opening_plugin/tex_glow.png"},
+		{"open_glow_a", "images/opening_plugin/tex_glow_A.png"},
+		{"open_glow_b_top", "images/opening_plugin/tex_glow_B_top.png"},
+		{"open_glow_b_mid", "images/opening_plugin/tex_glow_B_mid.png"},
+		{"open_glow_b_bot", "images/opening_plugin/tex_glow_B_buttom.png"},
+		{"preview_orig", "images/sysconf_plugin/tex_original_preview.png"},
+		{"preview_classic", "images/sysconf_plugin/tex_classic_preview.png"},
+		{"gameboot_bg", "images/themes/ext_10.png"},
 		{"focus_glow", "images/system_plugin/tex_3x3_focus.png"},
 		{"item_game", "images/system_plugin/tex_default_game_icon.png"},
 		{"frame_subs", "images/game_plugin/tex_subs_frame.png"},
@@ -396,6 +417,7 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		category_ = 5;
 		category_from_ = 5;
 		category_t_ = 1.0f;
+		opening_t_ = 0.0f;
 	} else {
 		items_ = categories_[category_];
 		item_ = items_.empty() ? 0 : std::max(0, std::min((int)items_.size() - 1, item_));
@@ -440,6 +462,7 @@ void XmbRenderer::RebuildCategories() {
 		{ TextOr("msgtop_sysconf_network", "Network Settings"), "", "item_network_settings" },
 		{ TextOr("msgtop_sysconf_rss", "RSS Channel Settings"), "", "item_rss_settings" },
 		{ TextOr("msg_display_setting", "Connected Display Settings"), "", "item_display_settings" },
+		{ TextOr("xmb_setting_bt_devices", "Bluetooth\u00ae Device Settings"), "", "item_bluetooth_settings" },
 	};
 	// 1: Extras
 	categories_[1] = {
@@ -619,7 +642,7 @@ void XmbRenderer::SetStorageInfo(const std::string &free_space_text, const std::
 void XmbRenderer::ApplySettings(const XmbSettings &settings) {
 	std::lock_guard<std::recursive_mutex> lock(mutex_);
 	settings_ = settings;
-	settings_.theme_style = std::max(0, std::min(3, settings_.theme_style));
+	settings_.theme_style = std::max(0, std::min(11, settings_.theme_style));
 	settings_.color_index = std::max(0, std::min(34, settings_.color_index));
 	settings_.bg_mode = std::max(0, std::min(2, settings_.bg_mode));
 	settings_.wave_mode = std::max(0, std::min(3, settings_.wave_mode));
@@ -646,6 +669,25 @@ void XmbRenderer::SetSavesLoading(bool loading) {
 void XmbRenderer::SetNetworkStatus(bool connected) {
 	std::lock_guard<std::recursive_mutex> lock(mutex_);
 	network_connected_ = connected;
+}
+
+void XmbRenderer::SetWirelessStatus(bool wifi_connected, bool bluetooth_enabled, bool bluetooth_connected, bool audio_muted) {
+	std::lock_guard<std::recursive_mutex> lock(mutex_);
+	network_connected_ = wifi_connected;
+	bluetooth_enabled_ = bluetooth_enabled;
+	bluetooth_connected_ = bluetooth_connected;
+	audio_muted_ = audio_muted;
+}
+
+void XmbRenderer::TriggerTransition(int kind) {
+	std::lock_guard<std::recursive_mutex> lock(mutex_);
+	if (kind == 0) {
+		opening_t_ = 0.0f;
+		resume_t_ = 1.0f;
+	} else if (kind == 1) {
+		resume_t_ = 0.0f;
+		opening_t_ = 1.0f;
+	}
 }
 
 std::string XmbRenderer::TextOr(const std::string &key, const std::string &fallback) const {
@@ -731,6 +773,42 @@ void XmbRenderer::DrawStatusBar() {
 	if (!font_loaded_) {
 		return;
 	}
+	float bar_alpha = 0.95f;
+	if (opening_t_ < 1.0f) {
+		const float u = std::clamp((opening_t_ - 0.55f) / 0.45f, 0.0f, 1.0f);
+		bar_alpha *= u * u * (3.0f - 2.0f * u);
+	}
+	if (bar_alpha <= 0.01f) {
+		return;
+	}
+
+	// Top-left transient Memory Stick access indicator (authentic PSP boot & loading behavior)
+	if (opening_t_ < 0.95f || resume_t_ < 0.85f || games_loading_ || saves_loading_) {
+		float ms_slide = 0.0f;
+		float ms_alpha = bar_alpha;
+		if (!games_loading_ && !saves_loading_) {
+			if (opening_t_ < 0.95f && opening_t_ > 0.65f) {
+				const float t = (opening_t_ - 0.65f) / 0.30f;
+				ms_slide = t * 28.0f;
+				ms_alpha *= (1.0f - t);
+			} else if (resume_t_ < 0.85f && resume_t_ > 0.50f) {
+				const float t = (resume_t_ - 0.50f) / 0.35f;
+				ms_slide = t * 28.0f;
+				ms_alpha *= (1.0f - t);
+			}
+		}
+		auto ms_tex = textures_.find("status_ms");
+		if (ms_tex != textures_.end() && ms_alpha > 0.02f) {
+			const float msc[4] = {1.0f, 1.0f, 1.0f, ms_alpha * 0.92f};
+			const float mss[4] = {0.0f, 0.0f, 0.0f, ms_alpha * 0.50f};
+			DrawTexture(ms_tex->second, 18.0f - ms_slide, 13.0f, 0.95f, mss);
+			DrawTexture(ms_tex->second, 17.0f - ms_slide, 12.0f, 0.95f, msc);
+			const float led_pulse = 0.45f + 0.55f * std::abs(std::sin(time_elapsed_ * 9.0f));
+			const float led_col[4] = {1.0f, 0.58f, 0.14f, ms_alpha * led_pulse};
+			DrawSolidQuad(27.0f - ms_slide, 10.0f, 3.5f, 4.0f, led_col);
+		}
+	}
+
 	char clock[40] = {0};
 	const std::time_t now = std::time(nullptr);
 	std::tm local{};
@@ -746,8 +824,52 @@ void XmbRenderer::DrawStatusBar() {
 	std::strftime(clock, sizeof(clock), fmt, &local);
 	const float scale = 0.755f;
 	const float width = MeasureText(clock, scale);
-	const float color[4] = {1.0f, 1.0f, 1.0f, 0.95f};
-	DrawText(clock, 444.0f - width, 18.0f, scale, color, true);
+	const float color[4] = {1.0f, 1.0f, 1.0f, bar_alpha};
+	const float shadow_col[4] = {0.0f, 0.0f, 0.0f, bar_alpha * 0.55f};
+	const float clock_x = 442.0f - width;
+	DrawText(clock, clock_x, 18.0f, scale, color, true);
+
+	// Authentic PSP top status bar indicators to the left of the clock (Bluetooth, Wi-Fi, AVLS, Mute)
+	float icon_x = clock_x - 10.0f;
+	if (bluetooth_enabled_) {
+		auto bt = textures_.find("status_bt");
+		if (bt != textures_.end()) {
+			DrawTexture(bt->second, icon_x + 1.0f, 13.0f, 0.52f, shadow_col);
+			DrawTexture(bt->second, icon_x, 12.0f, 0.52f, color);
+			if (bluetooth_connected_) {
+				const float dot_col[4] = {0.55f, 0.85f, 1.0f, bar_alpha};
+				DrawSolidQuad(icon_x + 4.5f, 10.5f, 2.2f, 2.2f, dot_col);
+			}
+			icon_x -= 14.0f;
+		}
+	}
+	if (network_connected_) {
+		auto wifi = textures_.find("status_wifi");
+		if (wifi != textures_.end() && wifi->second.height > 0) {
+			const float wscale = 14.5f / (float)wifi->second.height;
+			DrawTexture(wifi->second, icon_x + 1.0f, 13.0f, wscale, shadow_col);
+			DrawTexture(wifi->second, icon_x, 12.0f, wscale, color);
+			icon_x -= 17.0f;
+		}
+	}
+	if (settings_.avls_enabled) {
+		auto avls = textures_.find("status_avls");
+		if (avls != textures_.end()) {
+			DrawTexture(avls->second, icon_x - 3.0f, 12.5f, 0.42f, color);
+			icon_x -= 26.0f;
+		}
+	}
+	if (audio_muted_ || (!settings_.key_tone && !settings_.bgm_enabled)) {
+		auto mute = textures_.find("status_mute");
+		auto mute_sh = textures_.find("status_mute_shadow");
+		if (mute_sh != textures_.end()) {
+			DrawTexture(mute_sh->second, icon_x, 12.5f, 1.0f, color);
+		}
+		if (mute != textures_.end()) {
+			DrawTexture(mute->second, icon_x, 12.0f, 1.0f, color);
+			icon_x -= 15.0f;
+		}
+	}
 
 	auto battery = textures_.find("battery");
 	if (battery != textures_.end()) {
@@ -1174,10 +1296,24 @@ void XmbRenderer::UpdateThemeColor() {
 		return;
 	}
 
+	// Map official PSP-3000 console edition themes (3..11) to their real 13-27.bmp palette index
+	static const int kEditionExtMap[9] = {
+		15, // 3: Piano Black (Deep Obsidian Navy)
+		21, // 4: Ceramic White (Pearl Silver)
+		2,  // 5: Radiant Red (Carnival Red)
+		12, // 6: Vibrant Blue (Carnival Blue)
+		17, // 7: Spirited Green (Carnival Green)
+		19, // 8: Bright Yellow (Carnival Yellow)
+		0,  // 9: Blossom Pink
+		14, // 10: Turquoise Green (LittleBigPlanet)
+		7,  // 11: Lilac Purple (Hannah Montana)
+	};
+
 	const bool use_classic = (settings_.bg_mode == 1 || settings_.theme_style == 1);
 	char rel_path[64] = {0};
-	if (settings_.theme_style == 3 && settings_.color_index == 0 && settings_.bg_mode == 0) {
-		std::snprintf(rel_path, sizeof(rel_path), "images/themes/ext_15.png");
+	if (settings_.theme_style >= 3 && settings_.theme_style <= 11 && settings_.color_index == 0 && settings_.bg_mode == 0) {
+		const int ext_idx = kEditionExtMap[settings_.theme_style - 3];
+		std::snprintf(rel_path, sizeof(rel_path), "images/themes/ext_%02d.png", ext_idx);
 	} else if (settings_.color_index >= 13 && settings_.color_index <= 34) {
 		std::snprintf(rel_path, sizeof(rel_path), "images/themes/ext_%02d.png", settings_.color_index - 13);
 	} else {
@@ -1516,6 +1652,7 @@ int XmbRenderer::SettingsRowCount() const {
 	case SettingsKind::Network: return 2;
 	case SettingsKind::Rss: return 1;
 	case SettingsKind::Display: return 1;
+	case SettingsKind::Bluetooth: return 2;
 	}
 	return 1;
 }
@@ -1523,7 +1660,7 @@ int XmbRenderer::SettingsRowCount() const {
 int XmbRenderer::SettingsPickerCount() const {
 	switch (settings_kind_) {
 	case SettingsKind::Theme:
-		if (settings_sub_index_ == 0) return 4;
+		if (settings_sub_index_ == 0) return 12;
 		if (settings_sub_index_ == 1) return 35;
 		if (settings_sub_index_ == 2) return 3;
 		return 4;
@@ -1547,6 +1684,8 @@ int XmbRenderer::SettingsPickerCount() const {
 		return 2;
 	case SettingsKind::Display:
 		return 2;
+	case SettingsKind::Bluetooth:
+		return 0;
 	}
 	return 2;
 }
@@ -1582,6 +1721,8 @@ int XmbRenderer::SettingsCurrentValue() const {
 		return settings_.rss_auto_update ? 0 : 1;
 	case SettingsKind::Display:
 		return settings_.aspect_mode;
+	case SettingsKind::Bluetooth:
+		return bluetooth_enabled_ ? 0 : 1;
 	}
 	return 0;
 }
@@ -1589,8 +1730,13 @@ int XmbRenderer::SettingsCurrentValue() const {
 void XmbRenderer::ApplySettingsPickerChoice(int v) {
 	switch (settings_kind_) {
 	case SettingsKind::Theme:
-		if (settings_sub_index_ == 0) settings_.theme_style = v;
-		else if (settings_sub_index_ == 1) settings_.color_index = v;
+		if (settings_sub_index_ == 0) {
+			settings_.theme_style = v;
+			if (v >= 2) {
+				settings_.color_index = 0;
+				settings_.bg_mode = 0;
+			}
+		} else if (settings_sub_index_ == 1) settings_.color_index = v;
 		else if (settings_sub_index_ == 2) settings_.bg_mode = v;
 		else settings_.wave_mode = v;
 		theme_dirty_ = true;
@@ -1629,6 +1775,8 @@ void XmbRenderer::ApplySettingsPickerChoice(int v) {
 	case SettingsKind::Display:
 		settings_.aspect_mode = v;
 		break;
+	case SettingsKind::Bluetooth:
+		break;
 	}
 }
 
@@ -1653,6 +1801,7 @@ void XmbRenderer::DrawSettingsSubPage() {
 	else if (settings_kind_ == SettingsKind::Network) cat_tex_name = "item_network_settings";
 	else if (settings_kind_ == SettingsKind::Rss) cat_tex_name = "item_rss_settings";
 	else if (settings_kind_ == SettingsKind::Display) cat_tex_name = "item_display_settings";
+	else if (settings_kind_ == SettingsKind::Bluetooth) cat_tex_name = "item_bluetooth_settings";
 	auto cat_tex = textures_.find(cat_tex_name);
 	if (cat_tex != textures_.end() && cat_tex->second.width > 0 && cat_tex->second.height > 0) {
 		const float cat_color[4] = {1.0f, 1.0f, 1.0f, 0.48f};
@@ -1674,6 +1823,39 @@ void XmbRenderer::DrawSettingsSubPage() {
 	const std::string opt_16_9 = TextOr("xmb_opt_16_9", "16:9 Full");
 	const std::string opt_4_3 = TextOr("xmb_opt_4_3", "4:3 Original");
 
+	const std::vector<std::string> theme_names = {
+		opt_orig,
+		opt_classic,
+		opt_cookie,
+		opt_piano,
+		TextOr("xmb_theme_ceramic", "Ceramic White"),
+		TextOr("xmb_theme_radiant_red", "Radiant Red"),
+		TextOr("xmb_theme_vibrant_blue", "Vibrant Blue"),
+		TextOr("xmb_theme_spirited_green", "Spirited Green"),
+		TextOr("xmb_theme_bright_yellow", "Bright Yellow"),
+		TextOr("xmb_theme_blossom_pink", "Blossom Pink"),
+		TextOr("xmb_theme_turquoise", "Turquoise"),
+		TextOr("xmb_theme_lilac", "Lilac Purple"),
+	};
+
+	auto theme_swatch = [&](int t_idx) -> std::array<float, 3> {
+		switch (t_idx) {
+		case 0: return ColorSwatchForChoice(0);
+		case 1: return {kClassicBlueTint[0], kClassicBlueTint[1], kClassicBlueTint[2]};
+		case 2: return {0.78f, 0.56f, 0.34f};
+		case 3: return {kExtColorSwatches[15][0], kExtColorSwatches[15][1], kExtColorSwatches[15][2]};
+		case 4: return {kExtColorSwatches[21][0], kExtColorSwatches[21][1], kExtColorSwatches[21][2]};
+		case 5: return {kExtColorSwatches[2][0], kExtColorSwatches[2][1], kExtColorSwatches[2][2]};
+		case 6: return {kExtColorSwatches[12][0], kExtColorSwatches[12][1], kExtColorSwatches[12][2]};
+		case 7: return {kExtColorSwatches[17][0], kExtColorSwatches[17][1], kExtColorSwatches[17][2]};
+		case 8: return {kExtColorSwatches[19][0], kExtColorSwatches[19][1], kExtColorSwatches[19][2]};
+		case 9: return {kExtColorSwatches[0][0], kExtColorSwatches[0][1], kExtColorSwatches[0][2]};
+		case 10: return {kExtColorSwatches[14][0], kExtColorSwatches[14][1], kExtColorSwatches[14][2]};
+		case 11: return {kExtColorSwatches[7][0], kExtColorSwatches[7][1], kExtColorSwatches[7][2]};
+		default: return ColorSwatchForChoice(0);
+		}
+	};
+
 	auto color_label = [&](int idx) -> std::string {
 		if (idx == 0) return TextOr("xmb_opt_month_auto", "Month (Auto)");
 		if (idx >= 1 && idx <= 12) return TextOr(kMonthKeys[idx - 1], kMonthFallbacks[idx - 1]);
@@ -1682,10 +1864,8 @@ void XmbRenderer::DrawSettingsSubPage() {
 	};
 
 	if (settings_kind_ == SettingsKind::Theme) {
-		std::string theme_val = opt_orig;
-		if (settings_.theme_style == 1) theme_val = opt_classic;
-		else if (settings_.theme_style == 2) theme_val = opt_cookie;
-		else if (settings_.theme_style == 3) theme_val = opt_piano;
+		const int ts = std::clamp(settings_.theme_style, 0, (int)theme_names.size() - 1);
+		const std::string &theme_val = theme_names[ts];
 		std::string bg_val = settings_.bg_mode == 0 ? opt_orig : (settings_.bg_mode == 1 ? opt_classic : opt_off);
 		std::string wave_val = opt_orig;
 		if (settings_.wave_mode == 1) wave_val = TextOr("xmb_opt_slow", "Slow");
@@ -1768,6 +1948,14 @@ void XmbRenderer::DrawSettingsSubPage() {
 		rows = {
 			{ TextOr("xmb_setting_aspect", "Aspect Ratio"), settings_.aspect_mode == 0 ? opt_16_9 : opt_4_3 },
 		};
+	} else if (settings_kind_ == SettingsKind::Bluetooth) {
+		const std::string bt_state = bluetooth_enabled_
+		                                 ? (bluetooth_connected_ ? TextOr("xmb_bt_connected", "Connected") : opt_on)
+		                                 : opt_off;
+		rows = {
+			{ "Bluetooth\u00ae", bt_state },
+			{ TextOr("xmb_setting_bt_manage", "Manage Bluetooth\u00ae Devices"), "" },
+		};
 	}
 
 	if (font_loaded_) {
@@ -1800,9 +1988,10 @@ void XmbRenderer::DrawSettingsSubPage() {
 	// Right-side PSP value picker panel when open
 	if (settings_picker_open_ && font_loaded_) {
 		std::vector<std::string> choices;
+		const bool is_theme_picker = (settings_kind_ == SettingsKind::Theme && settings_sub_index_ == 0);
 		const bool is_color_picker = (settings_kind_ == SettingsKind::Theme && settings_sub_index_ == 1);
 		if (settings_kind_ == SettingsKind::Theme) {
-			if (settings_sub_index_ == 0) choices = {opt_orig, opt_classic, opt_cookie, opt_piano};
+			if (settings_sub_index_ == 0) choices = theme_names;
 			else if (settings_sub_index_ == 1) {
 				for (int c = 0; c <= 34; ++c) choices.push_back(color_label(c));
 			} else if (settings_sub_index_ == 2) choices = {opt_orig, opt_classic, opt_off};
@@ -1854,8 +2043,8 @@ void XmbRenderer::DrawSettingsSubPage() {
 				}
 				float text_x = panel_x + 12.0f;
 				float text_scale = 0.65f;
-				if (is_color_picker) {
-					const auto sw = ColorSwatchForChoice(i);
+				if (is_color_picker || is_theme_picker) {
+					const auto sw = is_theme_picker ? theme_swatch(i) : ColorSwatchForChoice(i);
 					const float sw_border[4] = {1.0f, 1.0f, 1.0f, sel ? 0.95f : 0.55f};
 					const float sw_fill[4] = {sw[0], sw[1], sw[2], 1.0f};
 					DrawSolidQuad(panel_x + 8.0f, y - 10.0f, 14.0f, 10.0f, sw_border);
@@ -1990,13 +2179,14 @@ void XmbRenderer::DrawInfoDialog() {
 		auto draw_row = [&](float y, const std::string &lbl, const std::string &val) {
 			const std::string display = val.empty() ? TextOr("msgshare_info_none", "-") : val;
 			DrawText(lbl, box_x + 18.0f, y, 0.58f, label_color, true);
-			DrawText(display, box_x + 148.0f, y, 0.58f, white, true);
+			const float val_x = std::max(box_x + 148.0f, box_x + 28.0f + MeasureText(lbl, 0.58f));
+			DrawText(display, val_x, y, 0.58f, white, true);
 		};
 
 		if (saved_data_page_ && save_page_index_ >= 0 && save_page_index_ < (int)saves_.size()) {
 			const auto &s = saves_[save_page_index_];
 			draw_row(box_y + 58.0f, TextOr("msgshare_info_title", "Title"), s.game_title);
-			draw_row(box_y + 82.0f, TextOr("msgtop_game_savedata", "Saved Data"), s.slot_name);
+			draw_row(box_y + 82.0f, TextOr("xmb_saves_count_lbl", "Saved Data"), s.slot_name);
 			draw_row(box_y + 106.0f, TextOr("msgshare_info_date", "Updated"), s.date_time);
 			draw_row(box_y + 130.0f, TextOr("msgshare_info_size", "Size"), s.size_str);
 		} else if (memory_stick_page_ && game_page_index_ >= 0 && game_page_index_ < (int)games_.size()) {
@@ -2044,6 +2234,13 @@ void XmbRenderer::KeyPressed(Key key) {
 
 	{
 		std::lock_guard<std::recursive_mutex> lock(mutex_);
+
+		if (launching_) {
+			return;
+		}
+		if (opening_t_ < 0.72f) {
+			opening_t_ = 0.72f;
+		}
 
 		// 1. System Info dialog
 		if (system_info_dialog_) {
@@ -2209,18 +2406,23 @@ void XmbRenderer::KeyPressed(Key key) {
 				if (options_selected_ == 0) {
 					options_menu_active_ = false;
 					if (memory_stick_page_ && game_page_index_ >= 0 && game_page_index_ < (int)games_.size()) {
-						PlaySound(1);
+						PlaySound(8);
 						launching_ = true;
 						launch_t_ = 0.0f;
+						launching_save_index_ = -1;
 					} else if (saved_data_page_ && save_page_index_ >= 0 && save_page_index_ < (int)saves_.size()) {
-						PlaySound(1);
-						do_save_selected = save_page_index_;
+						PlaySound(8);
+						launching_ = true;
+						launch_t_ = 0.0f;
+						launching_save_index_ = save_page_index_;
 					}
 				} else if (options_selected_ == 1) {
+					options_menu_active_ = false;
 					delete_dialog_active_ = true;
 					delete_dialog_selected_ = 1;
 					PlaySound(0);
 				} else if (options_selected_ == 2) {
+					options_menu_active_ = false;
 					info_dialog_active_ = true;
 					PlaySound(1);
 				}
@@ -2322,6 +2524,15 @@ void XmbRenderer::KeyPressed(Key key) {
 						restore_confirm_active_ = true;
 						restore_confirm_selected_ = 1;
 						PlaySound(0);
+					} else if (settings_kind_ == SettingsKind::Bluetooth) {
+						OpenNoticeDialog(
+							TextOr("xmb_setting_bt_devices", "Bluetooth\u00ae Device Settings"),
+							{
+								bluetooth_enabled_
+									? TextOr("xmb_notice_bt_on", "Bluetooth\u00ae is enabled. Paired controllers and audio devices are active.")
+									: TextOr("xmb_notice_bt_off", "Bluetooth\u00ae is turned off on this device."),
+							});
+						PlaySound(1);
 					} else if (SettingsPickerCount() > 0) {
 						settings_picker_open_ = true;
 						settings_picker_index_ = SettingsCurrentValue();
@@ -2380,9 +2591,10 @@ void XmbRenderer::KeyPressed(Key key) {
 				break;
 			case Key::Confirm:
 				if (game_page_index_ >= 0 && game_page_index_ < (int)games_.size()) {
-					PlaySound(1);
+					PlaySound(8);
 					launching_ = true;
 					launch_t_ = 0.0f;
+					launching_save_index_ = -1;
 				}
 				break;
 			case Key::Back:
@@ -2414,8 +2626,9 @@ void XmbRenderer::KeyPressed(Key key) {
 				break;
 			case Key::Confirm:
 				if (save_page_index_ >= 0 && save_page_index_ < (int)saves_.size()) {
-					PlaySound(1);
-					do_save_selected = save_page_index_;
+					options_menu_active_ = true;
+					options_selected_ = 0;
+					PlaySound(4);
 				}
 				break;
 			case Key::Back:
@@ -2517,6 +2730,7 @@ void XmbRenderer::KeyPressed(Key key) {
 						{"item_network_settings", SettingsKind::Network},
 						{"item_rss_settings", SettingsKind::Rss},
 						{"item_display_settings", SettingsKind::Display},
+						{"item_bluetooth_settings", SettingsKind::Bluetooth},
 					};
 					bool opened_sub = false;
 					for (const auto &entry : kSettingsMap) {
@@ -2705,6 +2919,25 @@ dispatch_callbacks:
 }
 
 void XmbRenderer::DrawCategoryRow() {
+	float intro_alpha = 1.0f;
+	float intro_slide_x = 0.0f;
+	float intro_scale = 1.0f;
+	if (opening_t_ < 1.0f) {
+		const float u = std::clamp((opening_t_ - 0.38f) / 0.62f, 0.0f, 1.0f);
+		const float ease = 1.0f - (1.0f - u) * (1.0f - u) * (1.0f - u);
+		intro_alpha = ease;
+		intro_slide_x = (1.0f - ease) * 44.0f;
+		intro_scale = 1.0f + (1.0f - ease) * 0.16f;
+	} else if (resume_t_ < 1.0f) {
+		const float u = std::clamp(resume_t_ / 0.85f, 0.0f, 1.0f);
+		const float ease = 1.0f - (1.0f - u) * (1.0f - u);
+		intro_alpha = ease;
+		intro_slide_x = (1.0f - ease) * 20.0f;
+	}
+	if (intro_alpha <= 0.005f) {
+		return;
+	}
+
 	const char *order[] = {"settings", "extras", "photo", "music", "video", "game", "network", "psn"};
 	const char *cookie_order[] = {
 		"cookies_cat_0", "cookies_cat_1", "cookies_cat_2", "cookies_cat_3",
@@ -2725,7 +2958,7 @@ void XmbRenderer::DrawCategoryRow() {
 		if (texture == textures_.end()) {
 			continue;
 		}
-		const float x = kCategoryAnchorX + (kCategoryX[index] - kCategoryAnchorX) - shift;
+		const float x = kCategoryAnchorX + (kCategoryX[index] - kCategoryAnchorX) - shift + intro_slide_x;
 		float icon_scale = 0.8f;
 		float icon_alpha = 0.55f;
 		if (same) {
@@ -2740,10 +2973,12 @@ void XmbRenderer::DrawCategoryRow() {
 			icon_scale = Lerp(0.8f, 1.0f, category_t_);
 			icon_alpha = Lerp(0.55f, 1.0f, category_t_);
 		}
+		icon_scale *= intro_scale;
+		icon_alpha *= intro_alpha;
 		const float icon_color[4] = {1.0f, 1.0f, 1.0f, icon_alpha};
 		auto glow = textures_.find("focus_glow");
 		if (glow != textures_.end() && index == category_ && icon_scale >= 0.99f) {
-			const float glow_color[4] = {1.0f, 1.0f, 1.0f, 0.62f};
+			const float glow_color[4] = {1.0f, 1.0f, 1.0f, 0.62f * intro_alpha};
 			DrawTexture(glow->second, x, kCategoryY, 1.0f, glow_color);
 		}
 		const float fit = (texture->second.height > 44) ? (34.0f / (float)texture->second.height) : 1.0f;
@@ -2755,15 +2990,15 @@ void XmbRenderer::DrawCategoryRow() {
 		const std::string label = TextOr(kCategoryKeys[index], kCategoryFallbacks[index]);
 		if (same && index == category_) {
 			const float width = MeasureText(label, label_scale);
-			const float label_color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+			const float label_color[4] = {1.0f, 1.0f, 1.0f, intro_alpha};
 			DrawText(label, x - width * 0.5f, 103.0f, label_scale, label_color, true);
 		} else if (!same && index == category_from_) {
 			const float width = MeasureText(label, label_scale);
-			const float label_color[4] = {1.0f, 1.0f, 1.0f, 1.0f - category_t_};
+			const float label_color[4] = {1.0f, 1.0f, 1.0f, (1.0f - category_t_) * intro_alpha};
 			DrawText(label, x - width * 0.5f, 103.0f, label_scale, label_color, true);
 		} else if (!same && index == category_) {
 			const float width = MeasureText(label, label_scale);
-			const float label_color[4] = {1.0f, 1.0f, 1.0f, category_t_};
+			const float label_color[4] = {1.0f, 1.0f, 1.0f, category_t_ * intro_alpha};
 			DrawText(label, x - width * 0.5f, 103.0f, label_scale, label_color, true);
 		}
 	}
@@ -2976,6 +3211,18 @@ void XmbRenderer::DrawItems() {
 
 void XmbRenderer::DrawItemColumn(const std::vector<Item> &list, int selected, float scroll,
                                  float global_alpha) {
+	float intro_slide_y = 0.0f;
+	if (opening_t_ < 1.0f) {
+		const float u = std::clamp((opening_t_ - 0.46f) / 0.54f, 0.0f, 1.0f);
+		const float ease = 1.0f - (1.0f - u) * (1.0f - u) * (1.0f - u);
+		global_alpha *= ease;
+		intro_slide_y = (1.0f - ease) * 24.0f;
+	} else if (resume_t_ < 1.0f) {
+		const float u = std::clamp(resume_t_ / 0.85f, 0.0f, 1.0f);
+		const float ease = 1.0f - (1.0f - u) * (1.0f - u);
+		global_alpha *= ease;
+		intro_slide_y = (1.0f - ease) * 14.0f;
+	}
 	if (global_alpha <= 0.001f || list.empty()) {
 		return;
 	}
@@ -2983,7 +3230,7 @@ void XmbRenderer::DrawItemColumn(const std::vector<Item> &list, int selected, fl
 		if (index < selected) {
 			continue;
 		}
-		const float y = kSelectedItemY + ((float)index - scroll) * kItemSpacing;
+		const float y = kSelectedItemY + ((float)index - scroll) * kItemSpacing + intro_slide_y;
 		if (y < -48.0f || y > kScreenHeight + 48.0f) {
 			continue;
 		}
@@ -3031,11 +3278,181 @@ void XmbRenderer::DrawItemColumn(const std::vector<Item> &list, int selected, fl
 	}
 }
 
+void XmbRenderer::DrawOpeningTransition() {
+	if (opening_t_ >= 1.0f) {
+		return;
+	}
+	// 1. Smooth black fade-in at the very start of XMB entry (0.00 -> 0.32)
+	if (opening_t_ < 0.32f) {
+		const float fade = 1.0f - (opening_t_ / 0.32f);
+		const float black[4] = {0.0f, 0.0f, 0.0f, fade * fade};
+		DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, black);
+	}
+	// 2. Authentic opening_plugin.rco light-streak glow across the wave (0.05 -> 0.72)
+	if (opening_t_ < 0.74f) {
+		const float u = std::clamp((opening_t_ - 0.04f) / 0.68f, 0.0f, 1.0f);
+		const float bell = std::sin(u * 3.14159265f);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+
+		auto glow_mid = textures_.find("open_glow_b_mid");
+		auto glow_top = textures_.find("open_glow_b_top");
+		auto glow_bot = textures_.find("open_glow_b_bot");
+		auto glow_a = textures_.find("open_glow_a");
+		if (glow_mid != textures_.end()) {
+			const float gx = 100.0f + u * 280.0f;
+			const float gc[4] = {1.0f, 1.0f, 1.0f, 0.68f * bell};
+			DrawTexture(glow_mid->second, gx, 136.0f, 1.35f, gc);
+		}
+		if (glow_top != textures_.end()) {
+			const float gc[4] = {1.0f, 1.0f, 1.0f, 0.52f * bell};
+			DrawTexture(glow_top->second, 240.0f, 122.0f, 1.0f, gc);
+		}
+		if (glow_bot != textures_.end()) {
+			const float gc[4] = {1.0f, 1.0f, 1.0f, 0.52f * bell};
+			DrawTexture(glow_bot->second, 240.0f, 150.0f, 1.0f, gc);
+		}
+		if (glow_a != textures_.end()) {
+			const float gx = 60.0f + u * 360.0f;
+			const float gc[4] = {1.0f, 1.0f, 1.0f, 0.75f * bell};
+			DrawTexture(glow_a->second, gx, 136.0f, 1.6f, gc);
+		}
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+		// Subtle Sony Computer Entertainment emblem glimmer before XMB icons take focus
+		if (opening_t_ < 0.56f) {
+			const float lu = std::clamp((opening_t_ - 0.06f) / 0.48f, 0.0f, 1.0f);
+			const float l_alpha = std::sin(lu * 3.14159265f) * 0.88f;
+			auto sce = textures_.find("open_sce_logo");
+			if (sce != textures_.end() && l_alpha > 0.02f) {
+				const float sc[4] = {1.0f, 1.0f, 1.0f, l_alpha};
+				DrawTexture(sce->second, 336.0f, 148.0f, 0.90f, sc);
+			}
+		}
+	}
+}
+
+void XmbRenderer::DrawResumeTransition() {
+	if (resume_t_ >= 1.0f) {
+		return;
+	}
+	// Smooth fade-in from black on returning from a game
+	if (resume_t_ < 0.48f) {
+		const float fade = 1.0f - (resume_t_ / 0.48f);
+		const float black[4] = {0.0f, 0.0f, 0.0f, fade * fade};
+		DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, black);
+	}
+	// Authentic 15-frame system_plugin_fg/tex_busy.png spinner in bottom-right corner
+	const float busy_alpha = 1.0f - std::clamp((resume_t_ - 0.55f) / 0.45f, 0.0f, 1.0f);
+	if (busy_alpha > 0.02f) {
+		const int frame = static_cast<int>(time_elapsed_ * 30.0f) % 15;
+		const float bcol[4] = {1.0f, 1.0f, 1.0f, busy_alpha * 0.92f};
+		auto busy_sh = textures_.find("status_busy_shadow");
+		auto busy = textures_.find("status_busy");
+		if (busy_sh != textures_.end()) {
+			DrawTextureCrop(busy_sh->second, 453.0f, 249.0f, 0.72f, bcol, 0, frame * 34, 34, 34);
+		}
+		if (busy != textures_.end()) {
+			DrawTextureCrop(busy->second, 452.0f, 248.0f, 0.72f, bcol, 0, frame * 34, 34, 34);
+		}
+	}
+}
+
+void XmbRenderer::DrawGameBootAnimation() {
+	if (!launching_) {
+		return;
+	}
+	const float t = std::clamp(launch_t_, 0.0f, 1.0f);
+
+	// 1. Luminous pearl-white & sky-cyan PSP Gameboot backdrop using real Sony 13-27.bmp gradient (ext_10.png)
+	const float bg_in = std::clamp(t / 0.18f, 0.0f, 1.0f);
+	const float bg_ease = bg_in * bg_in * (3.0f - 2.0f * bg_in);
+	const float base_col[4] = {0.90f, 0.96f, 1.0f, bg_ease};
+	DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, base_col);
+
+	auto gb_bg = textures_.find("gameboot_bg");
+	if (gb_bg != textures_.end() && gb_bg->second.id != 0) {
+		glBindTexture(GL_TEXTURE_2D, gb_bg->second.id);
+		const float grad_col[4] = {1.0f, 1.0f, 1.0f, bg_ease * 0.34f};
+		DrawQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, grad_col);
+	}
+
+	// Render the live 3D PSP wave mesh over the luminous gameboot backdrop
+	DrawWave(0.0f);
+	glUseProgram(program_);
+	glUniform2f(u_screen_, kScreenWidth, kScreenHeight);
+	glUniform1i(u_texture_, 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindVertexArray(vertex_array_);
+
+	// 2. Authentic opening_plugin.rco light beams & glow ribbons
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+	auto glow_mid = textures_.find("open_glow_b_mid");
+	auto glow_top = textures_.find("open_glow_b_top");
+	auto glow_bot = textures_.find("open_glow_b_bot");
+	auto glow_a = textures_.find("open_glow_a");
+	auto glow_v = textures_.find("open_glow");
+
+	const float beam_bell = std::sin(std::clamp(t / 0.88f, 0.0f, 1.0f) * 3.14159265f);
+	if (glow_v != textures_.end()) {
+		const float vx1 = 110.0f + t * 260.0f;
+		const float vx2 = 370.0f - t * 240.0f;
+		const float vc[4] = {0.75f, 0.92f, 1.0f, 0.55f * beam_bell};
+		DrawTexture(glow_v->second, vx1, 136.0f, 1.8f, vc);
+		DrawTexture(glow_v->second, vx2, 136.0f, 1.4f, vc);
+	}
+	if (glow_mid != textures_.end()) {
+		const float gx = 80.0f + t * 320.0f;
+		const float gc[4] = {1.0f, 1.0f, 1.0f, 0.85f * beam_bell};
+		DrawTexture(glow_mid->second, gx, 136.0f, 1.8f, gc);
+	}
+	if (glow_top != textures_.end()) {
+		const float gc[4] = {1.0f, 1.0f, 1.0f, 0.72f * beam_bell};
+		DrawTexture(glow_top->second, 240.0f, 114.0f, 1.0f, gc);
+	}
+	if (glow_bot != textures_.end()) {
+		const float gc[4] = {1.0f, 1.0f, 1.0f, 0.72f * beam_bell};
+		DrawTexture(glow_bot->second, 240.0f, 158.0f, 1.0f, gc);
+	}
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	// 3. Authentic opening_plugin/tex_psp_logo.png ("PSP PlayStation Portable", 260x80)
+	auto psp_logo = textures_.find("open_psp_logo");
+	if (psp_logo != textures_.end() && t >= 0.10f) {
+		const float lin = std::clamp((t - 0.10f) / 0.22f, 0.0f, 1.0f);
+		const float lout = 1.0f - std::clamp((t - 0.76f) / 0.16f, 0.0f, 1.0f);
+		const float lalpha = lin * lout;
+		const float lscale = 0.88f + 0.13f * (1.0f - (1.0f - std::clamp((t - 0.10f) / 0.72f, 0.0f, 1.0f)) *
+		                                             (1.0f - std::clamp((t - 0.10f) / 0.72f, 0.0f, 1.0f)));
+		// Crisp dark-navy drop shadow + dark-charcoal/metallic PSP logo over luminous pearl wave
+		const float shadow_c[4] = {0.06f, 0.14f, 0.26f, lalpha * 0.42f};
+		const float logo_c[4] = {0.10f, 0.13f, 0.20f, lalpha * 0.96f};
+		DrawTexture(psp_logo->second, 241.5f, 137.5f, lscale, shadow_c);
+		DrawTexture(psp_logo->second, 240.0f, 136.0f, lscale, logo_c);
+
+		// Specular highlight sweep across the PSP logo
+		if (glow_a != textures_.end()) {
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			const float sx = 110.0f + std::clamp((t - 0.15f) / 0.60f, 0.0f, 1.0f) * 260.0f;
+			const float sc[4] = {1.0f, 1.0f, 1.0f, 0.75f * lalpha};
+			DrawTexture(glow_a->second, sx, 130.0f, 1.45f, sc);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		}
+	}
+
+	// 4. Final fade to pure black before handing over to EmulationScreen (0.78 -> 1.00)
+	if (t > 0.78f) {
+		const float u = std::clamp((t - 0.78f) / 0.20f, 0.0f, 1.0f);
+		const float black[4] = {0.0f, 0.0f, 0.0f, u * u * (3.0f - 2.0f * u)};
+		DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, black);
+	}
+}
+
 void XmbRenderer::Draw() {
 	if (surface_width_ <= 0 || surface_height_ <= 0 || program_ == 0) {
 		return;
 	}
 	int selected_game_to_launch = -1;
+	int selected_save_to_launch = -1;
 	int deferred_focus_game = -999;
 	{
 		std::lock_guard<std::recursive_mutex> lock(mutex_);
@@ -3054,6 +3471,12 @@ void XmbRenderer::Draw() {
 
 		if (boot_t_ < 1.0f) {
 			boot_t_ = std::min(1.0f, boot_t_ + dt / 0.50f);
+		}
+		if (opening_t_ < 1.0f) {
+			opening_t_ = std::min(1.0f, opening_t_ + dt / 1.40f);
+		}
+		if (resume_t_ < 1.0f) {
+			resume_t_ = std::min(1.0f, resume_t_ + dt / 0.65f);
 		}
 		if (toast_timer_ > 0.0f) {
 			toast_timer_ -= dt;
@@ -3135,6 +3558,9 @@ void XmbRenderer::Draw() {
 			DrawStatusBar();
 		}
 
+		DrawOpeningTransition();
+		DrawResumeTransition();
+
 		DrawToast();
 		DrawExitDialog();
 		DrawOptionsMenu();
@@ -3156,12 +3582,16 @@ void XmbRenderer::Draw() {
 		}
 
 		if (launching_) {
-			launch_t_ += dt / 0.35f;
-			const float white_flash[4] = {1.0f, 1.0f, 1.0f, std::min(1.0f, launch_t_)};
-			DrawSolidQuad(0.0f, 0.0f, kScreenWidth, kScreenHeight, white_flash);
+			launch_t_ += dt / 2.10f;
+			DrawGameBootAnimation();
 			if (launch_t_ >= 1.0f) {
 				launching_ = false;
-				selected_game_to_launch = game_page_index_;
+				if (launching_save_index_ >= 0) {
+					selected_save_to_launch = launching_save_index_;
+					launching_save_index_ = -1;
+				} else {
+					selected_game_to_launch = game_page_index_;
+				}
 			}
 		}
 
@@ -3176,6 +3606,9 @@ void XmbRenderer::Draw() {
 	}
 	if (deferred_focus_game != -999) {
 		GameFocused(deferred_focus_game);
+	}
+	if (selected_save_to_launch >= 0) {
+		SaveSelected(selected_save_to_launch);
 	}
 	if (selected_game_to_launch >= 0) {
 		GameSelected(selected_game_to_launch);

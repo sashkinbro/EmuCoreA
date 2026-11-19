@@ -2108,4 +2108,17 @@
     <string name="xmb_notice_skype">Služba Skype™ pro PSP™ byla ukončena.</string>
     <string name="xmb_notice_psn">Služba PlayStation®Network není v offline režimu dostupná.</string>
     <string name="xmb_notice_ps_store">PlayStation®Store není v offline režimu dostupný.</string>
+    <string name="xmb_theme_ceramic">Keramická bílá</string>
+    <string name="xmb_theme_radiant_red">Zářivě červená</string>
+    <string name="xmb_theme_vibrant_blue">Sytě modrá</string>
+    <string name="xmb_theme_spirited_green">Smaragdově zelená</string>
+    <string name="xmb_theme_bright_yellow">Jasně žlutá</string>
+    <string name="xmb_theme_blossom_pink">Květově růžová</string>
+    <string name="xmb_theme_turquoise">Tyrkysová</string>
+    <string name="xmb_theme_lilac">Šeříkově fialová</string>
+    <string name="xmb_setting_bt_devices">Nastavení zařízení Bluetooth®</string>
+    <string name="xmb_setting_bt_manage">Správa zařízení Bluetooth®</string>
+    <string name="xmb_bt_connected">Připojeno</string>
+    <string name="xmb_notice_bt_on">Bluetooth® je zapnutý. Spárované ovladače a zvuková zařízení jsou aktivní.</string>
+    <string name="xmb_notice_bt_off">Bluetooth® je na tomto zařízení vypnutý.</string>
 </resources>

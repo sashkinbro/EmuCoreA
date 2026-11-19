@@ -1,10 +1,14 @@
 package com.sbro.emucorea.ui.xmb
 
 import android.app.Activity
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
@@ -81,6 +85,9 @@ private object XmbAssetCache {
     @Volatile
     var hasLoadedSaves: Boolean = false
 
+    @Volatile
+    var returnedFromGame: Boolean = false
+
     fun keyFor(game: GameItem): String = "${game.path}|${game.fileSize}|${game.lastModified}"
 }
 
@@ -91,6 +98,34 @@ private fun isNetworkAvailable(context: Context): Boolean = runCatching {
     val caps = cm.getNetworkCapabilities(network) ?: return false
     caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
 }.getOrDefault(false)
+
+private fun pushWirelessAndAudioStatus(context: Context) {
+    val wifiConnected = isNetworkAvailable(context)
+    val btAdapter = runCatching {
+        (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+    }.getOrNull()
+    val btEnabled = runCatching { btAdapter?.isEnabled == true }.getOrDefault(false)
+    val audioManager = runCatching {
+        context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+    }.getOrNull()
+    val btAudioConnected = runCatching {
+        audioManager?.getDevices(AudioManager.GET_DEVICES_OUTPUTS)?.any { dev ->
+            dev.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                dev.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+                dev.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                dev.type == AudioDeviceInfo.TYPE_BLE_SPEAKER
+        } == true
+    }.getOrDefault(false)
+    val audioMuted = runCatching {
+        (audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 1) <= 0
+    }.getOrDefault(false)
+    XmbNative.nativeSetWirelessStatus(
+        wifiConnected = wifiConnected,
+        bluetoothEnabled = btEnabled,
+        bluetoothConnected = btEnabled && btAudioConnected,
+        audioMuted = audioMuted,
+    )
+}
 
 private fun formatGameSize(sizeBytes: Long): String = when {
     sizeBytes <= 0L -> ""
@@ -284,6 +319,19 @@ private val XMB_STRING_BINDINGS: List<Pair<String, Int>> = listOf(
     "xmb_notice_skype" to R.string.xmb_notice_skype,
     "xmb_notice_psn" to R.string.xmb_notice_psn,
     "xmb_notice_ps_store" to R.string.xmb_notice_ps_store,
+    "xmb_theme_ceramic" to R.string.xmb_theme_ceramic,
+    "xmb_theme_radiant_red" to R.string.xmb_theme_radiant_red,
+    "xmb_theme_vibrant_blue" to R.string.xmb_theme_vibrant_blue,
+    "xmb_theme_spirited_green" to R.string.xmb_theme_spirited_green,
+    "xmb_theme_bright_yellow" to R.string.xmb_theme_bright_yellow,
+    "xmb_theme_blossom_pink" to R.string.xmb_theme_blossom_pink,
+    "xmb_theme_turquoise" to R.string.xmb_theme_turquoise,
+    "xmb_theme_lilac" to R.string.xmb_theme_lilac,
+    "xmb_setting_bt_devices" to R.string.xmb_setting_bt_devices,
+    "xmb_setting_bt_manage" to R.string.xmb_setting_bt_manage,
+    "xmb_bt_connected" to R.string.xmb_bt_connected,
+    "xmb_notice_bt_on" to R.string.xmb_notice_bt_on,
+    "xmb_notice_bt_off" to R.string.xmb_notice_bt_off,
 )
 
 private fun pushLocalizedStrings(context: Context) {
@@ -557,7 +605,7 @@ fun XmbScreen(
                 XmbSurfaceRenderer(context) {
                     pushLocalizedStrings(context)
                     pushStorageInfo()
-                    XmbNative.nativeSetNetworkStatus(isNetworkAvailable(context))
+                    pushWirelessAndAudioStatus(context)
                     pushSettingsToNativeOnGlThread()
                     val assetsSnapshot = currentAssets.value
                     val savesSnapshot = currentSaves.value
@@ -569,6 +617,12 @@ fun XmbScreen(
                         preferences.getInt("category", initialState[0]),
                         preferences.getInt("item", initialState[1]),
                     )
+                    if (XmbAssetCache.returnedFromGame) {
+                        XmbAssetCache.returnedFromGame = false
+                        XmbNative.nativeTriggerTransition(1)
+                    } else {
+                        XmbNative.nativeTriggerTransition(0)
+                    }
                 }
             )
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
@@ -617,6 +671,17 @@ fun XmbScreen(
         }
     }
 
+    val statusReceiver = remember {
+        object : BroadcastReceiver() {
+            override fun onReceive(c: Context?, intent: Intent?) {
+                val ctx = c ?: context
+                surface.queueEvent {
+                    pushWirelessAndAudioStatus(ctx)
+                }
+            }
+        }
+    }
+
     DisposableEffect(surface, lifecycleOwner) {
         var bgmJob: Job? = null
 
@@ -639,10 +704,19 @@ fun XmbScreen(
             XmbNative.nativeSetBattery(pct, charging)
         }
         context.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val statusFilter = IntentFilter().apply {
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
+            @Suppress("DEPRECATION")
+            addAction(ConnectivityManager.CONNECTIVITY_ACTION)
+            addAction("android.media.VOLUME_CHANGED_ACTION")
+        }
+        runCatching { context.registerReceiver(statusReceiver, statusFilter) }
 
         XmbHost.setGameListener { index ->
             if (index in currentGames.value.indices) {
                 saveState()
+                XmbAssetCache.returnedFromGame = true
                 bgmJob?.cancel()
                 XmbAudio.stopBgm()
                 currentSelection.value(index)
@@ -674,6 +748,7 @@ fun XmbScreen(
             val entry = currentSaves.value.getOrNull(index)
             if (entry != null && !entry.gamePath.isNullOrBlank()) {
                 saveState()
+                XmbAssetCache.returnedFromGame = true
                 bgmJob?.cancel()
                 XmbAudio.stopBgm()
                 currentSaveSelection.value?.invoke(entry.gamePath, entry.slot)
@@ -763,7 +838,7 @@ fun XmbScreen(
                     surface.requestFocus()
                     savesRevision++
                     surface.queueEvent {
-                        XmbNative.nativeSetNetworkStatus(isNetworkAvailable(context))
+                        pushWirelessAndAudioStatus(context)
                     }
                 }
                 Lifecycle.Event.ON_PAUSE -> {
@@ -782,6 +857,7 @@ fun XmbScreen(
             bgmJob?.cancel()
             XmbAudio.stopBgm()
             runCatching { context.unregisterReceiver(batteryReceiver) }
+            runCatching { context.unregisterReceiver(statusReceiver) }
             lifecycleOwner.lifecycle.removeObserver(observer)
             XmbHost.setGameListener(null)
             XmbHost.setFocusListener(null)
@@ -800,7 +876,7 @@ fun XmbScreen(
         surface.queueEvent {
             pushLocalizedStrings(context)
             pushStorageInfo()
-            XmbNative.nativeSetNetworkStatus(isNetworkAvailable(context))
+            pushWirelessAndAudioStatus(context)
             pushSavesToNative(context, saveRepo, saves)
         }
     }

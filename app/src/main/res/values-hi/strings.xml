@@ -2087,4 +2087,17 @@
     <string name="xmb_notice_skype">PSP™ के लिए Skype™ सेवा बंद कर दी गई है।</string>
     <string name="xmb_notice_psn">ऑफ़लाइन एमुलेटर मोड में PlayStation®Network उपलब्ध नहीं है।</string>
     <string name="xmb_notice_ps_store">ऑफ़लाइन एमुलेटर मोड में PlayStation®Store उपलब्ध नहीं है।</string>
+    <string name="xmb_theme_ceramic">सेरामिक व्हाइट</string>
+    <string name="xmb_theme_radiant_red">रेडिएंट रेड</string>
+    <string name="xmb_theme_vibrant_blue">वाइब्रेंट ब्लू</string>
+    <string name="xmb_theme_spirited_green">एमराल्ड ग्रीन</string>
+    <string name="xmb_theme_bright_yellow">ब्राइट येलो</string>
+    <string name="xmb_theme_blossom_pink">ब्लॉसम पिंक</string>
+    <string name="xmb_theme_turquoise">फ़िरोज़ा</string>
+    <string name="xmb_theme_lilac">लाइलैक पर्पल</string>
+    <string name="xmb_setting_bt_devices">Bluetooth® डिवाइस सेटिंग्स</string>
+    <string name="xmb_setting_bt_manage">Bluetooth® डिवाइस प्रबंधित करें</string>
+    <string name="xmb_bt_connected">कनेक्टेड</string>
+    <string name="xmb_notice_bt_on">Bluetooth® चालू है। पेयर किए गए कंट्रोलर और ऑडियो डिवाइस सक्रिय हैं।</string>
+    <string name="xmb_notice_bt_off">इस डिवाइस पर Bluetooth® बंद है।</string>
 </resources>

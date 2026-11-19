@@ -2101,4 +2101,17 @@
     <string name="xmb_notice_skype">Layanan Skype™ untuk PSP™ telah dihentikan.</string>
     <string name="xmb_notice_psn">PlayStation®Network tidak tersedia dalam mode emulator offline.</string>
     <string name="xmb_notice_ps_store">PlayStation®Store tidak dapat diakses dalam mode emulator offline.</string>
+    <string name="xmb_theme_ceramic">Putih Keramik</string>
+    <string name="xmb_theme_radiant_red">Merah Cerah</string>
+    <string name="xmb_theme_vibrant_blue">Biru Cerah</string>
+    <string name="xmb_theme_spirited_green">Hijau Zamrud</string>
+    <string name="xmb_theme_bright_yellow">Kuning Terang</string>
+    <string name="xmb_theme_blossom_pink">Merah Muda Mekar</string>
+    <string name="xmb_theme_turquoise">Toska</string>
+    <string name="xmb_theme_lilac">Ungu Lilac</string>
+    <string name="xmb_setting_bt_devices">Pengaturan Perangkat Bluetooth®</string>
+    <string name="xmb_setting_bt_manage">Kelola Perangkat Bluetooth®</string>
+    <string name="xmb_bt_connected">Terhubung</string>
+    <string name="xmb_notice_bt_on">Bluetooth® aktif. Kontroler dan perangkat audio yang dipasangkan siap digunakan.</string>
+    <string name="xmb_notice_bt_off">Bluetooth® dinonaktifkan di perangkat ini.</string>
 </resources>

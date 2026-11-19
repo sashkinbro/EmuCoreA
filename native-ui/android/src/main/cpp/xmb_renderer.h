@@ -101,6 +101,8 @@ public:
 	void SetGamesLoading(bool loading);
 	void SetSavesLoading(bool loading);
 	void SetNetworkStatus(bool connected);
+	void SetWirelessStatus(bool wifi_connected, bool bluetooth_enabled, bool bluetooth_connected, bool audio_muted);
+	void TriggerTransition(int kind);
 	void SetBattery(int level, bool charging);
 	void SetStrings(const std::unordered_map<std::string, std::string> &strings);
 	void SetStorageInfo(const std::string &free_space_text, const std::string &device_name);
@@ -124,6 +126,7 @@ private:
 		Network = 8,
 		Rss = 9,
 		Display = 10,
+		Bluetooth = 11,
 	};
 
 	enum class EmptyMediaKind {
@@ -172,6 +175,9 @@ private:
 	void DrawBackground();
 	void DrawWave(float dt);
 	void DrawStatusBar();
+	void DrawOpeningTransition();
+	void DrawGameBootAnimation();
+	void DrawResumeTransition();
 	bool LoadTexture(const std::string &name, const std::string &relative_path);
 	const Texture *GlyphTexture(uint32_t codepoint);
 	const Texture *ShadowGlyphTexture(uint32_t codepoint);
@@ -253,6 +259,12 @@ private:
 	bool games_loading_ = true;
 	bool saves_loading_ = true;
 	bool network_connected_ = false;
+	bool bluetooth_enabled_ = false;
+	bool bluetooth_connected_ = false;
+	bool audio_muted_ = false;
+	float opening_t_ = 0.0f;
+	float resume_t_ = 1.0f;
+	int launching_save_index_ = -1;
 
 	std::vector<Item> items_;
 	std::vector<Item> previous_items_;

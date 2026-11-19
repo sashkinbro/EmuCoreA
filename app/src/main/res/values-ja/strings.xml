@@ -2086,4 +2086,17 @@
     <string name="xmb_notice_skype">PSP™向けSkype™サービスは終了しました。</string>
     <string name="xmb_notice_psn">オフラインエミュレーターモードではPlayStation®Networkは利用できません。</string>
     <string name="xmb_notice_ps_store">オフラインエミュレーターモードではPlayStation®Storeに接続できません。</string>
+    <string name="xmb_theme_ceramic">セラミック・ホワイト</string>
+    <string name="xmb_theme_radiant_red">ラディアント・レッド</string>
+    <string name="xmb_theme_vibrant_blue">バイブラント・ブルー</string>
+    <string name="xmb_theme_spirited_green">スピリテッド・グリーン</string>
+    <string name="xmb_theme_bright_yellow">ブライト・イエロー</string>
+    <string name="xmb_theme_blossom_pink">ブロッサム・ピンク</string>
+    <string name="xmb_theme_turquoise">ターコイズ・グリーン</string>
+    <string name="xmb_theme_lilac">ライラック・パープル</string>
+    <string name="xmb_setting_bt_devices">Bluetooth®機器設定</string>
+    <string name="xmb_setting_bt_manage">Bluetooth®機器管理</string>
+    <string name="xmb_bt_connected">接続中</string>
+    <string name="xmb_notice_bt_on">Bluetooth®は有効です。ペアリングされたコントローラーとオーディオ機器が使用可能です。</string>
+    <string name="xmb_notice_bt_off">この機器のBluetooth®はオフになっています。</string>
 </resources>

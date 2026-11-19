@@ -2086,4 +2086,17 @@
     <string name="xmb_notice_skype">PSP™용 Skype™ 서비스가 종료되었습니다.</string>
     <string name="xmb_notice_psn">오프라인 에뮬레이터 모드에서는 PlayStation®Network를 사용할 수 없습니다.</string>
     <string name="xmb_notice_ps_store">오프라인 에뮬레이터 모드에서는 PlayStation®Store에 접속할 수 없습니다.</string>
+    <string name="xmb_theme_ceramic">세라믹 화이트</string>
+    <string name="xmb_theme_radiant_red">래디언트 레드</string>
+    <string name="xmb_theme_vibrant_blue">바이브런트 블루</string>
+    <string name="xmb_theme_spirited_green">스피리언트 그린</string>
+    <string name="xmb_theme_bright_yellow">브라이트 옐로우</string>
+    <string name="xmb_theme_blossom_pink">블로섬 핑크</string>
+    <string name="xmb_theme_turquoise">터콰이즈 그린</string>
+    <string name="xmb_theme_lilac">라일락 퍼플</string>
+    <string name="xmb_setting_bt_devices">Bluetooth® 기기 설정</string>
+    <string name="xmb_setting_bt_manage">Bluetooth® 기기 관리</string>
+    <string name="xmb_bt_connected">연결됨</string>
+    <string name="xmb_notice_bt_on">Bluetooth®가 켜져 있습니다. 페어링된 컨트롤러 및 오디오 기기가 활성화되었습니다.</string>
+    <string name="xmb_notice_bt_off">이 기기에서 Bluetooth®가 꺼져 있습니다.</string>
 </resources>

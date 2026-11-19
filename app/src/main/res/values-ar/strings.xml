@@ -2095,4 +2095,17 @@
     <string name="xmb_notice_skype">توقفت خدمة Skype™ لجهاز PSP™.</string>
     <string name="xmb_notice_psn">خدمة PlayStation®Network غير متاحة في وضع عدم الاتصال.</string>
     <string name="xmb_notice_ps_store">متجر PlayStation®Store غير متاح في وضع عدم الاتصال.</string>
+    <string name="xmb_theme_ceramic">أبيض سيراميكي</string>
+    <string name="xmb_theme_radiant_red">أحمر مشرق</string>
+    <string name="xmb_theme_vibrant_blue">أزرق زاهٍ</string>
+    <string name="xmb_theme_spirited_green">أخضر زمردي</string>
+    <string name="xmb_theme_bright_yellow">أصفر ساطع</string>
+    <string name="xmb_theme_blossom_pink">وردي زهري</string>
+    <string name="xmb_theme_turquoise">فيروزي</string>
+    <string name="xmb_theme_lilac">أرجواني ليلكي</string>
+    <string name="xmb_setting_bt_devices">إعدادات أجهزة Bluetooth®</string>
+    <string name="xmb_setting_bt_manage">إدارة أجهزة Bluetooth®</string>
+    <string name="xmb_bt_connected">متصل</string>
+    <string name="xmb_notice_bt_on">تم تفعيل Bluetooth®. وحدات التحكم وأجهزة الصوت المقترنة نشطة.</string>
+    <string name="xmb_notice_bt_off">تم إيقاف Bluetooth® على هذا الجهاز.</string>
 </resources>
