@@ -773,17 +773,6 @@ void XmbRenderer::DrawItemColumn(const std::vector<Item> &list, int selected, fl
 	if (global_alpha <= 0.001f || list.empty()) {
 		return;
 	}
-	if (selected > 0 && selected <= (int)list.size()) {
-		const Item &previous = list[selected - 1];
-		const float preview_color[4] = {1.0f, 1.0f, 1.0f, 0.55f * global_alpha};
-		auto preview_texture = textures_.find(previous.texture_name);
-		if (preview_texture != textures_.end()) {
-			DrawTexture(preview_texture->second, kItemIconX, 6.0f, 1.0f, preview_color);
-		}
-		if (font_loaded_) {
-			DrawText(previous.title, 141.0f, 17.0f, 0.81f, preview_color, true);
-		}
-	}
 	for (int index = 0; index < (int)list.size(); ++index) {
 		if (index < selected) {
 			continue;
