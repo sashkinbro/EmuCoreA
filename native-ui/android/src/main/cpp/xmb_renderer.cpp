@@ -337,7 +337,7 @@ bool XmbRenderer::LoadWave() {
 		                    (double)sum[0] / (double)pixels, (double)sum[1] / (double)pixels,
 		                    (double)sum[2] / (double)pixels, high[0], high[1], high[2]);
 	}
-	wave_tessellator_.setup(wave_, 64, 24);
+	wave_tessellator_.setup(wave_, 128, 48);
 	if (!wave_tessellator_.valid()) {
 		return false;
 	}
@@ -391,7 +391,7 @@ void XmbRenderer::DrawStatusBar() {
 	std::tm local{};
 	localtime_r(&now, &local);
 	std::strftime(clock, sizeof(clock), "%d/%m %H:%M", &local);
-	const float scale = 0.76f;
+	const float scale = 0.755f;
 	const float width = font_.TextWidth(clock, scale);
 	const float color[4] = {1.0f, 1.0f, 1.0f, 0.95f};
 	DrawText(clock, 444.0f - width, 18.0f, scale, color, true);
@@ -721,13 +721,6 @@ void XmbRenderer::DrawCategoryRow() {
 }
 
 void XmbRenderer::DrawItems() {
-	// The media indicator at the top-left is the inserted Memory Stick's icon
-	// (BI); it is not a list row and stays fixed while the utilities scroll.
-	auto top_icon = textures_.find("item_memstick");
-	if (top_icon != textures_.end()) {
-		const float top_color[4] = {1.0f, 1.0f, 1.0f, 0.95f};
-		DrawTexture(top_icon->second, kItemIconX, 7.0f, 1.5f, top_color);
-	}
 	const float scroll = Lerp((float)item_from_, (float)item_, item_t_);
 	for (int index = 0; index < (int)items_.size(); ++index) {
 		const bool above = index < item_;

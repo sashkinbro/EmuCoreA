@@ -84,6 +84,8 @@ sequence and does not crash.
 - Real focus glow/shadow filtering (the current halo is a cheap multi-sample
   approximation), reflections and icon cross-fades.
 - Game backgrounds and preview playback when a game is selected.
+- The transient Memory Stick access indicator that appears at the top-left in
+  the first boot frames (it is already sliding away 0.7 s later).
 - Exact per-element font sizes for every text style and the real shadow
   rendering (the glyphs are exact, the scale/baseline of each style is still
   being matched).
