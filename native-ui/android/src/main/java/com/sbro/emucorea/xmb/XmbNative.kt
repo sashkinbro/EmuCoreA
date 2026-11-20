@@ -70,6 +70,8 @@ object XmbNative {
 
     external fun nativeTouchTap(normX: Float, normY: Float)
 
+    external fun nativeTouchSwipe(direction: Int)
+
     external fun nativeSetSettings(
         themeStyle: Int,
         colorIndex: Int,

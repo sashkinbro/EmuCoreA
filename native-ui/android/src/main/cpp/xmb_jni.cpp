@@ -584,6 +584,11 @@ Java_com_sbro_emucorea_xmb_XmbNative_nativeTouchTap(JNIEnv *, jclass, jfloat nor
 }
 
 extern "C" JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_xmb_XmbNative_nativeTouchSwipe(JNIEnv *, jclass, jint direction) {
+	g_renderer.TouchSwipe((int)direction);
+}
+
+extern "C" JNIEXPORT void JNICALL
 Java_com_sbro_emucorea_xmb_XmbNative_nativeShutdown(JNIEnv *, jclass) {
 	g_renderer.Shutdown();
 }

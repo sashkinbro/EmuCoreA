@@ -743,15 +743,21 @@ void XmbRenderer::TouchTap(float norm_x, float norm_y) {
 		const float vx = std::clamp(norm_x, 0.0f, 1.0f) * screen_width_;
 		const float vy = std::clamp(norm_y, 0.0f, 1.0f) * kScreenHeight;
 
-		// 1. Direct tap on Yes / No buttons in any PSP confirmation dialog
+		// 1. Direct tap on Yes / No buttons or dismiss in any PSP confirmation dialog
 		if (exit_dialog_active_ || delete_dialog_active_ || restore_confirm_active_ || browser_confirm_active_) {
 			const float cx = screen_width_ * 0.5f;
+			if (vy < 66.0f || vy > 204.0f || (vy >= 186.0f && vx >= cx)) {
+				KeyPressed(Key::Back);
+				return;
+			}
 			if (vy >= 130.0f && vy <= 185.0f) {
 				const int choice = (vx < cx) ? 0 : 1;
 				if (exit_dialog_active_) exit_dialog_selected_ = choice;
 				else if (delete_dialog_active_) delete_dialog_selected_ = choice;
 				else if (restore_confirm_active_) restore_confirm_selected_ = choice;
 				else if (browser_confirm_active_) browser_confirm_selected_ = choice;
+			} else {
+				return;
 			}
 		} else if (options_menu_active_) {
 			const float panel_x = screen_width_ - 130.0f;
@@ -806,6 +812,63 @@ void XmbRenderer::TouchTap(float norm_x, float norm_y) {
 		}
 	}
 	KeyPressed(Key::Confirm);
+}
+
+void XmbRenderer::TouchSwipe(int direction) {
+	Key mapped = Key::Confirm;
+	bool has_key = false;
+	{
+		std::lock_guard<std::recursive_mutex> lock(mutex_);
+		if (!settings_.touch_controls_enabled || launching_) {
+			return;
+		}
+		if (opening_t_ < 0.72f) {
+			opening_t_ = 0.72f;
+		}
+		if (touch_tutorial_active_) {
+			mapped = Key::Confirm;
+			has_key = true;
+		} else if (exit_dialog_active_ || delete_dialog_active_ || restore_confirm_active_ || browser_confirm_active_) {
+			// Static Yes (left) / No (right) confirmation dialogs: highlight follows finger direction
+			if (direction == 2) {
+				mapped = Key::Left;
+				has_key = true;
+			} else if (direction == 3) {
+				mapped = Key::Right;
+				has_key = true;
+			}
+		} else if (options_menu_active_) {
+			// Static 3-row right-side Options panel: highlight follows vertical swipe; swipe right closes panel
+			if (direction == 0) {
+				mapped = Key::Up;
+				has_key = true;
+			} else if (direction == 1) {
+				mapped = Key::Down;
+				has_key = true;
+			} else if (direction == 3) {
+				mapped = Key::Back;
+				has_key = true;
+			}
+		} else if (system_info_dialog_ || info_notice_active_ || info_dialog_active_) {
+			// Read-only info/notice dialogs: swipe right or down closes dialog
+			if (direction == 3 || direction == 1) {
+				mapped = Key::Back;
+				has_key = true;
+			}
+		} else {
+			// Scrolling XMB strip, games/saves/settings lists, and scrolling picker: natural scrolling
+			switch (direction) {
+			case 0: mapped = Key::Down; has_key = true; break;
+			case 1: mapped = Key::Up; has_key = true; break;
+			case 2: mapped = Key::Right; has_key = true; break;
+			case 3: mapped = Key::Left; has_key = true; break;
+			default: break;
+			}
+		}
+	}
+	if (has_key) {
+		KeyPressed(mapped);
+	}
 }
 
 std::string XmbRenderer::TextOr(const std::string &key, const std::string &fallback) const {

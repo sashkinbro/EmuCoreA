@@ -106,6 +106,7 @@ public:
 	void TriggerTransition(int kind);
 	void SetTouchMode(bool active, bool show_tutorial);
 	void TouchTap(float norm_x, float norm_y);
+	void TouchSwipe(int direction);
 	void SetBattery(int level, bool charging);
 	void SetStrings(const std::unordered_map<std::string, std::string> &strings);
 	void SetStorageInfo(const std::string &free_space_text, const std::string &device_name);

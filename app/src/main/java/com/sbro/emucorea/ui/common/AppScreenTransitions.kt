@@ -2,7 +2,6 @@ package com.sbro.emucorea.ui.common
 
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.core.EaseIn
 import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -10,14 +9,14 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 
-internal fun appScreenEnterTransition(): EnterTransition = appScreenPopEnterTransition()
-
-internal fun appScreenExitTransition(): ExitTransition = ExitTransition.None
-
-internal fun appScreenPopEnterTransition(): EnterTransition =
+internal fun appScreenEnterTransition(): EnterTransition =
     fadeIn(animationSpec = tween(durationMillis = 260, delayMillis = 70, easing = EaseOut)) +
         scaleIn(initialScale = 0.96f, animationSpec = tween(260, delayMillis = 70, easing = EaseOut))
 
+internal fun appScreenExitTransition(): ExitTransition = ExitTransition.None
+
+internal fun appScreenPopEnterTransition(): EnterTransition = EnterTransition.None
+
 internal fun appScreenPopExitTransition(): ExitTransition =
-    fadeOut(animationSpec = tween(durationMillis = 110, easing = EaseIn)) +
-        scaleOut(targetScale = 1.0f, animationSpec = tween(110, easing = EaseIn))
+    fadeOut(animationSpec = tween(durationMillis = 260, easing = EaseOut)) +
+        scaleOut(targetScale = 0.96f, animationSpec = tween(260, easing = EaseOut))

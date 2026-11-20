@@ -117,12 +117,16 @@ class MainActivity : Activity() {
                 val dy = event.y - touchDownY
                 val absoluteX = kotlin.math.abs(dx)
                 val absoluteY = kotlin.math.abs(dy)
-                val code = when {
-                    absoluteX < 40f && absoluteY < 40f -> 4
-                    absoluteX > absoluteY -> if (dx > 0) 2 else 3
-                    else -> if (dy > 0) 0 else 1
+                if (absoluteX < 40f && absoluteY < 40f) {
+                    XmbNative.nativeKey(4)
+                } else {
+                    val dir = if (absoluteX > absoluteY) {
+                        if (dx > 0) 3 else 2
+                    } else {
+                        if (dy > 0) 1 else 0
+                    }
+                    XmbNative.nativeTouchSwipe(dir)
                 }
-                XmbNative.nativeKey(code)
                 return true
             }
         }

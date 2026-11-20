@@ -734,12 +734,12 @@ fun XmbScreen(
                                 val normY = if (v.height > 0) (event.y / v.height.toFloat()) else 0.5f
                                 XmbNative.nativeTouchTap(normX, normY)
                             } else {
-                                val code = if (ax > ay) {
-                                    if (dx > 0) 2 else 3
+                                val dir = if (ax > ay) {
+                                    if (dx > 0) 3 else 2
                                 } else {
-                                    if (dy > 0) 0 else 1
+                                    if (dy > 0) 1 else 0
                                 }
-                                XmbNative.nativeKey(code)
+                                XmbNative.nativeTouchSwipe(dir)
                             }
                         }
                         true
