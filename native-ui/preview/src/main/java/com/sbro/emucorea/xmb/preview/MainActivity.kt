@@ -119,8 +119,8 @@ class MainActivity : Activity() {
                 val absoluteY = kotlin.math.abs(dy)
                 val code = when {
                     absoluteX < 40f && absoluteY < 40f -> 4
-                    absoluteX > absoluteY -> if (dx > 0) 3 else 2
-                    else -> if (dy > 0) 1 else 0
+                    absoluteX > absoluteY -> if (dx > 0) 2 else 3
+                    else -> if (dy > 0) 0 else 1
                 }
                 XmbNative.nativeKey(code)
                 return true

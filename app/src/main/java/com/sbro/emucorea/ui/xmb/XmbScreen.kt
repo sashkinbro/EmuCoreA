@@ -732,9 +732,9 @@ fun XmbScreen(
                                 XmbNative.nativeTouchTap(normX, normY)
                             } else {
                                 val code = if (ax > ay) {
-                                    if (dx > 0) 3 else 2
+                                    if (dx > 0) 2 else 3
                                 } else {
-                                    if (dy > 0) 1 else 0
+                                    if (dy > 0) 0 else 1
                                 }
                                 XmbNative.nativeKey(code)
                             }
