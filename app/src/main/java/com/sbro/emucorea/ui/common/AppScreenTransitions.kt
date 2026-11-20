@@ -7,7 +7,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 
 internal fun appScreenEnterTransition(): EnterTransition =
     fadeIn(animationSpec = tween(durationMillis = 260, delayMillis = 70, easing = EaseOut)) +
@@ -15,8 +14,8 @@ internal fun appScreenEnterTransition(): EnterTransition =
 
 internal fun appScreenExitTransition(): ExitTransition = ExitTransition.None
 
-internal fun appScreenPopEnterTransition(): EnterTransition = EnterTransition.None
+internal fun appScreenPopEnterTransition(): EnterTransition =
+    scaleIn(initialScale = 0.96f, animationSpec = tween(260, delayMillis = 70, easing = EaseOut))
 
 internal fun appScreenPopExitTransition(): ExitTransition =
-    fadeOut(animationSpec = tween(durationMillis = 260, easing = EaseOut)) +
-        scaleOut(targetScale = 0.96f, animationSpec = tween(260, easing = EaseOut))
+    fadeOut(animationSpec = tween(durationMillis = 260, delayMillis = 70, easing = EaseOut))
