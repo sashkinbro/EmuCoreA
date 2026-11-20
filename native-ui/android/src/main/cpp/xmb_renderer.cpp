@@ -121,7 +121,7 @@ const float kMonthGradients[12][3] = {
 	{0.039f, 0.408f, 0.733f}, // Aug (Ocean Blue)
 	{0.420f, 0.063f, 0.569f}, // Sep (Royal Purple)
 	{1.000f, 0.616f, 0.180f}, // Oct (Amber)
-	{0.725f, 0.247f, 0.047f}, // Nov (PSP 6.60 Orange-Red)
+	{0.392f, 0.157f, 0.094f}, // Nov (PSP 6.60 Dark Mahogany matching orig_10.png)
 	{0.812f, 0.094f, 0.027f}, // Dec (Crimson)
 };
 
@@ -168,7 +168,28 @@ const char *kExtColorFallbacks[22] = {
 	"Gold", "Bronze",
 };
 
-const float kClassicBlueTint[3] = {0.12f, 0.42f, 0.88f};
+struct ThemePreset {
+	const char *rel_path;  // nullptr for Original (uses monthly) or Cookie (uses cookies_bg)
+	float r;
+	float g;
+	float b;
+};
+
+// 12 PSP XMB themes (0..11) — single source of truth for BOTH preview swatches and loaded textures
+const ThemePreset kThemePresets[12] = {
+	{ nullptr,                       0.392f, 0.157f, 0.094f }, // 0: Original (monthly auto)
+	{ "images/themes/classic_07.png", 0.039f, 0.408f, 0.733f }, // 1: Classic (PSP Classic Ocean Blue)
+	{ nullptr,                       0.851f, 0.780f, 0.682f }, // 2: Cookie (uses cookies_bg)
+	{ "images/themes/ext_15.png",     0.063f, 0.063f, 0.118f }, // 3: Piano Black
+	{ "images/themes/classic_00.png", 0.733f, 0.733f, 0.733f }, // 4: Ceramic White
+	{ "images/themes/classic_11.png", 0.980f, 0.102f, 0.086f }, // 5: Radiant Red
+	{ "images/themes/orig_06.png",    0.039f, 0.671f, 0.788f }, // 6: Vibrant Blue
+	{ "images/themes/ext_10.png",     0.008f, 0.780f, 0.365f }, // 7: Spirited Green
+	{ "images/themes/classic_01.png", 0.914f, 0.769f, 0.169f }, // 8: Bright Yellow
+	{ "images/themes/ext_00.png",     0.996f, 0.514f, 0.647f }, // 9: Blossom Pink
+	{ "images/themes/classic_06.png", 0.008f, 0.804f, 0.765f }, // 10: Turquoise
+	{ "images/themes/orig_05.png",    0.600f, 0.439f, 0.855f }, // 11: Lilac Purple
+};
 
 const char *kMonthKeys[12] = {
 	"xmb_month_jan", "xmb_month_feb", "xmb_month_mar", "xmb_month_apr",
@@ -1399,30 +1420,18 @@ void XmbRenderer::UpdateThemeColor() {
 		return;
 	}
 
-	// Map official PSP-3000 console edition themes (3..11) to their real 13-27.bmp palette index
-	static const int kEditionExtMap[9] = {
-		15, // 3: Piano Black (Deep Obsidian Navy)
-		21, // 4: Ceramic White (Pearl Silver)
-		2,  // 5: Radiant Red (Carnival Red)
-		12, // 6: Vibrant Blue (Carnival Blue)
-		17, // 7: Spirited Green (Carnival Green)
-		19, // 8: Bright Yellow (Carnival Yellow)
-		0,  // 9: Blossom Pink
-		14, // 10: Turquoise Green (LittleBigPlanet)
-		7,  // 11: Lilac Purple (Hannah Montana)
-	};
-
-	const bool use_classic = (settings_.bg_mode == 1 || settings_.theme_style == 1);
 	char rel_path[64] = {0};
-	if (settings_.theme_style >= 3 && settings_.theme_style <= 11 && settings_.color_index == 0 && settings_.bg_mode == 0) {
-		const int ext_idx = kEditionExtMap[settings_.theme_style - 3];
-		std::snprintf(rel_path, sizeof(rel_path), "images/themes/ext_%02d.png", ext_idx);
+	if (settings_.theme_style >= 1 && settings_.theme_style <= 11 && settings_.theme_style != 2 &&
+	    settings_.color_index == 0 && settings_.bg_mode == 0 &&
+	    kThemePresets[settings_.theme_style].rel_path != nullptr) {
+		std::snprintf(rel_path, sizeof(rel_path), "%s", kThemePresets[settings_.theme_style].rel_path);
 	} else if (settings_.color_index >= 13 && settings_.color_index <= 34) {
 		std::snprintf(rel_path, sizeof(rel_path), "images/themes/ext_%02d.png", settings_.color_index - 13);
 	} else {
+		const bool use_classic_bg = (settings_.bg_mode == 1);
 		const int month_index = EffectiveColorIndex();
 		std::snprintf(rel_path, sizeof(rel_path), "images/themes/%s_%02d.png",
-		              use_classic ? "classic" : "orig", month_index);
+		              use_classic_bg ? "classic" : "orig", month_index);
 	}
 
 	std::vector<uint8_t> png_file;
@@ -1449,11 +1458,12 @@ void XmbRenderer::UpdateThemeColor() {
 	}
 
 	// Fallback if extracted theme image is missing
-	const std::array<float, 3> swatch = (settings_.theme_style == 3 && settings_.color_index == 0)
-	                                        ? std::array<float, 3>{0.06f, 0.06f, 0.12f}
-	                                        : (use_classic && settings_.color_index == 0
-	                                               ? std::array<float, 3>{kClassicBlueTint[0], kClassicBlueTint[1], kClassicBlueTint[2]}
-	                                               : ColorSwatchForChoice(settings_.color_index));
+	const std::array<float, 3> swatch =
+		(settings_.theme_style >= 1 && settings_.theme_style <= 11 && settings_.color_index == 0 && settings_.bg_mode == 0)
+			? std::array<float, 3>{kThemePresets[settings_.theme_style].r,
+			                       kThemePresets[settings_.theme_style].g,
+			                       kThemePresets[settings_.theme_style].b}
+			: ColorSwatchForChoice(settings_.color_index);
 	wave_tint_ = swatch;
 	constexpr size_t row_count = sizeof(kBackgroundRows) / sizeof(kBackgroundRows[0]);
 	std::vector<uint8_t> fb_rgba(row_count * 4);
@@ -1853,10 +1863,8 @@ void XmbRenderer::ApplySettingsPickerChoice(int v) {
 	case SettingsKind::Theme:
 		if (settings_sub_index_ == 0) {
 			settings_.theme_style = v;
-			if (v >= 2) {
-				settings_.color_index = 0;
-				settings_.bg_mode = 0;
-			}
+			settings_.color_index = 0;
+			settings_.bg_mode = 0;
 		} else if (settings_sub_index_ == 1) settings_.color_index = v;
 		else if (settings_sub_index_ == 2) settings_.bg_mode = v;
 		else settings_.wave_mode = v;
@@ -1969,21 +1977,11 @@ void XmbRenderer::DrawSettingsSubPage() {
 	};
 
 	auto theme_swatch = [&](int t_idx) -> std::array<float, 3> {
-		switch (t_idx) {
-		case 0: return ColorSwatchForChoice(0);
-		case 1: return {kClassicBlueTint[0], kClassicBlueTint[1], kClassicBlueTint[2]};
-		case 2: return {0.78f, 0.56f, 0.34f};
-		case 3: return {kExtColorSwatches[15][0], kExtColorSwatches[15][1], kExtColorSwatches[15][2]};
-		case 4: return {kExtColorSwatches[21][0], kExtColorSwatches[21][1], kExtColorSwatches[21][2]};
-		case 5: return {kExtColorSwatches[2][0], kExtColorSwatches[2][1], kExtColorSwatches[2][2]};
-		case 6: return {kExtColorSwatches[12][0], kExtColorSwatches[12][1], kExtColorSwatches[12][2]};
-		case 7: return {kExtColorSwatches[17][0], kExtColorSwatches[17][1], kExtColorSwatches[17][2]};
-		case 8: return {kExtColorSwatches[19][0], kExtColorSwatches[19][1], kExtColorSwatches[19][2]};
-		case 9: return {kExtColorSwatches[0][0], kExtColorSwatches[0][1], kExtColorSwatches[0][2]};
-		case 10: return {kExtColorSwatches[14][0], kExtColorSwatches[14][1], kExtColorSwatches[14][2]};
-		case 11: return {kExtColorSwatches[7][0], kExtColorSwatches[7][1], kExtColorSwatches[7][2]};
-		default: return ColorSwatchForChoice(0);
+		if (t_idx == 0) return ColorSwatchForChoice(0);
+		if (t_idx >= 1 && t_idx <= 11) {
+			return {kThemePresets[t_idx].r, kThemePresets[t_idx].g, kThemePresets[t_idx].b};
 		}
+		return ColorSwatchForChoice(0);
 	};
 
 	auto color_label = [&](int idx) -> std::string {

@@ -38,6 +38,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.sbro.emucorea.MainActivity
 import com.sbro.emucorea.R
 import com.sbro.emucorea.core.PspGameMetadataReader
 import com.sbro.emucorea.data.GameItem
@@ -622,13 +623,15 @@ fun XmbScreen(
     }
 
     val activity = context as? Activity
-    val originalRequestedOrientation = remember(activity) {
-        activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
-    }
-    DisposableEffect(activity) {
-        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    val mainActivity = activity as? MainActivity
+    val orientationToken = remember { "xmb_${System.identityHashCode(Any())}" }
+    DisposableEffect(mainActivity, orientationToken) {
+        mainActivity?.setOrientationOverride(
+            orientationToken,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        )
         onDispose {
-            activity?.requestedOrientation = originalRequestedOrientation
+            mainActivity?.clearOrientationOverride(orientationToken)
         }
     }
 
@@ -924,6 +927,7 @@ fun XmbScreen(
             saveState()
             bgmJob?.cancel()
             XmbAudio.stopBgm()
+            mainActivity?.clearOrientationOverride(orientationToken)
             currentExit.value()
         }
 
@@ -932,7 +936,10 @@ fun XmbScreen(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_RESUME -> {
-                    activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    mainActivity?.setOrientationOverride(
+                        orientationToken,
+                        ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                    )
                     surface.onResume()
                     surface.requestFocus()
                     savesRevision++

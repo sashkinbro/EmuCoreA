@@ -65,9 +65,12 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.movableContentOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
@@ -107,11 +110,6 @@ enum class PrimaryDestination {
     Home, Search, Hub, Formats, Profile, Discord, Settings, Feedback
 }
 
-private enum class MobileLeadingAction {
-    Drawer,
-    Back
-}
-
 internal fun shouldUseCompactModalDrawer(
     drawerEnabled: Boolean,
     selected: PrimaryDestination,
@@ -123,7 +121,7 @@ internal fun shouldEnableDrawerInteraction(
     destinationSettled: Boolean
 ): Boolean = useModalDrawer && destinationSettled
 
-private const val DRAWER_DESTINATION_SETTLE_MS = 220L
+private const val DRAWER_DESTINATION_SETTLE_MS = 420L
 
 private val LocalDrawerVisualStyle = staticCompositionLocalOf { DrawerVisualStyle.CLASSIC }
 
@@ -194,14 +192,21 @@ fun AdaptiveShell(
             onCloseDrawer = { }
         )
     }
+    val latestContent = rememberUpdatedState(content)
+    val movableContent = remember {
+        movableContentOf<(() -> Unit)?> { openDrawer ->
+            latestContent.value(openDrawer)
+        }
+    }
     val configuration = LocalConfiguration.current
     val isTabletClass = configuration.smallestScreenWidthDp >= 600
     val isWide = tvUiEnabled || (isTabletClass && configuration.screenWidthDp >= 900)
+    val showPermanentRail = isWide && drawerEnabled
     val tvSafeHorizontal = TvUiMetrics.safeHorizontalDp(configuration.screenWidthDp).dp
     val tvSafeVertical = TvUiMetrics.safeVerticalDp(configuration.screenHeightDp).dp
     val tvNavigationWidth = TvUiMetrics.navigationWidthDp(configuration.screenWidthDp).dp
 
-    if (isWide) {
+    if (showPermanentRail) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -241,7 +246,7 @@ fun AdaptiveShell(
                     .weight(1f)
                     .fillMaxHeight()
             ) {
-                content(null)
+                movableContent(null)
             }
         }
     } else {
@@ -269,7 +274,7 @@ fun AdaptiveShell(
             onNavigateProfile = onNavigateProfile,
             onBackClick = onBackClick,
             onLaunchGame = onLaunchGame,
-            content = content
+            content = movableContent
         )
     }
 }
@@ -316,182 +321,181 @@ private fun CompactAdaptiveShell(
         isLandscapeCompact -> 0.46f
         else -> 0.74f
     }
-    val selectedDrawerItemFocusRequester = remember { FocusRequester() }
-    // A drawer should never be restored as open after a configuration change.
-    // This is especially important for back-only destinations such as Feedback and Settings.
-    val drawerState = remember(
-        selected,
-        configuration.screenWidthDp,
-        configuration.screenHeightDp
-    ) {
-        DrawerState(initialValue = DrawerValue.Closed)
-    }
-    var destinationSettled by remember(
-        selected,
-        configuration.screenWidthDp,
-        configuration.screenHeightDp
-    ) {
-        mutableStateOf(false)
-    }
-    val scope = rememberCoroutineScope()
-    val inputModeManager = LocalInputModeManager.current
-    val drawerScrollState = rememberScrollState()
-
     val useModalDrawer = shouldUseCompactModalDrawer(
         drawerEnabled = drawerEnabled,
         selected = selected,
         hasBackClick = onBackClick != null
     )
-    val mobileLeadingAction = if (useModalDrawer) {
-        MobileLeadingAction.Drawer
-    } else {
-        MobileLeadingAction.Back
+    if (!useModalDrawer) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            content(null)
+        }
+        return
     }
-    val drawerInteractionEnabled = shouldEnableDrawerInteraction(
-        useModalDrawer = useModalDrawer,
-        destinationSettled = destinationSettled
-    )
-    val leadingActionClick = when (mobileLeadingAction) {
-        MobileLeadingAction.Drawer -> rememberDebouncedClick {
+
+    // Recreate ModalNavigationDrawer and DrawerState together across orientation/size changes so
+    // transient 0px layout frames during rotation cannot leave AnchoredDraggable snapped Open.
+    key(
+        selected,
+        configuration.orientation,
+        configuration.screenWidthDp,
+        configuration.screenHeightDp
+    ) {
+        val selectedDrawerItemFocusRequester = remember { FocusRequester() }
+        var destinationSettled by remember { mutableStateOf(false) }
+        val allowDrawerOpen = rememberUpdatedState(
+            shouldEnableDrawerInteraction(
+                useModalDrawer = true,
+                destinationSettled = destinationSettled
+            )
+        )
+        val drawerState = remember {
+            DrawerState(
+                initialValue = DrawerValue.Closed,
+                confirmStateChange = { target ->
+                    target == DrawerValue.Closed || allowDrawerOpen.value
+                }
+            )
+        }
+        val scope = rememberCoroutineScope()
+        val inputModeManager = LocalInputModeManager.current
+        val drawerScrollState = rememberScrollState()
+        val drawerInteractionEnabled = shouldEnableDrawerInteraction(
+            useModalDrawer = true,
+            destinationSettled = destinationSettled
+        )
+        val leadingActionClick = rememberDebouncedClick {
             if (!drawerInteractionEnabled) return@rememberDebouncedClick
             scope.launch {
                 if (drawerState.isClosed) drawerState.open() else drawerState.close()
             }
         }
-        MobileLeadingAction.Back -> {
-            { onBackClick?.invoke(); Unit }
-        }
-    }
 
-    LaunchedEffect(
-        selected,
-        mobileLeadingAction,
-        configuration.screenWidthDp,
-        configuration.screenHeightDp
-    ) {
-        destinationSettled = false
-        drawerState.snapTo(DrawerValue.Closed)
-        // Consume pointer/controller events that belonged to the disappearing game surface.
-        withFrameNanos { }
-        withFrameNanos { }
-        delay(DRAWER_DESTINATION_SETTLE_MS.milliseconds)
-        if (drawerState.currentValue != DrawerValue.Closed || drawerState.targetValue != DrawerValue.Closed) {
+        LaunchedEffect(Unit) {
+            destinationSettled = false
             drawerState.snapTo(DrawerValue.Closed)
+            // Consume pointer/controller events that belonged to the disappearing game surface or stale rotation frame.
+            withFrameNanos { }
+            withFrameNanos { }
+            delay(DRAWER_DESTINATION_SETTLE_MS.milliseconds)
+            if (drawerState.currentValue != DrawerValue.Closed || drawerState.targetValue != DrawerValue.Closed) {
+                drawerState.snapTo(DrawerValue.Closed)
+            }
+            destinationSettled = true
         }
-        destinationSettled = true
-    }
-    LaunchedEffect(drawerState.isOpen, mobileLeadingAction, selected) {
-        if (drawerState.isOpen && mobileLeadingAction == MobileLeadingAction.Drawer) {
-            if (GamepadManager.isGamepadConnected() || inputModeManager.inputMode == InputMode.Keyboard) {
-                delay(40.milliseconds)
-                selectedDrawerItemFocusRequester.requestFocus()
+        LaunchedEffect(drawerState.currentValue, drawerState.targetValue, destinationSettled) {
+            if (!destinationSettled &&
+                (drawerState.currentValue != DrawerValue.Closed || drawerState.targetValue != DrawerValue.Closed)
+            ) {
+                drawerState.snapTo(DrawerValue.Closed)
             }
         }
-    }
-    ProvideGamepadMenuAction(
-        enabled = mobileLeadingAction == MobileLeadingAction.Drawer && drawerInteractionEnabled,
-        onMenu = {
-            scope.launch {
-                if (drawerState.isClosed) drawerState.open() else drawerState.close()
+        LaunchedEffect(drawerState.isOpen, selected) {
+            if (drawerState.isOpen) {
+                if (GamepadManager.isGamepadConnected() || inputModeManager.inputMode == InputMode.Keyboard) {
+                    delay(40.milliseconds)
+                    selectedDrawerItemFocusRequester.requestFocus()
+                }
             }
         }
-    )
-    BackHandler(enabled = drawerState.isOpen) {
-        scope.launch { drawerState.close() }
-    }
+        ProvideGamepadMenuAction(
+            enabled = drawerInteractionEnabled,
+            onMenu = {
+                scope.launch {
+                    if (drawerState.isClosed) drawerState.open() else drawerState.close()
+                }
+            }
+        )
+        BackHandler(enabled = drawerState.isOpen) {
+            scope.launch { drawerState.close() }
+        }
 
-    val screenContent: @Composable () -> Unit = {
-        Box(modifier = Modifier.fillMaxSize()) {
-            content(if (useModalDrawer) leadingActionClick else null)
-            if (useModalDrawer && selected != PrimaryDestination.Home) {
-                Surface(
+        ModalNavigationDrawer(
+            modifier = Modifier.testTag("adaptive_shell_modal_drawer"),
+            drawerState = drawerState,
+            gesturesEnabled = drawerInteractionEnabled,
+            scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.42f),
+            drawerContent = {
+                ModalDrawerSheet(
                     modifier = Modifier
-                        .padding(top = statusPadding + 12.dp, start = 12.dp),
-                    shape = neonShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                    tonalElevation = 4.dp,
-                    shadowElevation = 6.dp,
-                    onClick = leadingActionClick
+                        .testTag("adaptive_shell_drawer_sheet")
+                        .fillMaxHeight()
+                        .fillMaxWidth(drawerWidthFraction)
+                        .widthIn(min = 292.dp, max = if (isTabletClass) 360.dp else 320.dp),
+                    drawerShape = when (drawerVisualStyle) {
+                        DrawerVisualStyle.COMPACT -> neonShapeCorners(topEnd = 12.dp, bottomEnd = 12.dp)
+                        DrawerVisualStyle.GLASS -> neonShapeCorners(topEnd = 38.dp, bottomEnd = 38.dp)
+                        DrawerVisualStyle.CONSOLE -> neonShape(0.dp)
+                        DrawerVisualStyle.CLASSIC -> neonShapeCorners(topEnd = 30.dp, bottomEnd = 30.dp)
+                    },
+                    drawerContainerColor = when (drawerVisualStyle) {
+                        DrawerVisualStyle.GLASS -> MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
+                        DrawerVisualStyle.CONSOLE -> MaterialTheme.colorScheme.surfaceContainerLowest
+                        else -> MaterialTheme.colorScheme.surface
+                    },
+                    drawerContentColor = MaterialTheme.colorScheme.onSurface,
+                    drawerTonalElevation = 6.dp,
+                    windowInsets = WindowInsets(0, 0, 0, 0)
                 ) {
-                    Box(
-                        modifier = Modifier.padding(horizontal = 11.dp, vertical = 10.dp),
-                        contentAlignment = Alignment.Center
+                    SideNavigation(
+                        selected = selected,
+                        isProUnlocked = isProUnlocked,
+                        hiddenDrawerItems = hiddenDrawerItems,
+                        drawerVisualStyle = drawerVisualStyle,
+                        onNavigateHome = onNavigateHome,
+                        onNavigateSearch = onNavigateSearch,
+                        onNavigateHub = onNavigateHub,
+                        onNavigateFormats = onNavigateFormats,
+                        onNavigateSettings = onNavigateSettings,
+                        onNavigateDiscord = onNavigateDiscord,
+                        onNavigateFeedback = onNavigateFeedback,
+                        onNavigateGameSettingsManager = onNavigateGameSettingsManager,
+                        onNavigateDataTransfer = onNavigateDataTransfer,
+                        onResetAllSettings = onResetAllSettings,
+                        onNavigateSaveManager = onNavigateSaveManager,
+                        onNavigateMemoryCardManager = onNavigateMemoryCardManager,
+                        onNavigateTextureManager = onNavigateTextureManager,
+                        onNavigateCheatManager = onNavigateCheatManager,
+                        onNavigateAchievements = onNavigateAchievements,
+                        onNavigateProfile = onNavigateProfile,
+                        onLaunchGame = onLaunchGame,
+                        selectedItemFocusRequester = selectedDrawerItemFocusRequester,
+                        wrapInSurface = false,
+                        topInset = statusPadding,
+                        scrollState = drawerScrollState,
+                        onCloseDrawer = { drawerState.close() }
+                    )
+                }
+            }
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                content(leadingActionClick)
+                if (selected != PrimaryDestination.Home) {
+                    Surface(
+                        modifier = Modifier
+                            .padding(top = statusPadding + 12.dp, start = 12.dp),
+                        shape = neonShape(14.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                        tonalElevation = 4.dp,
+                        shadowElevation = 6.dp,
+                        onClick = leadingActionClick
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Menu,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(18.dp)
-                        )
+                        Box(
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Menu,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
         }
     }
-
-    if (!useModalDrawer) {
-        screenContent()
-        return
-    }
-
-    ModalNavigationDrawer(
-        modifier = Modifier.testTag("adaptive_shell_modal_drawer"),
-        drawerState = drawerState,
-        gesturesEnabled = drawerInteractionEnabled,
-        scrimColor = MaterialTheme.colorScheme.scrim.copy(alpha = 0.42f),
-        drawerContent = {
-            ModalDrawerSheet(
-                modifier = Modifier
-                    .testTag("adaptive_shell_drawer_sheet")
-                    .fillMaxHeight()
-                    .fillMaxWidth(drawerWidthFraction)
-                    .widthIn(min = 292.dp, max = if (isTabletClass) 360.dp else 320.dp),
-                drawerShape = when (drawerVisualStyle) {
-                    DrawerVisualStyle.COMPACT -> neonShapeCorners(topEnd = 12.dp, bottomEnd = 12.dp)
-                    DrawerVisualStyle.GLASS -> neonShapeCorners(topEnd = 38.dp, bottomEnd = 38.dp)
-                    DrawerVisualStyle.CONSOLE -> neonShape(0.dp)
-                    DrawerVisualStyle.CLASSIC -> neonShapeCorners(topEnd = 30.dp, bottomEnd = 30.dp)
-                },
-                drawerContainerColor = when (drawerVisualStyle) {
-                    DrawerVisualStyle.GLASS -> MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
-                    DrawerVisualStyle.CONSOLE -> MaterialTheme.colorScheme.surfaceContainerLowest
-                    else -> MaterialTheme.colorScheme.surface
-                },
-                drawerContentColor = MaterialTheme.colorScheme.onSurface,
-                drawerTonalElevation = 6.dp,
-                windowInsets = WindowInsets(0, 0, 0, 0)
-            ) {
-                SideNavigation(
-                    selected = selected,
-                    isProUnlocked = isProUnlocked,
-                    hiddenDrawerItems = hiddenDrawerItems,
-                    drawerVisualStyle = drawerVisualStyle,
-                    onNavigateHome = onNavigateHome,
-                    onNavigateSearch = onNavigateSearch,
-                    onNavigateHub = onNavigateHub,
-                    onNavigateFormats = onNavigateFormats,
-                    onNavigateSettings = onNavigateSettings,
-                    onNavigateDiscord = onNavigateDiscord,
-                    onNavigateFeedback = onNavigateFeedback,
-                    onNavigateGameSettingsManager = onNavigateGameSettingsManager,
-                    onNavigateDataTransfer = onNavigateDataTransfer,
-                    onResetAllSettings = onResetAllSettings,
-                    onNavigateSaveManager = onNavigateSaveManager,
-                    onNavigateMemoryCardManager = onNavigateMemoryCardManager,
-                    onNavigateTextureManager = onNavigateTextureManager,
-                    onNavigateCheatManager = onNavigateCheatManager,
-                    onNavigateAchievements = onNavigateAchievements,
-                    onNavigateProfile = onNavigateProfile,
-                    onLaunchGame = onLaunchGame,
-                    selectedItemFocusRequester = selectedDrawerItemFocusRequester,
-                    wrapInSurface = false,
-                    topInset = statusPadding,
-                    scrollState = drawerScrollState,
-                    onCloseDrawer = { drawerState.close() }
-                )
-            }
-        }
-    ) { screenContent() }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

@@ -165,6 +165,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.sbro.emucorea.MainActivity
 import com.sbro.emucorea.R
 import com.sbro.emucorea.core.AudioDefaults
 import com.sbro.emucorea.core.AndroidTouchHaptics
@@ -389,12 +390,18 @@ fun EmulationScreen(
     val presentationSurfaceGeneration by EmulatorBridge.presentationSurfaceGeneration.collectAsState()
     val context = LocalContext.current
     val activity = context as? android.app.Activity
+    val mainActivity = activity as? MainActivity
+    val orientationToken = remember { "emulation_${System.identityHashCode(Any())}" }
     val originalRequestedOrientation = remember(activity) {
         activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
-    val restoreHostUi = remember(activity, originalRequestedOrientation) {
+    val restoreHostUi = remember(activity, mainActivity, orientationToken, originalRequestedOrientation) {
         {
-            activity?.requestedOrientation = originalRequestedOrientation
+            if (mainActivity != null) {
+                mainActivity.clearOrientationOverride(orientationToken)
+            } else {
+                activity?.requestedOrientation = originalRequestedOrientation
+            }
             activity?.window?.let { window ->
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.show(WindowInsetsCompat.Type.navigationBars())
@@ -717,8 +724,12 @@ fun EmulationScreen(
     }
 
     if (emulationOrientation != null) {
-        DisposableEffect(activity, originalRequestedOrientation, emulationOrientation) {
-            activity?.requestedOrientation = emulationOrientation
+        DisposableEffect(activity, mainActivity, orientationToken, originalRequestedOrientation, emulationOrientation) {
+            if (mainActivity != null) {
+                mainActivity.setOrientationOverride(orientationToken, emulationOrientation)
+            } else {
+                activity?.requestedOrientation = emulationOrientation
+            }
             activity?.window?.let { window ->
                 val controller = WindowCompat.getInsetsController(window, window.decorView)
                 controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE

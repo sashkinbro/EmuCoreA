@@ -69,16 +69,36 @@ open class MainActivity : ComponentActivity() {
     private var reviewRequestInFlight = false
     private var reviewRetryAfterResumeScheduled = false
     private var appliedDarkTheme = true
+    private var currentOrientationLock: Int = AppPreferences.ORIENTATION_LOCK_AUTO
+    private val orientationOverrides = LinkedHashMap<String, Int>()
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLocaleManager.wrap(newBase))
     }
 
-    private fun applyOrientationLock(lock: Int) {
-        requestedOrientation = when (lock) {
+    private fun resolveAndApplyOrientation() {
+        if (launchedFromTv) return
+        val override = orientationOverrides.values.lastOrNull()
+        requestedOrientation = override ?: when (currentOrientationLock) {
             AppPreferences.ORIENTATION_LOCK_PORTRAIT -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             AppPreferences.ORIENTATION_LOCK_LANDSCAPE -> ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
+    private fun applyOrientationLock(lock: Int) {
+        currentOrientationLock = lock
+        resolveAndApplyOrientation()
+    }
+
+    fun setOrientationOverride(token: String, orientation: Int) {
+        orientationOverrides[token] = orientation
+        resolveAndApplyOrientation()
+    }
+
+    fun clearOrientationOverride(token: String) {
+        if (orientationOverrides.remove(token) != null) {
+            resolveAndApplyOrientation()
         }
     }
 

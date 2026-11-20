@@ -87,6 +87,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.zIndex
+import com.sbro.emucorea.MainActivity
 import com.sbro.emucorea.R
 import com.sbro.emucorea.data.AppPreferences
 import com.sbro.emucorea.data.CustomTouchControl
@@ -493,6 +494,8 @@ fun ControlsEditorScreen(
     val editorColorScheme = MaterialTheme.colorScheme
     fun editorAppearance(kind: ControlShapeKind): ControlAppearance =
         editorControlAppearance(state.touchControlVisualStyle, kind, editorColorScheme)
+    val mainActivity = activity as? MainActivity
+    val orientationToken = remember { "controls_editor_${System.identityHashCode(Any())}" }
     val originalOrientation = remember(activity) {
         activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
@@ -817,12 +820,21 @@ fun ControlsEditorScreen(
     BackHandler(onBack = onBackClick)
 
     if (manageActivityOrientation) {
-        LaunchedEffect(activity) {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        }
-        DisposableEffect(activity) {
+        DisposableEffect(activity, mainActivity, orientationToken) {
+            if (mainActivity != null) {
+                mainActivity.setOrientationOverride(
+                    orientationToken,
+                    ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                )
+            } else {
+                activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            }
             onDispose {
-                activity?.requestedOrientation = originalOrientation
+                if (mainActivity != null) {
+                    mainActivity.clearOrientationOverride(orientationToken)
+                } else {
+                    activity?.requestedOrientation = originalOrientation
+                }
             }
         }
     }
