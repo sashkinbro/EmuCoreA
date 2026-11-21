@@ -62,8 +62,8 @@ android {
         applicationId = "com.sbro.emucorea"
         minSdk = 26
         targetSdk = 37
-        versionCode = 47
-        versionName = "0.1.6"
+        versionCode = 49
+        versionName = "0.1.7"
 
         buildConfigField("String", "FEEDBACK_ENDPOINT", buildConfigString(feedbackEndpoint))
         buildConfigField("String", "FEEDBACK_API_KEY", buildConfigString(feedbackApiKey))
@@ -77,6 +77,17 @@ android {
         ndk {
             //noinspection ChromeOsAbiSupport
             abiFilters += "arm64-v8a"
+        }
+        discordSdkDirectory?.let { sdkDir ->
+            externalNativeBuild {
+                cmake {
+                    arguments += listOf(
+                        "-DANDROID_STL=c++_shared",
+                        "-DDISCORD_SDK_DIR=${sdkDir.absolutePath.replace('\\', '/')}"
+                    )
+                    targets += "emucorea_discord"
+                }
+            }
         }
     }
 
@@ -122,10 +133,22 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            discordSdkDirectory?.let { pickFirsts += "**/libdiscord_partner_sdk.so" }
+            discordSdkDirectory?.let {
+                pickFirsts += "**/libdiscord_partner_sdk.so"
+                pickFirsts += "**/libc++_shared.so"
+            }
         }
     }
-    discordSdkDirectory?.let { sdkDir -> sourceSets["main"].jniLibs.srcDir(sdkDir) }
+    discordSdkDirectory?.let { sdkDir ->
+        sourceSets["main"].jniLibs.srcDir(sdkDir)
+        // libemucorea_discord.so (DiscordNative's JNI bridge) is built here.
+        externalNativeBuild {
+            cmake {
+                path = file("src/main/cpp/CMakeLists.txt")
+                version = "3.30.5"
+            }
+        }
+    }
     sourceSets["main"].assets.srcDir(rootProject.file("core/assets"))
     androidResources {
         // This frontend does not ship PPSSPP's web debugger.

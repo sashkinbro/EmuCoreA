@@ -1050,7 +1050,8 @@ void XmbRenderer::DrawStatusBar() {
 		auto mute = textures_.find("status_mute");
 		auto mute_sh = textures_.find("status_mute_shadow");
 		if (mute_sh != textures_.end()) {
-			DrawTexture(mute_sh->second, icon_x, 12.5f + top_y_off, 1.0f, color);
+			const float mute_shadow_col[4] = {1.0f, 1.0f, 1.0f, bar_alpha * 0.75f};
+			DrawTexture(mute_sh->second, icon_x + 0.5f, 12.5f + top_y_off, 1.0f, mute_shadow_col);
 		}
 		if (mute != textures_.end()) {
 			DrawTexture(mute->second, icon_x, 12.0f + top_y_off, 1.0f, color);
@@ -1138,6 +1139,19 @@ bool XmbRenderer::LoadTexture(const std::string &name, const std::string &relati
 	if (!DecodePng(file, &width, &height, &rgba)) {
 		__android_log_print(ANDROID_LOG_WARN, kTag, "cannot decode %s", relative_path.c_str());
 		return false;
+	}
+	// system_plugin_fg/*_shadow.png are fully opaque luminance masks (the
+	// firmware blends them by intensity). Drawn as plain RGBA they show up as a
+	// dark box behind the icon, so turn the luminance into black + alpha.
+	const std::string shadow_suffix = "_shadow";
+	if (name.size() > shadow_suffix.size() &&
+	    name.compare(name.size() - shadow_suffix.size(), shadow_suffix.size(), shadow_suffix) == 0 &&
+	    relative_path.find("system_plugin_fg/") != std::string::npos) {
+		for (size_t i = 0; i + 3 < rgba.size(); i += 4) {
+			const int lum = std::max({(int)rgba[i], (int)rgba[i + 1], (int)rgba[i + 2]});
+			rgba[i] = rgba[i + 1] = rgba[i + 2] = 0;
+			rgba[i + 3] = (uint8_t)std::min(255, (lum * rgba[i + 3] * 2) / 255);
+		}
 	}
 	Texture texture;
 	texture.width = width;
