@@ -119,9 +119,12 @@ private:
     mutable std::vector<float> m_blended;
     mutable std::vector<float> m_rowP;
     mutable std::vector<float> m_rowDu;
+    mutable std::vector<float> m_weights;
+    mutable std::vector<float> m_morphTmp;
 };
 
 /// Compose bone pose at frame: morph weights + matrix (column-major).
 void pspWavePoseAt(const PspWave &wave, float frame, float *matrix16, std::vector<float> &weights);
+void pspWavePoseAt(const PspWave &wave, float frame, float *matrix16, std::vector<float> &weights, std::vector<float> &tmp);
 
 } // namespace xmb

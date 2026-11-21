@@ -20,6 +20,7 @@ import android.os.Environment
 import android.os.StatFs
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -479,7 +481,7 @@ fun XmbScreen(
             emptyList()
         } else {
             withContext(Dispatchers.IO) {
-                val semaphore = Semaphore(4)
+                val semaphore = Semaphore(2)
                 coroutineScope {
                     games.map { game ->
                         async {
@@ -522,6 +524,7 @@ fun XmbScreen(
 
     val saveRepo = remember(context) { SaveStateRepository(context) }
     var savesRevision by remember { mutableIntStateOf(0) }
+    var savesLoaded by remember { mutableStateOf(XmbAssetCache.hasLoadedSaves) }
     val saveStates by produceState<List<SaveStateEntryInfo>>(initialValue = XmbAssetCache.lastSaves, savesRevision, context) {
         val enriched = withContext(Dispatchers.IO) {
             val raw = runCatching { saveRepo.listEntries() }.getOrDefault(emptyList())
@@ -529,7 +532,7 @@ fun XmbScreen(
         }
         XmbAssetCache.lastSaves = enriched
         XmbAssetCache.hasLoadedSaves = true
-        XmbNative.nativeSetSavesLoading(false)
+        savesLoaded = true
         value = enriched
     }
     val currentSaves = rememberUpdatedState(saveStates)
@@ -617,11 +620,6 @@ fun XmbScreen(
         }
     }
 
-    BackHandler {
-        // Triggers authentic PSP exit confirmation dialog or back action
-        XmbNative.nativeKey(5)
-    }
-
     val activity = context as? Activity
     val mainActivity = activity as? MainActivity
     val orientationToken = remember { "xmb_${System.identityHashCode(Any())}" }
@@ -654,6 +652,9 @@ fun XmbScreen(
         var downY = 0f
         var gestureHandled = false
         var longPressRunnable: Runnable? = null
+        val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+        val tapSlop = maxOf(40f, touchSlop * 1.5f)
+        val moveCancelSlop = maxOf(36f, touchSlop)
         GLSurfaceView(context).apply {
             setEGLContextClientVersion(3)
             preserveEGLContextOnPause = true
@@ -694,6 +695,7 @@ fun XmbScreen(
                 }
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> {
+                        v.parent?.requestDisallowInterceptTouchEvent(true)
                         downX = event.x
                         downY = event.y
                         gestureHandled = false
@@ -701,7 +703,7 @@ fun XmbScreen(
                         val lp = Runnable {
                             if (!gestureHandled) {
                                 gestureHandled = true
-                                XmbNative.nativeKey(6) // Triangle / Options menu
+                                queueEvent { XmbNative.nativeKey(6) } // Triangle / Options menu
                             }
                         }
                         longPressRunnable = lp
@@ -712,39 +714,41 @@ fun XmbScreen(
                         if (event.pointerCount >= 2 && !gestureHandled) {
                             longPressRunnable?.let(v::removeCallbacks)
                             gestureHandled = true
-                            XmbNative.nativeKey(5) // Circle / Back
+                            queueEvent { XmbNative.nativeKey(5) } // Circle / Back
                         }
                         true
                     }
                     MotionEvent.ACTION_MOVE -> {
-                        if (!gestureHandled && (abs(event.x - downX) > 36f || abs(event.y - downY) > 36f)) {
+                        if (!gestureHandled && (abs(event.x - downX) > moveCancelSlop || abs(event.y - downY) > moveCancelSlop)) {
                             longPressRunnable?.let(v::removeCallbacks)
                         }
                         true
                     }
                     MotionEvent.ACTION_UP -> {
+                        v.parent?.requestDisallowInterceptTouchEvent(false)
                         longPressRunnable?.let(v::removeCallbacks)
                         if (!gestureHandled) {
                             val dx = event.x - downX
                             val dy = event.y - downY
                             val ax = abs(dx)
                             val ay = abs(dy)
-                            if (ax < 40f && ay < 40f) {
+                            if (ax < tapSlop && ay < tapSlop) {
                                 val normX = if (v.width > 0) (event.x / v.width.toFloat()) else 0.5f
                                 val normY = if (v.height > 0) (event.y / v.height.toFloat()) else 0.5f
-                                XmbNative.nativeTouchTap(normX, normY)
+                                queueEvent { XmbNative.nativeTouchTap(normX, normY) }
                             } else {
                                 val dir = if (ax > ay) {
                                     if (dx > 0) 3 else 2
                                 } else {
                                     if (dy > 0) 1 else 0
                                 }
-                                XmbNative.nativeTouchSwipe(dir)
+                                queueEvent { XmbNative.nativeTouchSwipe(dir) }
                             }
                         }
                         true
                     }
                     MotionEvent.ACTION_CANCEL -> {
+                        v.parent?.requestDisallowInterceptTouchEvent(false)
                         longPressRunnable?.let(v::removeCallbacks)
                         gestureHandled = true
                         true
@@ -752,6 +756,13 @@ fun XmbScreen(
                     else -> true
                 }
             }
+        }
+    }
+
+    BackHandler {
+        // Triggers authentic PSP exit confirmation dialog or back action
+        surface.queueEvent {
+            XmbNative.nativeKey(5)
         }
     }
 
@@ -765,7 +776,9 @@ fun XmbScreen(
                 val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                     status == BatteryManager.BATTERY_STATUS_FULL
                 val pct = if (scale > 0 && level >= 0) (level * 100) / scale else 100
-                XmbNative.nativeSetBattery(pct, charging)
+                surface.queueEvent {
+                    XmbNative.nativeSetBattery(pct, charging)
+                }
             }
         }
     }
@@ -800,7 +813,9 @@ fun XmbScreen(
             val charging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
                 status == BatteryManager.BATTERY_STATUS_FULL
             val pct = if (scale > 0 && level >= 0) (level * 100) / scale else 100
-            XmbNative.nativeSetBattery(pct, charging)
+            surface.queueEvent {
+                XmbNative.nativeSetBattery(pct, charging)
+            }
         }
         context.registerReceiver(batteryReceiver, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
         val statusFilter = IntentFilter().apply {
@@ -931,7 +946,11 @@ fun XmbScreen(
             currentExit.value()
         }
 
-        XmbHost.setKeyListener { XmbNative.nativeKey(it) }
+        XmbHost.setKeyListener { code ->
+            surface.queueEvent {
+                XmbNative.nativeKey(code)
+            }
+        }
 
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -1003,9 +1022,9 @@ fun XmbScreen(
         }
     }
 
-    LaunchedEffect(saveStates) {
+    LaunchedEffect(saveStates, savesLoaded) {
         val saves = saveStates
-        val loading = !XmbAssetCache.hasLoadedSaves && saves.isEmpty()
+        val loading = !savesLoaded && saves.isEmpty()
         val refChanged = lastAppliedSaves.value !== saves
         if (refChanged) {
             lastAppliedSaves.value = saves

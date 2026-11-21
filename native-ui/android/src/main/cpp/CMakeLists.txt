@@ -30,7 +30,21 @@ target_include_directories(emucorea_xmb PRIVATE
 )
 
 target_compile_features(emucorea_xmb PRIVATE cxx_std_17)
-target_compile_options(emucorea_xmb PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_options(emucorea_xmb PRIVATE
+    -Wall
+    -Wextra
+    -Wno-unused-parameter
+    -fvisibility=hidden
+    -ffunction-sections
+    -fdata-sections
+    $<$<CONFIG:Debug>:-O2>
+    $<$<NOT:$<CONFIG:Debug>>:-O3>
+    $<$<NOT:$<CONFIG:Debug>>:-flto=thin>
+)
+target_link_options(emucorea_xmb PRIVATE
+    -Wl,--gc-sections
+    $<$<NOT:$<CONFIG:Debug>>:-flto=thin>
+)
 
 find_library(android-lib android)
 find_library(log-lib log)

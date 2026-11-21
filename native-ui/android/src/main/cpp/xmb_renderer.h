@@ -229,6 +229,8 @@ private:
 	GLuint vertex_buffer_ = 0;
 	GLuint white_texture_ = 0;
 	GLint u_screen_ = -1;
+	GLint u_rect_ = -1;
+	GLint u_uv_rect_ = -1;
 	GLint u_color_ = -1;
 	GLint u_texture_ = -1;
 	std::unordered_map<std::string, Texture> textures_;
@@ -252,6 +254,7 @@ private:
 	GLint wave_sampler_ = -1;
 	std::vector<float> wave_vertices_;
 	float wave_frame_ = 0.0f;
+	float wave_evaluated_frame_ = -1.0f;
 	std::array<float, 3> wave_tint_{0.725f, 0.247f, 0.047f};
 	std::string root_;
 	std::unordered_map<std::string, std::string> strings_;
@@ -260,6 +263,10 @@ private:
 	std::string device_name_ = "PSP™";
 	int surface_width_ = 0;
 	int surface_height_ = 0;
+	int view_x_ = 0;
+	int view_y_ = 0;
+	int view_width_ = 0;
+	int view_height_ = 0;
 	float screen_width_ = 480.0f;
 	bool touch_mode_active_ = false;
 	bool touch_tutorial_active_ = false;

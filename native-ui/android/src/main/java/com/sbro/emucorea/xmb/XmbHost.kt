@@ -77,6 +77,9 @@ object XmbHost {
         keyListener = listener
     }
 
+    @JvmStatic
+    fun isActive(): Boolean = keyListener != null
+
     fun setBrowserListener(listener: ((String) -> Unit)?) {
         browserListener = listener
     }
@@ -126,9 +129,6 @@ object XmbHost {
     @JvmStatic
     fun handleKeyEvent(event: KeyEvent): Boolean {
         val listener = keyListener ?: return false
-        if (event.action != KeyEvent.ACTION_DOWN) {
-            return true
-        }
         val code = when (event.keyCode) {
             KeyEvent.KEYCODE_DPAD_UP -> 0
             KeyEvent.KEYCODE_DPAD_DOWN -> 1
@@ -136,7 +136,6 @@ object XmbHost {
             KeyEvent.KEYCODE_DPAD_RIGHT -> 3
             KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER -> 4
             KeyEvent.KEYCODE_BUTTON_A -> if (swapConfirmButton) 5 else 4
-            KeyEvent.KEYCODE_BACK -> 5
             KeyEvent.KEYCODE_BUTTON_B -> if (swapConfirmButton) 4 else 5
             KeyEvent.KEYCODE_BUTTON_Y, KeyEvent.KEYCODE_MENU,
             KeyEvent.KEYCODE_SPACE -> 6
@@ -144,6 +143,12 @@ object XmbHost {
         }
         if (code < 0) {
             return false
+        }
+        if (event.action != KeyEvent.ACTION_DOWN) {
+            return true
+        }
+        if (event.repeatCount > 0 && code >= 4) {
+            return true
         }
         listener(code)
         return true

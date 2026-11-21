@@ -733,7 +733,7 @@ PspWaveLoadResult loadPspWaveRco(const std::string &rcoPath, PspWave &out)
 
 // --- Pose / tessellation -------------------------------------------------------------------------
 
-void pspWavePoseAt(const PspWave &wave, float frame, float *m, std::vector<float> &weights)
+void pspWavePoseAt(const PspWave &wave, float frame, float *m, std::vector<float> &weights, std::vector<float> &tmp)
 {
     std::copy_n(wave.restMatrix, 16, m);
     if (wave.matrixTrack.valid())
@@ -741,7 +741,7 @@ void pspWavePoseAt(const PspWave &wave, float frame, float *m, std::vector<float
 
     weights = wave.restMorph;
     if (wave.morphTrack.valid()) {
-        std::vector<float> tmp(size_t(wave.morphTrack.dims), 0.f);
+        tmp.assign(size_t(wave.morphTrack.dims), 0.f);
         wave.morphTrack.evaluate(frame, tmp.data());
         for (size_t i = 0; i < weights.size() && i < tmp.size(); ++i)
             weights[i] = tmp[i];
@@ -765,6 +765,12 @@ void pspWavePoseAt(const PspWave &wave, float frame, float *m, std::vector<float
             v[2] /= len;
         }
     }
+}
+
+void pspWavePoseAt(const PspWave &wave, float frame, float *m, std::vector<float> &weights)
+{
+    std::vector<float> tmp;
+    pspWavePoseAt(wave, frame, m, weights, tmp);
 }
 
 std::vector<PspWaveTessellator::Basis> PspWaveTessellator::buildBasis(const std::vector<float> &U, int count, int samples)
@@ -858,15 +864,14 @@ void PspWaveTessellator::evaluate(const PspWave &wave, float frame, std::vector<
         return;
 
     float M[16];
-    std::vector<float> w;
-    pspWavePoseAt(wave, frame, M, w);
+    pspWavePoseAt(wave, frame, M, m_weights, m_morphTmp);
 
     // Blend morph targets and apply bone matrix + ModelObject transform to the control points
     // (B-splines are affine invariant, so posing the hull poses the surface).
     const size_t cps = size_t(m_uCount) * size_t(m_vCount);
     m_blended.assign(cps * 3, 0.f);
-    for (int m = 0; m < wave.morphCount && m < int(w.size()); ++m) {
-        const float wm = w[size_t(m)];
+    for (int m = 0; m < wave.morphCount && m < int(m_weights.size()); ++m) {
+        const float wm = m_weights[size_t(m)];
         if (wm == 0.f)
             continue;
         const float *src = wave.ctrl.data() + size_t(m) * cps * 3;

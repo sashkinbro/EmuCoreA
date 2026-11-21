@@ -422,6 +422,9 @@ open class MainActivity : ComponentActivity() {
     @SuppressLint("RestrictedApi", "GestureBackNavigation")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (XmbHost.handleKeyEvent(event)) return true
+        if (XmbHost.isActive() && event.keyCode == KeyEvent.KEYCODE_BACK) {
+            return super.dispatchKeyEvent(event)
+        }
         if (KeyboardMouseManager.handleKeyBindingCapture(event)) return true
 
         if (GamepadManager.isGameController(event.device)) {

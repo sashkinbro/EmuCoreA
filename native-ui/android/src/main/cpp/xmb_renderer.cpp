@@ -49,12 +49,14 @@ float AdvanceTowardsOne(float value, float dt, float tau) {
 }
 
 const char *kVertexShader = R"(#version 300 es
-layout(location = 0) in vec2 aPos;
-layout(location = 1) in vec2 aUv;
+layout(location = 0) in vec2 aUnit;
 uniform vec2 uScreen;
+uniform vec4 uRect;
+uniform vec4 uUvRect;
 out vec2 vUv;
 void main() {
-	vUv = aUv;
+	vec2 aPos = uRect.xy + aUnit * uRect.zw;
+	vUv = uUvRect.xy + aUnit * uUvRect.zw;
 	vec2 p = vec2(aPos.x / uScreen.x * 2.0 - 1.0, 1.0 - aPos.y / uScreen.y * 2.0);
 	gl_Position = vec4(p, 0.0, 1.0);
 }
@@ -301,6 +303,11 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 	program_ = 0;
 	vertex_array_ = 0;
 	vertex_buffer_ = 0;
+	wave_evaluated_frame_ = -1.0f;
+	view_x_ = 0;
+	view_y_ = 0;
+	view_width_ = 0;
+	view_height_ = 0;
 	logged_gl_error_ = false;
 	const bool first_init = !initialized_once_;
 
@@ -310,15 +317,21 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		return false;
 	}
 
+	static constexpr float kUnitQuad[12] = {
+		0.0f, 0.0f,
+		1.0f, 0.0f,
+		0.0f, 1.0f,
+		1.0f, 0.0f,
+		1.0f, 1.0f,
+		0.0f, 1.0f,
+	};
 	glGenVertexArrays(1, &vertex_array_);
 	glGenBuffers(1, &vertex_buffer_);
 	glBindVertexArray(vertex_array_);
 	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, nullptr, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(kUnitQuad), kUnitQuad, GL_STATIC_DRAW);
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (const void *)0);
-	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 4, (const void *)(sizeof(float) * 2));
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(float) * 2, (const void *)0);
 	glBindVertexArray(0);
 
 	const uint32_t white_pixel = 0xFFFFFFFF;
@@ -567,6 +580,8 @@ bool XmbRenderer::BuildProgram() {
 		return false;
 	}
 	u_screen_ = glGetUniformLocation(program_, "uScreen");
+	u_rect_ = glGetUniformLocation(program_, "uRect");
+	u_uv_rect_ = glGetUniformLocation(program_, "uUvRect");
 	u_color_ = glGetUniformLocation(program_, "uColor");
 	u_texture_ = glGetUniformLocation(program_, "uTexture");
 	return true;
@@ -726,6 +741,9 @@ void XmbRenderer::SetTouchMode(bool active, bool show_tutorial) {
 }
 
 void XmbRenderer::TouchTap(float norm_x, float norm_y) {
+	Key action = Key::Confirm;
+	bool has_action = true;
+	int pending_sound = -1;
 	{
 		std::lock_guard<std::recursive_mutex> lock(mutex_);
 		if (!settings_.touch_controls_enabled || launching_) {
@@ -736,82 +754,89 @@ void XmbRenderer::TouchTap(float norm_x, float norm_y) {
 		}
 		if (touch_tutorial_active_) {
 			touch_tutorial_active_ = false;
-			PlaySound(1);
-			return;
-		}
+			pending_sound = 1;
+			has_action = false;
+		} else {
+			float vx = std::clamp(norm_x, 0.0f, 1.0f) * screen_width_;
+			float vy = std::clamp(norm_y, 0.0f, 1.0f) * kScreenHeight;
+			if (surface_width_ > 0 && surface_height_ > 0 && view_width_ > 0 && view_height_ > 0) {
+				const float px = std::clamp(norm_x, 0.0f, 1.0f) * (float)surface_width_;
+				const float py = std::clamp(norm_y, 0.0f, 1.0f) * (float)surface_height_;
+				const int top_y = surface_height_ - (view_y_ + view_height_);
+				vx = std::clamp((px - (float)view_x_) / (float)view_width_, 0.0f, 1.0f) * screen_width_;
+				vy = std::clamp((py - (float)top_y) / (float)view_height_, 0.0f, 1.0f) * kScreenHeight;
+			}
 
-		const float vx = std::clamp(norm_x, 0.0f, 1.0f) * screen_width_;
-		const float vy = std::clamp(norm_y, 0.0f, 1.0f) * kScreenHeight;
-
-		// 1. Direct tap on Yes / No buttons or dismiss in any PSP confirmation dialog
-		if (exit_dialog_active_ || delete_dialog_active_ || restore_confirm_active_ || browser_confirm_active_) {
-			const float cx = screen_width_ * 0.5f;
-			if (vy < 66.0f || vy > 204.0f || (vy >= 186.0f && vx >= cx)) {
-				KeyPressed(Key::Back);
-				return;
-			}
-			if (vy >= 130.0f && vy <= 185.0f) {
-				const int choice = (vx < cx) ? 0 : 1;
-				if (exit_dialog_active_) exit_dialog_selected_ = choice;
-				else if (delete_dialog_active_) delete_dialog_selected_ = choice;
-				else if (restore_confirm_active_) restore_confirm_selected_ = choice;
-				else if (browser_confirm_active_) browser_confirm_selected_ = choice;
-			} else {
-				return;
-			}
-		} else if (options_menu_active_) {
-			const float panel_x = screen_width_ - 130.0f;
-			if (vx < panel_x) {
-				KeyPressed(Key::Back);
-				return;
-			}
-			const float first_y = 106.0f;
-			for (int i = 0; i < 3; ++i) {
-				const float item_y = first_y + i * 30.0f;
-				if (vy >= item_y - 18.0f && vy <= item_y + 10.0f) {
-					options_selected_ = i;
-					break;
+			// 1. Direct tap on Yes / No buttons or dismiss in any PSP confirmation dialog
+			if (exit_dialog_active_ || delete_dialog_active_ || restore_confirm_active_ || browser_confirm_active_) {
+				const float cx = screen_width_ * 0.5f;
+				if (vy < 66.0f || vy > 204.0f || (vy >= 186.0f && vx >= cx)) {
+					action = Key::Back;
+				} else if (vy >= 130.0f && vy <= 185.0f) {
+					const int choice = (vx < cx) ? 0 : 1;
+					if (exit_dialog_active_) exit_dialog_selected_ = choice;
+					else if (delete_dialog_active_) delete_dialog_selected_ = choice;
+					else if (restore_confirm_active_) restore_confirm_selected_ = choice;
+					else if (browser_confirm_active_) browser_confirm_selected_ = choice;
+				} else {
+					has_action = false;
 				}
-			}
-		} else if (settings_sub_active_ && settings_picker_open_) {
-			const float panel_x = screen_width_ - 138.0f;
-			if (vx < panel_x) {
-				KeyPressed(Key::Back);
-				return;
-			}
-			const int max_c = SettingsPickerCount();
-			for (int i = 0; i < max_c; ++i) {
-				const float y = kSelectedItemY + (float)(i - settings_picker_index_) * 26.0f;
-				if (vy >= y - 16.0f && vy <= y + 8.0f) {
-					settings_picker_index_ = i;
-					break;
+			} else if (options_menu_active_) {
+				const float panel_x = screen_width_ - 130.0f;
+				if (vx < panel_x) {
+					action = Key::Back;
+				} else {
+					const float first_y = 106.0f;
+					for (int i = 0; i < 3; ++i) {
+						const float item_y = first_y + i * 30.0f;
+						if (vy >= item_y - 18.0f && vy <= item_y + 10.0f) {
+							options_selected_ = i;
+							break;
+						}
+					}
 				}
-			}
-		} else if (!system_info_dialog_ && !info_notice_active_ && !info_dialog_active_) {
-			// Tapping the left '<' back arrow on sub-pages returns to main XMB
-			if ((memory_stick_page_ || saved_data_page_ || settings_sub_active_ || empty_media_kind_ != EmptyMediaKind::None) &&
-			    vx <= 54.0f && vy >= 100.0f && vy <= 172.0f) {
-				KeyPressed(Key::Back);
-				return;
-			}
-			// Tapping the bottom-right touch hint bar triggers Options (Triangle) or Back (Circle)
-			const float corner_pad = (settings_.aspect_mode == 0 && (screen_width_ > 490.0f || touch_mode_active_))
-			                             ? std::clamp((screen_width_ - 480.0f) * 0.22f + 14.0f, 14.0f, 32.0f)
-			                             : 4.0f;
-			if (vy >= 232.0f) {
-				if (vx >= screen_width_ - 92.0f - corner_pad) {
-					KeyPressed(Key::Back);
-					return;
+			} else if (settings_sub_active_ && settings_picker_open_) {
+				const float panel_x = screen_width_ - 138.0f;
+				if (vx < panel_x) {
+					action = Key::Back;
+				} else {
+					const int max_c = SettingsPickerCount();
+					for (int i = 0; i < max_c; ++i) {
+						const float y = kSelectedItemY + (float)(i - settings_picker_index_) * 26.0f;
+						if (vy >= y - 16.0f && vy <= y + 8.0f) {
+							settings_picker_index_ = i;
+							break;
+						}
+					}
 				}
-				if ((memory_stick_page_ || saved_data_page_) &&
-				    vx >= screen_width_ - 185.0f - corner_pad && vx < screen_width_ - 92.0f - corner_pad) {
-					KeyPressed(Key::Options);
-					return;
+			} else if (!system_info_dialog_ && !info_notice_active_ && !info_dialog_active_) {
+				// Tapping the left '<' back arrow on sub-pages returns to main XMB
+				if ((memory_stick_page_ || saved_data_page_ || settings_sub_active_ || empty_media_kind_ != EmptyMediaKind::None) &&
+				    vx <= 54.0f && vy >= 100.0f && vy <= 172.0f) {
+					action = Key::Back;
+				} else {
+					// Tapping the bottom-right touch hint bar triggers Options (Triangle) or Back (Circle)
+					const float corner_pad = (settings_.aspect_mode == 0 && (screen_width_ > 490.0f || touch_mode_active_))
+					                             ? std::clamp((screen_width_ - 480.0f) * 0.22f + 14.0f, 14.0f, 32.0f)
+					                             : 4.0f;
+					if (vy >= 232.0f) {
+						if (vx >= screen_width_ - 92.0f - corner_pad) {
+							action = Key::Back;
+						} else if ((memory_stick_page_ || saved_data_page_) &&
+						           vx >= screen_width_ - 185.0f - corner_pad && vx < screen_width_ - 92.0f - corner_pad) {
+							action = Key::Options;
+						}
+					}
 				}
 			}
 		}
 	}
-	KeyPressed(Key::Confirm);
+	if (pending_sound >= 0) {
+		PlaySound(pending_sound);
+	}
+	if (has_action) {
+		KeyPressed(action);
+	}
 }
 
 void XmbRenderer::TouchSwipe(int direction) {
@@ -893,11 +918,12 @@ bool XmbRenderer::LoadWave() {
 	} else {
 		__android_log_print(ANDROID_LOG_INFO, kTag, "wave rco loaded");
 	}
-	wave_tessellator_.setup(wave_, 128, 48);
+	wave_tessellator_.setup(wave_, 72, 28);
 	if (!wave_tessellator_.valid()) {
 		return false;
 	}
 	wave_vertices_.resize((size_t)wave_tessellator_.uSamples() * wave_tessellator_.vSamples() * 6);
+	wave_evaluated_frame_ = -1.0f;
 	if (!BuildWaveProgram()) {
 		return false;
 	}
@@ -907,7 +933,7 @@ bool XmbRenderer::LoadWave() {
 	glGenBuffers(1, &wave_ebo_);
 	glBindVertexArray(wave_vao_);
 	glBindBuffer(GL_ARRAY_BUFFER, wave_vbo_);
-	glBufferData(GL_ARRAY_BUFFER, wave_vertices_.size() * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, wave_vertices_.size() * sizeof(float), nullptr, GL_STREAM_DRAW);
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * 6, (const void *)0);
 	glEnableVertexAttribArray(1);
@@ -1096,15 +1122,24 @@ void XmbRenderer::DrawWave(float dt) {
 	if (loop > 0.0f && speed > 0.0f) {
 		wave_frame_ = std::fmod(wave_frame_ + dt * wave_.frameRate * speed, loop);
 	}
-	wave_tessellator_.evaluate(wave_, wave_.frameStart + wave_frame_, wave_vertices_);
+	const float target_frame = wave_.frameStart + wave_frame_;
+	const bool needs_upload = (wave_evaluated_frame_ != target_frame) || wave_vertices_.empty();
+	if (needs_upload) {
+		wave_tessellator_.evaluate(wave_, target_frame, wave_vertices_);
+		wave_evaluated_frame_ = target_frame;
+	}
 	if (wave_vertices_.empty()) {
 		return;
 	}
 
 	glUseProgram(wave_program_);
 	glBindVertexArray(wave_vao_);
-	glBindBuffer(GL_ARRAY_BUFFER, wave_vbo_);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, wave_vertices_.size() * sizeof(float), wave_vertices_.data());
+	if (needs_upload) {
+		glBindBuffer(GL_ARRAY_BUFFER, wave_vbo_);
+		const GLsizeiptr bytes = (GLsizeiptr)(wave_vertices_.size() * sizeof(float));
+		glBufferData(GL_ARRAY_BUFFER, bytes, nullptr, GL_STREAM_DRAW);
+		glBufferSubData(GL_ARRAY_BUFFER, 0, bytes, wave_vertices_.data());
+	}
 	float mvp[16];
 	BuildWaveMvp(mvp, screen_width_);
 	glUniformMatrix4fv(wave_mvp_, 1, GL_FALSE, mvp);
@@ -1168,8 +1203,13 @@ bool XmbRenderer::LoadTexture(const std::string &name, const std::string &relati
 }
 
 void XmbRenderer::Resize(int width, int height) {
+	std::lock_guard<std::recursive_mutex> lock(mutex_);
 	surface_width_ = width;
 	surface_height_ = height;
+	view_x_ = 0;
+	view_y_ = 0;
+	view_width_ = 0;
+	view_height_ = 0;
 }
 
 void XmbRenderer::DrawQuad(float x, float y, float width, float height, const float color[4]) {
@@ -1183,19 +1223,9 @@ void XmbRenderer::DrawSolidQuad(float x, float y, float width, float height, con
 
 void XmbRenderer::DrawQuadUv(float x, float y, float width, float height, const float color[4],
                              float u0, float v0, float u1, float v1) {
-	const float x1 = x + width;
-	const float y1 = y + height;
-	const float vertices[24] = {
-		x, y, u0, v0,
-		x1, y, u1, v0,
-		x, y1, u0, v1,
-		x1, y, u1, v0,
-		x1, y1, u1, v1,
-		x, y1, u0, v1,
-	};
+	glUniform4f(u_rect_, x, y, width, height);
+	glUniform4f(u_uv_rect_, u0, v0, u1 - u0, v1 - v0);
 	glUniform4fv(u_color_, 1, color);
-	glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_);
-	glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
 	glDrawArrays(GL_TRIANGLES, 0, 6);
 }
 
@@ -1695,10 +1725,16 @@ void XmbRenderer::DrawYesNoDialog(const std::string &line1, const std::string &l
 }
 
 void XmbRenderer::SetExitDialog(bool active) {
-	std::lock_guard<std::recursive_mutex> lock(mutex_);
-	exit_dialog_active_ = active;
-	if (active) {
-		exit_dialog_selected_ = 1;
+	bool play_sound = false;
+	{
+		std::lock_guard<std::recursive_mutex> lock(mutex_);
+		exit_dialog_active_ = active;
+		if (active) {
+			exit_dialog_selected_ = 1;
+			play_sound = true;
+		}
+	}
+	if (play_sound) {
 		PlaySound(0);
 	}
 }
@@ -2588,6 +2624,7 @@ void XmbRenderer::KeyPressed(Key key) {
 	int do_delete_save = -1;
 	int do_delete_game = -1;
 	bool do_settings_changed = false;
+	int pending_sound = -1;
 	std::string do_open_browser;
 	XmbSettings new_settings;
 
@@ -2603,7 +2640,7 @@ void XmbRenderer::KeyPressed(Key key) {
 
 		// 0. Touch & Gesture Controls tutorial dialog (any button skips/closes)
 		if (touch_tutorial_active_) {
-			PlaySound(1);
+			pending_sound = 1;
 			touch_tutorial_active_ = false;
 			goto dispatch_callbacks;
 		}
@@ -2611,7 +2648,7 @@ void XmbRenderer::KeyPressed(Key key) {
 		// 1. System Info dialog
 		if (system_info_dialog_) {
 			if (IsBackKey(key) || IsConfirmKey(key)) {
-				PlaySound(2);
+				pending_sound = 2;
 				system_info_dialog_ = false;
 			}
 			goto dispatch_callbacks;
@@ -2620,7 +2657,7 @@ void XmbRenderer::KeyPressed(Key key) {
 		// 1b. Notice dialog (System Update, USB, Firmware notices, Information Board, etc.)
 		if (info_notice_active_) {
 			if (IsBackKey(key) || IsConfirmKey(key)) {
-				PlaySound(2);
+				pending_sound = 2;
 				info_notice_active_ = false;
 			}
 			goto dispatch_callbacks;
@@ -2632,18 +2669,18 @@ void XmbRenderer::KeyPressed(Key key) {
 			case Key::Left:
 				if (restore_confirm_selected_ != 0) {
 					restore_confirm_selected_ = 0;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Right:
 				if (restore_confirm_selected_ != 1) {
 					restore_confirm_selected_ = 1;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Confirm:
 				if (restore_confirm_selected_ == 0) {
-					PlaySound(1);
+					pending_sound = 1;
 					restore_confirm_active_ = false;
 					settings_ = XmbSettings{};
 					seq_play_enabled_ = true;
@@ -2652,12 +2689,12 @@ void XmbRenderer::KeyPressed(Key key) {
 					new_settings = settings_;
 					do_settings_changed = true;
 				} else {
-					PlaySound(2);
+					pending_sound = 2;
 					restore_confirm_active_ = false;
 				}
 				break;
 			case Key::Back:
-				PlaySound(2);
+				pending_sound = 2;
 				restore_confirm_active_ = false;
 				break;
 			default:
@@ -2672,27 +2709,27 @@ void XmbRenderer::KeyPressed(Key key) {
 			case Key::Left:
 				if (browser_confirm_selected_ != 0) {
 					browser_confirm_selected_ = 0;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Right:
 				if (browser_confirm_selected_ != 1) {
 					browser_confirm_selected_ = 1;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Confirm:
 				if (browser_confirm_selected_ == 0) {
-					PlaySound(1);
+					pending_sound = 1;
 					browser_confirm_active_ = false;
 					do_open_browser = pending_browser_url_;
 				} else {
-					PlaySound(2);
+					pending_sound = 2;
 					browser_confirm_active_ = false;
 				}
 				break;
 			case Key::Back:
-				PlaySound(2);
+				pending_sound = 2;
 				browser_confirm_active_ = false;
 				break;
 			default:
@@ -2707,18 +2744,18 @@ void XmbRenderer::KeyPressed(Key key) {
 			case Key::Left:
 				if (delete_dialog_selected_ != 0) {
 					delete_dialog_selected_ = 0;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Right:
 				if (delete_dialog_selected_ != 1) {
 					delete_dialog_selected_ = 1;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Confirm:
 				if (delete_dialog_selected_ == 0) {
-					PlaySound(1);
+					pending_sound = 1;
 					delete_dialog_active_ = false;
 					options_menu_active_ = false;
 					if (saved_data_page_ && save_page_index_ >= 0 && save_page_index_ < (int)saves_.size()) {
@@ -2727,12 +2764,12 @@ void XmbRenderer::KeyPressed(Key key) {
 						do_delete_game = game_page_index_;
 					}
 				} else {
-					PlaySound(2);
+					pending_sound = 2;
 					delete_dialog_active_ = false;
 				}
 				break;
 			case Key::Back:
-				PlaySound(2);
+				pending_sound = 2;
 				delete_dialog_active_ = false;
 				break;
 			default:
@@ -2744,7 +2781,7 @@ void XmbRenderer::KeyPressed(Key key) {
 		// 3. Information dialog
 		if (info_dialog_active_) {
 			if (IsBackKey(key) || IsConfirmKey(key)) {
-				PlaySound(2);
+				pending_sound = 2;
 				info_dialog_active_ = false;
 			}
 			goto dispatch_callbacks;
@@ -2756,31 +2793,31 @@ void XmbRenderer::KeyPressed(Key key) {
 			case Key::Up:
 				if (options_selected_ > 0) {
 					options_selected_ -= 1;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Down:
 				if (options_selected_ < 2) {
 					options_selected_ += 1;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Options:
 			case Key::Back:
 				options_menu_active_ = false;
-				PlaySound(2);
+				pending_sound = 2;
 				break;
 			case Key::Confirm:
 				if (options_selected_ == 0) {
 					options_menu_active_ = false;
 					if (memory_stick_page_ && game_page_index_ >= 0 && game_page_index_ < (int)games_.size()) {
-						PlaySound(8);
+						pending_sound = 8;
 						launching_ = true;
 						launch_dispatched_ = false;
 						launch_t_ = 0.0f;
 						launching_save_index_ = -1;
 					} else if (saved_data_page_ && save_page_index_ >= 0 && save_page_index_ < (int)saves_.size()) {
-						PlaySound(8);
+						pending_sound = 8;
 						launching_ = true;
 						launch_dispatched_ = false;
 						launch_t_ = 0.0f;
@@ -2790,11 +2827,11 @@ void XmbRenderer::KeyPressed(Key key) {
 					options_menu_active_ = false;
 					delete_dialog_active_ = true;
 					delete_dialog_selected_ = 1;
-					PlaySound(0);
+					pending_sound = 0;
 				} else if (options_selected_ == 2) {
 					options_menu_active_ = false;
 					info_dialog_active_ = true;
-					PlaySound(1);
+					pending_sound = 1;
 				}
 				break;
 			default:
@@ -2809,27 +2846,27 @@ void XmbRenderer::KeyPressed(Key key) {
 			case Key::Left:
 				if (exit_dialog_selected_ != 0) {
 					exit_dialog_selected_ = 0;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Right:
 				if (exit_dialog_selected_ != 1) {
 					exit_dialog_selected_ = 1;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Confirm:
 				if (exit_dialog_selected_ == 0) {
-					PlaySound(1);
+					pending_sound = 1;
 					exit_dialog_active_ = false;
 					do_exit = true;
 				} else {
-					PlaySound(2);
+					pending_sound = 2;
 					exit_dialog_active_ = false;
 				}
 				break;
 			case Key::Back:
-				PlaySound(2);
+				pending_sound = 2;
 				exit_dialog_active_ = false;
 				break;
 			default:
@@ -2847,13 +2884,13 @@ void XmbRenderer::KeyPressed(Key key) {
 				case Key::Up:
 					if (settings_picker_index_ > 0) {
 						settings_picker_index_ -= 1;
-						PlaySound(0);
+						pending_sound = 0;
 					}
 					break;
 				case Key::Down:
 					if (settings_picker_index_ + 1 < max_c) {
 						settings_picker_index_ += 1;
-						PlaySound(0);
+						pending_sound = 0;
 					}
 					break;
 				case Key::Confirm:
@@ -2861,12 +2898,12 @@ void XmbRenderer::KeyPressed(Key key) {
 					settings_picker_open_ = false;
 					new_settings = settings_;
 					do_settings_changed = true;
-					PlaySound(1);
+					pending_sound = 1;
 					break;
 				case Key::Back:
 				case Key::Left:
 					settings_picker_open_ = false;
-					PlaySound(2);
+					pending_sound = 2;
 					break;
 				default:
 					break;
@@ -2876,24 +2913,24 @@ void XmbRenderer::KeyPressed(Key key) {
 				case Key::Up:
 					if (settings_sub_index_ > 0) {
 						settings_sub_index_ -= 1;
-						PlaySound(0);
+						pending_sound = 0;
 					}
 					break;
 				case Key::Down:
 					if (settings_sub_index_ + 1 < row_count) {
 						settings_sub_index_ += 1;
-						PlaySound(0);
+						pending_sound = 0;
 					}
 					break;
 				case Key::Confirm:
 				case Key::Right:
 					if (settings_kind_ == SettingsKind::System && settings_sub_index_ == 0) {
 						system_info_dialog_ = true;
-						PlaySound(1);
+						pending_sound = 1;
 					} else if (settings_kind_ == SettingsKind::System && settings_sub_index_ == 2) {
 						restore_confirm_active_ = true;
 						restore_confirm_selected_ = 1;
-						PlaySound(0);
+						pending_sound = 0;
 					} else if (settings_kind_ == SettingsKind::Bluetooth) {
 						OpenNoticeDialog(
 							TextOr("xmb_setting_bt_devices", "Bluetooth\u00ae Device Settings"),
@@ -2902,19 +2939,19 @@ void XmbRenderer::KeyPressed(Key key) {
 									? TextOr("xmb_notice_bt_on", "Bluetooth\u00ae is enabled. Paired controllers and audio devices are active.")
 									: TextOr("xmb_notice_bt_off", "Bluetooth\u00ae is turned off on this device."),
 							});
-						PlaySound(1);
+						pending_sound = 1;
 					} else if (SettingsPickerCount() > 0) {
 						settings_picker_open_ = true;
 						settings_picker_index_ = SettingsCurrentValue();
-						PlaySound(1);
+						pending_sound = 1;
 					} else {
-						PlaySound(1);
+						pending_sound = 1;
 					}
 					break;
 				case Key::Back:
 				case Key::Left:
 					settings_sub_active_ = false;
-					PlaySound(2);
+					pending_sound = 2;
 					break;
 				default:
 					break;
@@ -2927,7 +2964,7 @@ void XmbRenderer::KeyPressed(Key key) {
 		if (empty_media_kind_ != EmptyMediaKind::None) {
 			if (IsBackKey(key) || key == Key::Left) {
 				empty_media_kind_ = EmptyMediaKind::None;
-				PlaySound(2);
+				pending_sound = 2;
 			}
 			goto dispatch_callbacks;
 		}
@@ -2937,7 +2974,7 @@ void XmbRenderer::KeyPressed(Key key) {
 			if ((memory_stick_page_ && !games_.empty()) || (saved_data_page_ && !saves_.empty())) {
 				options_menu_active_ = !options_menu_active_;
 				options_selected_ = 0;
-				PlaySound(options_menu_active_ ? 4 : 2);
+				pending_sound = options_menu_active_ ? 4 : 2;
 			}
 			goto dispatch_callbacks;
 		}
@@ -2948,20 +2985,20 @@ void XmbRenderer::KeyPressed(Key key) {
 			case Key::Up:
 				if (game_page_index_ > 0) {
 					game_page_index_ -= 1;
-					PlaySound(0);
+					pending_sound = 0;
 					do_game_focused = game_page_index_;
 				}
 				break;
 			case Key::Down:
 				if (game_page_index_ + 1 < (int)games_.size()) {
 					game_page_index_ += 1;
-					PlaySound(0);
+					pending_sound = 0;
 					do_game_focused = game_page_index_;
 				}
 				break;
 			case Key::Confirm:
 				if (game_page_index_ >= 0 && game_page_index_ < (int)games_.size()) {
-					PlaySound(8);
+					pending_sound = 8;
 					launching_ = true;
 					launch_dispatched_ = false;
 					launch_t_ = 0.0f;
@@ -2971,7 +3008,7 @@ void XmbRenderer::KeyPressed(Key key) {
 			case Key::Back:
 			case Key::Left:
 				memory_stick_page_ = false;
-				PlaySound(2);
+				pending_sound = 2;
 				do_game_focused = -1;
 				break;
 			default:
@@ -2986,26 +3023,26 @@ void XmbRenderer::KeyPressed(Key key) {
 			case Key::Up:
 				if (save_page_index_ > 0) {
 					save_page_index_ -= 1;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Down:
 				if (save_page_index_ + 1 < (int)saves_.size()) {
 					save_page_index_ += 1;
-					PlaySound(0);
+					pending_sound = 0;
 				}
 				break;
 			case Key::Confirm:
 				if (save_page_index_ >= 0 && save_page_index_ < (int)saves_.size()) {
 					options_menu_active_ = true;
 					options_selected_ = 0;
-					PlaySound(4);
+					pending_sound = 4;
 				}
 				break;
 			case Key::Back:
 			case Key::Left:
 				saved_data_page_ = false;
-				PlaySound(2);
+				pending_sound = 2;
 				break;
 			default:
 				break;
@@ -3020,7 +3057,7 @@ void XmbRenderer::KeyPressed(Key key) {
 				item_from_ = item_;
 				item_ -= 1;
 				item_t_ = 0.0f;
-				PlaySound(0);
+				pending_sound = 0;
 			}
 			break;
 		case Key::Down:
@@ -3028,7 +3065,7 @@ void XmbRenderer::KeyPressed(Key key) {
 				item_from_ = item_;
 				item_ += 1;
 				item_t_ = 0.0f;
-				PlaySound(0);
+				pending_sound = 0;
 			}
 			break;
 		case Key::Left:
@@ -3044,7 +3081,7 @@ void XmbRenderer::KeyPressed(Key key) {
 				item_ = category_selected_[category_];
 				item_from_ = item_;
 				item_t_ = 1.0f;
-				PlaySound(3);
+				pending_sound = 3;
 			}
 			break;
 		case Key::Right:
@@ -3060,7 +3097,7 @@ void XmbRenderer::KeyPressed(Key key) {
 				item_ = category_selected_[category_];
 				item_from_ = item_;
 				item_t_ = 1.0f;
-				PlaySound(3);
+				pending_sound = 3;
 			}
 			break;
 		case Key::Confirm:
@@ -3073,7 +3110,7 @@ void XmbRenderer::KeyPressed(Key key) {
 							TextOr("xmb_notice_update_1", "The system software of your PSP\u2122 4000 system is version 7.1 EmuCore Edition"),
 							TextOr("xmb_notice_update_2", "There is no need to update."),
 						});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_usb") {
@@ -3083,7 +3120,7 @@ void XmbRenderer::KeyPressed(Key key) {
 							TextOr("msgshare_info_space", "Free Space") + ": " + free_space_text_,
 							TextOr("xmb_sysinfo_name", "Nickname") + ": " + device_name_,
 						});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					static const struct {
@@ -3111,7 +3148,7 @@ void XmbRenderer::KeyPressed(Key key) {
 							settings_sub_index_ = 0;
 							settings_sub_scroll_ = 0.0f;
 							settings_picker_open_ = false;
-							PlaySound(1);
+							pending_sound = 1;
 							opened_sub = true;
 							break;
 						}
@@ -3120,35 +3157,35 @@ void XmbRenderer::KeyPressed(Key key) {
 				} else if (category_ == 1) {
 					if (tex == "item_comics") {
 						empty_media_kind_ = EmptyMediaKind::Comics;
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_1seg") {
 						OpenNoticeDialog(title, {TextOr("xmb_notice_1seg", "1Seg tuner is not connected.")});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 				} else if (category_ == 2) {
 					if (tex == "item_camera") {
 						OpenNoticeDialog(title, {TextOr("xmb_notice_camera", "Connect a camera compatible with the PSP\u2122 system.")});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_memstick") {
 						empty_media_kind_ = EmptyMediaKind::Photo;
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 				} else if (category_ == 3) {
 					if (tex == "item_sensme" || tex == "item_memstick") {
 						empty_media_kind_ = EmptyMediaKind::Music;
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 				} else if (category_ == 4) {
 					if (tex == "item_memstick") {
 						empty_media_kind_ = EmptyMediaKind::Video;
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 				} else if (category_ == 5) {
@@ -3157,21 +3194,21 @@ void XmbRenderer::KeyPressed(Key key) {
 							TextOr("xmb_notice_gamesharing_1", "Searching for a nearby PSP\u2122 system..."),
 							TextOr("xmb_notice_gamesharing_2", "No Game Sharing sessions found."),
 						});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_savedata") {
 						saved_data_page_ = true;
 						save_page_index_ = 0;
 						save_scroll_ = 0.0f;
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_memstick") {
 						memory_stick_page_ = true;
 						game_page_index_ = 0;
 						game_scroll_ = 0.0f;
-						PlaySound(1);
+						pending_sound = 1;
 						if (!games_.empty()) {
 							do_game_focused = game_page_index_;
 						}
@@ -3180,57 +3217,57 @@ void XmbRenderer::KeyPressed(Key key) {
 				} else if (category_ == 6) {
 					if (tex == "item_manuals") {
 						touch_tutorial_active_ = true;
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_locationfree") {
 						OpenNoticeDialog(title, {TextOr("xmb_notice_locationfree", "No LocationFree\u2122 Base Station is registered.")});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_remoteplay") {
 						OpenNoticeDialog(title, {TextOr("xmb_notice_remoteplay", "Register a PS3\u2122 system to start Remote Play.")});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_rss") {
 						OpenNoticeDialog(title, {TextOr("xmb_notice_rss", "No RSS channels have been added.")});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_internet_browser") {
 						browser_confirm_active_ = true;
 						browser_confirm_selected_ = 0;
 						pending_browser_url_ = "https://www.playstation.com";
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_internet_search") {
 						browser_confirm_active_ = true;
 						browser_confirm_selected_ = 0;
 						pending_browser_url_ = "https://www.google.com";
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_internet_radio") {
 						OpenNoticeDialog(title, {TextOr("xmb_notice_radio", "No Internet Radio player stations saved.")});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_skype") {
 						OpenNoticeDialog(title, {TextOr("xmb_notice_skype", "Skype\u2122 service for PSP\u2122 has been discontinued.")});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 				} else if (category_ == 7) {
 					if (tex == "item_psn_signup") {
 						OpenNoticeDialog(title, {TextOr("xmb_notice_psn", "PlayStation\u00aeNetwork is unavailable in offline emulator mode.")});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_psn_store") {
 						OpenNoticeDialog(title, {TextOr("xmb_notice_ps_store", "PlayStation\u00aeStore cannot be accessed in offline emulator mode.")});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_info_board") {
@@ -3243,17 +3280,17 @@ void XmbRenderer::KeyPressed(Key key) {
 							    (network_connected_ ? TextOr("xmb_net_connected", "Connected")
 							                        : TextOr("xmb_net_disconnected", "Not Connected")),
 						});
-						PlaySound(1);
+						pending_sound = 1;
 						break;
 					}
 				}
 			}
-			PlaySound(5);
+			pending_sound = 5;
 			break;
 		case Key::Back:
 			exit_dialog_active_ = true;
 			exit_dialog_selected_ = 1;
-			PlaySound(0);
+			pending_sound = 0;
 			break;
 		default:
 			break;
@@ -3261,6 +3298,9 @@ void XmbRenderer::KeyPressed(Key key) {
 	}
 
 dispatch_callbacks:
+	if (pending_sound >= 0) {
+		PlaySound(pending_sound);
+	}
 	if (do_exit) {
 		ExitRequested();
 	}
@@ -3892,6 +3932,10 @@ void XmbRenderer::Draw() {
 		const int view_height = (int)std::lround(kScreenHeight * scale);
 		const int view_x = (surface_width_ - view_width) / 2;
 		const int view_y = (surface_height_ - view_height) / 2;
+		view_x_ = view_x;
+		view_y_ = view_y;
+		view_width_ = view_width;
+		view_height_ = view_height;
 
 		glViewport(0, 0, surface_width_, surface_height_);
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -4002,6 +4046,7 @@ void XmbRenderer::Draw() {
 }
 
 void XmbRenderer::Shutdown() {
+	std::lock_guard<std::recursive_mutex> lock(mutex_);
 	pic1_texture_ = 0;
 	pic0_texture_ = 0;
 	pic1_loaded_path_.clear();
