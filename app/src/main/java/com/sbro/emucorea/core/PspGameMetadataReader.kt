@@ -37,6 +37,47 @@ data class PspGameExtendedInfo(
  */
 object PspGameMetadataReader {
 
+    private val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)
+
+    private fun resolveSizeAndModified(
+        context: Context,
+        path: String,
+        knownSize: Long,
+        knownModified: Long,
+    ): Pair<Long, Long> {
+        if (knownSize > 0L && knownModified > 0L) {
+            return knownSize to knownModified
+        }
+        var sizeBytes = knownSize.coerceAtLeast(0L)
+        var lastModified = knownModified.coerceAtLeast(0L)
+        runCatching {
+            if (path.startsWith("content://")) {
+                val doc = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
+                if (sizeBytes <= 0L) sizeBytes = doc?.length() ?: 0L
+                if (lastModified <= 0L) lastModified = doc?.lastModified() ?: 0L
+            } else {
+                val file = File(path)
+                if (file.isFile) {
+                    if (sizeBytes <= 0L) sizeBytes = file.length()
+                    if (lastModified <= 0L) lastModified = file.lastModified()
+                }
+            }
+        }
+        return sizeBytes to lastModified
+    }
+
+    private fun assetHash(
+        context: Context,
+        path: String,
+        knownSize: Long = -1L,
+        knownModified: Long = -1L,
+    ): String {
+        val (sizeBytes, lastModified) = resolveSizeAndModified(context, path, knownSize, knownModified)
+        val identity = "$path:$sizeBytes:$lastModified"
+        return MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+    }
+
     fun read(context: Context, path: String): PspGameMetadata? {
         val bytes = readAsset(context, path, PSP_ASSET_PARAM_SFO) ?: return null
         val fields = parseSfo(bytes)
@@ -47,25 +88,16 @@ object PspGameMetadataReader {
         )
     }
 
-    fun readExtendedInfo(context: Context, path: String): PspGameExtendedInfo {
+    fun readExtendedInfo(
+        context: Context,
+        path: String,
+        knownSize: Long = -1L,
+        knownModified: Long = -1L,
+    ): PspGameExtendedInfo {
         val fields = runCatching {
             readAsset(context, path, PSP_ASSET_PARAM_SFO)?.let(::parseSfo)
         }.getOrNull().orEmpty()
-        var sizeBytes = 0L
-        var lastModified = 0L
-        runCatching {
-            if (path.startsWith("content://")) {
-                val doc = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
-                sizeBytes = doc?.length() ?: 0L
-                lastModified = doc?.lastModified() ?: 0L
-            } else {
-                val file = File(path)
-                if (file.isFile) {
-                    sizeBytes = file.length()
-                    lastModified = file.lastModified()
-                }
-            }
-        }
+        val (sizeBytes, lastModified) = resolveSizeAndModified(context, path, knownSize, knownModified)
         val rawSerial = fields["DISC_ID"]?.takeIf(String::isNotBlank)?.uppercase(java.util.Locale.ROOT)
         val formattedSerial = if (rawSerial != null && rawSerial.length == 9 && !rawSerial.contains('-')) {
             "${rawSerial.substring(0, 4)}-${rawSerial.substring(4)}"
@@ -97,111 +129,139 @@ object PspGameMetadataReader {
         }
     }
 
-    fun extractIcon0(context: Context, path: String): String? = runCatching {
+    private fun extractPngAsset(
+        context: Context,
+        path: String,
+        assetId: Int,
+        fileSuffix: String,
+        noneSuffix: String,
+        knownSize: Long,
+        knownModified: Long,
+    ): String? = runCatching {
         val directory = File(context.cacheDir, "game-covers/embedded").apply { mkdirs() }
-        val identity = if (path.startsWith("content://")) {
-            val document = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
-            "$path:${document?.length()}:${document?.lastModified()}"
-        } else {
-            val file = File(path)
-            "$path:${file.length()}:${file.lastModified()}"
+        val hash = assetHash(context, path, knownSize, knownModified)
+        val target = File(directory, "$hash$fileSuffix")
+        if (target.isFile && target.length() > 24L) return@runCatching target.absolutePath
+        val noneMarker = File(directory, "$hash$noneSuffix")
+        if (noneMarker.isFile) return@runCatching null
+        val bytes = readAsset(context, path, assetId)
+        if (bytes == null) {
+            runCatching { noneMarker.writeBytes(ByteArray(0)) }
+            return@runCatching null
         }
-        val hash = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
-            .joinToString("") { "%02x".format(it) }
-        val target = File(directory, "$hash.png")
-        if (isImage(target)) return@runCatching target.absolutePath
-        val bytes = readAsset(context, path, PSP_ASSET_ICON0) ?: return@runCatching null
-        if (bytes.size < 8 || !bytes.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))) {
+        if (bytes.size < 8 || !bytes.copyOfRange(0, 8).contentEquals(PNG_SIGNATURE)) {
+            runCatching { noneMarker.writeBytes(ByteArray(0)) }
             return@runCatching null
         }
         val temporary = File.createTempFile(hash, ".tmp", directory)
         try {
             temporary.writeBytes(bytes)
-            if (!isImage(temporary)) return@runCatching null
+            if (!isImage(temporary)) {
+                runCatching { noneMarker.writeBytes(ByteArray(0)) }
+                return@runCatching null
+            }
             if (!temporary.renameTo(target)) temporary.copyTo(target, overwrite = true)
-            target.takeIf(::isImage)?.absolutePath
+            target.takeIf { it.isFile && it.length() > 24L }?.absolutePath
         } finally {
             temporary.delete()
         }
     }.getOrNull()
 
-    fun extractPic1(context: Context, path: String): String? = runCatching {
-        val directory = File(context.cacheDir, "game-covers/embedded").apply { mkdirs() }
-        val identity = if (path.startsWith("content://")) {
-            val document = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
-            "$path:${document?.length()}:${document?.lastModified()}"
-        } else {
-            val file = File(path)
-            "$path:${file.length()}:${file.lastModified()}"
-        }
-        val hash = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
-            .joinToString("") { "%02x".format(it) }
-        val target = File(directory, "${hash}_pic1.png")
-        if (isImage(target)) return@runCatching target.absolutePath
-        val bytes = readAsset(context, path, PSP_ASSET_PIC1) ?: return@runCatching null
-        if (bytes.size < 8 || !bytes.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))) {
-            return@runCatching null
-        }
-        val temporary = File.createTempFile("${hash}_pic1", ".tmp", directory)
-        try {
-            temporary.writeBytes(bytes)
-            if (!isImage(temporary)) return@runCatching null
-            if (!temporary.renameTo(target)) temporary.copyTo(target, overwrite = true)
-            target.takeIf(::isImage)?.absolutePath
-        } finally {
-            temporary.delete()
-        }
-    }.getOrNull()
+    fun extractIcon0(
+        context: Context,
+        path: String,
+        knownSize: Long = -1L,
+        knownModified: Long = -1L,
+    ): String? = extractPngAsset(
+        context = context,
+        path = path,
+        assetId = PSP_ASSET_ICON0,
+        fileSuffix = ".png",
+        noneSuffix = "_icon0.none",
+        knownSize = knownSize,
+        knownModified = knownModified,
+    )
 
-    fun extractPic0(context: Context, path: String): String? = runCatching {
-        val directory = File(context.cacheDir, "game-covers/embedded").apply { mkdirs() }
-        val identity = if (path.startsWith("content://")) {
-            val document = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
-            "$path:${document?.length()}:${document?.lastModified()}"
-        } else {
-            val file = File(path)
-            "$path:${file.length()}:${file.lastModified()}"
-        }
-        val hash = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
-            .joinToString("") { "%02x".format(it) }
-        val target = File(directory, "${hash}_pic0.png")
-        if (isImage(target)) return@runCatching target.absolutePath
-        val bytes = readAsset(context, path, PSP_ASSET_PIC0) ?: return@runCatching null
-        if (bytes.size < 8 || !bytes.copyOfRange(0, 8).contentEquals(byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))) {
-            return@runCatching null
-        }
-        val temporary = File.createTempFile("${hash}_pic0", ".tmp", directory)
-        try {
-            temporary.writeBytes(bytes)
-            if (!isImage(temporary)) return@runCatching null
-            if (!temporary.renameTo(target)) temporary.copyTo(target, overwrite = true)
-            target.takeIf(::isImage)?.absolutePath
-        } finally {
-            temporary.delete()
-        }
-    }.getOrNull()
+    fun extractPic1(
+        context: Context,
+        path: String,
+        knownSize: Long = -1L,
+        knownModified: Long = -1L,
+    ): String? = extractPngAsset(
+        context = context,
+        path = path,
+        assetId = PSP_ASSET_PIC1,
+        fileSuffix = "_pic1.png",
+        noneSuffix = "_pic1.none",
+        knownSize = knownSize,
+        knownModified = knownModified,
+    )
 
-    fun extractSnd0(context: Context, path: String): String? = runCatching {
-        val directory = File(context.cacheDir, "game-covers/embedded").apply { mkdirs() }
-        val identity = if (path.startsWith("content://")) {
-            val document = androidx.documentfile.provider.DocumentFile.fromSingleUri(context, Uri.parse(path))
-            "$path:${document?.length()}:${document?.lastModified()}"
-        } else {
-            val file = File(path)
-            "$path:${file.length()}:${file.lastModified()}"
-        }
-        val hash = MessageDigest.getInstance("SHA-256").digest(identity.toByteArray())
-            .joinToString("") { "%02x".format(it) }
+    fun extractPic0(
+        context: Context,
+        path: String,
+        knownSize: Long = -1L,
+        knownModified: Long = -1L,
+    ): String? = extractPngAsset(
+        context = context,
+        path = path,
+        assetId = PSP_ASSET_PIC0,
+        fileSuffix = "_pic0.png",
+        noneSuffix = "_pic0.none",
+        knownSize = knownSize,
+        knownModified = knownModified,
+    )
+
+    /**
+     * Checks whether SND0.AT3 has already been decoded or marked absent in the disk cache.
+     * Returns:
+     * - non-empty path if the decoded WAV file exists in cache
+     * - `""` if a negative-cache `.none` marker exists (game has no SND0.AT3)
+     * - `null` if SND0 has not been inspected/extracted yet
+     */
+    fun findCachedSnd0(
+        context: Context,
+        path: String,
+        knownSize: Long = -1L,
+        knownModified: Long = -1L,
+    ): String? = runCatching {
+        val directory = File(context.cacheDir, "game-covers/embedded")
+        val hash = assetHash(context, path, knownSize, knownModified)
         val target = File(directory, "${hash}_snd0.wav")
         if (target.isFile && target.length() > 44L) return@runCatching target.absolutePath
-        val bytes = readAsset(context, path, PSP_ASSET_SND0) ?: return@runCatching null
+        val noneMarker = File(directory, "${hash}_snd0.none")
+        if (noneMarker.isFile) return@runCatching ""
+        null
+    }.getOrNull()
+
+    fun extractSnd0(
+        context: Context,
+        path: String,
+        knownSize: Long = -1L,
+        knownModified: Long = -1L,
+    ): String? = runCatching {
+        val directory = File(context.cacheDir, "game-covers/embedded").apply { mkdirs() }
+        val hash = assetHash(context, path, knownSize, knownModified)
+        val target = File(directory, "${hash}_snd0.wav")
+        if (target.isFile && target.length() > 44L) return@runCatching target.absolutePath
+        val noneMarker = File(directory, "${hash}_snd0.none")
+        if (noneMarker.isFile) return@runCatching null
+        val bytes = readAsset(context, path, PSP_ASSET_SND0)
+        if (bytes == null) {
+            runCatching { noneMarker.writeBytes(ByteArray(0)) }
+            return@runCatching null
+        }
         if (bytes.size < 44 || !bytes.copyOfRange(0, 4).contentEquals("RIFF".toByteArray(Charsets.US_ASCII))) {
+            runCatching { noneMarker.writeBytes(ByteArray(0)) }
             return@runCatching null
         }
         val temporary = File.createTempFile("${hash}_snd0", ".tmp", directory)
         try {
             val ok = XmbNative.nativeDecodeAt3Bytes(bytes, temporary.absolutePath)
-            if (!ok || temporary.length() <= 44L) return@runCatching null
+            if (!ok || temporary.length() <= 44L) {
+                runCatching { noneMarker.writeBytes(ByteArray(0)) }
+                return@runCatching null
+            }
             if (!temporary.renameTo(target)) temporary.copyTo(target, overwrite = true)
             target.takeIf { it.isFile && it.length() > 44L }?.absolutePath
         } finally {

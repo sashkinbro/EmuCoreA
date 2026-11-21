@@ -289,11 +289,13 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 	glyph_textures_.clear();
 	shadow_glyph_textures_.clear();
 	fallback_glyphs_.clear();
+	text_width_cache_.clear();
 	pic1_texture_ = 0;
 	pic0_texture_ = 0;
 	pic1_loaded_path_.clear();
 	pic0_loaded_path_.clear();
 	white_texture_ = 0;
+	bound_texture_ = 0;
 	background_texture_ = 0;
 	wave_texture_ = 0;
 	wave_program_ = 0;
@@ -337,6 +339,7 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 	const uint32_t white_pixel = 0xFFFFFFFF;
 	glGenTextures(1, &white_texture_);
 	glBindTexture(GL_TEXTURE_2D, white_texture_);
+	bound_texture_ = white_texture_;
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -946,6 +949,7 @@ bool XmbRenderer::LoadWave() {
 	if (!wave_.rgba.empty() && wave_.texW > 0 && wave_.texH > 0) {
 		glGenTextures(1, &wave_texture_);
 		glBindTexture(GL_TEXTURE_2D, wave_texture_);
+		bound_texture_ = wave_texture_;
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, wave_.texW, wave_.texH, 0, GL_RGBA, GL_UNSIGNED_BYTE, wave_.rgba.data());
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -963,7 +967,7 @@ void XmbRenderer::DrawBackground() {
 		auto cookie_bg = textures_.find("cookies_bg");
 		if (cookie_bg != textures_.end() && cookie_bg->second.id != 0) {
 			const float color[4] = {0.84f, 0.82f, 0.80f, 1.0f};
-			glBindTexture(GL_TEXTURE_2D, cookie_bg->second.id);
+			BindTexture(cookie_bg->second.id);
 			DrawQuad(0.0f, 0.0f, screen_width_, kScreenHeight, color);
 			return;
 		}
@@ -972,7 +976,7 @@ void XmbRenderer::DrawBackground() {
 		return;
 	}
 	const float color[4] = {1.0f, 1.0f, 1.0f, 1.0f};
-	glBindTexture(GL_TEXTURE_2D, background_texture_);
+	BindTexture(background_texture_);
 	DrawQuad(0.0f, 0.0f, screen_width_, kScreenHeight, color);
 }
 
@@ -1152,6 +1156,7 @@ void XmbRenderer::DrawWave(float dt) {
 	            wave_.diffuse[2] * wave_.tint[2] * alpha * wb * 1.45f, 1.0f);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, wave_texture_);
+	bound_texture_ = wave_texture_;
 	glUniform1i(wave_sampler_, 0);
 	glEnable(GL_BLEND);
 	glBlendFuncSeparate(GL_ONE, GL_ONE, GL_ZERO, GL_ONE);
@@ -1193,6 +1198,7 @@ bool XmbRenderer::LoadTexture(const std::string &name, const std::string &relati
 	texture.height = height;
 	glGenTextures(1, &texture.id);
 	glBindTexture(GL_TEXTURE_2D, texture.id);
+	bound_texture_ = texture.id;
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1200,6 +1206,29 @@ bool XmbRenderer::LoadTexture(const std::string &name, const std::string &relati
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 	textures_[name] = texture;
 	return true;
+}
+
+void XmbRenderer::BindTexture(GLuint id) {
+	if (bound_texture_ != id) {
+		bound_texture_ = id;
+		glBindTexture(GL_TEXTURE_2D, id);
+	}
+}
+
+void XmbRenderer::EvictImageTexture(const std::string &path) {
+	if (path.empty()) {
+		return;
+	}
+	auto it = image_textures_.find(path);
+	if (it != image_textures_.end()) {
+		if (it->second.id != 0) {
+			if (bound_texture_ == it->second.id) {
+				bound_texture_ = 0;
+			}
+			glDeleteTextures(1, &it->second.id);
+		}
+		image_textures_.erase(it);
+	}
 }
 
 void XmbRenderer::Resize(int width, int height) {
@@ -1217,7 +1246,7 @@ void XmbRenderer::DrawQuad(float x, float y, float width, float height, const fl
 }
 
 void XmbRenderer::DrawSolidQuad(float x, float y, float width, float height, const float color[4]) {
-	glBindTexture(GL_TEXTURE_2D, white_texture_);
+	BindTexture(white_texture_);
 	DrawQuadUv(x, y, width, height, color, 0.0f, 0.0f, 1.0f, 1.0f);
 }
 
@@ -1241,7 +1270,7 @@ void XmbRenderer::DrawTextureUv(const Texture &texture, float center_x, float ce
 	}
 	const float width = texture.width * scale;
 	const float height = texture.height * scale;
-	glBindTexture(GL_TEXTURE_2D, texture.id);
+	BindTexture(texture.id);
 	DrawQuadUv(center_x - width * 0.5f, center_y - height * 0.5f, width, height, color, u0, v0, u1, v1);
 }
 
@@ -1254,7 +1283,7 @@ void XmbRenderer::DrawTextureCrop(const Texture &texture, float center_x, float 
 	const float v0 = (float)y / texture.height;
 	const float u1 = (float)(x + width) / texture.width;
 	const float v1 = (float)(y + height) / texture.height;
-	glBindTexture(GL_TEXTURE_2D, texture.id);
+	BindTexture(texture.id);
 	DrawQuadUv(center_x - width * scale * 0.5f, center_y - height * scale * 0.5f,
 	           width * scale, height * scale, color, u0, v0, u1, v1);
 }
@@ -1274,6 +1303,7 @@ const XmbRenderer::Texture *XmbRenderer::TextureForPath(const std::string &path)
 		texture.height = height;
 		glGenTextures(1, &texture.id);
 		glBindTexture(GL_TEXTURE_2D, texture.id);
+		bound_texture_ = texture.id;
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1307,6 +1337,7 @@ const XmbRenderer::Texture *XmbRenderer::GlyphTexture(uint32_t codepoint) {
 	texture.height = glyph->height;
 	glGenTextures(1, &texture.id);
 	glBindTexture(GL_TEXTURE_2D, texture.id);
+	bound_texture_ = texture.id;
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture.width, texture.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1337,6 +1368,7 @@ const XmbRenderer::Texture *XmbRenderer::ShadowGlyphTexture(uint32_t codepoint) 
 	texture.height = glyph->height;
 	glGenTextures(1, &texture.id);
 	glBindTexture(GL_TEXTURE_2D, texture.id);
+	bound_texture_ = texture.id;
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture.width, texture.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1360,6 +1392,7 @@ bool XmbRenderer::EnsureFallbackGlyph(uint32_t codepoint, FallbackGlyph *out_met
 		return false;
 	}
 	fallback_glyphs_[codepoint] = metrics;
+	text_width_cache_.clear();
 	*out_metrics = metrics;
 	*out_tex = nullptr;
 
@@ -1376,6 +1409,7 @@ bool XmbRenderer::EnsureFallbackGlyph(uint32_t codepoint, FallbackGlyph *out_met
 		texture.height = metrics.height;
 		glGenTextures(1, &texture.id);
 		glBindTexture(GL_TEXTURE_2D, texture.id);
+		bound_texture_ = texture.id;
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, texture.width, texture.height, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1388,27 +1422,35 @@ bool XmbRenderer::EnsureFallbackGlyph(uint32_t codepoint, FallbackGlyph *out_met
 }
 
 float XmbRenderer::MeasureText(const std::string &text, float scale) {
-	if (!font_loaded_) {
+	if (!font_loaded_ || text.empty()) {
 		return 0.0f;
 	}
+	auto cached = text_width_cache_.find(text);
+	if (cached != text_width_cache_.end()) {
+		return cached->second * scale;
+	}
 	size_t position = 0;
-	float width = 0.0f;
+	float unscaled = 0.0f;
 	while (true) {
 		const uint32_t codepoint = NextCodepoint(text, position);
 		if (codepoint == 0) {
 			break;
 		}
 		if (const FontGlyph *glyph = font_.Glyph(codepoint)) {
-			width += glyph->advance_h / 64.0f * scale;
+			unscaled += glyph->advance_h / 64.0f;
 		} else {
 			FallbackGlyph fb;
 			const Texture *fb_tex = nullptr;
 			if (EnsureFallbackGlyph(codepoint, &fb, &fb_tex)) {
-				width += fb.advance_h / 64.0f * scale;
+				unscaled += fb.advance_h / 64.0f;
 			}
 		}
 	}
-	return width;
+	if (text_width_cache_.size() >= 1024) {
+		text_width_cache_.clear();
+	}
+	text_width_cache_.emplace(text, unscaled);
+	return unscaled * scale;
 }
 
 float XmbRenderer::DrawText(const std::string &text, float x, float baseline, float scale,
@@ -1432,7 +1474,9 @@ float XmbRenderer::DrawText(const std::string &text, float x, float baseline, fl
 			g_w = glyph->width;
 			g_h = glyph->height;
 			g_adv = glyph->advance_h;
-			texture = GlyphTexture(codepoint);
+			if (g_w > 0 && g_h > 0) {
+				texture = GlyphTexture(codepoint);
+			}
 		} else {
 			FallbackGlyph fb;
 			if (!EnsureFallbackGlyph(codepoint, &fb, &texture)) {
@@ -1449,7 +1493,7 @@ float XmbRenderer::DrawText(const std::string &text, float x, float baseline, fl
 			const float glyph_y = baseline - g_top * scale;
 			const float width = g_w * scale;
 			const float height = g_h * scale;
-			glBindTexture(GL_TEXTURE_2D, texture->id);
+			BindTexture(texture->id);
 			if (shadow) {
 				DrawQuad(glyph_x + 1.0f, glyph_y + 1.0f, width, height, shadow_color);
 			}
@@ -1556,6 +1600,7 @@ void XmbRenderer::UpdateThemeColor() {
 			};
 		}
 		glBindTexture(GL_TEXTURE_2D, background_texture_);
+		bound_texture_ = background_texture_;
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, rgba.data());
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -1583,6 +1628,7 @@ void XmbRenderer::UpdateThemeColor() {
 		fb_rgba[i * 4 + 3] = 255;
 	}
 	glBindTexture(GL_TEXTURE_2D, background_texture_);
+	bound_texture_ = background_texture_;
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, (GLsizei)row_count, 0, GL_RGBA, GL_UNSIGNED_BYTE, fb_rgba.data());
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
@@ -3412,6 +3458,8 @@ void XmbRenderer::DrawCategoryRow() {
 
 void XmbRenderer::SetGames(const std::vector<GameInfo> &games) {
 	std::lock_guard<std::recursive_mutex> lock(mutex_);
+	const bool was_empty = games_.empty();
+	const int old_index = game_page_index_;
 	games_ = games;
 	if (!games_.empty()) {
 		games_loading_ = false;
@@ -3419,11 +3467,29 @@ void XmbRenderer::SetGames(const std::vector<GameInfo> &games) {
 	if (game_page_index_ >= (int)games_.size()) {
 		game_page_index_ = std::max(0, (int)games_.size() - 1);
 	}
-	game_scroll_ = (float)game_page_index_;
-	pic1_loaded_path_.clear();
-	pic0_loaded_path_.clear();
-	pic1_texture_ = 0;
-	pic0_texture_ = 0;
+	if (was_empty || game_page_index_ != old_index) {
+		game_scroll_ = (float)game_page_index_;
+	}
+	const std::string cur_pic1 = (game_page_index_ >= 0 && game_page_index_ < (int)games_.size())
+	                                 ? games_[game_page_index_].pic1_path
+	                                 : std::string();
+	const std::string cur_pic0 = (game_page_index_ >= 0 && game_page_index_ < (int)games_.size())
+	                                 ? games_[game_page_index_].pic0_path
+	                                 : std::string();
+	if (cur_pic1 != pic1_loaded_path_) {
+		if (!pic1_loaded_path_.empty()) {
+			EvictImageTexture(pic1_loaded_path_);
+			pic1_loaded_path_.clear();
+		}
+		pic1_texture_ = 0;
+	}
+	if (cur_pic0 != pic0_loaded_path_) {
+		if (!pic0_loaded_path_.empty()) {
+			EvictImageTexture(pic0_loaded_path_);
+			pic0_loaded_path_.clear();
+		}
+		pic0_texture_ = 0;
+	}
 	if (memory_stick_page_ && !games_.empty()) {
 		pending_focus_notify_ = true;
 	}
@@ -3541,37 +3607,50 @@ void XmbRenderer::DrawMemoryStickPage() {
 
 	game_page_index_ = std::max(0, std::min((int)games_.size() - 1, game_page_index_));
 	const auto &selected_game = games_[game_page_index_];
+	const bool scroll_settled = std::abs((float)game_page_index_ - game_scroll_) < 0.25f;
 
-	// 1. Fullscreen PIC1.PNG background with crossfade
+	// 1. Fullscreen PIC1.PNG background with crossfade (deferred until scrolling settles)
 	if (selected_game.pic1_path != pic1_loaded_path_) {
-		pic1_loaded_path_ = selected_game.pic1_path;
+		if (!pic1_loaded_path_.empty()) {
+			EvictImageTexture(pic1_loaded_path_);
+			pic1_loaded_path_.clear();
+		}
 		pic1_texture_ = 0;
-		if (!selected_game.pic1_path.empty()) {
-			if (const Texture *t = TextureForPath(selected_game.pic1_path)) {
-				pic1_texture_ = t->id;
+		pic1_alpha_ = 0.0f;
+		if (scroll_settled) {
+			pic1_loaded_path_ = selected_game.pic1_path;
+			if (!selected_game.pic1_path.empty()) {
+				if (const Texture *t = TextureForPath(selected_game.pic1_path)) {
+					pic1_texture_ = t->id;
+				}
 			}
 		}
-		pic1_alpha_ = 0.0f;
 	}
 	if (pic1_texture_ != 0) {
-		pic1_alpha_ = std::min(1.0f, pic1_alpha_ + 0.05f);
-		glBindTexture(GL_TEXTURE_2D, pic1_texture_);
+		pic1_alpha_ = std::min(1.0f, pic1_alpha_ + last_dt_ / 0.22f);
+		BindTexture(pic1_texture_);
 		const float pic1_color[4] = {1.0f, 1.0f, 1.0f, pic1_alpha_};
 		DrawQuad(0.0f, 0.0f, screen_width_, kScreenHeight, pic1_color);
 	}
 
 	// 2. PIC0.PNG logo banner (and title when no PIC0 banner)
 	if (selected_game.pic0_path != pic0_loaded_path_) {
-		pic0_loaded_path_ = selected_game.pic0_path;
+		if (!pic0_loaded_path_.empty()) {
+			EvictImageTexture(pic0_loaded_path_);
+			pic0_loaded_path_.clear();
+		}
 		pic0_texture_ = 0;
-		if (!selected_game.pic0_path.empty()) {
-			if (const Texture *t = TextureForPath(selected_game.pic0_path)) {
-				pic0_texture_ = t->id;
+		if (scroll_settled) {
+			pic0_loaded_path_ = selected_game.pic0_path;
+			if (!selected_game.pic0_path.empty()) {
+				if (const Texture *t = TextureForPath(selected_game.pic0_path)) {
+					pic0_texture_ = t->id;
+				}
 			}
 		}
 	}
 	if (pic0_texture_ != 0) {
-		glBindTexture(GL_TEXTURE_2D, pic0_texture_);
+		BindTexture(pic0_texture_);
 		const float pic0_w = std::min(305.0f, screen_width_ - 172.0f);
 		const float pic0_h = pic0_w * (172.0f / 305.0f);
 		DrawQuad(165.0f, 134.0f - pic0_h * 0.5f, pic0_w, pic0_h, white);
@@ -3784,7 +3863,7 @@ void XmbRenderer::DrawGameBootAnimation() {
 
 	auto gb_bg = textures_.find("gameboot_bg");
 	if (gb_bg != textures_.end() && gb_bg->second.id != 0) {
-		glBindTexture(GL_TEXTURE_2D, gb_bg->second.id);
+		BindTexture(gb_bg->second.id);
 		const float grad_col[4] = {1.0f, 1.0f, 1.0f, bg_ease * 0.34f};
 		DrawQuad(0.0f, 0.0f, screen_width_, kScreenHeight, grad_col);
 	}
@@ -3796,6 +3875,7 @@ void XmbRenderer::DrawGameBootAnimation() {
 	glUniform1i(u_texture_, 0);
 	glActiveTexture(GL_TEXTURE0);
 	glBindVertexArray(vertex_array_);
+	bound_texture_ = 0;
 
 	// 2. Authentic opening_plugin.rco light beams & glow ribbons
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
@@ -3873,6 +3953,7 @@ void XmbRenderer::Draw() {
 		float dt = std::chrono::duration<float>(now - last_draw_).count();
 		last_draw_ = now;
 		dt = std::min(dt, 0.1f);
+		last_dt_ = dt;
 		time_elapsed_ += dt;
 
 		if (pending_focus_notify_) {
@@ -3958,6 +4039,7 @@ void XmbRenderer::Draw() {
 		glUniform1i(u_texture_, 0);
 		glActiveTexture(GL_TEXTURE0);
 		glBindVertexArray(vertex_array_);
+		bound_texture_ = 0;
 		DrawBackground();
 
 		DrawWave(dt);
@@ -3967,6 +4049,7 @@ void XmbRenderer::Draw() {
 		glUniform1i(u_texture_, 0);
 		glActiveTexture(GL_TEXTURE0);
 		glBindVertexArray(vertex_array_);
+		bound_texture_ = 0;
 
 		if (memory_stick_page_) {
 			DrawMemoryStickPage();
@@ -4051,6 +4134,8 @@ void XmbRenderer::Shutdown() {
 	pic0_texture_ = 0;
 	pic1_loaded_path_.clear();
 	pic0_loaded_path_.clear();
+	bound_texture_ = 0;
+	text_width_cache_.clear();
 	if (white_texture_) {
 		glDeleteTextures(1, &white_texture_);
 		white_texture_ = 0;

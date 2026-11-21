@@ -213,6 +213,39 @@ bool DecodePng(const std::vector<uint8_t> &file, int *width, int *height,
 	}
 
 	const size_t output_stride = (size_t)w * 4;
+	std::vector<uint8_t> pass_pixels;
+	if (interlace == 0 && bit_depth == 8) {
+		if (color_type == 6) {
+			if (!UnfilterScanlines(raw.data(), output_stride, h, 4, rgba)) {
+				return false;
+			}
+			*width = (int)w;
+			*height = (int)h;
+			return true;
+		}
+		if (color_type == 2 && trns.empty()) {
+			const size_t row_bytes = (size_t)w * 3;
+			if (!UnfilterScanlines(raw.data(), row_bytes, h, 3, &pass_pixels)) {
+				return false;
+			}
+			rgba->resize(output_stride * h);
+			const uint8_t *src = pass_pixels.data();
+			uint8_t *dst = rgba->data();
+			const size_t pixel_count = (size_t)w * h;
+			for (size_t i = 0; i < pixel_count; ++i) {
+				dst[0] = src[0];
+				dst[1] = src[1];
+				dst[2] = src[2];
+				dst[3] = 255;
+				src += 3;
+				dst += 4;
+			}
+			*width = (int)w;
+			*height = (int)h;
+			return true;
+		}
+	}
+
 	std::vector<uint8_t> pixels(output_stride * h, 0);
 	size_t raw_offset = 0;
 	for (int p = 0; p < num_passes; ++p) {
@@ -226,7 +259,6 @@ bool DecodePng(const std::vector<uint8_t> &file, int *width, int *height,
 		const uint32_t pw = (w - 1 - sx) / dx + 1;
 		const uint32_t ph = (h - 1 - sy) / dy + 1;
 		const size_t row_bytes = ((size_t)pw * samples * bit_depth + 7) / 8;
-		std::vector<uint8_t> pass_pixels;
 		if (!UnfilterScanlines(raw.data() + raw_offset, row_bytes, ph, bpp, &pass_pixels)) {
 			return false;
 		}

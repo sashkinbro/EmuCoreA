@@ -477,25 +477,48 @@ fun XmbScreen(
     }
 
     val gameAssets by produceState<List<GameAssets>>(initialValue = initialGameAssets, games, context) {
-        value = if (games.isEmpty()) {
-            emptyList()
+        if (games.isEmpty()) {
+            value = emptyList()
         } else {
-            withContext(Dispatchers.IO) {
+            val pendingSnd0Indices = ArrayList<Int>()
+            val phase1 = withContext(Dispatchers.IO) {
                 val semaphore = Semaphore(2)
                 coroutineScope {
-                    games.map { game ->
+                    games.mapIndexed { idx, game ->
                         async {
                             val cacheKey = XmbAssetCache.keyFor(game)
                             val cached = XmbAssetCache.games[cacheKey]
                             if (cached != null && hasValidCachedFiles(cached)) {
+                                val cachedWav = PspGameMetadataReader.findCachedSnd0(
+                                    context,
+                                    game.path,
+                                    game.fileSize,
+                                    game.lastModified,
+                                )
+                                if (cached.wavPath.isEmpty() && cachedWav == null) {
+                                    synchronized(pendingSnd0Indices) { pendingSnd0Indices.add(idx) }
+                                }
                                 return@async cached
                             }
                             semaphore.withPermit {
-                                val icon = runCatching { PspGameMetadataReader.extractIcon0(context, game.path) }.getOrNull().orEmpty()
-                                val pic1 = runCatching { PspGameMetadataReader.extractPic1(context, game.path) }.getOrNull().orEmpty()
-                                val pic0 = runCatching { PspGameMetadataReader.extractPic0(context, game.path) }.getOrNull().orEmpty()
-                                val wav = runCatching { PspGameMetadataReader.extractSnd0(context, game.path) }.getOrNull().orEmpty()
-                                val ext = runCatching { PspGameMetadataReader.readExtendedInfo(context, game.path) }.getOrNull()
+                                val icon = runCatching {
+                                    PspGameMetadataReader.extractIcon0(context, game.path, game.fileSize, game.lastModified)
+                                }.getOrNull().orEmpty()
+                                val pic1 = runCatching {
+                                    PspGameMetadataReader.extractPic1(context, game.path, game.fileSize, game.lastModified)
+                                }.getOrNull().orEmpty()
+                                val pic0 = runCatching {
+                                    PspGameMetadataReader.extractPic0(context, game.path, game.fileSize, game.lastModified)
+                                }.getOrNull().orEmpty()
+                                val cachedWav = runCatching {
+                                    PspGameMetadataReader.findCachedSnd0(context, game.path, game.fileSize, game.lastModified)
+                                }.getOrNull()
+                                if (cachedWav == null) {
+                                    synchronized(pendingSnd0Indices) { pendingSnd0Indices.add(idx) }
+                                }
+                                val ext = runCatching {
+                                    PspGameMetadataReader.readExtendedInfo(context, game.path, game.fileSize, game.lastModified)
+                                }.getOrNull()
                                 val sizeBytes = ext?.sizeBytes?.takeIf { it > 0L } ?: game.fileSize
                                 val modifiedMs = ext?.lastModified?.takeIf { it > 0L } ?: game.lastModified
                                 val resolved = GameAssets(
@@ -503,7 +526,7 @@ fun XmbScreen(
                                     iconPath = icon,
                                     pic1Path = pic1,
                                     pic0Path = pic0,
-                                    wavPath = wav,
+                                    wavPath = cachedWav.orEmpty(),
                                     serial = ext?.serial?.ifBlank { game.serial.orEmpty() } ?: game.serial.orEmpty(),
                                     version = ext?.discVersion.orEmpty(),
                                     sysVersion = ext?.systemVersion.orEmpty(),
@@ -516,6 +539,30 @@ fun XmbScreen(
                             }
                         }
                     }.awaitAll()
+                }
+            }
+            // Publish visual assets (ICON0, PIC1, PIC0, metadata) immediately without waiting for AT3 decoding
+            value = phase1
+
+            if (pendingSnd0Indices.isNotEmpty()) {
+                val updated = phase1.toMutableList()
+                var changed = false
+                withContext(Dispatchers.IO) {
+                    for (idx in pendingSnd0Indices) {
+                        val game = games.getOrNull(idx) ?: continue
+                        val wav = runCatching {
+                            PspGameMetadataReader.extractSnd0(context, game.path, game.fileSize, game.lastModified)
+                        }.getOrNull().orEmpty()
+                        if (wav.isNotEmpty() && updated[idx].wavPath != wav) {
+                            val withWav = updated[idx].copy(wavPath = wav)
+                            updated[idx] = withWav
+                            XmbAssetCache.games[XmbAssetCache.keyFor(game)] = withWav
+                            changed = true
+                        }
+                    }
+                }
+                if (changed) {
+                    value = updated.toList()
                 }
             }
         }
@@ -840,18 +887,35 @@ fun XmbScreen(
         XmbHost.setFocusListener { index ->
             bgmJob?.cancel()
             val assets = currentAssets.value
+            val gamesSnapshot = currentGames.value
             if (XmbAudio.bgmEnabled && index in assets.indices) {
-                val wav = assets[index].wavPath
-                if (wav.isNotEmpty()) {
-                    // Authentic PSP settle delay before starting SND0 BGM preview
-                    bgmJob = coroutineScope.launch {
-                        delay(400)
-                        if (XmbAudio.bgmEnabled) {
-                            XmbAudio.playBgm(wav)
+                // Authentic PSP settle delay before starting SND0 BGM preview
+                bgmJob = coroutineScope.launch {
+                    delay(400)
+                    if (!XmbAudio.bgmEnabled) return@launch
+                    var wav = currentAssets.value.getOrNull(index)?.wavPath.orEmpty()
+                    if (wav.isEmpty() && index in gamesSnapshot.indices) {
+                        val game = gamesSnapshot[index]
+                        val cacheKey = XmbAssetCache.keyFor(game)
+                        wav = XmbAssetCache.games[cacheKey]?.wavPath.orEmpty()
+                        if (wav.isEmpty()) {
+                            wav = withContext(Dispatchers.IO) {
+                                runCatching {
+                                    PspGameMetadataReader.extractSnd0(context, game.path, game.fileSize, game.lastModified)
+                                }.getOrNull().orEmpty()
+                            }
+                            if (wav.isNotEmpty()) {
+                                XmbAssetCache.games[cacheKey]?.let { existing ->
+                                    XmbAssetCache.games[cacheKey] = existing.copy(wavPath = wav)
+                                }
+                            }
                         }
                     }
-                } else {
-                    XmbAudio.stopBgm()
+                    if (XmbAudio.bgmEnabled && wav.isNotEmpty()) {
+                        XmbAudio.playBgm(wav)
+                    } else {
+                        XmbAudio.stopBgm()
+                    }
                 }
             } else {
                 XmbAudio.stopBgm()
