@@ -76,3 +76,10 @@ firestore.indexes.json
 
 # NOTE about core/: its upstream .gitignore also ignores FFmpeg static libraries
 # and a shader asset required by this build. These are force-added individually.
+
+# Local Claude Code config (agents, scheduled task locks).
+.claude/
+
+# SQLite journal files created while the bundled catalog DB is open.
+*.db-shm
+*.db-wal
