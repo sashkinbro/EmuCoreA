@@ -82,6 +82,7 @@ import com.sbro.emucorea.ui.common.appScreenExitTransition
 import com.sbro.emucorea.ui.common.appScreenPopEnterTransition
 import com.sbro.emucorea.ui.common.appScreenPopExitTransition
 import com.sbro.emucorea.ui.common.EmuCoreALoadingAnimation
+import com.sbro.emucorea.ui.common.ProReminderHost
 import com.sbro.emucorea.ui.common.ProvideGamepadUiNavigation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -391,6 +392,9 @@ fun AppNavigation(
                 navController.navigate(XmbRoute) { launchSingleTop = true }
             }
         }
+        ProReminderHost(
+            isHomeVisible = currentBackStackEntry?.destination?.hasRoute<HomeRoute>() == true
+        )
         NavHost(
             navController = navController,
             startDestination = startDestination,            modifier = Modifier
@@ -517,6 +521,11 @@ fun AppNavigation(
                             GameLaunchShortcut.requestPinnedShortcut(context, game)
                         },
                         onMenuClick = openDrawer,
+                        onOpenProSettings = {
+                            navController.navigate(SettingsRoute(tab = "pro")) {
+                                launchSingleTop = true
+                            }
+                        },
                         onShelfModeChanged = { isShelfMode ->
                             homeDrawerEnabled = !isShelfMode
                         },
@@ -1082,6 +1091,11 @@ fun AppNavigation(
                 ) {
                     ProfileScreen(
                         onBackClick = { navController.popBackStack() },
+                        onOpenProSettings = {
+                            navController.navigate(SettingsRoute(tab = "pro")) {
+                                launchSingleTop = true
+                            }
+                        },
                         onOpenGameDetails = { catalogGameId ->
                             navController.navigate(GameDetailRoute(catalogGameId = catalogGameId)) {
                                 launchSingleTop = true

@@ -225,6 +225,8 @@ import com.sbro.emucorea.ui.common.GameCoverAspectRatio
 import com.sbro.emucorea.ui.common.NavigationBackButton
 import com.sbro.emucorea.ui.common.ProvideGamepadShoulderActions
 import com.sbro.emucorea.ui.common.ProSupportOptionsDialog
+import com.sbro.emucorea.ui.common.ProPromoCard
+import com.sbro.emucorea.ui.common.ProPromoVariant
 import com.sbro.emucorea.ui.common.RequestFocusOnResume
 import com.sbro.emucorea.ui.common.ScreenTopBar
 import com.sbro.emucorea.ui.common.ScrollableFilterTabRow
@@ -603,6 +605,7 @@ fun SettingsScreen(
                     pendingGamepadActionId.value = actionId
                 },
                 onOpenGamepadAssignment = { showGamepadAssignmentDialog = true },
+                onOpenProTab = { selectedTab = SettingsTab.Pro },
                 searchQuery = searchQuery,
                 onSearchResultSelected = { tab ->
                     selectedTab = tab
@@ -1119,7 +1122,8 @@ private fun SettingsContent(
     onOpenControlsLayoutEditor: (() -> Unit)? = null,
     onOpenThemeManager: (() -> Unit)? = null,
     onOpenTouchControlCreator: (() -> Unit)? = null,
-    onOpenGpuDriverManager: () -> Unit
+    onOpenGpuDriverManager: () -> Unit,
+    onOpenProTab: () -> Unit = {}
 ) {
     val gamepadActions = remember { GamepadManager.mappableButtonActions() }
     val gamepadDeviceAssignments by GamepadManager.gamepadDeviceAssignmentsState.collectAsState()
@@ -1337,6 +1341,11 @@ private fun SettingsContent(
                 }
 
                 SettingsTab.Customization -> {
+                    ProPromoCard(
+                        variant = ProPromoVariant.THEMES,
+                        modifier = Modifier.padding(horizontal = ScreenHorizontalPadding),
+                        onLearnMore = onOpenProTab
+                    )
                     CustomizationSettingsTab(
                         uiState = uiState,
                         onPickBackground = launchHomeBackgroundPicker,
@@ -1409,6 +1418,11 @@ private fun SettingsContent(
                 }
 
                 SettingsTab.Controls -> {
+                    ProPromoCard(
+                        variant = ProPromoVariant.CONTROLS,
+                        modifier = Modifier.padding(horizontal = ScreenHorizontalPadding),
+                        onLearnMore = onOpenProTab
+                    )
                     SettingsSection(title = stringResource(R.string.settings_touch_controls)) {
                         ActionItem(
                             icon = Icons.Rounded.Tune,

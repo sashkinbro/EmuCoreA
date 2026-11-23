@@ -154,6 +154,8 @@ import com.sbro.emucorea.data.HomeBackgroundType
 import com.sbro.emucorea.ui.common.GameCoverArt
 import com.sbro.emucorea.ui.common.GameCoverAspectRatio
 import com.sbro.emucorea.ui.common.EmuCoreALoadingAnimation
+import com.sbro.emucorea.ui.common.ProPromoCard
+import com.sbro.emucorea.ui.common.ProPromoVariant
 import com.sbro.emucorea.ui.common.ProSupportOptionsDialog
 import com.sbro.emucorea.ui.common.TvStoragePickerHost
 import com.sbro.emucorea.ui.common.TvStorageRequest
@@ -187,6 +189,7 @@ fun HomeScreen(
     onCreateShortcutClick: (GameItem) -> Unit,
     onMenuClick: (() -> Unit)? = null,
     onShelfModeChanged: (Boolean) -> Unit = {},
+    onOpenProSettings: () -> Unit = {},
     onSaveSelected: ((String, Int) -> Unit)? = null,
     viewModel: HomeViewModel = viewModel()
 ) {
@@ -576,6 +579,14 @@ fun HomeScreen(
                                     onToggleShelfMode = viewModel::toggleShelfMode,
                                     onToggleLibraryViewMode = viewModel::toggleLibraryViewMode,
                                     onMenuClick = onMenuClick
+                                )
+                            }
+
+                            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                ProPromoCard(
+                                    variant = ProPromoVariant.LIBRARY,
+                                    modifier = Modifier.padding(horizontal = horizontalInset),
+                                    onLearnMore = onOpenProSettings
                                 )
                             }
 

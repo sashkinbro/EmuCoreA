@@ -409,6 +409,10 @@ class AppPreferences(private val context: Context) {
         private val IN_APP_REVIEW_LAST_ATTEMPT_AT_MS =
             longPreferencesKey("in_app_review_last_attempt_at_ms")
         private val IN_APP_REVIEW_REQUESTED = booleanPreferencesKey("in_app_review_requested")
+        private val PRO_REMINDER_LAST_SHOWN_AT_MS = longPreferencesKey("pro_reminder_last_shown_at_ms")
+        private val PRO_REMINDER_DISMISS_STREAK = intPreferencesKey("pro_reminder_dismiss_streak")
+        private fun proPromoHiddenUntilKey(id: String) = longPreferencesKey("pro_promo_hidden_until_" + id)
+        private fun proPromoDismissStreakKey(id: String) = intPreferencesKey("pro_promo_dismiss_streak_" + id)
         private val RENDERER = intPreferencesKey("renderer")
         private val UPSCALE = floatPreferencesKey("upscale_multiplier_v2")
         private val UPSCALE_LEGACY = intPreferencesKey("upscale_multiplier")
@@ -1382,6 +1386,43 @@ class AppPreferences(private val context: Context) {
     val welcomeDialogShown: Flow<Boolean> = context.dataStore.data
         .map { prefs -> prefs[WELCOME_DIALOG_SHOWN] ?: false }
         .distinctUntilChanged()
+
+    val inAppReviewLastAttemptAtMs: Flow<Long> = context.dataStore.data
+        .map { prefs -> prefs[IN_APP_REVIEW_LAST_ATTEMPT_AT_MS] ?: 0L }
+        .distinctUntilChanged()
+
+    val proReminderLastShownAtMs: Flow<Long> = context.dataStore.data
+        .map { prefs -> prefs[PRO_REMINDER_LAST_SHOWN_AT_MS] ?: 0L }
+        .distinctUntilChanged()
+
+    val proReminderDismissStreak: Flow<Int> = context.dataStore.data
+        .map { prefs -> prefs[PRO_REMINDER_DISMISS_STREAK] ?: 0 }
+        .distinctUntilChanged()
+
+    suspend fun markProReminderShown(nowMs: Long) {
+        context.dataStore.edit { prefs -> prefs[PRO_REMINDER_LAST_SHOWN_AT_MS] = nowMs }
+    }
+
+    suspend fun setProReminderDismissStreak(streak: Int) {
+        context.dataStore.edit { prefs -> prefs[PRO_REMINDER_DISMISS_STREAK] = streak }
+    }
+
+    fun proPromoHiddenUntil(id: String): Flow<Long> = context.dataStore.data
+        .map { prefs -> prefs[proPromoHiddenUntilKey(id)] ?: 0L }
+        .distinctUntilChanged()
+
+    /** Records one more X dismissal of the card and hides it for the interval chosen by [intervalMsFor]. */
+    suspend fun dismissProPromo(id: String, nowMs: Long, intervalMsFor: (Int) -> Long) {
+        context.dataStore.edit { prefs ->
+            val streak = (prefs[proPromoDismissStreakKey(id)] ?: 0) + 1
+            prefs[proPromoDismissStreakKey(id)] = streak
+            prefs[proPromoHiddenUntilKey(id)] = nowMs + intervalMsFor(streak)
+        }
+    }
+
+    suspend fun resetProPromoDismissStreak(id: String) {
+        context.dataStore.edit { prefs -> prefs[proPromoDismissStreakKey(id)] = 0 }
+    }
 
     suspend fun setWelcomeDialogShown(shown: Boolean) {
         context.dataStore.edit { prefs -> prefs[WELCOME_DIALOG_SHOWN] = shown }
