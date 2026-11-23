@@ -398,7 +398,8 @@ fun EmulationScreen(
     val restoreHostUi = remember(activity, mainActivity, orientationToken, originalRequestedOrientation) {
         {
             if (mainActivity != null) {
-                mainActivity.clearOrientationOverride(orientationToken)
+                // Deferred so returning to the XMB does not flash through portrait/auto.
+                mainActivity.clearOrientationOverrideDeferred(orientationToken)
             } else {
                 activity?.requestedOrientation = originalRequestedOrientation
             }

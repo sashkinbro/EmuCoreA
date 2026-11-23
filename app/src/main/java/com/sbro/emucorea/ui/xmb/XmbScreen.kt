@@ -676,7 +676,7 @@ fun XmbScreen(
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         )
         onDispose {
-            mainActivity?.clearOrientationOverride(orientationToken)
+            mainActivity?.clearOrientationOverrideDeferred(orientationToken)
         }
     }
 
@@ -1006,7 +1006,7 @@ fun XmbScreen(
             saveState()
             bgmJob?.cancel()
             XmbAudio.stopBgm()
-            mainActivity?.clearOrientationOverride(orientationToken)
+            mainActivity?.clearOrientationOverrideDeferred(orientationToken)
             currentExit.value()
         }
 
