@@ -122,6 +122,7 @@ enum class GameMenuTabId {
     EMULATION,
     CHEATS,
     SHADERS,
+    DRIVERS,
     GRAPHICS,
     ACHIEVEMENTS
 }
@@ -162,6 +163,7 @@ enum class GameMenuSectionId(val tab: GameMenuTabId) {
     EMULATION_AUDIO(GameMenuTabId.EMULATION),
     EMULATION_CHEATS(GameMenuTabId.CHEATS),
     SHADERS_LIBRARY(GameMenuTabId.SHADERS),
+    DRIVERS_LIBRARY(GameMenuTabId.DRIVERS),
     GRAPHICS_DISPLAY(GameMenuTabId.GRAPHICS),
     GRAPHICS_RENDERING(GameMenuTabId.GRAPHICS),
     GRAPHICS_SCREEN(GameMenuTabId.GRAPHICS)
@@ -180,6 +182,7 @@ val SupportedGameMenuTabs: List<GameMenuTabId> = listOf(
     GameMenuTabId.EMULATION,
     GameMenuTabId.CHEATS,
     GameMenuTabId.SHADERS,
+    GameMenuTabId.DRIVERS,
     GameMenuTabId.GRAPHICS,
     GameMenuTabId.ACHIEVEMENTS
 )
@@ -197,6 +200,7 @@ val SupportedGameMenuSections: List<GameMenuSectionId> = listOf(
     GameMenuSectionId.EMULATION_AUDIO,
     GameMenuSectionId.EMULATION_CHEATS,
     GameMenuSectionId.SHADERS_LIBRARY,
+    GameMenuSectionId.DRIVERS_LIBRARY,
     GameMenuSectionId.GRAPHICS_DISPLAY
 )
 

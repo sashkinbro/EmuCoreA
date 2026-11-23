@@ -22,7 +22,15 @@ import com.sbro.emucorea.core.SetupValidator
 import com.sbro.emucorea.core.EmulatorStorage
 import com.sbro.emucorea.core.DeviceGpuInfoProvider
 import com.sbro.emucorea.core.GamepadManager
+import com.sbro.emucorea.core.GpuDriverCatalogRepository
+import com.sbro.emucorea.core.GpuDriverCompatibility
+import com.sbro.emucorea.core.GpuDriverManager
+import com.sbro.emucorea.core.GpuDriverRecommendations
+import com.sbro.emucorea.core.GpuDriverVendor
 import com.sbro.emucorea.core.GpuHardwareProfiles
+import com.sbro.emucorea.core.RemoteGpuDriver
+import com.sbro.emucorea.core.vendor
+import com.sbro.emucorea.ui.settings.recommendationRank
 import com.sbro.emucorea.core.KeyboardMouseManager
 import com.sbro.emucorea.core.MobileSocNameMapper
 import com.sbro.emucorea.core.NativeApp
@@ -365,6 +373,15 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     private var shaderBrowserRefreshGeneration = 0L
     private var shaderPackInstallJob: Job? = null
     private val shaderSelectionMutex = Mutex()
+    private val gpuDriverCatalogRepository = GpuDriverCatalogRepository(application)
+    private val _gpuDriverBrowser = MutableStateFlow(GpuDriverBrowserState())
+    internal val gpuDriverBrowser: StateFlow<GpuDriverBrowserState> = _gpuDriverBrowser.asStateFlow()
+    private var gpuDriverRefreshJob: Job? = null
+    private var gpuDriverImportJob: Job? = null
+    private val gpuDriverDownloadJobs = HashMap<String, Job>()
+    private val gpuDriverApplying = java.util.concurrent.atomic.AtomicBoolean(false)
+    @Volatile
+    private var rawGpuDriverCatalog: List<RemoteGpuDriver> = emptyList()
     // Derive terminal presentation from authoritative runtime state. Deferred
     // startup/save-load coroutines cannot overwrite a fatal error with Running.
     val uiState: StateFlow<EmulationUiState> = combine(_uiState, EmulatorBridge.runtimeFailure) {
@@ -2495,6 +2512,275 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    // region In-game Drivers tab
+
+    /**
+     * Re-reads the installed drivers and the effective selection every time the Drivers tab is
+     * opened. The catalog is only fetched while it has not loaded successfully yet; [forceCatalog]
+     * refetches it on demand.
+     */
+    fun refreshGpuDriverBrowser(forceCatalog: Boolean = false) {
+        if (gpuDriverRefreshJob?.isActive == true) return
+        gpuDriverRefreshJob = viewModelScope.launch(Dispatchers.IO) {
+            val installed = runCatching {
+                GpuDriverManager(getApplication()).listInstalledDrivers().filter { it.isUsable }
+            }.getOrDefault(emptyList())
+            val selection = loadGpuDriverSelection()
+            _gpuDriverBrowser.update { current ->
+                val keepScope = current.scopeInitialized &&
+                    (current.scope == GpuDriverScope.Global || selection.canUseGameScope)
+                current.copy(
+                    installed = installed,
+                    canUseGameScope = selection.canUseGameScope,
+                    scope = when {
+                        keepScope -> current.scope
+                        selection.canUseGameScope -> GpuDriverScope.Game
+                        else -> GpuDriverScope.Global
+                    },
+                    scopeInitialized = true,
+                    globalPath = selection.globalPath,
+                    gameOverride = selection.gameOverride,
+                    gamePath = selection.gamePath,
+                    catalog = rankGpuDriverCatalog(rawGpuDriverCatalog)
+                )
+            }
+            val state = _gpuDriverBrowser.value
+            if ((forceCatalog || !state.catalogLoaded) && !state.catalogLoading) {
+                loadGpuDriverCatalog()
+            }
+        }
+    }
+
+    private class GpuDriverSelection(
+        val canUseGameScope: Boolean,
+        val globalPath: String?,
+        val gameOverride: Boolean,
+        val gamePath: String?
+    )
+
+    private suspend fun loadGpuDriverSelection(): GpuDriverSelection {
+        val settings = preferences.settingsSnapshot.first()
+        val globalPath = settings.customDriverPath?.takeIf { settings.gpuDriverType == 1 && it.isNotBlank() }
+        val gameKey = activePerGameKey()
+        val profile = gameKey?.let { key ->
+            withContext(Dispatchers.IO) { perGameSettingsRepository.get(key) }
+        }
+        val owns = profile?.ownsGpuDriver() == true
+        return GpuDriverSelection(
+            canUseGameScope = gameKey != null,
+            globalPath = globalPath,
+            gameOverride = owns,
+            gamePath = if (owns && profile.gpuDriverType == 1) {
+                profile.customDriverPath?.takeIf { it.isNotBlank() }
+            } else {
+                null
+            }
+        )
+    }
+
+    private fun rankGpuDriverCatalog(drivers: List<RemoteGpuDriver>): List<RemoteGpuDriver> {
+        if (drivers.isEmpty()) return drivers
+        val gpu = DeviceGpuInfoProvider.get(getApplication())
+        val vendor = GpuDriverCompatibility.vendorOfGpu(gpu.model)
+            .takeIf { it != GpuDriverVendor.UNKNOWN }
+            ?: GpuDriverCompatibility.deviceVendor()
+        val profile = GpuDriverRecommendations.profileForGpu(GpuDriverCompatibility.currentDevice().socName, gpu.model)
+        return drivers
+            .filter { GpuDriverCompatibility.isCatalogDriverCompatible(it, vendor, gpu) }
+            .sortedByDescending { it.recommendationRank(profile, vendor) }
+    }
+
+    private suspend fun loadGpuDriverCatalog() {
+        _gpuDriverBrowser.update { it.copy(catalogLoading = true, catalogFailed = false) }
+        runCatching { gpuDriverCatalogRepository.loadCatalog() }
+            .onSuccess { drivers ->
+                rawGpuDriverCatalog = drivers
+                _gpuDriverBrowser.update {
+                    it.copy(
+                        catalogLoading = false,
+                        catalogLoaded = true,
+                        catalogFailed = false,
+                        catalog = rankGpuDriverCatalog(drivers)
+                    )
+                }
+            }
+            .onFailure { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                Log.w(TAG, "Could not load the GPU driver catalog", error)
+                _gpuDriverBrowser.update { it.copy(catalogLoading = false, catalogFailed = true) }
+            }
+    }
+
+    internal fun setGpuDriverScope(scope: GpuDriverScope) {
+        _gpuDriverBrowser.update { current ->
+            if (scope == GpuDriverScope.Game && !current.canUseGameScope) current else current.copy(scope = scope)
+        }
+    }
+
+    fun clearGpuDriverMessage() {
+        _gpuDriverBrowser.update { it.copy(message = null, messageArg = null) }
+    }
+
+    private fun postGpuDriverMessage(message: GpuDriverTabMessage, arg: String? = null) {
+        _gpuDriverBrowser.update {
+            it.copy(message = message, messageArg = arg, messageNonce = it.messageNonce + 1)
+        }
+    }
+
+    private suspend fun reloadInstalledGpuDrivers() {
+        val installed = withContext(Dispatchers.IO) {
+            runCatching { GpuDriverManager(getApplication()).listInstalledDrivers().filter { it.isUsable } }
+                .getOrDefault(emptyList())
+        }
+        _gpuDriverBrowser.update { it.copy(installed = installed) }
+    }
+
+    /** Downloads a catalog driver and installs it; it becomes selectable but is not applied. */
+    fun downloadGpuDriver(driver: RemoteGpuDriver) {
+        if (gpuDriverDownloadJobs[driver.id]?.isActive == true) return
+        val job = viewModelScope.launch(Dispatchers.IO) {
+            val self = coroutineContext[Job]
+            _gpuDriverBrowser.update { it.copy(downloads = it.downloads + (driver.id to 0f)) }
+            try {
+                val installedName = runCatching {
+                    val archive = gpuDriverCatalogRepository.downloadDriver(driver) { progress ->
+                        // Blocking copy loop: abort promptly when the view model is cleared.
+                        self?.ensureActive()
+                        _gpuDriverBrowser.update { it.copy(downloads = it.downloads + (driver.id to progress)) }
+                    }
+                    try {
+                        GpuDriverManager(getApplication()).installFromArchive(archive, driver.vendor)
+                    } finally {
+                        archive.delete()
+                    }
+                }
+                installedName.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
+                reloadInstalledGpuDrivers()
+                installedName
+                    .onSuccess { postGpuDriverMessage(GpuDriverTabMessage.Installed, it) }
+                    .onFailure {
+                        Log.w(TAG, "GPU driver install failed", it)
+                        postGpuDriverMessage(GpuDriverTabMessage.InstallFailed, it.message)
+                    }
+            } finally {
+                _gpuDriverBrowser.update { it.copy(downloads = it.downloads - driver.id) }
+                gpuDriverDownloadJobs.remove(driver.id)
+            }
+        }
+        gpuDriverDownloadJobs[driver.id] = job
+    }
+
+    fun importGpuDriver(uri: Uri) {
+        if (gpuDriverImportJob?.isActive == true) return
+        _gpuDriverBrowser.update { it.copy(importing = true) }
+        gpuDriverImportJob = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val result = runCatching { GpuDriverManager(getApplication()).installFromArchive(uri) }
+                result.exceptionOrNull()?.let { if (it is kotlinx.coroutines.CancellationException) throw it }
+                reloadInstalledGpuDrivers()
+                result
+                    .onSuccess { postGpuDriverMessage(GpuDriverTabMessage.Installed, it) }
+                    .onFailure {
+                        Log.w(TAG, "GPU driver import failed", it)
+                        postGpuDriverMessage(GpuDriverTabMessage.InstallFailed, it.message)
+                    }
+            } finally {
+                _gpuDriverBrowser.update { it.copy(importing = false) }
+            }
+        }
+    }
+
+    /** Picks [path] (null = system driver) for the selected scope and applies it live. */
+    fun selectGpuDriver(path: String?) {
+        applyGpuDriverChange(path = path, useGlobalForGame = false)
+    }
+
+    /** Drops this game's driver override so it inherits the app-wide driver again. */
+    fun useGlobalGpuDriverForGame() {
+        applyGpuDriverChange(path = null, useGlobalForGame = true)
+    }
+
+    private fun applyGpuDriverChange(path: String?, useGlobalForGame: Boolean) {
+        if (!gpuDriverApplying.compareAndSet(false, true)) return
+        _gpuDriverBrowser.update {
+            it.copy(applying = true, applyingTarget = GpuDriverTarget(if (useGlobalForGame) it.globalPath else path))
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            var message: GpuDriverTabMessage? = null
+            var messageArg: String? = null
+            try {
+                val before = _gpuDriverBrowser.value
+                val gameKey = activePerGameKey()
+                val previousEffective = before.effectivePath
+                var gameOverride = before.gameOverride
+                var gamePath = before.gamePath
+                var globalPath = before.globalPath
+                if (before.activeScope == GpuDriverScope.Game && gameKey != null) {
+                    if (useGlobalForGame) {
+                        if (gameOverride) {
+                            persistRuntimeState(
+                                _uiState.value,
+                                gpuDriverUpdate = GpuDriverProfileUpdate.UseGlobal
+                            )
+                        }
+                        gameOverride = false
+                        gamePath = null
+                    } else {
+                        persistRuntimeState(
+                            _uiState.value,
+                            gpuDriverUpdate = GpuDriverProfileUpdate.Override(path)
+                        )
+                        gameOverride = true
+                        gamePath = path
+                    }
+                } else {
+                    if (useGlobalForGame) return@launch
+                    preferences.setCustomDriverPath(path)
+                    preferences.setGpuDriverType(if (path == null) 0 else 1)
+                    globalPath = path
+                }
+                val newEffective = if (gameOverride && gameKey != null) gamePath else globalPath
+                val retryingFailedDriver = newEffective != null && newEffective in before.failedPaths
+                var failedPaths = before.failedPaths
+                if (newEffective == previousEffective && !retryingFailedDriver) {
+                    // The running game already uses this driver: nothing to reload.
+                    if (before.activeScope == GpuDriverScope.Global && before.gameOverride) {
+                        message = GpuDriverTabMessage.SavedGlobalGameKeeps
+                    }
+                } else {
+                    val status = EmulatorBridge.reloadGpuDriver(newEffective)
+                    message = gpuDriverMessageForReloadStatus(status)
+                    if (newEffective != null) {
+                        failedPaths = when (message) {
+                            GpuDriverTabMessage.FellBackToSystem -> failedPaths + newEffective
+                            GpuDriverTabMessage.Applied -> failedPaths - newEffective
+                            else -> failedPaths
+                        }
+                    }
+                }
+                _gpuDriverBrowser.update {
+                    it.copy(
+                        gameOverride = gameOverride,
+                        gamePath = gamePath,
+                        globalPath = globalPath,
+                        failedPaths = failedPaths
+                    )
+                }
+            } catch (error: Throwable) {
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                Log.w(TAG, "Could not apply the in-game GPU driver", error)
+                message = GpuDriverTabMessage.ApplyFailed
+                messageArg = null
+            } finally {
+                gpuDriverApplying.set(false)
+                _gpuDriverBrowser.update { it.copy(applying = false, applyingTarget = null) }
+                message?.let { postGpuDriverMessage(it, messageArg) }
+            }
+        }
+    }
+
+    // endregion
+
     fun toggleFrameLimit() {
         setFrameLimitEnabled(!_uiState.value.frameLimitEnabled)
     }
@@ -2715,6 +3001,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     private suspend fun persistRuntimeState(
         updatedState: EmulationUiState,
         shaderChainUpdate: ShaderChainUpdate? = null,
+        gpuDriverUpdate: GpuDriverProfileUpdate? = null,
         persistGlobal: suspend () -> Unit = {}
     ): EmulationUiState {
         val gameKey = activePerGameKey()
@@ -2816,7 +3103,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                         runtimeProfile.audioMinimalOutputLatency
                     },
                     providedKeys = finalProvidedKeys
-                )
+                ).withGpuDriverUpdate(gpuDriverUpdate)
             )
             val finalState = updatedState.copy(gameSettingsProfileActive = true)
             _uiState.value = finalState

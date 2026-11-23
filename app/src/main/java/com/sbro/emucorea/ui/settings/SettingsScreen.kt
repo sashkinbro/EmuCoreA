@@ -1992,7 +1992,7 @@ private fun SettingsContent(
                             helpText = stringResource(R.string.settings_help_renderer),
                             onResetToDefault = { viewModel.setRenderer(defaults.renderer) }
                         )
-                        if (com.sbro.emucorea.core.GpuDriverCompatibility.supportsCustomDrivers()) {
+                        if (customGpuDriversSupported()) {
                             val driverState by viewModel.driverUiState.collectAsState()
                             val activeDriverName = driverState.customDriverPath
                                 ?.takeIf { driverState.gpuDriverType == 1 }
@@ -3610,6 +3610,7 @@ private fun gameMenuTabLabel(tab: GameMenuTabId): String = when (tab) {
     GameMenuTabId.EMULATION -> stringResource(R.string.settings_emulation_tab)
     GameMenuTabId.CHEATS -> stringResource(R.string.emulation_cheats_title)
     GameMenuTabId.SHADERS -> stringResource(R.string.emulation_shaders_tab)
+    GameMenuTabId.DRIVERS -> stringResource(R.string.emulation_drivers_tab)
     GameMenuTabId.GRAPHICS -> stringResource(R.string.settings_graphics_tab)
     GameMenuTabId.ACHIEVEMENTS -> stringResource(R.string.achievements_title)
 }
@@ -3620,6 +3621,7 @@ private fun gameMenuTabIcon(tab: GameMenuTabId): ImageVector = when (tab) {
     GameMenuTabId.EMULATION -> Icons.Rounded.SettingsSuggest
     GameMenuTabId.CHEATS -> Icons.Rounded.Star
     GameMenuTabId.SHADERS -> Icons.Rounded.Gradient
+    GameMenuTabId.DRIVERS -> Icons.Rounded.Memory
     GameMenuTabId.GRAPHICS -> Icons.Rounded.Wallpaper
     GameMenuTabId.ACHIEVEMENTS -> Icons.Rounded.EmojiEvents
 }
@@ -3641,6 +3643,7 @@ private fun gameMenuSectionLabel(section: GameMenuSectionId): String = when (sec
     GameMenuSectionId.EMULATION_AUDIO -> stringResource(R.string.settings_audio_tab)
     GameMenuSectionId.EMULATION_CHEATS -> stringResource(R.string.settings_enable_cheats)
     GameMenuSectionId.SHADERS_LIBRARY -> stringResource(R.string.settings_game_menu_section_shaders)
+    GameMenuSectionId.DRIVERS_LIBRARY -> stringResource(R.string.settings_game_menu_section_drivers)
     GameMenuSectionId.GRAPHICS_DISPLAY -> stringResource(R.string.settings_game_menu_section_graphics_display)
     GameMenuSectionId.GRAPHICS_RENDERING -> stringResource(R.string.settings_rendering_section)
     GameMenuSectionId.GRAPHICS_SCREEN -> stringResource(R.string.emulation_screen_tab)
@@ -5644,6 +5647,7 @@ private fun fpsOverlayMetricOptions(): List<Pair<Int, String>> = listOf(
     PerformanceOverlayMetrics.FRAME_TIME to stringResource(R.string.settings_fps_metric_frame_time),
     PerformanceOverlayMetrics.RESOLUTION to stringResource(R.string.settings_fps_metric_resolution),
     PerformanceOverlayMetrics.HOST_CPU to stringResource(R.string.settings_fps_metric_host_cpu),
+    PerformanceOverlayMetrics.DRIVER to stringResource(R.string.settings_fps_metric_driver),
     PerformanceOverlayMetrics.AUDIO to stringResource(R.string.settings_fps_metric_audio)
 )
 

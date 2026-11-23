@@ -67,6 +67,7 @@ internal fun buildPerformanceOverlayLayout(
             line.startsWith("GPU Core:") -> PerformanceOverlayMetrics.GPU_CORE
             line.startsWith("JIT:") -> PerformanceOverlayMetrics.JIT
             line.startsWith("CD-ROM:") -> PerformanceOverlayMetrics.CDROM
+            line.startsWith("Driver:") -> PerformanceOverlayMetrics.DRIVER
             line.startsWith("CPU:") -> PerformanceOverlayMetrics.HOST_CPU
             line.startsWith("GPU:") -> PerformanceOverlayMetrics.HOST_GPU
             line.startsWith("Audio:") -> PerformanceOverlayMetrics.AUDIO
@@ -105,7 +106,7 @@ internal fun buildPerformanceOverlayLayout(
         line.startsWith("GPU Core:") || line.startsWith("JIT:") || line.startsWith("CD-ROM:")
     }
     val hardwareLines = filtered.filter { line ->
-        line.startsWith("CPU:") || line.startsWith("GPU:")
+        line.startsWith("CPU:") || line.startsWith("GPU:") || line.startsWith("Driver:")
     }
     val audioLines = filtered.filter { line -> line.startsWith("Audio:") }
     val rendererLine = filtered.firstOrNull(::isRendererLine)

@@ -122,12 +122,17 @@ object GpuDriverRecommendations {
     }
 
     fun supportedFamilies(gpu: String): Set<AdrenoFamily> = buildSet {
-        val normalized = gpu.lowercase(Locale.US)
+        // Catalog text can exclude families ("Adreno 6xx/7xx; not Adreno 8xx"): drop the
+        // negated mentions first so an excluded family is never read as supported.
+        val normalized = NEGATED_ADRENO_FAMILIES.replace(gpu.lowercase(Locale.US), " ")
         AdrenoFamily.entries.forEach { family ->
             if (family.catalogToken in normalized) add(family)
         }
     }
 
+    private val NEGATED_ADRENO_FAMILIES = Regex(
+        """\b(?:not|no|except|excluding|without)\s+(?:for\s+)?(?:adreno\s*)?\dxx(?:\s*(?:/|,|or|and)\s*(?:adreno\s*)?\dxx)*"""
+    )
     private val EXPLICIT_ADRENO_MODEL = Regex("8xx\\s*\\(([^)]+)\\)", RegexOption.IGNORE_CASE)
     private val ADRENO_MODEL = Regex("""adreno\s*(\d{3})""", RegexOption.IGNORE_CASE)
 }
@@ -209,12 +214,12 @@ object GpuDriverCompatibility {
     /**
      * Fallback model list for catalog entries that predate `supportedGpuModels` and
      * for already-installed libraries, which carry no version context. It must match
-     * the models the newest package supports (0.5.0: G31, G51, G52, G57, G68, G76,
-     * G77, G78(AE), G310, G510, G610, G615, G710, G715), so an installed library is
+     * the models the newest package supports (0.6.0: G31, G51, G52, G57, G68, G76,
+     * G77, G78(AE), G310, G510, G610, G615, G620, G710, G715, G720), so an installed library is
      * not refused at launch. Trailing core-count/revision suffixes are ignored.
      */
     private val MALI_SX2_SUPPORTED_MODEL = Regex(
-        """^(?:mali|immortalis)-g(?:31|51|52|57|68|76|77|78(?:ae)?|310|510|610|615|710|715)""" +
+        """^(?:mali|immortalis)-g(?:31|51|52|57|68|76|77|78(?:ae)?|310|510|610|615|620|710|715|720)""" +
             MALI_SX2_SUFFIX,
         RegexOption.IGNORE_CASE
     )
@@ -225,7 +230,24 @@ object GpuDriverCompatibility {
         RegexOption.IGNORE_CASE
     )
 
-    fun deviceVendor(): GpuDriverVendor = deviceVendor(currentDeviceInfo())
+    fun deviceVendor(): GpuDriverVendor = resolveDeviceVendor(
+        currentDeviceInfo(), MobileSocNameMapper.currentDeviceName(), DeviceGpuInfoProvider.snapshot.value
+    )
+
+    internal fun resolveDeviceVendor(
+        deviceInfo: String,
+        socName: String? = null,
+        deviceGpu: DeviceGpuSnapshot? = null
+    ): GpuDriverVendor {
+        // A real renderer is stronger evidence than ROM/vendor branding. This
+        // also covers new Allwinner parts without another device whitelist.
+        if (deviceGpu?.source == GpuInfoSource.GL_RENDERER) {
+            vendorOfGpu(deviceGpu.model).takeIf { it != GpuDriverVendor.UNKNOWN }?.let { return it }
+        }
+        vendorOfGpu(SocGpuCatalog.forSoc(socName))
+            .takeIf { it != GpuDriverVendor.UNKNOWN }?.let { return it }
+        return deviceVendor(deviceInfo)
+    }
 
     fun vendorOfGpu(model: GpuModelInfo?): GpuDriverVendor = when (model?.vendor) {
         GpuVendor.ADRENO -> GpuDriverVendor.ADRENO
@@ -236,6 +258,12 @@ object GpuDriverCompatibility {
     }
 
     internal fun deviceVendor(deviceInfo: String): GpuDriverVendor {
+        vendorOfGpu(GpuModelParser.parse(deviceInfo))
+            .takeIf { it != GpuDriverVendor.UNKNOWN }?.let { return it }
+        val socName = MobileSocNameMapper.resolveKnownCode(deviceInfo)
+            ?: MobileSocNameMapper.resolvePlatformFamily(deviceInfo)
+        vendorOfGpu(SocGpuCatalog.forSoc(socName))
+            .takeIf { it != GpuDriverVendor.UNKNOWN }?.let { return it }
         val info = deviceInfo.lowercase(Locale.US)
         if (QUALCOMM_SIGNALS.any { it in info }) return GpuDriverVendor.ADRENO
         if (XCLIPSE_SIGNALS.any { it in info }) return GpuDriverVendor.XCLIPSE
@@ -310,8 +338,10 @@ object GpuDriverCompatibility {
         val socName = MobileSocNameMapper.currentDeviceName()
             .takeIf { it.isNotBlank() }
             ?: socLabel().ifBlank { vendor.displayName }
+        val detectedModel = DeviceGpuInfoProvider.snapshot.value
+            ?.takeIf { it.source == GpuInfoSource.GL_RENDERER }?.model
         val catalogModel = SocGpuCatalog.forSoc(socName)
-        val gpuName = catalogModel?.displayName ?: when (vendor) {
+        val gpuName = detectedModel?.displayName ?: catalogModel?.displayName ?: when (vendor) {
             GpuDriverVendor.ADRENO ->
                 GpuDriverRecommendations.currentDeviceProfile()?.adrenoName ?: vendor.displayName
             else -> vendor.displayName

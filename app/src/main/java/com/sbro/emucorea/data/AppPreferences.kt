@@ -450,6 +450,7 @@ class AppPreferences(private val context: Context) {
         private val FPS_OVERLAY_CORNER = intPreferencesKey("fps_overlay_corner")
         private val FPS_OVERLAY_SCALE = intPreferencesKey("fps_overlay_scale")
         private val FPS_OVERLAY_METRICS = intPreferencesKey("fps_overlay_metrics")
+        private val FPS_OVERLAY_DRIVER_MIGRATED = booleanPreferencesKey("fps_overlay_driver_metric_migrated")
         private val CONFIRM_SAVE_LOAD_ACTIONS = booleanPreferencesKey("confirm_save_load_actions")
         private val BACK_BUTTON_EXITS_GAME = booleanPreferencesKey("back_button_exits_game")
         private val COMPACT_CONTROLS = booleanPreferencesKey("compact_controls")
@@ -2816,6 +2817,20 @@ class AppPreferences(private val context: Context) {
         }.toString()
     }
 
+    /** One-time: stored overlay masks predate the Driver line; show it wherever GPU is shown. */
+    suspend fun migrateOverlayDriverMetricIfNeeded() {
+        context.dataStore.edit { prefs ->
+            if (prefs[FPS_OVERLAY_DRIVER_MIGRATED] != true) {
+                prefs[FPS_OVERLAY_METRICS]?.let { stored ->
+                    if (stored and PerformanceOverlayMetrics.HOST_GPU != 0) {
+                        prefs[FPS_OVERLAY_METRICS] = stored or PerformanceOverlayMetrics.DRIVER
+                    }
+                }
+                prefs[FPS_OVERLAY_DRIVER_MIGRATED] = true
+            }
+        }
+    }
+
     private fun migrateGlobalStickSurfaceMode(prefs: MutablePreferences) {
         if (prefs[STICK_SURFACE_MODE] == true) {
             val stickScale = (prefs[STICK_SCALE] ?: OVERLAY_CONTROL_SCALE_DEFAULT)
@@ -2958,6 +2973,7 @@ class AppPreferences(private val context: Context) {
     }
 
     suspend fun migrateOverlayLayoutIfNeeded() {
+        migrateOverlayDriverMetricIfNeeded()
         context.dataStore.edit { prefs ->
             val currentVersion = prefs[OVERLAY_LAYOUT_VERSION] ?: 0
             if (currentVersion >= CURRENT_OVERLAY_LAYOUT_VERSION) return@edit

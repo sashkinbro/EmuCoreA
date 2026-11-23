@@ -194,6 +194,11 @@ constexpr int kRendererVulkan = 1;
 constexpr int kRendererOpenGL = 2;
 std::atomic<int> g_requestedRenderer{kRendererVulkan};
 std::string g_requestedCustomDriverPath;
+// Overlay label of the driver the active Vulkan device uses. Written when the
+// graphics context is (re)created; read by nativeGetDriverLabel without the
+// frame mutex so the overlay poll never waits on a frame.
+std::mutex g_driverLabelMutex;
+std::string g_driverLabel;
 int g_activeRenderer = kRendererVulkan;
 std::string g_bootError;
 int g_displayWidth = 1080;
@@ -1011,10 +1016,191 @@ const char *RendererName(int renderer) {
     }
 }
 
+void SetDriverLabel(std::string label) {
+    if (label.size() > 28) label.resize(28);
+    std::lock_guard<std::mutex> lock(g_driverLabelMutex);
+    g_driverLabel = std::move(label);
+}
+
+std::string LowerAscii(std::string text) {
+    for (char &c : text) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    return text;
+}
+
+// "malisx2-0.5.1-308fe121c7" -> "MaliSX2 0.5.1" (same rules as EmuCoreX's overlay label).
+std::string FriendlyCustomDriverName(const std::string &folder) {
+    std::vector<std::string> tokens;
+    std::string current;
+    for (const char c : folder) {
+        if (c == '-' || c == '_' || c == ' ') {
+            if (!current.empty()) tokens.push_back(std::move(current));
+            current.clear();
+        } else {
+            current.push_back(c);
+        }
+    }
+    if (!current.empty()) tokens.push_back(std::move(current));
+
+    const auto isVersion = [](const std::string &t) {
+        size_t i = (!t.empty() && (t[0] == 'v' || t[0] == 'V')) ? 1 : 0;
+        if (i >= t.size() || t[i] < '0' || t[i] > '9') return false;
+        bool dot = false;
+        for (; i < t.size(); i++) {
+            if (t[i] == '.') dot = true;
+            else if (t[i] < '0' || t[i] > '9') return false;
+        }
+        return dot;
+    };
+    const auto isHash = [](const std::string &t) {
+        if (t.size() < 7) return false;
+        for (const char c : t) {
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) return false;
+        }
+        return true;
+    };
+
+    std::string version;
+    std::vector<std::string> words;
+    for (const std::string &token : tokens) {
+        if (version.empty() && isVersion(token)) {
+            version = (token[0] == 'v' || token[0] == 'V') ? token.substr(1) : token;
+            continue;
+        }
+        if (isHash(token) || !version.empty()) continue;
+        if (LowerAscii(token) == "android") continue;
+        words.push_back(token);
+    }
+    // No dotted version ("turnip-axfl3-003-android"): the tail after the name is the version tag.
+    if (version.empty() && words.size() > 1) {
+        for (size_t i = 1; i < words.size(); i++) {
+            if (!version.empty()) version.push_back('-');
+            version += words[i];
+        }
+        words.resize(1);
+    }
+
+    std::string name;
+    for (const std::string &token : words) {
+        std::string word = token;
+        const std::string lower = LowerAscii(word);
+        if (lower == "malisx2") word = "MaliSX2";
+        else if (lower == "panvk") word = "PanVK";
+        else if (!word.empty()) word[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(word[0])));
+        if (!name.empty()) name.push_back(' ');
+        name += word;
+    }
+    if (name.empty()) name = folder;
+    return version.empty() ? name : (name + " " + version);
+}
+
+// "...v1.r40p0-01eac0.b025..." -> "r40p0"; empty when no Mali release token is present.
+std::string ExtractMaliRelease(const std::string &text) {
+    for (size_t i = 0; i + 3 < text.size(); i++) {
+        if (text[i] != 'r' || (i > 0 && std::isalnum(static_cast<unsigned char>(text[i - 1])))) continue;
+        size_t j = i + 1;
+        while (j < text.size() && std::isdigit(static_cast<unsigned char>(text[j]))) j++;
+        if (j == i + 1 || j >= text.size() || text[j] != 'p') continue;
+        size_t k = j + 1;
+        while (k < text.size() && std::isdigit(static_cast<unsigned char>(text[k]))) k++;
+        if (k == j + 1) continue;
+        return text.substr(i, k - i);
+    }
+    return {};
+}
+
+// "V@0744.0 (...)" -> "V@0744.0"; empty when absent.
+std::string ExtractQualcommToken(const std::string &text) {
+    const size_t pos = text.find("V@");
+    if (pos == std::string::npos) return {};
+    size_t end = pos;
+    while (end < text.size() && text[end] != ' ' && text[end] != ',' && text[end] != '(' && text[end] != '\n') end++;
+    return text.substr(pos, end - pos);
+}
+
+// Short system-driver version ("r40p0", "V@0744.0", "512.744"); empty when unknown.
+std::string ShortSystemDriverVersion(uint32_t vendorId, const std::string &info, uint32_t driverVersion) {
+    std::string result;
+    if (vendorId == 0x13B5) result = ExtractMaliRelease(info);
+    else if (vendorId == 0x5143) result = ExtractQualcommToken(info);
+    if (result.empty() && vendorId == 0x5143) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%u.%u", VK_VERSION_MAJOR(driverVersion), VK_VERSION_MINOR(driverVersion));
+        result = buf;
+    }
+    if (result.empty()) result = info;
+    if (result.empty()) {
+        char buf[48];
+        snprintf(buf, sizeof(buf), "%u.%u.%u", VK_VERSION_MAJOR(driverVersion), VK_VERSION_MINOR(driverVersion),
+                 VK_VERSION_PATCH(driverVersion));
+        return buf;
+    }
+    // Generic: first token up to ' ', '-', ',', '('; drop a leading "v1.".
+    const size_t cut = result.find_first_of(" -,(\n\r");
+    if (cut != std::string::npos) result.resize(cut);
+    if (result.size() > 3 && (result[0] == 'v' || result[0] == 'V') && result[1] == '1' && result[2] == '.') {
+        result.erase(0, 3);
+    }
+    if (result.size() > 13) result.resize(13);
+    return result;
+}
+
+// Overlay "Driver:" text for the device that was just created. A loaded custom
+// driver shows its package name; the system driver shows "System <version>".
+// Called with the Vulkan instance alive (right after InitAPI).
+std::string BuildDriverLabel(VulkanContext *vulkan) {
+    if (vulkan == nullptr) return {};
+    const VkPhysicalDeviceProperties &props = vulkan->GetPhysicalDeviceProperties().properties;
+
+    std::string driverName;
+    std::string driverInfo;
+    if (vkGetPhysicalDeviceProperties2 != nullptr && props.apiVersion >= VK_API_VERSION_1_1) {
+        bool hasDriverProperties = props.apiVersion >= VK_API_VERSION_1_2;
+        if (!hasDriverProperties) {
+            for (const VkExtensionProperties &ext : vulkan->GetDeviceExtensionsAvailable()) {
+                if (strcmp(ext.extensionName, VK_KHR_DRIVER_PROPERTIES_EXTENSION_NAME) == 0) {
+                    hasDriverProperties = true;
+                    break;
+                }
+            }
+        }
+        if (hasDriverProperties) {
+            VkPhysicalDeviceDriverProperties driver{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES};
+            VkPhysicalDeviceProperties2 props2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+            props2.pNext = &driver;
+            vkGetPhysicalDeviceProperties2(vulkan->GetCurrentPhysicalDevice(), &props2);
+            driver.driverName[VK_MAX_DRIVER_NAME_SIZE - 1] = '\0';
+            driver.driverInfo[VK_MAX_DRIVER_INFO_SIZE - 1] = '\0';
+            driverName = driver.driverName;
+            driverInfo = driver.driverInfo;
+        }
+    }
+    // What the created device itself reports: proves which driver really runs.
+    NLOGI("Vulkan device driver: name='%s' info='%s' version=0x%08x api=%u.%u.%u custom=%d",
+          driverName.c_str(), driverInfo.c_str(), props.driverVersion,
+          VK_API_VERSION_MAJOR(props.apiVersion), VK_API_VERSION_MINOR(props.apiVersion),
+          VK_API_VERSION_PATCH(props.apiVersion), VulkanCustomDriverLibraryLoaded() ? 1 : 0);
+
+    if (VulkanCustomDriverLibraryLoaded()) {
+        // ".../drivers/<package>/<library>.so" -> the package folder name.
+        std::string folder;
+        const size_t slash = g_requestedCustomDriverPath.find_last_of('/');
+        if (slash != std::string::npos && slash > 0) {
+            const size_t prev = g_requestedCustomDriverPath.find_last_of('/', slash - 1);
+            const size_t begin = prev == std::string::npos ? 0 : prev + 1;
+            folder = g_requestedCustomDriverPath.substr(begin, slash - begin);
+        }
+        if (!folder.empty()) return FriendlyCustomDriverName(folder);
+        if (!driverName.empty()) return driverName;
+    }
+    const std::string version = ShortSystemDriverVersion(props.vendorID, driverInfo, props.driverVersion);
+    return version.empty() ? std::string("System") : "System " + version;
+}
+
 // Creates the graphics context for the renderer stored by nativeSetRenderer.
 // Must run before PSP_Init, because BootGame picks the GPU core from it.
 bool CreateGraphicsContext() {
     if (g_graphicsContext != nullptr) return true;
+    SetDriverLabel({});
 
     const int requested = g_requestedRenderer.load();
     if (requested == kRendererOpenGL) {
@@ -1066,6 +1252,7 @@ bool CreateGraphicsContext() {
     }
     Core_SetGraphicsContext(g_graphicsContext);
     SetGPUBackend(GPUBackend::VULKAN);
+    SetDriverLabel(BuildDriverLabel(static_cast<VulkanContext *>(g_graphicsContext->GetAPIContext())));
     NLOGI("%s renderer initialized (Vulkan API: %s)", RendererName(g_activeRenderer),
           deviceName.c_str());
     return true;
@@ -1957,6 +2144,8 @@ void ShutdownCore() {
         delete g_graphicsContext;
         g_graphicsContext = nullptr;
     }
+    // No Vulkan device any more: the overlay must not keep showing the old driver.
+    SetDriverLabel(std::string());
     DestroyEGL();
     if (g_glWindow != nullptr) {
         ANativeWindow_release(g_glWindow);
@@ -2882,12 +3071,9 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetRenderer(JNIEnv *, jclass, jin
     }
 }
 
-// The selected library is stored for the next context while a game is running.
-JNIEXPORT void JNICALL
-Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCustomDriver(JNIEnv *env, jclass, jstring path, jstring nativeLibDir) {
-    const std::string nextPath = ToString(env, path);
-    const std::string nativeDir = ToString(env, nativeLibDir);
-    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+// Stores the custom driver path and, while idle, rebuilds the graphics context
+// with it. Called with g_nativeFrameMutex held.
+static void StoreCustomDriverLocked(const std::string &nextPath, const std::string &nativeDir) {
     VulkanSetNativeLibDir(nativeDir);
     if (nextPath == g_requestedCustomDriverPath) return;
     g_requestedCustomDriverPath = nextPath;
@@ -2913,6 +3099,119 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCustomDriver(JNIEnv *env, jcla
     if (hadSurface && g_surfaceWindow != nullptr) {
         AttachSurface(g_surfaceWindow, g_surfaceWidth, g_surfaceHeight);
     }
+}
+
+// The selected library is stored for the next context while a game is running.
+JNIEXPORT void JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeSetCustomDriver(JNIEnv *env, jclass, jstring path, jstring nativeLibDir) {
+    const std::string nextPath = ToString(env, path);
+    const std::string nativeDir = ToString(env, nativeLibDir);
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+    StoreCustomDriverLocked(nextPath, nativeDir);
+}
+
+// Tears the live Vulkan context down and brings it up again with `path` as the
+// custom driver ("" = system driver), the way PPSSPP handles a lost device:
+// DeviceLost -> ShutdownSurface -> ShutdownAPI (destroys the instance and
+// dlcloses the old libvulkan) -> new context (reloads libvulkan) -> InitSurface
+// -> DeviceRestore. Called with g_nativeFrameMutex held, so RunFrame (the only
+// thing that advances emulation and records/presents frames) is idle and no
+// object of the old driver is alive when the library is unloaded.
+// Returns false when no context or no surface could be brought up; the caller
+// may call it again, it copes with whatever state a failed attempt left.
+static bool RebuildVulkanContextLocked(const std::string &path) {
+    if (g_graphicsContext != nullptr) {
+        if (g_renderReady) {
+            if (gpu != nullptr) gpu->DeviceLost();
+            g_graphicsContext->ShutdownSurface();
+            g_renderReady = false;
+        }
+        g_graphicsContext->ShutdownAPI();
+        delete g_graphicsContext;
+        g_graphicsContext = nullptr;
+        Core_SetGraphicsContext(nullptr);
+    }
+    SetDriverLabel({});
+    g_requestedCustomDriverPath = path;
+    VulkanSetCustomDriverPath(path);
+    // Nothing of the old driver is alive now. A failed InitAPI can leave the
+    // library loaded; drop it so the new path is really used.
+    VulkanFree();
+    if (!CreateGraphicsContext()) {
+        VulkanFree();
+        return false;
+    }
+    if (g_surfaceWindow != nullptr) {
+        // g_booted: this also runs gpu->DeviceRestore(newDraw).
+        return AttachSurface(g_surfaceWindow, g_surfaceWidth, g_surfaceHeight);
+    }
+    return true;
+}
+
+// Swaps the custom Vulkan driver of a running session. Blocking; must not be
+// called on the UI thread. Returns 0 applied, 1 fell back to the system
+// driver, 2 failed (session left paused), 3 stored for the next context.
+JNIEXPORT jint JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeReloadGpuDriver(JNIEnv *env, jclass, jstring path, jstring nativeLibDir) {
+    constexpr jint kApplied = 0;
+    constexpr jint kFellBack = 1;
+    constexpr jint kFailed = 2;
+    constexpr jint kStored = 3;
+    const std::string nextPath = ToString(env, path);
+    const std::string nativeDir = ToString(env, nativeLibDir);
+    std::lock_guard<std::mutex> lock(g_nativeFrameMutex);
+
+    const bool live = g_booted && g_activeRenderer == kRendererVulkan;
+    if (!live) {
+        StoreCustomDriverLocked(nextPath, nativeDir);
+        return kStored;
+    }
+
+    VulkanSetNativeLibDir(nativeDir);
+    NLOGI("Reloading the Vulkan driver live: '%s'", nextPath.c_str());
+    // The audio callback pulls from the core; keep it quiet while the GPU
+    // objects are rebuilt.
+    const bool audioWasRunning = g_audioStarted;
+    StopAudio();
+
+    jint result = kApplied;
+    bool ok = RebuildVulkanContextLocked(nextPath);
+    if (ok && !nextPath.empty() && !VulkanCustomDriverLibraryLoaded()) {
+        // The loader already dropped to the system driver (the hook falls back
+        // silently when the custom library cannot be opened).
+        NLOGE("Custom Vulkan driver did not load; the system driver is in use");
+        g_requestedCustomDriverPath.clear();
+        VulkanSetCustomDriverPath(std::string());
+        SetDriverLabel(BuildDriverLabel(static_cast<VulkanContext *>(g_graphicsContext->GetAPIContext())));
+        result = kFellBack;
+    } else if (!ok && !nextPath.empty()) {
+        NLOGE("Vulkan device failed to come up with the custom driver; retrying with the system driver");
+        ok = RebuildVulkanContextLocked(std::string());
+        result = kFellBack;
+    }
+
+    if (!ok) {
+        NLOGE("Vulkan driver reload FAILED: no working graphics context; the session stays paused");
+        g_surfaceFailed = true;
+        if (g_bootError.empty()) g_bootError = "Unable to reload the graphics driver";
+        return kFailed;
+    }
+
+    if (audioWasRunning) StartAudio();
+    NLOGI("Vulkan driver reload done (%s), custom driver loaded: %d",
+          result == kApplied ? "applied" : "fell back to the system driver",
+          VulkanCustomDriverLibraryLoaded() ? 1 : 0);
+    return result;
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeGetDriverLabel(JNIEnv *env, jclass) {
+    std::string label;
+    {
+        std::lock_guard<std::mutex> lock(g_driverLabelMutex);
+        label = g_driverLabel;
+    }
+    return env->NewStringUTF(label.c_str());
 }
 
 JNIEXPORT jboolean JNICALL

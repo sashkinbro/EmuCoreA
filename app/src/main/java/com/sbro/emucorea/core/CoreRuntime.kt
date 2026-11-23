@@ -1133,10 +1133,33 @@ internal object CoreRuntime {
         runCatching { NativePpsspp.nativeGetActiveRenderer() }
             .getOrDefault(RendererDefaults.toCoreRenderer(requestedRenderer))
 
+    @Volatile private var driverLabelCache = ""
+    @Volatile private var driverLabelRenderer = -1
+
+    /** Forget the cached driver label so the next overlay update re-reads it (after a driver switch). */
+    fun invalidateDriverLabel() {
+        driverLabelCache = ""
+        driverLabelRenderer = -1
+    }
+
+    // Cached per active renderer; an empty label (not Vulkan / not initialised yet) is re-polled,
+    // which is one cheap JNI call per overlay update.
+    private fun currentDriverLabel(activeRenderer: Int): String {
+        if (driverLabelRenderer != activeRenderer) {
+            driverLabelCache = ""
+            driverLabelRenderer = activeRenderer
+        }
+        if (driverLabelCache.isEmpty()) {
+            driverLabelCache = runCatching { NativePpsspp.nativeGetDriverLabel() }.getOrDefault("")
+        }
+        return driverLabelCache
+    }
+
     private fun publishPerformanceMetrics(fps: Double, frames: Int, frameNanos: Long,
                                           cpuLoadPercent: Double, speed: Double, targetFps: Double) {
         if (frames <= 0 || !performanceMetricsEnabled) return
-        val renderer = RendererDefaults.coreRendererName(activeCoreRenderer())
+        val activeRenderer = activeCoreRenderer()
+        val renderer = RendererDefaults.coreRendererName(activeRenderer)
         val frameMs = frameNanos / frames / 1_000_000.0
         val gpuLoad = if (detailedPerformanceMetrics) GpuLoadReader.loadPercent() else null
         val overlay = buildString {
@@ -1149,6 +1172,9 @@ internal object CoreRuntime {
                 append('\n').append("CPU:Host | ").append(String.format(Locale.US, "%.1f%%", cpuLoadPercent))
                 append('\n').append("GPU:Host")
                 if (gpuLoad != null) append(String.format(Locale.US, " | %.1f%%", gpuLoad))
+                // The line text stays English in every language: it is a technical term.
+                val driverLabel = currentDriverLabel(activeRenderer)
+                if (driverLabel.isNotEmpty()) append('\n').append("Driver:").append(driverLabel)
                 append('\n').append("Res:").append(frameWidth).append('x').append(frameHeight)
                 append('\n').append(String.format(Locale.US, "Frame:%.1f ms", frameMs))
             }

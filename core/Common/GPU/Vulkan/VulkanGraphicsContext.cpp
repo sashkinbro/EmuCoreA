@@ -216,6 +216,8 @@ bool VulkanGraphicsContext::InitAPI(void *wnd, std::string *deviceName, std::str
 	static const std::vector<const char *> noExtensions;
 	if (vulkan_->CreateDevice(deviceNum, vr_ ? VR_GetVulkanDeviceExtensions() : noExtensions) != VK_SUCCESS) {
 		*errorMessage = vulkan_->InitError();
+		// The instance would otherwise leak, and keep the driver library from being unloaded.
+		vulkan_->DestroyInstance();
 		delete vulkan_;
 		vulkan_ = nullptr;
 		return false;

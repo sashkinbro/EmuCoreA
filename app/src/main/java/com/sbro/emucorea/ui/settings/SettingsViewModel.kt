@@ -246,6 +246,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private var mediatekCompatibilityNoticeChecked = false
 
     init {
+        viewModelScope.launch { preferences.migrateOverlayDriverMetricIfNeeded() }
         refreshInstalledGpuDrivers()
         initializeAboutInfo()
         refreshShaderPresets()

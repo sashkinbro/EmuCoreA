@@ -43,6 +43,21 @@ object NativePpsspp {
     external fun nativeSetCustomDriver(path: String, nativeLibDir: String)
     external fun nativeIsCustomDriverLoaded(): Boolean
 
+    /**
+     * Swap the custom Vulkan driver while a game runs. path = "" -> system driver.
+     * Returns RELOAD_APPLIED=0, RELOAD_FELL_BACK_TO_SYSTEM=1, RELOAD_FAILED=2, RELOAD_STORED=3
+     * (STORED = no running Vulkan session; the path is just stored for the next context/launch).
+     * Blocking, call off the main thread.
+     */
+    @JvmStatic external fun nativeReloadGpuDriver(path: String, nativeLibDir: String): Int
+
+    /**
+     * Short label of the driver the active Vulkan device really uses, e.g. "Turnip Mesa 25.3" /
+     * "Mali-SX2 ..." / "Qualcomm 512.744"; max 28 chars; "" when the renderer is not Vulkan or
+     * nothing is initialised.
+     */
+    @JvmStatic external fun nativeGetDriverLabel(): String
+
     external fun nativeInit(
         apkPath: String,
         dataDir: String,

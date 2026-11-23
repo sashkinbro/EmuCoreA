@@ -174,6 +174,9 @@ fun GpuDriverScreen(
     val initialDeviceGpu = remember(context) { DeviceGpuInfoProvider.get(context) }
     val deviceGpuSnapshot by DeviceGpuInfoProvider.snapshot.collectAsState()
     val deviceGpu = deviceGpuSnapshot ?: initialDeviceGpu
+    LaunchedEffect(deviceGpu) {
+        viewModel.refreshInstalledGpuDrivers()
+    }
     val buildDeviceVendor = remember { GpuDriverCompatibility.deviceVendor() }
     val deviceVendor = GpuDriverCompatibility.vendorOfGpu(deviceGpu.model)
         .takeIf { it != GpuDriverVendor.UNKNOWN }
@@ -182,8 +185,8 @@ fun GpuDriverScreen(
         GpuDriverRecommendations.profileForGpu(deviceSummary.socName, deviceGpu.model)
     }
     val detectedGpuName = deviceGpu.model?.displayName?.takeIf { it.isNotBlank() }
-    val deviceGpuName = SocGpuCatalog.forSoc(deviceSummary.socName)?.displayName
-        ?: detectedGpuName
+    val deviceGpuName = detectedGpuName
+        ?: SocGpuCatalog.forSoc(deviceSummary.socName)?.displayName
         ?: deviceSummary.gpuName
     val isAdrenoDevice = deviceVendor == GpuDriverVendor.ADRENO
     val deviceHintRes = if (isAdrenoDevice) {
@@ -993,7 +996,7 @@ private fun DriverBadgeRow(
     }
 }
 
-private fun RemoteGpuDriver.recommendationRank(
+internal fun RemoteGpuDriver.recommendationRank(
     profile: SnapdragonGpuProfile?,
     deviceVendor: GpuDriverVendor? = null
 ): Int =
@@ -1034,7 +1037,7 @@ private fun DriverBadge(text: String, color: androidx.compose.ui.graphics.Color)
     }
 }
 
-private fun RemoteGpuDriver.installedDriverName(): String {
+internal fun RemoteGpuDriver.installedDriverName(): String {
     val rawName = downloadUrl.substringBefore('?').substringAfterLast('/').ifBlank { "$id.zip" }
     val safeName = rawName.replace(Regex("[^A-Za-z0-9._-]"), "_")
     val archiveName = if (safeName.endsWith(".zip", ignoreCase = true)) safeName else "$safeName.zip"

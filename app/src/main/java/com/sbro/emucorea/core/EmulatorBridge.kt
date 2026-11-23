@@ -36,6 +36,10 @@ object EmulatorBridge {
     const val AUTO_RENDERER = RendererDefaults.AUTO
     const val OPENGL_RENDERER = RendererDefaults.OPENGL
     const val VULKAN_RENDERER = RendererDefaults.VULKAN
+    const val GPU_DRIVER_RELOAD_APPLIED = 0
+    const val GPU_DRIVER_RELOAD_FELL_BACK_TO_SYSTEM = 1
+    const val GPU_DRIVER_RELOAD_FAILED = 2
+    const val GPU_DRIVER_RELOAD_STORED = 3
     private const val ANGLE_EGL_LIBRARY_NAME = "libEGL_angle.so"
     private const val ANGLE_GLES_LIBRARY_NAME = "libGLESv2_angle.so"
     private const val AUTO_PROGRESSIVE_SCAN_PAD_INDEX = 0
@@ -906,6 +910,33 @@ object EmulatorBridge {
     suspend fun setCustomDriverPath(path: String) {
         settingsCache["EmuCoreA/GS:CustomDriverPath"] = path
         performRuntimeOps(listOf(customDriverOp(prepareCustomDriverLibrary(path))))
+    }
+
+    /**
+     * Switches the custom Vulkan driver (null/blank = system driver) and, when a Vulkan game is
+     * running, recreates the GS device so it takes effect immediately. Returns one of the
+     * GPU_DRIVER_RELOAD_* codes. Runs off the main thread and may take a few seconds.
+     */
+    suspend fun reloadGpuDriver(path: String?): Int {
+        if (!isNativeLoaded) return GPU_DRIVER_RELOAD_STORED
+        val context = getContext() ?: return GPU_DRIVER_RELOAD_STORED
+        val resolvedPath = if (!path.isNullOrBlank() && GpuDriverCompatibility.supportsCustomDrivers()) {
+            prepareCustomDriverLibrary(path)
+        } else {
+            ""
+        }
+        settingsCache["EmuCoreA/GS:CustomDriverPath"] = resolvedPath
+        // Keep the core settings in step so a later context re-init reuses the switched driver.
+        CoreRuntime.settings["EmuCoreA/GPU:CustomDriverPath"] = resolvedPath
+        val nativeLibDir = context.applicationInfo.nativeLibraryDir.orEmpty()
+        return withContext(Dispatchers.IO) {
+            runSerial {
+                val status = runCatching { NativePpsspp.nativeReloadGpuDriver(resolvedPath, nativeLibDir) }
+                    .getOrDefault(GPU_DRIVER_RELOAD_FAILED)
+                CoreRuntime.invalidateDriverLabel()
+                status
+            }
+        }
     }
 
     suspend fun setFrameLimitEnabled(enabled: Boolean) {
