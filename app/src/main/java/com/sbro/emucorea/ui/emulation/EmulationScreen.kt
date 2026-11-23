@@ -58,6 +58,10 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.ScrollState
@@ -3096,7 +3100,8 @@ private fun EmulationSidebarMenu(
         onNext = { selectRelativeMenuTab(1) }
     )
 
-    val menuContent: @Composable ColumnScope.() -> Unit = {
+    // The game header card leads every tab; the lazy Drivers tab reuses it as its first item.
+    val menuHeader: @Composable () -> Unit = {
                 val menuTitle = gameHeader.title.ifBlank { stringResource(R.string.emulation_sidebar_title) }
                 Surface(
                     shape = neonShape(22.dp),
@@ -3167,6 +3172,9 @@ private fun EmulationSidebarMenu(
                         }
                     }
                 }
+    }
+    val menuContent: @Composable ColumnScope.() -> Unit = {
+                menuHeader()
 
                 var coreOptionsVersion by remember { mutableIntStateOf(0) }
                 val onCoreOptionChange: (String, String) -> Unit = { key, value ->
@@ -4034,34 +4042,8 @@ private fun EmulationSidebarMenu(
                             }
                     }
 
-                    EmulationMenuTab.Drivers -> {
-                        gameMenuSectionsForTab(GameMenuTabId.DRIVERS, uiState.gameMenuSectionOrder)
-                            .filterNot(uiState.hiddenGameMenuSections::contains)
-                            .forEach { section ->
-                                when (section) {
-                                    GameMenuSectionId.DRIVERS_LIBRARY -> {
-                                        SidebarSectionTitle(
-                                            text = stringResource(R.string.settings_gpu_driver_manager_title).uppercase(),
-                                            color = sectionTitleColor,
-                                            topPadding = sectionLabelTopPadding,
-                                            horizontalInset = sectionLabelInset
-                                        )
-
-                                        EmulationDriversSection(
-                                            state = driverBrowserState,
-                                            onScopeChange = onSetDriverScope,
-                                            onSelect = onSelectDriver,
-                                            onUseGlobal = onUseGlobalDriver,
-                                            onDownload = onDownloadDriver,
-                                            onImportClick = importDriverClick,
-                                            onRefreshCatalog = onRefreshDriverCatalog
-                                        )
-                                    }
-
-                                    else -> Unit
-                                }
-                            }
-                    }
+                    // Rendered as a lazy list by GameMenuLayoutHost (driversLazyContent).
+                    EmulationMenuTab.Drivers -> Unit
 
                     EmulationMenuTab.Graphics -> {
                         gameMenuSectionsForTab(GameMenuTabId.GRAPHICS, uiState.gameMenuSectionOrder)
@@ -4153,6 +4135,40 @@ private fun EmulationSidebarMenu(
                 }
     }
 
+    // The catalog can hold hundreds of drivers: composing them all in the scrolling Column made
+    // the menu hitch every time the tab opened. Like EmuCoreX, the tab is a lazy list instead.
+    val driversListState = rememberLazyListState()
+    val driversLazyContent: LazyListScope.() -> Unit = {
+        item(key = "menu:header", contentType = "menu-header") { menuHeader() }
+        gameMenuSectionsForTab(GameMenuTabId.DRIVERS, uiState.gameMenuSectionOrder)
+            .filterNot(uiState.hiddenGameMenuSections::contains)
+            .forEach { section ->
+                when (section) {
+                    GameMenuSectionId.DRIVERS_LIBRARY -> {
+                        item(key = "drivers:title", contentType = "drivers-title") {
+                            SidebarSectionTitle(
+                                text = stringResource(R.string.settings_gpu_driver_manager_title).uppercase(),
+                                color = sectionTitleColor,
+                                topPadding = sectionLabelTopPadding,
+                                horizontalInset = sectionLabelInset
+                            )
+                        }
+                        emulationDriversItems(
+                            state = driverBrowserState,
+                            onScopeChange = onSetDriverScope,
+                            onSelect = onSelectDriver,
+                            onUseGlobal = onUseGlobalDriver,
+                            onDownload = onDownloadDriver,
+                            onImportClick = importDriverClick,
+                            onRefreshCatalog = onRefreshDriverCatalog
+                        )
+                    }
+
+                    else -> Unit
+                }
+            }
+    }
+
     GameMenuLayoutHost(
         style = uiState.gameMenuLayoutStyle,
         modifier = modifier,
@@ -4165,6 +4181,8 @@ private fun EmulationSidebarMenu(
         sectionSpacing = sectionSpacing,
         onSelectTab = { selectedMenuTabName = it.name },
         onClose = onClose,
+        lazyContent = if (selectedMenuTab == EmulationMenuTab.Drivers) driversLazyContent else null,
+        lazyListState = driversListState,
         content = menuContent
     )
 }
@@ -4182,6 +4200,8 @@ private fun GameMenuLayoutHost(
     sectionSpacing: Dp,
     onSelectTab: (EmulationMenuTab) -> Unit,
     onClose: () -> Unit,
+    lazyContent: (LazyListScope.() -> Unit)? = null,
+    lazyListState: LazyListState? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val safeModifier = modifier
@@ -4203,6 +4223,8 @@ private fun GameMenuLayoutHost(
                     scrollState = selectedTabScrollState,
                     bottomPadding = contentBottomPadding,
                     sectionSpacing = sectionSpacing,
+                    lazyContent = lazyContent,
+                    lazyListState = lazyListState,
                     content = content
                 )
                 Spacer(modifier = Modifier.width(12.dp))
@@ -4255,6 +4277,8 @@ private fun GameMenuLayoutHost(
                             scrollState = selectedTabScrollState,
                             bottomPadding = 18.dp,
                             sectionSpacing = sectionSpacing,
+                            lazyContent = lazyContent,
+                            lazyListState = lazyListState,
                             content = content
                         )
                     }
@@ -4295,6 +4319,8 @@ private fun GameMenuLayoutHost(
                             scrollState = selectedTabScrollState,
                             bottomPadding = 18.dp,
                             sectionSpacing = sectionSpacing,
+                            lazyContent = lazyContent,
+                            lazyListState = lazyListState,
                             content = content
                         )
                     }
@@ -4337,6 +4363,8 @@ private fun GameMenuLayoutHost(
                             sectionSpacing = 10.dp,
                             horizontalPadding = 12.dp,
                             verticalPadding = 12.dp,
+                            lazyContent = lazyContent,
+                            lazyListState = lazyListState,
                             content = content
                         )
                     }
@@ -4353,6 +4381,8 @@ private fun GameMenuContentSurface(
     scrollState: ScrollState,
     bottomPadding: Dp,
     sectionSpacing: Dp,
+    lazyContent: (LazyListScope.() -> Unit)? = null,
+    lazyListState: LazyListState? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
     Surface(
@@ -4365,6 +4395,8 @@ private fun GameMenuContentSurface(
             scrollState = scrollState,
             bottomPadding = bottomPadding,
             sectionSpacing = sectionSpacing,
+            lazyContent = lazyContent,
+            lazyListState = lazyListState,
             content = content
         )
     }
@@ -4378,8 +4410,25 @@ private fun GameMenuContentColumn(
     sectionSpacing: Dp,
     horizontalPadding: Dp = 18.dp,
     verticalPadding: Dp = 18.dp,
+    lazyContent: (LazyListScope.() -> Unit)? = null,
+    lazyListState: LazyListState? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    if (lazyContent != null && lazyListState != null) {
+        LazyColumn(
+            modifier = modifier.fillMaxSize(),
+            state = lazyListState,
+            contentPadding = PaddingValues(
+                start = horizontalPadding,
+                end = horizontalPadding,
+                top = verticalPadding,
+                bottom = verticalPadding + bottomPadding
+            ),
+            verticalArrangement = Arrangement.spacedBy(sectionSpacing),
+            content = lazyContent
+        )
+        return
+    }
     Column(
         modifier = modifier
             .fillMaxSize()

@@ -34,6 +34,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CloudDownload
@@ -52,7 +54,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -78,17 +79,18 @@ import com.sbro.emucorea.ui.theme.neon.neonShape
 /**
  * In-game Drivers tab. Picking a driver persists it first (per game or app-wide, depending on
  * the selected scope) and then reloads the Vulkan device on a background coroutine.
+ *
+ * Every card is its own lazy item with a stable key, so applying a driver (which rewrites the
+ * state) never rebuilds the list and the scroll position is kept.
  */
-@Composable
-internal fun EmulationDriversSection(
+internal fun LazyListScope.emulationDriversItems(
     state: GpuDriverBrowserState,
     onScopeChange: (GpuDriverScope) -> Unit,
     onSelect: (String?) -> Unit,
     onUseGlobal: () -> Unit,
     onDownload: (RemoteGpuDriver) -> Unit,
     onImportClick: () -> Unit,
-    onRefreshCatalog: () -> Unit,
-    modifier: Modifier = Modifier
+    onRefreshCatalog: () -> Unit
 ) {
     val scopeSelectedPath = if (state.activeScope == GpuDriverScope.Game) state.gamePath else state.globalPath
     val hasSelection = state.activeScope == GpuDriverScope.Global || state.gameOverride
@@ -96,18 +98,21 @@ internal fun EmulationDriversSection(
     val effective = state.effectivePath
     val effectiveFailed = effective != null && effective in state.failedPaths
 
-    Column(
-        modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    item(key = "drivers:active", contentType = "drivers-card") {
         DriverActiveCard(state = state, onScopeChange = onScopeChange)
+    }
 
-        if (state.canUseGameScope && state.activeScope == GpuDriverScope.Game) {
+    if (state.canUseGameScope && state.activeScope == GpuDriverScope.Game) {
+        item(key = "drivers:global-link", contentType = "drivers-card") {
             DriverGlobalLinkCard(state = state, onUseGlobal = onUseGlobal)
         }
+    }
 
+    item(key = "drivers:installed-header", contentType = "drivers-header") {
         DriverSectionHeader(text = stringResource(R.string.settings_gpu_driver_installed))
+    }
 
+    item(key = "drivers:system", contentType = "drivers-card") {
         DriverInstalledCard(
             title = stringResource(R.string.emulation_drivers_system_driver),
             subtitle = deviceVendorName(),
@@ -118,26 +123,28 @@ internal fun EmulationDriversSection(
             enabled = !state.busy,
             onClick = { onSelect(null) }
         )
+    }
 
-        state.installed.forEach { driver ->
-            key("drivers:installed:${driver.name}") {
-                val identity = state.identityOf(driver)
-                val failed = driver.mainLibraryPath in state.failedPaths
-                DriverInstalledCard(
-                    title = identity.title,
-                    subtitle = driverSubtitle(driver.vendor, friendlyGpuDriverIdentity(driver.name).version),
-                    selected = isSelected(driver.mainLibraryPath),
-                    active = effective == driver.mainLibraryPath && !failed,
-                    failed = failed,
-                    applying = state.applyingTarget?.path == driver.mainLibraryPath,
-                    enabled = !state.busy,
-                    onClick = { onSelect(driver.mainLibraryPath) }
-                )
-            }
-        }
+    items(state.installed, key = { "drivers:installed:${it.name}" }, contentType = { "drivers-card" }) { driver ->
+        val identity = state.identityOf(driver)
+        val failed = driver.mainLibraryPath in state.failedPaths
+        DriverInstalledCard(
+            title = identity.title,
+            subtitle = driverSubtitle(driver.vendor, friendlyGpuDriverIdentity(driver.name).version),
+            selected = isSelected(driver.mainLibraryPath),
+            active = effective == driver.mainLibraryPath && !failed,
+            failed = failed,
+            applying = state.applyingTarget?.path == driver.mainLibraryPath,
+            enabled = !state.busy,
+            onClick = { onSelect(driver.mainLibraryPath) }
+        )
+    }
 
+    item(key = "drivers:import", contentType = "drivers-card") {
         DriverImportCard(importing = state.importing, onImportClick = onImportClick)
+    }
 
+    item(key = "drivers:catalog-header", contentType = "drivers-header") {
         DriverSectionHeader(
             text = stringResource(R.string.settings_gpu_driver_catalog),
             action = {
@@ -148,9 +155,11 @@ internal fun EmulationDriversSection(
                 }
             }
         )
+    }
 
-        when {
-            state.catalogLoading && state.catalog.isEmpty() -> DriverCardSurface {
+    when {
+        state.catalogLoading && state.catalog.isEmpty() -> item(key = "drivers:catalog-state", contentType = "drivers-card") {
+            DriverCardSurface {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -167,39 +176,41 @@ internal fun EmulationDriversSection(
                     )
                 }
             }
-            state.catalogFailed && state.catalog.isEmpty() -> DriverCardSurface {
+        }
+        state.catalogFailed && state.catalog.isEmpty() -> item(key = "drivers:catalog-state", contentType = "drivers-card") {
+            DriverCardSurface {
                 Text(
                     text = stringResource(R.string.settings_gpu_driver_catalog_failed),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.error
                 )
             }
-            state.catalog.isEmpty() -> DriverCardSurface {
+        }
+        state.catalog.isEmpty() -> item(key = "drivers:catalog-state", contentType = "drivers-card") {
+            DriverCardSurface {
                 Text(
                     text = stringResource(R.string.settings_gpu_driver_catalog_empty),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            else -> state.catalog.forEach { driver ->
-                key("drivers:catalog:${driver.id}") {
-                    val installed = state.installed.firstOrNull { it.name == driver.installedDriverName() }
-                    val top = state.catalog.firstOrNull()?.id == driver.id &&
-                        (driver.recommended || state.catalog.size > 1)
-                    DriverCatalogCard(
-                        driver = driver,
-                        installed = installed,
-                        recommended = top,
-                        progress = state.downloads[driver.id],
-                        selected = installed != null && isSelected(installed.mainLibraryPath),
-                        failed = installed != null && installed.mainLibraryPath in state.failedPaths,
-                        applyingThis = installed != null && state.applyingTarget?.path == installed.mainLibraryPath,
-                        selectEnabled = !state.busy,
-                        onSelect = { installed?.let { onSelect(it.mainLibraryPath) } },
-                        onDownload = { onDownload(driver) }
-                    )
-                }
-            }
+        }
+        else -> items(state.catalog, key = { "drivers:catalog:${it.id}" }, contentType = { "drivers-card" }) { driver ->
+            val installed = state.installed.firstOrNull { it.name == driver.installedDriverName() }
+            val top = state.catalog.firstOrNull()?.id == driver.id &&
+                (driver.recommended || state.catalog.size > 1)
+            DriverCatalogCard(
+                driver = driver,
+                installed = installed,
+                recommended = top,
+                progress = state.downloads[driver.id],
+                selected = installed != null && isSelected(installed.mainLibraryPath),
+                failed = installed != null && installed.mainLibraryPath in state.failedPaths,
+                applyingThis = installed != null && state.applyingTarget?.path == installed.mainLibraryPath,
+                selectEnabled = !state.busy,
+                onSelect = { installed?.let { onSelect(it.mainLibraryPath) } },
+                onDownload = { onDownload(driver) }
+            )
         }
     }
 }
@@ -215,7 +226,7 @@ internal fun rememberDriverImportLauncher(onImport: (Uri) -> Unit): () -> Unit {
     }
 }
 
-/** Shows the latest apply/install result as a toast. Lives outside the tab content so it never leaves composition. */
+/** Shows the latest apply/install result as a toast. Lives outside the lazy list so it never leaves composition. */
 @Composable
 internal fun DriverMessageEffect(state: GpuDriverBrowserState, onMessageShown: () -> Unit) {
     val context = LocalContext.current
