@@ -1412,13 +1412,19 @@ class AppPreferences(private val context: Context) {
         .distinctUntilChanged()
 
     /** Records one more X dismissal of the card and hides it for the interval chosen by [intervalMsFor]. */
-    suspend fun dismissProPromo(id: String, nowMs: Long, intervalMsFor: (Int) -> Long) {
+    suspend fun dismissProPromo(id: String, nowMs: Long, intervalMsFor: (Int) -> Long): Int {
+        var newStreak = 0
         context.dataStore.edit { prefs ->
             val streak = (prefs[proPromoDismissStreakKey(id)] ?: 0) + 1
             prefs[proPromoDismissStreakKey(id)] = streak
             prefs[proPromoHiddenUntilKey(id)] = nowMs + intervalMsFor(streak)
+            newStreak = streak
         }
+        return newStreak
     }
+
+    suspend fun proPromoDismissStreak(id: String): Int =
+        context.dataStore.data.first()[proPromoDismissStreakKey(id)] ?: 0
 
     suspend fun resetProPromoDismissStreak(id: String) {
         context.dataStore.edit { prefs -> prefs[proPromoDismissStreakKey(id)] = 0 }

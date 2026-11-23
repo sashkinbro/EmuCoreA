@@ -12,6 +12,8 @@ import com.sbro.emucorea.EmuCoreAApp
 import com.sbro.emucorea.discord.DiscordIntegration
 import com.sbro.emucorea.core.AndroidGamePerformance
 import com.sbro.emucorea.core.AndroidGamePhase
+import com.sbro.emucorea.core.AnalyticsDimensions
+import com.sbro.emucorea.core.AppAnalytics
 import com.sbro.emucorea.core.AudioDefaults
 import com.sbro.emucorea.core.DocumentPathResolver
 import com.sbro.emucorea.core.EmulatorBridge
@@ -397,6 +399,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
     private var lastAutoSavePlayTimeMs: Long = 0L
     private var pendingPlayTimeSyncMs: Long = 0L
     private var playTimeSyncJob: Job? = null
+    private var currentAnalyticsAudioBackend: Int = AudioDefaults.BACKEND_DEFAULT
     private var savePreviewJob: Job? = null
     private var lastCloudPlayTimeSyncAtMs: Long = 0L
     private var shouldCountCurrentProfileSession = false
@@ -909,6 +912,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
         val success = scheduled && waitForSaveStateUpdate(path, AUTO_SAVE_SLOT, previousModified)
+        AppAnalytics.logSaveStateAction(action = "save", automatic = true, success = success)
         val after = _uiState.value
         _uiState.value = after.copy(
             isAutoSaveInProgress = false,
@@ -957,6 +961,12 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
         }
         val normalizedSlotToLoad = slotToLoad?.let { normalizeSaveSlot(it) }
         val hasPendingStateLoad = !bootSmokeProbe && normalizedSlotToLoad != null
+        val analyticsLaunchType = AnalyticsDimensions.launchType(
+            bootToBios = false,
+            bootSmokeProbe = bootSmokeProbe,
+            autotestMode = autotestMode
+        )
+        var analyticsPerformanceProfile = PerformanceProfiles.SAFE
         cancelPendingStart = false
         pausedForBackground = false
         if (pendingPlayTimeSyncMs > 0L) {
@@ -1018,6 +1028,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 )
 
                 val config = loadLaunchConfig()
+                analyticsPerformanceProfile = config.performanceProfile
+                currentAnalyticsAudioBackend = config.audioBackend
                 val renderer = rendererOverride ?: config.renderer
                 Log.i(
                     TAG,
@@ -1067,6 +1079,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 }
 
                 if (launchPath.isNullOrBlank()) {
+                    AppAnalytics.logEmulationStartFailed(analyticsLaunchType, "path_unavailable")
                     _uiState.value = _uiState.value.copy(
                         isStarting = false,
                         statusMessage = null,
@@ -1275,6 +1288,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
 
                     delay(500.milliseconds)
                     val loaded = EmulatorBridge.loadState(normalizedSlotToLoad)
+                    AppAnalytics.logSaveStateAction(action = "load", automatic = false, success = loaded)
                     _uiState.value = _uiState.value.copy(
                         isRunning = true,
                         isPaused = false,
@@ -1339,6 +1353,19 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 false
             }
             Log.i(TAG, "EmulatorBridge.startEmulation returned $started path=$pathToLaunch")
+            val analyticsState = _uiState.value
+            if (started) {
+                AppAnalytics.logEmulationStarted(
+                    launchType = analyticsLaunchType,
+                    renderer = analyticsState.renderer,
+                    audioBackend = currentAnalyticsAudioBackend,
+                    upscaleMultiplier = analyticsState.upscale,
+                    performanceProfile = analyticsPerformanceProfile,
+                    saveStateLoad = hasPendingStateLoad
+                )
+            } else {
+                AppAnalytics.logEmulationStartFailed(analyticsLaunchType, "native_start")
+            }
             if (started) {
                 RetroAchievementsRepository.get(getApplication()).onGameStarted(pathToLaunch)
                 syncCheatsForCurrentGame()
@@ -3372,6 +3399,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
             val success = scheduled && path != null && waitForSaveStateUpdate(path, slot, previousModified)
+            AppAnalytics.logSaveStateAction(action = "save", automatic = false, success = success)
             _uiState.value = _uiState.value.copy(
                 isActionInProgress = false,
                 actionLabel = null,
@@ -3401,6 +3429,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     } catch (_: Exception) { false }
                 }
             }
+            AppAnalytics.logSaveStateAction(action = "load", automatic = false, success = success)
             _uiState.value = _uiState.value.copy(
                 isActionInProgress = false,
                 actionLabel = null,
@@ -3426,6 +3455,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                     } catch (_: Exception) { false }
                 }
             }
+            AppAnalytics.logSaveStateAction(action = "load", automatic = true, success = success)
             _uiState.value = _uiState.value.copy(
                 isActionInProgress = false,
                 actionLabel = null,
@@ -3457,6 +3487,7 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
         }
+        AppAnalytics.logSaveStateAction(action = "load", automatic = true, success = success)
         _uiState.value = _uiState.value.copy(
             isActionInProgress = false,
             actionLabel = null,
@@ -3544,6 +3575,8 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
             if (!_uiState.value.isRunning && !_uiState.value.isStarting &&
                 !EmulatorBridge.isVmActive() && EmulatorBridge.runtimeFailure.value == null) return
             if (isShuttingDown) return
+            val analyticsState = _uiState.value
+            val completedRunningSession = analyticsState.isRunning
             isShuttingDown = true
             pausedForBackground = false
             try {
@@ -3583,6 +3616,13 @@ class EmulationViewModel(application: Application) : AndroidViewModel(applicatio
                 if (!EmulatorBridge.isVmActive()) {
                     com.sbro.emucorea.core.ArchiveGameReader.release(pinnedArchiveLaunchPath)
                     pinnedArchiveLaunchPath = null
+                }
+                if (completedRunningSession) {
+                    AppAnalytics.logEmulationEnded(
+                        activePlayTimeMs = analyticsState.activePlayTimeMs,
+                        renderer = analyticsState.renderer,
+                        audioBackend = currentAnalyticsAudioBackend
+                    )
                 }
             } finally {
                 isShuttingDown = false
