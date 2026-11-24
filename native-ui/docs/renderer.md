@@ -1,106 +1,170 @@
 # Native renderer
 
-The first native scene draws the Game-column anchors with the original
-`topmenu_icon` textures and the firmware's own PGF glyphs. It is a foundation,
-not parity: the wave, focus/scroll/cross-fade animations and the per-game
-background are still missing.
+The XMB scene is drawn by `xmb::XmbRenderer` (`android/src/main/cpp/`), a plain
+C++ class with no emulator, SDL or PPSSPP dependency. It draws the firmware's
+own images, wave model and PGF font from the resource tree built on the device
+(see the [README](../README.md#firmware-and-resources)). This page describes
+what it draws and how a frame is produced. The remaining differences from the
+firmware are listed in the README.
 
 ## Path of a frame
 
 ```text
-MainActivity (preview)
-  GLSurfaceView (GLES 3 context)
+XmbScreen (app module, Compose)
+  GLSurfaceView (GLES 3 context, continuous rendering)
     XmbSurfaceRenderer.onSurfaceCreated -> XmbSession.initialize -> XmbResources
                                        -> nativeInit
     onSurfaceChanged -> nativeResize
     onDrawFrame      -> nativeDraw -> xmb::XmbRenderer::Draw
 ```
 
-`XmbRenderer` is plain C++ with no emulator, SDL or PPSSPP dependency. It owns:
+The standalone `preview` app uses the same `XmbSurfaceRenderer`.
 
-- `png_image.cpp`: a small PNG reader for the 8-bit RGBA images the prep tools
-  write (all five filters, zlib via libz). The application never needs to
-  decode a PNG at runtime if the pack later switches to raw textures, but this
-  keeps the current pack directly usable.
-- `pgf_font.cpp`: a reader for the firmware fonts, ported from the inspected
-  PGF layout. It decodes the char map, the compact metric tables, the
-  nibble-RLE glyph bitmaps and the V_ROWS-to-row-major transposition. Glyph
-  textures are created lazily, one per codepoint. Text shadows are a one-pixel
-  offset copy of the main glyph; the PGF shadow sub-glyph records are not used
-  because their layout is still unresolved and reading them as main glyphs
-  produced the black stripes seen in testing.
-- `xmb_renderer.cpp`: GLES 3 shader, one dynamic quad buffer, a texture cache,
-  and the measured category/item anchors from `scene/categories.json`.
-- The wave is the firmware's own `mdl_bg.gmo` (22x11 control grid, two morph
-  targets, a 128x128 reflection map, a 1500-frame track at 30 fps), parsed by
-  the vendored Vlnky reader and tessellated every frame. It is drawn with the
-  PSP's sphere-map/additive blend. The background ramp behind it is measured
-  from the reference frames; its placement and intensity are still being
-  matched and are not yet a pixel-exact wave.
-- The clock uses the firmware PGF font and the battery the original
-  `system_plugin_fg/tex_battery` sheet (top frame). Selected item icons get a
-  low-alpha multi-sample halo.
-- The viewport keeps the 480x272 aspect ratio and letterboxes on wider
-  surfaces. Coordinates in the scene are always PSP pixels.
+`XmbRenderer` owns:
 
-The scene currently draws:
+- `png_image.cpp`: a small PNG reader for the 8-bit RGBA images the extractor
+  writes.
+- `pgf_font.cpp`: a reader for the firmware's `ltn0.pgf`: char map, compact
+  metric tables, nibble-RLE glyph bitmaps and the V_ROWS-to-row-major
+  transposition. Glyph textures are created lazily, one per codepoint.
+  Codepoints the font lacks are rasterised by `XmbFontFallback` with the Android
+  system font and cached the same way.
+- `xmb_renderer.cpp`: the GLES 3 shader, one dynamic quad buffer, a texture
+  cache, the wave pass and all scene drawing.
 
-- the category row at y = 71, with the measured x anchors for
-  Video/Game/Network/PSN and extrapolated anchors for the four left slots;
-- the selected category at scale 1.0 and opacity 1.0, the others at 0.8/0.55;
-- real item columns for all eight categories (Settings with Video/Photo/System
-  Settings, Extras Digital Comics, Photo Camera, Music SensMe, Video and Game
-  Memory Stick, Network Internet Browser/Search, PSN Sign Up/Store), with the
-  previous item shown dim at the top-left and the selected item's firmware
-  focus glow;
-- the Game column's Saved Data Utility and Memory Stick, plus the PGF titles,
-  clock and battery;
-- a measured theme ramp and the live wave behind them.
+`Draw()` renders into a virtual screen 272 units high. The width is 480 for the
+original aspect, 362.67 for 4:3, or follows the device aspect ratio (clamped to
+360..680) in the default Full Screen mode, so units stay square. The viewport is
+centred and letterboxed when the surface has another shape. Coordinates in the
+scene are always these virtual pixels.
 
-The icons and glyphs are the exact decoded resources; the layout constants are
-the ones measured against the real shell and recorded in
-[docs/reference.md](reference.md). `scene/categories.json` is the source for
-those values.
+The order within a frame is: background, wave, the active page (category row
+and item columns, game list, Saved Data, a Settings sub-page, or an empty media
+page), status bar, touch hint bar, opening and resume transitions, toast,
+dialogs, touch tutorial, then the gameboot sequence while a launch is running.
 
-## Interaction
+## Scene
 
-Physical D-pad / A / B and touch swipes are forwarded from the preview activity
-to `nativeKey`. The scene keeps a category index and an item index; Up/Down
-scroll the list, Left/Right move the category row, Confirm/Back are wired to
-the decide/cancel sounds.
+Categories and items
 
-The two animations use the curve measured from sixty 60 Hz reference frames: a
-one-pole ease-out with a 45 ms time constant for the category row and 60 ms for
-the item scroll. The old selected icon shrinks/fades while the new one grows;
-titles cross-fade with the same progress. Rows above the selected item are
-hidden after the scroll settles, matching the reference's clean selection view.
+- The category row sits at y = 71. The selected category is drawn at scale 1.0
+  and the others smaller and dimmer. The row slides so the selected icon stays
+  at its anchor.
+- Eight categories: Settings, Extras, Photo, Music, Video, Game, Network and
+  Online. Their items (`RebuildCategories`) carry the firmware's icons and
+  labels. An item whose icon is missing from the installed firmware is removed
+  from its column, except in the Game column.
+- Category slides and item scrolling use a one-pole ease-out with a 45 ms and a
+  60 ms time constant. The previous column fades out over 0.18 s while the new
+  one fades in. The selected item gets the firmware's focus glow texture
+  (`tex_3x3_focus`).
+- Items without an EmuCoreA counterpart open a notice dialog (System Update,
+  USB Connection, Game Sharing, Remote Play, Online Store and similar) or an
+  empty media page (Photo, Music, Video, Digital Comics). Internet Browser and
+  Internet Search ask for confirmation and then open the device browser.
 
-Sounds come from the installed pack through Kotlin `SoundPool`; the native
-scene calls `PlaySound` on the same events (cursor on list moves, category
-decide on row moves, decide/cancel on Confirm/Back). Verified on the Anbernic
-RG556: the preview plays `snd_cursor` and `snd_category_decide` for the D-pad
-sequence and does not crash.
+Game column
 
-## Deliberately not here yet
+- Memory Card opens the game list. The selected game shows its PIC1 as a
+  fullscreen background that fades in once scrolling settles, its PIC0 banner
+  (or the title when there is no banner), and a vertical list of ICON0 images
+  with the focus glow on the selected one. A loading indicator is shown while
+  the library loads, and "There are no games" when it is empty.
+- The host reads ICON0, PIC0, PIC1 and SND0 from each game and passes the paths
+  in `GameInfo`. Moving the selection calls `XmbHost.onGameFocused`, which
+  starts that game's SND0 preview in `XmbAudio`.
+- Saved Data Utility lists the app's save states with preview image, title,
+  slot, date and size.
+- On both lists the Options key (Triangle, Y, Menu, or a long press) opens a
+  panel with Start, Delete and Information. On the save list, Confirm opens it.
+  Delete asks for confirmation. Information shows title, size, version,
+  required version, disc ID, region and date for a game.
 
-- Exact wave placement/colour and the real theme ramp (the current geometry is
-  the original mesh but the camera offset and additive strength are
-  approximations).
-- Real focus glow/shadow filtering (the current halo is a cheap multi-sample
-  approximation), reflections and icon cross-fades.
-- Game backgrounds and preview playback when a game is selected.
-- The exact USB Connection glyph (the reference uses a USB trident; the
-  extracted `CA` cable/wrench icon is the closest current match and is still
-  provisional).
-- The transient Memory Stick access indicator that appears at the top-left in
-  the first boot frames (it is already sliding away 0.7 s later).
-- Exact per-element font sizes for every text style and the real shadow
-  rendering (the glyphs are exact, the scale/baseline of each style is still
-  being matched).
+Settings column
 
-Those are parity work, and none of them is represented by an approximation in
-the scene. The provisional wave/background values are visibly different from
-the reference and are listed here instead of being called done.
+- Sub-pages for Theme, Sound, Date & Time, System, Video, Photo, Power Save,
+  Security, Network, RSS, Connected Display and Bluetooth. Each row opens a
+  picker in a right-hand panel. Theme changes update the background and wave
+  immediately. Changes reach the host as an int array
+  (`XmbHost.onSettingsChanged`), which stores them in preferences and applies
+  the audio, keep-screen-on and confirm-button ones.
+- System offers System Information (it names EmuCoreA, not a Sony model or
+  firmware release) and Restore Default Settings with a confirmation.
+
+Dialogs
+
+- Quit, delete, restore-defaults and browser confirmations share one Yes/No
+  dialog. Notice, system information and game information dialogs close with
+  Back or Confirm. A toast shows short messages.
+
+## Themes and wave
+
+- The background is a gradient image from the installed firmware
+  (`images/themes/`: `orig_NN`, `classic_NN`, `ext_NN`, plus the Cookie
+  images). The Original theme picks the monthly colour from the date.
+- At start-up `LoadThemeSwatches` reads the centre pixel of each of the 12
+  monthly (`orig_00` to `orig_11`) and 22 extended (`ext_00` to `ext_21`)
+  swatch images and uses it as that colour. A colour whose swatch is missing,
+  and November, keep built-in values. The centre pixel of the chosen theme
+  image also gives the wave tint. If a theme image cannot be loaded, a gradient
+  built from measured row medians is tinted with the swatch instead.
+- The wave is the firmware's `mdl_bg.gmo` (22x11 control grid, two morph
+  targets, a 128x128 reflection map, a track at 30 fps), parsed by the
+  vendored Vlnky reader and tessellated each frame. It is drawn with additive
+  blending. The wave setting selects normal speed, slow, static or off. The
+  gameboot sequence draws it too.
+
+## Opening, resume and gameboot
+
+- Entering the mode from the app plays the opening transition: a fade from
+  black and light sweeps built from the `opening_plugin` glow textures, with
+  the EmuCoreA name shimmering where the firmware shows its company emblem.
+  Touch input or a key skips ahead.
+- Returning from a game plays a shorter fade from black with the firmware's
+  busy spinner.
+- Launching a game plays the gameboot sequence: a light backdrop (a firmware
+  theme gradient), the wave, glow beams, and the name EMUCOREA in tracked
+  capitals with a light sweep, then a fade to black. The gameboot sound is
+  extracted from `gameboot.pmf` as `snd_gameboot.at3` and decoded by
+  `at3_decoder.cpp`. After 2.1 s the renderer calls `XmbHost.onGameSelected`
+  and the host starts emulation. No Sony logo or name is drawn.
+
+## Status bar
+
+Top right: battery (firmware sheet, with a charging animation and a blink when
+low), Wi-Fi, Bluetooth, AVLS and mute indicators, and the clock in the selected
+date and 12/24-hour format. A memory card indicator slides in at the top left
+during the opening and while the game or save lists load. On screens wider than
+490 units, or in touch mode, the bar is inset from the corners. The host pushes
+battery, network, Bluetooth and mute state through the `nativeSet*` calls.
+
+## Input
+
+`XmbHost.handleKeyEvent` maps the D-pad, Enter, A/B (swappable with the Confirm
+Button setting) and Y/Menu/Space to `nativeKey` (Up, Down, Left, Right,
+Confirm, Back, Options). `XmbRenderer::KeyPressed` is the single entry point for
+key input.
+
+Touch is handled in `XmbScreen` and forwarded as `nativeTouchTap(x, y)` and
+`nativeTouchSwipe(direction)`:
+
+- a swipe moves like the D-pad, so the content follows the finger. Inside
+  dialogs and the options panel it moves the highlight or closes the panel;
+- a tap on Yes/No, on a picker row, on the back arrow or on the hint bar acts
+  on that control, and any other tap confirms;
+- a long press (420 ms) opens the options panel, and a second finger acts as
+  Back;
+- a first-use tutorial dialog explains the gestures. Online Instruction Manuals
+  shows it again.
+
+## Audio
+
+`XmbAudio` loads the navigation sounds (`snd_cursor`, `snd_decide`,
+`snd_cancel`, `snd_category_decide`, `snd_option`, `snd_gameboot` and others)
+into a `SoundPool` and plays them on the renderer's `PlaySound` events. Game
+SND0 previews are decoded to WAV by the host and streamed in a gapless
+`AudioTrack` loop. Key tone and background music can be switched off, and AVLS
+lowers the volume.
 
 ## Running the preview
 
@@ -109,7 +173,7 @@ gradlew :native-ui:preview:installDebug
 adb shell am start -n com.sbro.emucorea.xmb.preview/.MainActivity
 ```
 
-The preview installs the pack on first launch, logs
-`scene initialized with N textures` and `nativeInit ok`, and shows the current
-scene fullscreen. Frames are compared against `native-ui/reference` captured by
+The preview has no updater unpacker. Push an unpacked flash0 first (see the
+README); it installs the resources from there on start, logs
+`scene initialized with N textures`, and shows the scene fullscreen. Frames are compared against `native-ui/reference`, captured by
 `tools/reference_capture.py`.

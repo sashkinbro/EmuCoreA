@@ -88,14 +88,25 @@ with a 1000/64-pixel advance, "Game" as 58.25 px and "Saved Data Utility" as
 
 ## Checking the on-device extractor
 
-`native-ui/resources/` (written by `extract_psp_resources.py`) is the oracle. The
-C++ extractor must produce the same file list and manifest. Non-image files
-must be byte-identical, and PNGs must decode to the same pixels. There is no
-pack step any more: the APK carries no resources.
+`native-ui/resources/` (written by `extract_psp_resources.py`) is the oracle.
+The C++ extractor must produce the same file list and manifest. Non-image files
+must be byte-identical, and PNGs must decode to the same pixels.
 
-## Reference frames from the real XMB
+- `tests/xmb_extract_cli.cpp` is a small command-line wrapper around
+  `xmb::ExtractResources` (`android/src/main/cpp/xmb_extract.cpp`). Built on a
+  desktop against the extractor sources, it runs the same code the app runs:
+  `xmb_extract_cli FLASH0_DIR OUT_DIR`. It prints the result and the time taken.
+- `tests/compare_extract.py REFERENCE_DIR CANDIDATE_DIR` compares two output
+  trees: the same manifest entries, identical bytes for non-PNG files,
+  identical decoded RGBA for PNGs. Manifest paths and text files are normalised
+  so a tree produced on Windows compares equal to one produced on Android.
 
-`reference_capture.py` boots the real 6.60 VSH in PPSSPPHeadless, stops on
+Run the Python extractor and the C++ one on the same flash0, then compare the
+two output directories.
+
+## Reference frames from the 6.60 XMB
+
+`reference_capture.py` boots the 6.60 VSH in PPSSPPHeadless, stops on
 absolute emulated timestamps through the WebSocket debugger, drives the D-pad
 and saves 480x272 screenshots:
 

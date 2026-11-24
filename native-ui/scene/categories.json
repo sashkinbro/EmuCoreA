@@ -1,5 +1,5 @@
 {
-  "comment": "Measured from the 6.60 XMB; asset labels refer to topmenu_icon.rco images in the resource pack. Coordinates are PSP pixels on a 480x272 screen.",
+  "comment": "Measured from the 6.60 XMB; asset labels refer to topmenu_icon.rco images in the resource tree built from the user firmware. Coordinates are PSP pixels on a 480x272 screen.",
   "screen": { "width": 480, "height": 272 },
   "category_row": {
     "selected_icon_center": { "x": 109.5, "y": 71 },

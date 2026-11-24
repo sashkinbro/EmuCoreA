@@ -7,10 +7,10 @@ gameboot sequences, the animated wave and the status bar.
 
 Layout and timing are measured against the 6.60/6.61 System Software, and the
 images, sounds and fonts come from the user's own copy of it at runtime. The
-view renders at 60 FPS with no emulation core, no PPSSPP UI and no guest CPU at
-runtime. EmuCoreA is not affiliated with Sony. It does not present itself as a
-Sony system: no model number, system-software release or company emblem is
-shown.
+view is drawn by its own OpenGL ES renderer, with no emulation core, no PPSSPP
+UI and no guest CPU involved. EmuCoreA is not affiliated with Sony. It does not
+present itself as a Sony system: no model number, system-software release or
+company emblem is shown.
 
 The host application supplies the installed-game list and owns launching a
 game. This module owns drawing, input, audio playback and the resource tree.
@@ -77,8 +77,8 @@ renderer. It does not depend on `:app` or `:core-native`.
   until `XmbResources.isInstalled()`. `XmbFirmwareInstaller` holds the library
   scan and the unpack-then-extract sequence.
 
-`native-ui/preview` is a dependency-free launch host used while the scene is
-built. It has no updater unpacker. To give it resources, push an unpacked
+`native-ui/preview` is a dependency-free launch host for developing the scene.
+It has no updater unpacker. To give it resources, push an unpacked
 flash0 to its external files directory
 (`adb push flash0 /sdcard/Android/data/<package>/files/flash0`). It installs
 from there on start.
@@ -90,7 +90,7 @@ native-ui/
   android/    Kotlin host, JNI bridge, C++ renderer and on-device extractor
   tools/      offline reference tools: updater/RCO/GIM/VAG/PGF readers in Python
   tests/      golden-data and parser tests (use the local dump when present)
-  scene/      measured category layout
+  scene/      measured category anchors (reference data, not read at runtime)
   docs/       integration, renderer and reference measurements
   preview/    standalone preview app used while developing the scene
   resources/  Python reference output, ignored
@@ -101,35 +101,80 @@ The Python tools in `tools/` are the reference implementation of the format
 handling, and the oracle the C++ extractor is checked against. They are
 development tools only and do not run on the device.
 
-## Status
+## Features
 
-- [x] PSAR unpack (core) and RLZ/RCO/GIM/VAG/PGF readers
-- [x] On-device resource build from the user's own firmware; nothing ships in
-      the APK
-- [x] Reference oracle: the real 6.60 XMB captured through the debugger
-      ([measurements](docs/reference.md))
-- [x] Native GLES scene with the measured anchors, original textures and PGF
-      text ([renderer](docs/renderer.md))
-- [x] Live navigation (D-pad, keys, touch gestures) with measured easing and
-      original sounds
-- [x] Wave mesh, background ramp, the 12 original colours and 6.60 themes,
-      clock, battery and Wi-Fi/Bluetooth/AVLS/mute status icons
-- [x] All eight categories with real item columns, cross-fades and the focus
-      glow
-- [x] Game column from the app library: ICON0/PIC1/SND0, saves, delete,
-      launch through the app's emulation handoff
-- [x] Opening (`opening_plugin`) and gameboot (`gameboot.pmf`) sequences
-- [x] In-XMB Settings column with the app's real options and inert PSP entries
-- [x] App integration as the home library mode, landscape lock, touch
-      tutorial ([integration](docs/integration.md))
-- [x] Every XMB string in the app's 18 locales
-- [ ] Restore of the selected category/item after a cold start
-- [ ] Wave placement/glow and theme colours pixel-exact against the firmware
-- [ ] Frame-for-frame comparison against the firmware XMB
-- [ ] Extraction verified on firmware other than 6.60/6.61
+Navigation and input
 
-Nothing is claimed equivalent until it has been compared against the original,
-and every remaining difference is written down.
+- All eight categories (Settings, Extras, Photo, Music, Video, Game, Network,
+  Online) with item columns, animated category and item scrolling, the focus
+  glow, and the firmware's navigation sounds.
+- D-pad, gamepad buttons (confirm/back swappable) and touch: tap, swipe, long
+  press for the options menu, a two-finger tap for Back, and a first-use touch
+  tutorial. Back opens a quit confirmation. Touch can be turned off in Settings.
+- The mode is the home screen's library view, locks to landscape, and keeps the
+  selected category and item across app restarts.
+
+Game column
+
+- Memory Card lists the games from the app library with their ICON0, PIC1
+  background and PIC0 banner. The game's SND0 music plays while it is focused.
+- Confirm, or Start in the options menu, plays the gameboot sequence and then
+  launches the game through the app's normal emulation path. Closing the game
+  returns to the XMB.
+- The options menu offers Start, Delete and Information (title, size, version,
+  required version, disc ID, region, date).
+- Saved Data Utility lists the app's save states with the same options menu.
+
+Settings column
+
+- Theme (style, colour, background, wave), Sound (key tone, background music,
+  AVLS), Date & Time, System (system information, restore defaults), Video and
+  Connected Display (aspect mode, touch controls), Power Save (keep screen on)
+  and the other firmware entries. Changes apply immediately and persist.
+- Entries with no counterpart in EmuCoreA (slideshow, parental control level,
+  ad hoc channel, RSS auto update, sequential play, WLAN power save) store the
+  chosen value or only change what is displayed. System Update, Game Sharing,
+  Remote Play and the online services open a short notice dialog.
+- Internet Browser and Internet Search ask for confirmation and open the device
+  browser.
+
+Look and sound
+
+- The animated wave from the firmware model, the background gradient, the 12
+  themes (Original, Classic, Cookie, Piano Black and others) and the monthly
+  and extended colours. Colours are read from the installed firmware's swatches.
+- Opening and gameboot sequences that show the EmuCoreA name.
+- Status bar: clock with date and 12/24-hour formats, battery with charging
+  animation, Wi-Fi, Bluetooth, AVLS and mute indicators, memory card activity
+  while loading.
+- Text in the firmware's PGF fonts, with the Android system font for characters
+  the firmware font lacks. All `xmb_*` strings exist in the app's 18 string
+  sets.
+
+Resources
+
+- Built on the device from the user's own firmware; nothing from it is in the
+  APK. Any 6.xx updater works, and a better one found later replaces the
+  installed resources in the background.
+
+## Known differences from the firmware
+
+- Wave placement, brightness and the glow around the selected icon are tuned by
+  eye against reference captures and are not pixel-exact.
+- The November (Mahogany) theme colour is EmuCoreA's own value. A colour name
+  whose swatch is missing from the firmware uses a built-in approximation.
+- Text scale and baseline are set per text style from measurements. Text
+  shadows are a one-pixel offset copy of the glyph.
+- Characters outside the firmware's Latin font come from the Android system
+  font.
+- The opening sequence is composed from the firmware's glow textures rather
+  than played from `opening_plugin`. The gameboot sequence uses the firmware's
+  gameboot sound and backdrop gradient; its logo is replaced by the EmuCoreA
+  name.
+- The 480x272 frame is widened to the device's aspect ratio when the aspect
+  mode is Full Screen.
+- Reference captures cover 6.60. Other 6.xx firmware is handled by the digest
+  matching described above but has not been compared frame by frame.
 
 ## License
 

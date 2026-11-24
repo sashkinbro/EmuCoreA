@@ -1,8 +1,19 @@
 # Application integration
 
-How the XMB mode is wired into EmuCoreA. The sections below were written as the
-plan and are kept as the rules the integration follows. "Current state" says
-what is actually in place.
+How the XMB mode is wired into EmuCoreA. The native scene lives in
+`:native-ui:android`; the app-side glue is in
+`app/src/main/java/com/sbro/emucorea/ui/xmb/`.
+
+## Overview
+
+- `:app` depends on `:native-ui:android`. The XMB is a library mode of the home
+  screen (`HomeScreen` shelf toggle leads to `XmbScreen`). It can also be
+  opened as `XmbRoute` with the `xmb_mode` intent extra.
+- `XmbScreen` hosts the GL surface in Compose, supplies the `HomeViewModel`
+  library (DLC filtered out), the games' ICON0/PIC0/PIC1/SND0 and the save
+  states, and forwards `XmbHost.onGameSelected(index)` to the normal emulation
+  launch. The `core` module is not involved in browsing the menu.
+- The mode locks the screen to landscape while it is shown.
 
 ## Firmware setup
 
@@ -26,155 +37,105 @@ After a successful install the screen switches to the XMB scene. On later
 starts the mode opens directly. Back on the setup screen leaves the mode, except
 while an install is running.
 
-## Replace the active carousel
+### Which firmware is accepted
 
-The current home screen's shelf/carousel is `HomeShelfMode.kt` behind the
-`HomeLibraryViewMode.SHELF` branch chosen in `HomeScreen.kt`. The new XMB must be
-an additional library mode, defaulting on for existing users only after the
-migration is accepted:
+- Any 6.xx updater works. After extraction, `XmbResources.alignImages` places
+  every image the renderer loads at its expected path by the SHA-256 of its
+  6.60 source payload (`XmbExpectedImages`), because the positional labels of
+  `topmenu_icon.rco` entries shift between versions.
+- A positional image that no extracted file matches belongs to a feature that
+  firmware lacks. Its path is left empty and the renderer hides that entry
+  (`RebuildCategories`), as that firmware's own menu would. The Game column is
+  exempt because its icons are required.
+- If a required image is missing (category icons, Game column icons), or the
+  firmware is older than 6.00, `XmbResources.install` throws
+  `UnsupportedFirmwareException`, the staging directory is discarded and the
+  setup screen reports it. A source whose install failed is skipped by later
+  scans in the same process.
 
-- `HomeLibraryViewMode.XMB` (or a renamed shelf mode) selected by the existing
-  home toggle/action.
-- The mode hosts the `native-ui` GL surface inside a Compose `AndroidView`,
-  fullscreen, with the same system-bar handling as the current shelf.
-- Games come from the existing home/library repository and ViewModel. Each XMB
-  item gets the existing title and cover/icon; no new scanner or database is
-  introduced.
-- The toggle and back stack use the app's existing navigation; no new activity
-  unless the GL surface's lifecycle requires one.
+### Background upgrade
 
-The `core` module is not modified. The menu calls the application's existing
-game-launch path.
+When the installed resources came from a firmware other than 6.60/6.61,
+`XmbScreen` calls `XmbFirmwareInstaller.upgradeIfBetter` once the library has
+loaded:
 
-## Lifecycle
+- It runs once per process, off the main thread, and scans the library
+  quietly. It does nothing if a better updater (a 6.60/6.61 one, or a newer
+  version) is not found.
+- When one is found it is installed with
+  `XmbResources.install(keepPrevious = true)`. The tree the running XMB uses
+  stays on disk and is not touched.
+- The new tree is used the next time the mode opens (`current` points at it).
+  The old one is removed the first time `XmbResources.installed` runs in the next
+  process, together with any tree left by an older build.
+- A failed upgrade is logged and leaves the current resources in place.
 
-1. Opening the app restores the last mode from `AppPreferences`. If the user
-   closed the app while in XMB, XMB is shown again, with the selected item and
-   category restored.
-2. XMB lists every game the application currently exposes to the library; the
-   list updates when the library changes (install/remove/scan) without losing
-   the selection.
-3. Confirm launches the game through the same path as the current home screen.
-   The menu saves its state before launching.
-4. When the emulation screen/process ends (Back/exit, game shutdown, process
-   death), the app returns to XMB, not to the old carousel, preserving the
-   selected item. If the process was killed, the launch intent/state is
-   recovered from preferences and the existing emulation handoff.
-5. Pause/resume of the app pauses the wave/animations but does not reset the
-   selection. Audio focus follows the existing app lifecycle.
-6. Back in XMB behaves like the PSP: item → category → home/leave; app close in
-   XMB is a normal close and the mode is persisted.
+## Library and selection
 
-## Other tabs
-
-Every XMB category gets a real column and real item labels from the firmware
-(system plugin, music, video, photo, network, PSN), with the original icons and
-open/close animations. Items that have no implementation in EmuCoreA are
-present but inert: selecting them shows the PSP-style unavailable/error sound
-and a short "not available in this build" message. They must never look like an
-empty placeholder screen; the shell animations, focus glow, sound and status
-bar are the same as the Game column.
-
-## Touch without a gamepad
-
-The mode must be usable on phones/handhelds with no controller and with no
-on-screen buttons. Gestures are the whole input:
-
-- swipe up/down: previous/next item;
-- swipe left/right: previous/next category;
-- tap: confirm (launch/open the selected item);
-- edge-back gesture / system Back: item → category → leave, same as the PSP
-  Back button;
-- a long swipe may repeat one step only while the finger travels, and a gesture
-  must not also fire a tap.
-
-The gestures feed the same `KeyPressed` path as the physical D-pad, so the
-animation, sounds and selection state are identical. Thresholds and velocity
-handling live in the host, not in the firmware renderer.
-
-The integration is allowed to extend the existing core hand-off where it is
-needed for this mode: read the selected game's ICON0/PIC1/SND0, start it through
-the same path as the current home screen, and carry the return state back. It
-must not change emulator behaviour, graphics settings or the core's game list;
-only the glue needed for the XMB launch/metadata path.
-
-## Current state
-
-- `:app` depends on `:native-ui:android`. The XMB is the home screen's library
-  mode (`HomeScreen` shelf toggle → `XmbScreen`). It is also reachable as
-  `XmbRoute` with the `xmb_mode` intent extra.
-- `XmbScreen` hosts the GL surface in Compose, supplies the `HomeViewModel`
-  library (DLC filtered out), ICON0/PIC1/SND0 and save states. It forwards
-  `XmbHost.onGameSelected(index)` to the normal emulation launch.
-- The opening and gameboot sequences, touch gestures with the touch tutorial,
-  the landscape lock and the in-XMB Settings column are implemented.
-- Open: restoring the exact category/item after a cold start (the selection
-  survives only while the process does).
-
-## Opening transition
-
-Entering the mode from the app must play the short PSP opening animation, not
-cut straight to the menu. The source is `opening_plugin.rco` (already extracted
-with its model and images): the short startup sequence before the XMB, not the
-long cold-boot init. It is rendered by the same native scene, synchronised with
-the boot sound, and must be skippable/consumed exactly like the firmware
-animation. The final frame hands over to the menu without a flash.
-
-## Game library and selection
-
-- The Game column is populated from the application's existing library: every
-  game visible in the app appears with its own title and icon/cover art.
-- Selecting a game shows its PSP-style background: PIC1 image, ICON0 icon,
-  SND0/ATRAC music where the game carries it, and the same focus/transition
-  behaviour as a UMD item.
-- Confirm launches through the existing emulation handoff. Closing the game —
-  Back, in-game exit, emulator shutdown or process death — returns to the XMB
-  at the exact category/item that was selected when the game started.
-- The mode restores that position on a cold start; no reset to the first item.
+- The Game column lists the games the app's home screen exposes (DLC excluded),
+  each with its title, ICON0 icon, PIC1 background, PIC0 banner and SND0 music.
+  Assets are read from the game files off the main thread (`PspGameMetadataReader`),
+  cached by path, size and modification time, and pushed to native with
+  `nativeSetGames`. SND0 is decoded after the visual assets so the list appears
+  first. The list updates when the library changes.
+- Saved Data Utility lists the app's save states (`SaveStateRepository`).
+- Confirm, or Start in the options menu, plays the gameboot sequence and then
+  calls `XmbHost.onGameSelected(index)`; the app navigates to `EmulationRoute`
+  as it does from the other library views. Selecting a save launches the game
+  with that save slot.
+- Delete in the options menu calls `XmbHost.onDeleteGame` / `onDeleteSave`
+  after the in-XMB confirmation; the host deletes the file or save.
+- The selected category and item are stored by `XmbScreen` in the `xmb_state`
+  preferences when the app pauses, the mode closes or a game launches, and
+  restored with `nativeSetState` the next time the scene is created, including
+  after a restart of the process. The game list and save list positions are
+  stored as well.
+- When emulation ends, the app returns to the XMB. A return from a game plays
+  the shorter resume transition; entering the mode otherwise plays the opening.
 
 ## Settings
 
-The settings for the mode live inside the XMB itself, as the PSP's own Settings
-column did — this is the immersion the mode is for. Selecting the Settings
-category shows a normal PSP column with the same icons, focus glow, scroll and
-opening/closing animations. No bespoke Material settings screen is added for
-the mode.
+The Settings column is the XMB's own (see [renderer](renderer.md)). Values
+come back through `XmbHost.onSettingsChanged` and are stored in the `xmb_state`
+preferences by `XmbScreen`, which pushes them back to native at the next start.
+The audio settings drive `XmbAudio`, "swap confirm" drives
+`XmbHost.swapConfirmButton`, and keep-screen-on sets `FLAG_KEEP_SCREEN_ON` on
+the window. Slideshow, parental control level, ad hoc channel and RSS auto
+update are stored but nothing else reads them.
 
-The column mixes two kinds of entries:
+## Touch without a gamepad
 
-- real settings implemented by this app and stored in `AppPreferences`
-  (background/theme, wave on/off and speed, navigation sounds/volume, clock
-  format/visibility, icon/text scale, animation speed, reset to defaults);
-- imitated PSP entries (the same labels/icons and full navigation, animation
-  and sound behaviour, but inert or showing the PSP unavailable sound), so the
-  tab feels complete rather than like a stub.
+When no physical gamepad is connected and touch controls are enabled, the
+scene runs in touch mode and shows a hint bar and, once, a tutorial dialog.
+Gestures are the whole input:
 
-The existing app settings may offer a shortcut that opens the XMB already
-positioned on its Settings category, but the authoritative UI is the in-XMB
-column with the existing PSP layout.
+- swipe up/down: next/previous item; swipe left/right: next/previous category;
+- tap: confirm, or press the control that was touched;
+- long press: options menu on the game and save lists;
+- two-finger tap and system Back: Back (item list, then the quit confirmation).
+
+Gestures are recognised in `XmbScreen`'s touch listener (tap slop, move-cancel
+slop and the 420 ms long press are defined there) and feed the same
+`KeyPressed` path as the D-pad, so animation, sounds and selection state are
+the same.
 
 ## Localisation
 
-The application ships `values` plus `values-ar, cs, de, es, fa, fr, hi, in, it,
-ja, ko, pl, pt, ru, tr, uk, zh` (18 resources). Every new string introduced by
-this work — mode name, settings labels/descriptions, item names, unavailable
-messages, accessibility labels — must exist in all of them, not only
-`values/strings.xml` and `values-uk`. Language selection remains the existing
-`AppLocaleManager`/`AppPreferences` system (including "System" / automatic
-selection). Non-Latin fonts are already handled by the firmware PGF reader's
-Latin/Japanese/Korean font selection work, which must be wired to the selected
-locale.
+Labels come from the firmware's text catalogue (`text/en.txt`, built during
+extraction) and from the app's `xmb_*` string resources, which `XmbScreen` pushes
+to native with `nativeSetStrings` and which override the catalogue. All 212
+`xmb_*` strings exist in the app's 18 string sets (`values` and 17 locale
+folders), and the strings are pushed again when the app language changes.
+Characters missing from the firmware font are drawn with the Android system
+font.
 
-## Acceptance
+## Lifecycle
 
-- A cold start in XMB always restores XMB and the selection.
-- Every game visible in the current library is visible in XMB and launches the
-  same way it does from the carousel; returning always lands in XMB.
-- No empty category: each tab draws real labels/icons and its opening/closing
-  animation, with inert items behaving consistently.
-- Toggling this mode repeatedly does not leak the GL surface, audio player or
-  pack installer.
-- The XMB Settings column is reachable inside the mode, contains the real
-  options plus imitated PSP entries, and its changes apply live and persist.
-- All strings resolve in every supported locale.
-- The renderer parity suite from the previous phase still passes.
+- Pausing the app stops the SND0 preview, saves the selection and pauses the GL
+  surface. Resuming restarts rendering and refreshes status and touch mode.
+- Leaving the mode (quit confirmation, or Back from the setup screen) stops
+  audio, clears the orientation override and unregisters the battery and status
+  receivers.
+- `XmbHost` listeners are installed when the screen enters composition and
+  cleared when it leaves, so toggling the mode repeatedly does not accumulate
+  them.

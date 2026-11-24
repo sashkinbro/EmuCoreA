@@ -1,7 +1,7 @@
 # Reference behaviour
 
 The acceptance target is the 6.60 XMB itself. This file records what was
-measured from the real shell and where the measurements came from, so a later
+measured from the original shell and where the measurements came from, so a later
 change can be checked against the same source instead of an impression.
 
 Firmware and reference frames remain local. Reproduce them with
@@ -31,8 +31,8 @@ Observed on a Lenovo TB710FU:
 ## Game column, measured
 
 Coordinates are PSP screen pixels, origin top-left, from the 480x272 capture.
-They are measurements from rendered frames, not yet values recovered from the
-plugin's data.
+They are measurements from rendered frames, not values read from the plugin's
+data.
 
 | Element | Measurement |
 | --- | --- |
@@ -70,7 +70,9 @@ unselected icons and the selected one):
 | 7 | PlayStation Network | AQ (blue orb) | x ≈ 109 |
 
 The selected icon is drawn at scale 1.0; the same texture at about 0.8 for the
-neighbouring slots. The texture labels are the ones in the extracted pack.
+neighbouring slots. The texture labels are those of the 6.60 firmware. Other versions label the
+same icons differently, which is why the app matches images by digest (see
+[integration](integration.md#which-firmware-is-accepted)).
 
 The item icons identified from the same frames:
 
@@ -83,7 +85,8 @@ The item icons identified from the same frames:
 | UMD game | the game's own ICON0 (not a firmware texture) |
 
 `native-ui/scene/categories.json` holds these values together with the measured
-anchors. Values not measured yet are left null there rather than guessed.
+anchors. It is reference data for development; the renderer does not read it at
+runtime, and the constants it uses live in `xmb_renderer.cpp`.
 
 The Game column's selected item changes what is behind it: with a UMD game
 selected the game's PIC1 fills the screen, its preview plays in a small
@@ -102,7 +105,7 @@ Navigation:
 - The wave background keeps moving during both.
 - The XMB sound events (`snd_cursor`, `snd_decide`, `snd_cancel`,
   `snd_category_decide`, `snd_option`) come from `system_plugin.rco`; they are
-  already extracted into the pack.
+  extracted on the device by the resource build.
 
 ## What the index file is
 
@@ -129,14 +132,18 @@ shared focus/scroll/arrow textures; `game_plugin.rco` holds the list and
 loading panels; `system_plugin_bg.rco` holds the wave model and its curves.
 
 Text is rendered from the firmware's PGF fonts. PPSSPP's `Core/Font/PGF.cpp`
-is the reference parser for the glyph payload and metrics; the XMB's strings
-are short enough to prepare a glyph atlas offline once that parser is ported.
+is the reference parser for the glyph payload and metrics; the renderer has its
+own reader (`pgf_font.cpp`) that decodes glyphs lazily at runtime.
 
-## Still to measure from the original
+## What is measured and what is tuned
 
-- exact animation curves and durations for item focus, list scroll, category
-  slide and wave parameters (plugin code / RCO animation data);
-- the item icon selection rules (which `topmenu_icon` entry each label uses);
-- font size and positioning per row, plus the shadow offsets;
-- the game-background layout once a UMD is selected (preview rectangle, title
-  art, icon placement).
+Measured from the reference frames and used as constants in the renderer: the
+category row anchors and spacing, item spacing, the ease-out time constants
+(45 ms for the category row, 60 ms for item scrolling), the item order of each
+category, the item icon each label uses, and the background row medians.
+
+Set by eye against the frames rather than recovered from the firmware: the
+wave's camera offset and brightness, the glow around the selected icon, the text
+scale and baseline of each text style, and the layout of the game list over
+PIC1. These are listed in the README under "Known differences from the
+firmware".
