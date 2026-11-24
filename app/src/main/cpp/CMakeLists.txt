@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 SBRO
-# SPDX-License-Identifier: LicenseRef-EmuCoreA-Proprietary
+# SPDX-License-Identifier: GPL-2.0-or-later
 #
 # Discord Social SDK bridge (libemucorea_discord.so), loaded only inside the
 # isolated :discord process by DiscordNative. app/build.gradle.kts wires this

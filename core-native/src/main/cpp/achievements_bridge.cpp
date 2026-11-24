@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 SBRO
-// SPDX-License-Identifier: LicenseRef-EmuCoreA-Proprietary
+// SPDX-License-Identifier: GPL-2.0-or-later
 //
 // RetroAchievements bridge for the native PPSSPP frontend.
 //

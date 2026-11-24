@@ -126,7 +126,9 @@ The catalogs credit the original sources. Redistributable files are mirrored in 
 
 ## Credits and license
 
-EmuCoreA builds on PPSSPP. The root [LICENSE.TXT](LICENSE.TXT) is an exact copy of PPSSPP's upstream license file. The vendored core and its dependencies retain their copyright and license notices in `core/`.
+EmuCoreA is free software, licensed under the **GNU General Public License, version 2 or (at your option) any later version** (GPL-2.0-or-later), the same license as PPSSPP, which it builds on. The full text is in [LICENSE.TXT](LICENSE.TXT), an exact copy of PPSSPP's upstream license file (GPLv2 plus the PSPSDK BSD notice). Source files carry `SPDX-License-Identifier: GPL-2.0-or-later` headers. The complete source for every released build is this repository.
+
+The vendored core and its dependencies retain their own copyright and license notices in `core/`. The XMB mode's third-party parts are listed in [native-ui/THIRD_PARTY_NOTICES.md](native-ui/THIRD_PARTY_NOTICES.md).
 
 Thanks to the PPSSPP contributors and to the RetroAchievements team for rcheevos.
 

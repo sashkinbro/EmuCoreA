@@ -178,10 +178,10 @@ Resources
 
 ## License
 
-The XMB mode is licensed under **GPL-2.0-or-later**, the same license as the
-PPSSPP core it is built with. The full text is in [LICENSE](LICENSE). This
-covers everything under `native-ui/` and the app-side XMB files in
-`app/src/main/java/com/sbro/emucorea/ui/xmb/`. Every source file carries an
+The XMB mode, like the rest of EmuCoreA, is licensed under
+**GPL-2.0-or-later**, the same license as the PPSSPP core it is built with.
+The full text is in [LICENSE](LICENSE) (and in the repository's
+`LICENSE.TXT`). Every source file here carries an
 `SPDX-License-Identifier: GPL-2.0-or-later` header. Third-party parts and their
 own licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 

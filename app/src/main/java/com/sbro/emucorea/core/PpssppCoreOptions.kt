@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: 2026 SBRO
-// SPDX-License-Identifier: LicenseRef-EmuCoreA-Proprietary
+// SPDX-License-Identifier: GPL-2.0-or-later
 //
 // Generated from core/libretro/libretro_core_options.h (PPSSPP libretro core).
 // Regenerate with: python tools/gen_ppsspp_options.py
