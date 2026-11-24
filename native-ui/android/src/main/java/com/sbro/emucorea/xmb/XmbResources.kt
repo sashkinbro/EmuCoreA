@@ -27,7 +27,7 @@ object XmbResources {
     private const val ROOT_NAME = "native-ui"
     private const val COMPLETE_NAME = ".complete"
     private const val STAGING_NAME = ".staging"
-    private const val MARKER_FORMAT = "xmb-resources-v2"
+    private const val MARKER_FORMAT = "xmb-resources-v3"
     private val ID_NAME = Regex("^[0-9a-f]{64}$")
 
     /** The firmware's menu images don't match what the renderer needs (another version). */
@@ -174,7 +174,9 @@ object XmbResources {
      * the digest of the image's source payload ([XmbExpectedImages]). Labels
      * like `topmenu_icon/EV` are positional and shift between firmware
      * versions; without this an icon would land on its neighbour's item.
-     * Returns the expected paths no extracted image matched.
+     * A positional image nothing matches is a feature this firmware lacks: its
+     * path is cleared so the renderer hides the entry instead of showing the
+     * wrong icon. Returns the required paths that could not be filled.
      */
     private fun alignImages(staging: File, manifestText: String): List<String> {
         val entries = org.json.JSONObject(manifestText).getJSONArray("files")
@@ -190,24 +192,32 @@ object XmbResources {
         }
         // Read every source first, so a move never overwrites an image another one still needs.
         val plan = LinkedHashMap<String, ByteArray>()
+        val absent = ArrayList<String>()
         val unresolved = ArrayList<String>()
-        for ((path, expected) in XmbExpectedImages.bySourceSha256) {
-            if (shaByPath[path] == expected) continue
-            val source = pathBySha[expected]
-            if (source == null) {
-                unresolved += path
-                continue
+        for ((path, expected) in XmbExpectedImages.byPath) {
+            if (shaByPath[path] == expected.sha256) continue
+            val source = pathBySha[expected.sha256]
+            when {
+                source != null -> plan[path] = File(staging, source).readBytes()
+                // A real label with other artwork is simply this version's design: keep it.
+                !expected.positional -> Unit
+                expected.required -> unresolved += path
+                else -> absent += path
             }
-            plan[path] = File(staging, source).readBytes()
         }
         for ((path, bytes) in plan) {
             val target = File(staging, path)
             target.parentFile?.mkdirs()
             target.writeBytes(bytes)
         }
-        if (plan.isNotEmpty()) {
-            android.util.Log.i("XmbResources", "moved ${plan.size} images to their renderer paths")
+        for (path in absent) {
+            File(staging, path).delete()
         }
+        android.util.Log.i(
+            "XmbResources",
+            "images: ${plan.size} moved, ${absent.size} features absent in this firmware, " +
+                "${unresolved.size} required missing",
+        )
         return unresolved
     }
 

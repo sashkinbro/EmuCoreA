@@ -587,6 +587,20 @@ void XmbRenderer::RebuildCategories() {
 		{ TextOr("msg_ps_store", "Online Store"), "", "item_psn_store" },
 		{ TextOr("msg_information_board", "Information Board"), "", "item_info_board" },
 	};
+	// A feature whose icon the installed firmware doesn't have didn't exist in that version
+	// (e.g. SensMe channels before 6.60). Hide the entry, as that firmware's own menu would.
+	// The Game column is exempt: its icons are required at install time, and its entries are
+	// addressed by index elsewhere.
+	for (int c = 0; c < 8; ++c) {
+		if (c == 5) {
+			continue;
+		}
+		auto &list = categories_[c];
+		list.erase(std::remove_if(list.begin(), list.end(), [this](const Item &item) {
+			return item.texture_name.rfind("item_", 0) == 0 &&
+			       textures_.find(item.texture_name) == textures_.end();
+		}), list.end());
+	}
 	if (category_ >= 0 && category_ < 8) {
 		items_ = categories_[category_];
 		if (items_.empty()) {

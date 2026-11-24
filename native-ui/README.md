@@ -33,6 +33,15 @@ firmware the user already has:
    `EBOOT.PBP`, a bare `DATA.BIN`, or a disc image (ISO/CSO/CHD) that carries
    one.
 
+Any 6.xx updater works. The menu icons in `topmenu_icon.rco` have positional
+labels that shift between versions, so after extraction every image the
+renderer loads is matched by the digest of its 6.60 source payload
+(`XmbExpectedImages`) and moved to the path the renderer expects. An icon that
+version doesn't have belongs to a feature it didn't have yet (SensMe on 6.31,
+for example). Its entry is hidden, as that firmware's own menu would hide it.
+A firmware without the category or Game-column icons (anything before 6.00)
+is rejected with a message, and the next disc is tried.
+
 The app never downloads firmware and never sends it anywhere. Decryption uses
 the PSAR unpacker that is already part of the PPSSPP core
 (`core/Core/Util/PSARUnpack.cpp`, GPL-2.0-or-later). The unpacked firmware is
@@ -56,7 +65,7 @@ renderer. It does not depend on `:app` or `:core-native`.
 
 - `XmbResources` owns the installed tree. `install(context, flash0)` runs the
   native extractor into a staging directory, writes a completion marker
-  (`xmb-resources-v2`) and renames the directory into
+  (`xmb-resources-v3`) and renames the directory into
   `noBackupFilesDir/native-ui/<sha256 of manifest>/`. An interrupted install
   never looks installed. Installs are serialized in-process and with a file
   lock. Trees left by older builds, including the APK-bundled pack, are
