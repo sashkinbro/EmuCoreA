@@ -34,6 +34,18 @@ internal interface PspImageSource : Closeable {
             magic[2] == 'B'.code.toByte() && magic[3] == 'P'.code.toByte()
     }
 
+    /**
+     * When the disc was mastered, from the ISO9660 primary volume descriptor
+     * (creation date, else modification date), as epoch milliseconds. Null for
+     * PBP images or a descriptor without a date. Unlike the file's own mtime this
+     * survives copying and archive tools that stamp every file with one date.
+     */
+    fun readIsoVolumeDate(): Long? {
+        val pvd = read(16L * 2048L, 2048) ?: return null
+        if (pvd[0] != 1.toByte() || String(pvd, 1, 5, Charsets.US_ASCII) != "CD001") return null
+        return parseIsoDate(pvd, 813) ?: parseIsoDate(pvd, 830)
+    }
+
     fun readPbpAsset(asset: Int): ByteArray? {
         val header = read(0, 0x28) ?: return null
         val offsets = IntArray(8) { littleInt(header, 8 + it * 4) }
@@ -118,6 +130,30 @@ private fun parseDirectoryRecord(buffer: ByteArray, offset: Int): IsoEntry? {
 
 private fun findEntry(entries: List<IsoEntry>, name: String): IsoEntry? =
     entries.firstOrNull { it.name.equals(name, ignoreCase = true) }
+
+/**
+ * An ISO9660 "dec-datetime": 16 ASCII digits YYYYMMDDHHMMSScc and a signed offset
+ * from GMT in 15-minute steps. Null when the field is unset (zeros or spaces).
+ */
+private fun parseIsoDate(bytes: ByteArray, offset: Int): Long? {
+    if (offset + 17 > bytes.size) return null
+    val digits = String(bytes, offset, 16, Charsets.US_ASCII)
+    if (!digits.all { it.isDigit() }) return null
+    val year = digits.substring(0, 4).toInt()
+    if (year < 1990) return null
+    val calendar = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("GMT"))
+    calendar.clear()
+    calendar.set(
+        year,
+        digits.substring(4, 6).toInt() - 1,
+        digits.substring(6, 8).toInt(),
+        digits.substring(8, 10).toInt(),
+        digits.substring(10, 12).toInt(),
+        digits.substring(12, 14).toInt(),
+    )
+    val gmtOffsetMinutes = bytes[offset + 16].toInt() * 15
+    return calendar.timeInMillis - gmtOffsetMinutes * 60_000L
+}
 
 private fun littleInt(bytes: ByteArray, offset: Int): Int =
     ByteBuffer.wrap(bytes, offset, 4).order(ByteOrder.LITTLE_ENDIAN).int

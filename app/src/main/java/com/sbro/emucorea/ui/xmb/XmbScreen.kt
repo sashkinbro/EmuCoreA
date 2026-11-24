@@ -157,10 +157,21 @@ private fun formatGameSize(sizeBytes: Long): String = when {
     else -> String.format(Locale.US, "%.1f MB", sizeBytes / (1024.0 * 1024.0))
 }
 
-private fun formatGameDate(modifiedMs: Long): String = if (modifiedMs > 0L) {
+private fun formatGameDate(modifiedMs: Long): String = if (modifiedMs > 0L && !isArchiveToolStamp(modifiedMs)) {
     SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date(modifiedMs))
 } else {
     ""
+}
+
+/**
+ * TorrentZip (used by the No-Intro/Redump sets) stamps every file with
+ * 1996-12-24 23:32; a game file carrying it has no real date of its own.
+ */
+private fun isArchiveToolStamp(ms: Long): Boolean {
+    val c = java.util.Calendar.getInstance().apply { timeInMillis = ms }
+    return c.get(java.util.Calendar.YEAR) == 1996 && c.get(java.util.Calendar.MONTH) == java.util.Calendar.DECEMBER &&
+        c.get(java.util.Calendar.DAY_OF_MONTH) == 24 && c.get(java.util.Calendar.HOUR_OF_DAY) == 23 &&
+        c.get(java.util.Calendar.MINUTE) == 32
 }
 
 private fun hasValidCachedFiles(assets: GameAssets): Boolean =
@@ -572,7 +583,8 @@ private fun XmbScene(
                                     sysVersion = ext?.systemVersion.orEmpty(),
                                     region = ext?.region.orEmpty(),
                                     sizeStr = formatGameSize(sizeBytes),
-                                    dateStr = formatGameDate(modifiedMs),
+                                    // The disc's own mastering date; the file date only for images without one.
+                                    dateStr = formatGameDate(ext?.discDate?.takeIf { it > 0L } ?: modifiedMs),
                                 )
                                 XmbAssetCache.games[cacheKey] = resolved
                                 resolved

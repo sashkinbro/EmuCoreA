@@ -24,6 +24,8 @@ data class PspGameExtendedInfo(
     val region: String?,
     val sizeBytes: Long,
     val lastModified: Long,
+    /** When the disc was mastered (ISO volume date), epoch ms; 0 when unknown. */
+    val discDate: Long = 0L,
 )
 
 /**
@@ -105,6 +107,9 @@ object PspGameMetadataReader {
             rawSerial
         }
         val region = rawSerial?.let(::regionFromSerial)
+        val discDate = runCatching {
+            openSource(context, path)?.use { source -> if (source.isPbp()) null else source.readIsoVolumeDate() }
+        }.getOrNull() ?: 0L
         return PspGameExtendedInfo(
             title = fields["TITLE"]?.takeIf(String::isNotBlank),
             serial = formattedSerial,
@@ -114,6 +119,7 @@ object PspGameMetadataReader {
             region = region,
             sizeBytes = sizeBytes,
             lastModified = lastModified,
+            discDate = discDate,
         )
     }
 
