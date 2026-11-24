@@ -1,8 +1,30 @@
-# Application integration plan
+# Application integration
 
-This is the next phase after the standalone menu is at parity. It is deliberately
-not started while the Game column still has known visual gaps; the task list
-keeps it after the renderer work.
+How the XMB mode is wired into EmuCoreA. The sections below were written as the
+plan and are kept as the rules the integration follows. "Current state" says
+what is actually in place.
+
+## Firmware setup
+
+The mode has no resources until the user's own firmware is installed (see the
+[README](../README.md#firmware-and-resources)). `XmbScreen` therefore shows
+`XmbFirmwareSetup` (app module, `ui/xmb/`) until `XmbResources.isInstalled()`:
+
+1. While the library is still loading, it waits.
+2. It scans the library's disc images (ISO/CSO/CHD, not archives) with
+   `NativePpsspp.nativeReadUpdaterVersionFd`. That reads only the updater's
+   `PARAM.SFO`. A 6.60/6.61 updater stops the scan. Otherwise the newest one wins.
+3. When one is found, it is installed without asking. Progress covers the unpack
+   (`nativeUnpackUpdaterFd`, `prefixFilter = "flash0:/"`, into
+   `cacheDir/xmb-firmware/flash0`) and the resource build
+   (`XmbResources.install`). The temporary firmware is then deleted.
+4. When none is found, or the install fails, the screen explains why and offers
+   **Choose file** (an `EBOOT.PBP`, a `DATA.BIN` or a disc image through the
+   system picker) and **Back**.
+
+After a successful install the screen switches to the XMB scene. On later
+starts the mode opens directly. Back on the setup screen leaves the mode, except
+while an install is running.
 
 ## Replace the active carousel
 
@@ -76,17 +98,18 @@ the same path as the current home screen, and carry the return state back. It
 must not change emulator behaviour, graphics settings or the core's game list;
 only the glue needed for the XMB launch/metadata path.
 
-## Current integration state
+## Current state
 
-- `:app` depends on `:native-ui:android`.
+- `:app` depends on `:native-ui:android`. The XMB is the home screen's library
+  mode (`HomeScreen` shelf toggle → `XmbScreen`). It is also reachable as
+  `XmbRoute` with the `xmb_mode` intent extra.
 - `XmbScreen` hosts the GL surface in Compose, supplies the `HomeViewModel`
-  library titles and forwards `XmbHost.onGameSelected(index)` to
-  `EmulationRoute(gamePath)`.
-- `XmbRoute` is reachable with the temporary `xmb_mode` intent extra while the
-  carousel replacement/default is wired; the screen renders fullscreen in the
-  app process with the same pack/installer.
-- The game hand-off is in place but still needs a populated library and the
-  return-to-same-position state (next).
+  library (DLC filtered out), ICON0/PIC1/SND0 and save states. It forwards
+  `XmbHost.onGameSelected(index)` to the normal emulation launch.
+- The opening and gameboot sequences, touch gestures with the touch tutorial,
+  the landscape lock and the in-XMB Settings column are implemented.
+- Open: restoring the exact category/item after a cold start (the selection
+  survives only while the process does).
 
 ## Opening transition
 

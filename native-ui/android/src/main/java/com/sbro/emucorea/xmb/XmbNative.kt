@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 SBRO
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 package com.sbro.emucorea.xmb
 
 /**
@@ -102,6 +105,12 @@ object XmbNative {
     external fun nativeDecodeAt3(at3Path: String, wavPath: String): Boolean
 
     external fun nativeDecodeAt3Bytes(at3Bytes: ByteArray, wavPath: String): Boolean
+
+    /**
+     * Builds the XMB resource tree into [outDir] from an unpacked flash0 directory.
+     * Returns "" on success, otherwise a short English error. Blocking; call off the UI thread.
+     */
+    external fun nativeExtractResources(flash0Dir: String, outDir: String): String
 
     external fun nativeShutdown()
 }

@@ -1,8 +1,11 @@
-# Offline PSP resource preparation
+# Offline PSP resource tools
 
-These scripts read firmware dumped from a PSP the user owns and produce the
-ready resource pack. They are development tools and never ship in the
-application; the UI reads only the packed, ready files.
+These scripts are the reference implementation of the PSP formats the XMB
+uses. On the device, the same work is done by the C++ extractor in
+`native-ui/android/src/main/cpp/` from the user's own firmware (see the
+[README](../README.md#firmware-and-resources)). The scripts are used to
+develop and check that extractor against a local firmware dump. They never
+ship in the application, and their output is never packaged.
 
 ## Getting the firmware
 
@@ -83,19 +86,12 @@ with a 1000/64-pixel advance, "Game" as 58.25 px and "Saved Data Utility" as
 184.48 px. The same layout is implemented once more in the native renderer;
 `tests/test_pgf.py` pins the metrics so the two do not drift apart.
 
-## Packing
+## Checking the on-device extractor
 
-```text
-python native-ui/tools/pack_resources.py
-```
-
-Writes `native-ui/build/native-ui.zip` and `native-ui/build/native-ui-pack.json`
-with the SHA-256, packed size, file count and unpacked size. The ZIP is
-deterministic (sorted entries, 1980 timestamps, level 9), and the script
-verifies every entry against the resource tree after writing. The Android
-module's `prepareNativeUiPack` task runs this before `preBuild` and copies the
-ZIP into the APK's assets; the installer uses the hash as the installed pack's
-version.
+`native-ui/resources/` (written by `extract_psp_resources.py`) is the oracle. The
+C++ extractor must produce the same file list and manifest. Non-image files
+must be byte-identical, and PNGs must decode to the same pixels. There is no
+pack step any more: the APK carries no resources.
 
 ## Reference frames from the real XMB
 

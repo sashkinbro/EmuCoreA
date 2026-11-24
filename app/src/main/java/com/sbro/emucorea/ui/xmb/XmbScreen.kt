@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 SBRO
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 package com.sbro.emucorea.ui.xmb
 
 import android.app.Activity
@@ -49,6 +52,7 @@ import com.sbro.emucorea.data.SaveStateRepository
 import com.sbro.emucorea.xmb.XmbAudio
 import com.sbro.emucorea.xmb.XmbHost
 import com.sbro.emucorea.xmb.XmbNative
+import com.sbro.emucorea.xmb.XmbResources
 import com.sbro.emucorea.xmb.XmbSurfaceRenderer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -430,7 +434,11 @@ private fun pushSavesToNative(
 }
 
 /**
- * Compose host for the authentic Sony PSP XMB mode.
+ * Compose host for the XMB mode.
+ *
+ * The XMB is drawn from resources built on the device out of the user's own
+ * firmware. Until those exist, [XmbFirmwareSetup] is shown instead: it finds a
+ * firmware updater among the user's games, or asks for one.
  */
 @Composable
 fun XmbScreen(
@@ -441,6 +449,31 @@ fun XmbScreen(
     onDeleteGame: ((GameItem) -> Unit)? = null,
     onExitXmb: () -> Unit = {},
     modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    var resourcesReady by remember { mutableStateOf(XmbResources.isInstalled(context)) }
+    if (!resourcesReady) {
+        XmbFirmwareSetup(
+            games = games,
+            isLoadingGames = isLoadingGames,
+            onInstalled = { resourcesReady = true },
+            onExit = onExitXmb,
+            modifier = modifier,
+        )
+        return
+    }
+    XmbScene(games, isLoadingGames, onGameSelected, onSaveSelected, onDeleteGame, onExitXmb, modifier)
+}
+
+@Composable
+private fun XmbScene(
+    games: List<GameItem>,
+    isLoadingGames: Boolean,
+    onGameSelected: (Int) -> Unit,
+    onSaveSelected: ((gamePath: String, slot: Int) -> Unit)?,
+    onDeleteGame: ((GameItem) -> Unit)?,
+    onExitXmb: () -> Unit,
+    modifier: Modifier,
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -807,7 +840,7 @@ fun XmbScreen(
     }
 
     BackHandler {
-        // Triggers authentic PSP exit confirmation dialog or back action
+        // Triggers the exit confirmation dialog or back action
         surface.queueEvent {
             XmbNative.nativeKey(5)
         }
@@ -889,7 +922,7 @@ fun XmbScreen(
             val assets = currentAssets.value
             val gamesSnapshot = currentGames.value
             if (XmbAudio.bgmEnabled && index in assets.indices) {
-                // Authentic PSP settle delay before starting SND0 BGM preview
+                // Settle delay before starting the SND0 music preview
                 bgmJob = coroutineScope.launch {
                     delay(400)
                     if (!XmbAudio.bgmEnabled) return@launch

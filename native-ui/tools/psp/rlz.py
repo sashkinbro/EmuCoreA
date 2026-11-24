@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Decoder for the RLZ streams inside PSP RCO resources.
 
 RLZ is a range coder with a literal/match model, the format the VSH's resource

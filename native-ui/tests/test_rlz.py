@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Tests for the PSP RCO RLZ decoder.
 
 The firmware fixtures are local development inputs and are never committed, so

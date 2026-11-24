@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Tests for the firmware PGF font reader.
 
 The font fixture is local firmware and is skipped when absent. The expected

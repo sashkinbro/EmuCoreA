@@ -74,6 +74,7 @@
 #include "Core/SaveState.h"
 #include "Core/System.h"
 #include "Core/Util/PortManager.h"
+#include "Core/Util/PSARUnpack.h"
 #include "GPU/GPUCommon.h"
 
 #include "Core/FrameTiming.h"
@@ -2720,6 +2721,121 @@ void ApplyNativeConfig(const std::string &key, const std::string &value) {
 }  // namespace
 
 // ---------------------------------------------------------------------------
+// PSP firmware (updater) import for the XMB mode. Works on an fd the frontend
+// opened through SAF; touches no emulator state, so it needs neither nativeInit
+// nor a running game.
+// ---------------------------------------------------------------------------
+namespace {
+
+constexpr size_t kUpdaterHeadBytes = 64 * 1024;
+constexpr s64 kUpdaterMaxBytes = 256 * 1024 * 1024;
+constexpr const char *kUpdateDir = "/PSP_GAME/SYSDIR/UPDATE";
+constexpr const char *kUpdateDataBin = "/PSP_GAME/SYSDIR/UPDATE/DATA.BIN";
+constexpr const char *kUpdateSfo = "/PSP_GAME/SYSDIR/UPDATE/PARAM.SFO";
+
+// A game disc image (ISO/CSO/CHD) with an updater, an updater EBOOT.PBP, or a
+// bare DATA.BIN / PSAR file, read through an fd the caller keeps owning.
+class UpdaterInput {
+public:
+    UpdaterInput(int fd, const std::string &hint) : loader_(fd, hint) {}
+    ~UpdaterInput() {
+        pbp_.reset();
+        delete disc_;  // before loader_, which the block device reads from
+    }
+
+    bool Open() {
+        if (!loader_.Exists()) return false;
+        u8 magic[4]{};
+        if (loader_.ReadAt(0, 1, sizeof(magic), magic) != sizeof(magic)) return false;
+        if (!memcmp(magic, "\0PBP", 4)) {
+            pbp_ = std::make_unique<PBPReader>(&loader_);
+            return pbp_->IsValid() && pbp_->GetSubFileSize(PBP_UNKNOWN_PSAR) >= 0x40;
+        }
+        if (!memcmp(magic, "PSAR", 4)) {
+            bare_ = true;
+            return true;
+        }
+        std::string blockError;
+        std::shared_ptr<BlockDevice> device(ConstructBlockDevice(&loader_, &blockError));
+        if (!device) return false;
+        disc_ = new ISOFileSystem(&hAlloc_, device);
+        return disc_->GetFileInfo(kUpdateDir).exists;
+    }
+
+    // The updater's PARAM.SFO bytes (disc or PBP); false for a bare archive.
+    bool ReadSfo(std::vector<u8> *out) {
+        if (pbp_) return pbp_->GetSubFile(PBP_PARAM_SFO, out) && !out->empty();
+        if (disc_) return ReadDiscFile(kUpdateSfo, 1024 * 1024, out);
+        return false;
+    }
+
+    // The first maxBytes of the PSAR archive (all of it if maxBytes is 0).
+    bool ReadArchive(size_t maxBytes, std::vector<u8> *out) {
+        out->clear();
+        if (pbp_) {
+            size_t size = pbp_->GetSubFileSize(PBP_UNKNOWN_PSAR);
+            if (maxBytes != 0) size = std::min(size, maxBytes);
+            if (size > static_cast<size_t>(kUpdaterMaxBytes)) return false;
+            out->resize(size);
+            return pbp_->ReadSubFile(PBP_UNKNOWN_PSAR, 0, size, out->data());
+        }
+        if (bare_) {
+            s64 size = loader_.FileSize();
+            if (maxBytes != 0) size = std::min<s64>(size, static_cast<s64>(maxBytes));
+            if (size < 0x40 || size > kUpdaterMaxBytes) return false;
+            out->resize(static_cast<size_t>(size));
+            return loader_.ReadAt(0, 1, out->size(), out->data()) == out->size();
+        }
+        if (disc_) return ReadDiscFile(kUpdateDataBin, maxBytes, out);
+        return false;
+    }
+
+private:
+    bool ReadDiscFile(const char *path, size_t maxBytes, std::vector<u8> *out) {
+        const PSPFileInfo info = disc_->GetFileInfo(path);
+        if (!info.exists || info.size <= 0 || info.size > kUpdaterMaxBytes) return false;
+        size_t size = static_cast<size_t>(info.size);
+        if (maxBytes != 0) size = std::min(size, maxBytes);
+        const int handle = disc_->OpenFile(path, FILEACCESS_READ);
+        if (handle < 0) return false;
+        out->resize(size);
+        const size_t got = disc_->ReadFile(handle, out->data(), static_cast<s64>(size));
+        disc_->CloseFile(handle);
+        if (got != size) {
+            out->clear();
+            return false;
+        }
+        return true;
+    }
+
+    FdFileLoader loader_;
+    SequentialHandleAllocator hAlloc_;
+    ISOFileSystem *disc_ = nullptr;
+    std::unique_ptr<PBPReader> pbp_;
+    bool bare_ = false;
+};
+
+bool HasPsarMagic(const std::vector<u8> &data) {
+    return data.size() >= 0x40 && !memcmp(data.data(), "PSAR", 4);
+}
+
+// The firmware version the archive declares in its first record. Decrypts one
+// block only: the declared length is zeroed so a 64 KiB prefix is not rejected
+// as truncated, and the walk stops at the first record the prefix cannot hold.
+std::string VersionFromArchiveHead(std::vector<u8> head) {
+    if (!HasPsarMagic(head)) return std::string();
+    memset(head.data() + 8, 0, 4);
+    PSARUnpackOptions options;
+    options.listOnly = true;
+    PSARUnpackStats stats;
+    std::string error;
+    UnpackPSAR(head.data(), head.size(), Path(), options, &stats, &error);
+    return stats.firmwareVersion;
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------------------
 // JNI surface for com.sbro.emucorea.core.NativePpsspp.
 // ---------------------------------------------------------------------------
 extern "C" {
@@ -2911,6 +3027,102 @@ Java_com_sbro_emucorea_core_NativePpsspp_nativeBootFd(JNIEnv *env, jclass, jint 
     g_bootRequested = true;
     g_bootError.clear();
     return JNI_TRUE;
+}
+
+// Firmware version ("6.60") of the updater behind fd, or "" if there is none.
+// Reads the PARAM.SFO and the first 64 KiB of the archive only.
+JNIEXPORT jstring JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeReadUpdaterVersionFd(JNIEnv *env, jclass, jint fd,
+                                                                    jstring pathHint) {
+    std::string version;
+    if (fd >= 0) {
+        UpdaterInput input(fd, ToString(env, pathHint));
+        std::vector<u8> head;
+        if (input.Open() && input.ReadArchive(kUpdaterHeadBytes, &head) && HasPsarMagic(head)) {
+            std::vector<u8> sfo;
+            if (input.ReadSfo(&sfo)) {
+                ParamSFOData paramSFO;
+                if (paramSFO.ReadSFO(sfo)) {
+                    version = VersionFromUpdaterTitle(paramSFO.GetValueString("TITLE"));
+                }
+            }
+            if (version.empty()) version = VersionFromArchiveHead(head);
+        }
+    }
+    return env->NewStringUTF(version.c_str());
+}
+
+// Unpacks the updater behind fd into outputDir. Returns "" on success, else a
+// short English error. progress (java.util.function.IntConsumer, may be null)
+// is called on this thread with 0..100.
+JNIEXPORT jstring JNICALL
+Java_com_sbro_emucorea_core_NativePpsspp_nativeUnpackUpdaterFd(JNIEnv *env, jclass, jint fd,
+                                                               jstring pathHint, jstring outputDir,
+                                                               jstring prefixFilter,
+                                                               jobject progress) {
+    std::string error;
+    do {
+        if (fd < 0) {
+            error = "Invalid file descriptor";
+            break;
+        }
+        const std::string outDir = ToString(env, outputDir);
+        if (outDir.empty()) {
+            error = "No output directory";
+            break;
+        }
+        std::vector<u8> psar;
+        {
+            UpdaterInput input(fd, ToString(env, pathHint));
+            if (!input.Open()) {
+                error = "Not a PSP updater, a game disc with one, or a PSAR file";
+                break;
+            }
+            if (!input.ReadArchive(0, &psar) || !HasPsarMagic(psar)) {
+                error = "This file does not contain a firmware update";
+                break;
+            }
+        }
+
+        jmethodID accept = nullptr;
+        if (progress != nullptr) {
+            jclass cls = env->GetObjectClass(progress);
+            accept = env->GetMethodID(cls, "accept", "(I)V");
+            env->DeleteLocalRef(cls);
+            if (env->ExceptionCheck()) env->ExceptionClear();
+        }
+        int lastPercent = -1;
+        auto report = [&](int percent) {
+            if (accept == nullptr || percent == lastPercent) return;
+            lastPercent = percent;
+            env->CallVoidMethod(progress, accept, static_cast<jint>(percent));
+            if (env->ExceptionCheck()) env->ExceptionClear();
+        };
+
+        PSARUnpackOptions options;
+        options.prefixFilter = ToString(env, prefixFilter);
+        options.model = PSPModelGeneration::Any;
+        options.progress = [&](float fraction) {
+            report(std::clamp(static_cast<int>(fraction * 100.0f), 0, 99));
+        };
+        PSARUnpackStats stats;
+        std::string unpackError;
+        if (!UnpackPSAR(psar.data(), psar.size(), Path(outDir), options, &stats, &unpackError)) {
+            error = unpackError.empty() ? "Unpacking failed" : unpackError;
+            break;
+        }
+        if (stats.failed > 0) {
+            error = "Some firmware files could not be unpacked";
+            break;
+        }
+        if (stats.written == 0) {
+            error = "The updater contained no matching files";
+            break;
+        }
+        report(100);
+    } while (false);
+    if (!error.empty()) NLOGE("nativeUnpackUpdaterFd: %s", error.c_str());
+    return env->NewStringUTF(error.c_str());
 }
 
 JNIEXPORT jboolean JNICALL

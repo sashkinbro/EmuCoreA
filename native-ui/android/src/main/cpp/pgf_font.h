@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 SBRO
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #pragma once
 
 #include <cstdint>

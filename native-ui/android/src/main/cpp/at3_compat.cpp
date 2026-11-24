@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 SBRO
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #include <cstdlib>
 #include <cstdarg>
 #include <cstdio>

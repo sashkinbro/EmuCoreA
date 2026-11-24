@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 SBRO
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 package com.sbro.emucorea.xmb.preview
 
 import android.app.Activity
@@ -12,6 +15,7 @@ import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.TextView
 import com.sbro.emucorea.xmb.XmbNative
+import com.sbro.emucorea.xmb.XmbResources
 import com.sbro.emucorea.xmb.XmbSession
 import com.sbro.emucorea.xmb.XmbSurfaceRenderer
 import java.io.File
@@ -56,6 +60,14 @@ class MainActivity : Activity() {
 
         Thread {
             val message = try {
+                // The preview has no updater unpacker. During development, push an unpacked
+                // flash0 with `adb push flash0 /sdcard/Android/data/<package>/files/flash0`.
+                if (!XmbResources.isInstalled(applicationContext)) {
+                    val flash0 = File(getExternalFilesDir(null), "flash0")
+                    if (File(flash0, "vsh/resource").isDirectory) {
+                        XmbResources.install(applicationContext, flash0)
+                    }
+                }
                 val directory = XmbSession.initialize(applicationContext)
                 val files = directory.walkTopDown().filter { it.isFile }.count()
                 buildString {

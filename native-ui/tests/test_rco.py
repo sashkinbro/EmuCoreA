@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Tests for the PSP RCO reader and its GIM/VAG payload decoders.
 
 Most assertions use the local firmware dump and skip when it is absent. The

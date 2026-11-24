@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Capture reference frames from the real PSP XMB in PPSSPPHeadless.
 
 The shell is booted from a local 6.60 flash0 dump with the WebSocket debugger

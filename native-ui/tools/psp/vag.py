@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Decoder for the VAG sounds in PSP RCO containers.
 
 A VAG file is a 0x30-byte big-endian header ("VAGp", version, payload size,

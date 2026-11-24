@@ -10,7 +10,7 @@ background are still missing.
 ```text
 MainActivity (preview)
   GLSurfaceView (GLES 3 context)
-    XmbSurfaceRenderer.onSurfaceCreated -> XmbSession.initialize -> BundledResources
+    XmbSurfaceRenderer.onSurfaceCreated -> XmbSession.initialize -> XmbResources
                                        -> nativeInit
     onSurfaceChanged -> nativeResize
     onDrawFrame      -> nativeDraw -> xmb::XmbRenderer::Draw

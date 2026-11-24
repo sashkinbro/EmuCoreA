@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Extract a PSP firmware updater from a UMD disc image.
 
 Most PSP discs carry the firmware updater in PSP_GAME/SYSDIR/UPDATE/. The file

@@ -90,6 +90,51 @@ object NativePpsspp {
      */
     external fun nativeReadGameAsset(path: String, fd: Int, asset: Int): ByteArray?
 
+    /**
+     * Reads the PSP firmware version (for example "6.60") of the updater in the
+     * file behind [fd], or "" if the file carries none. Accepted inputs: a game
+     * disc image (ISO/CSO/CHD) with PSP_GAME/SYSDIR/UPDATE/DATA.BIN, an updater
+     * EBOOT.PBP, or a bare DATA.BIN / PSAR file. Cheap: reads only the updater's
+     * PARAM.SFO and the first 64 KiB of the archive, never decrypts the payload.
+     *
+     * Blocking; call off the main thread. The caller keeps ownership of [fd]
+     * (the core works on a duplicate). [pathHint] is the display name, used only
+     * for its extension. Needs neither nativeInit nor a running game, and does not
+     * touch emulator state.
+     */
+    @JvmStatic
+    external fun nativeReadUpdaterVersionFd(fd: Int, pathHint: String): String
+
+    /**
+     * Unpacks the firmware inside the updater behind [fd] (same input shapes as
+     * [nativeReadUpdaterVersionFd]) into [outputDir], a plain filesystem path in
+     * app-private storage. Only entries whose firmware path starts with
+     * [prefixFilter] (case-insensitive, e.g. "flash0:/"; empty = everything) are
+     * written, for every PSP model's file list.
+     *
+     * Layout: a "flash0:/x/y" entry is written to `<outputDir>/flash0/x/y`, so with
+     * "flash0:/" the caller must treat `<outputDir>/flash0` as flash0 (fonts in
+     * `<outputDir>/flash0/font`, XMB resources in
+     * `<outputDir>/flash0/vsh/resource`). [outputDir] itself is not flash0.
+     * Entries no file list names are skipped by a non-empty filter.
+     *
+     * [progress] receives 0..100 on the calling thread (may be null; values are
+     * monotonic, 100 only on success). Returns "" on success, otherwise a short
+     * English error. Blocking and CPU/IO heavy (the whole archive, up to ~100 MB,
+     * is held in memory); call off the main thread. The caller keeps ownership of
+     * [fd]. Needs neither nativeInit nor a running game; it touches no emulator
+     * state, so it is also safe during a session, just slow and memory hungry.
+     * Not cancellable. Use a fresh or empty [outputDir]; existing files are overwritten.
+     */
+    @JvmStatic
+    external fun nativeUnpackUpdaterFd(
+        fd: Int,
+        pathHint: String,
+        outputDir: String,
+        prefixFilter: String,
+        progress: java.util.function.IntConsumer?,
+    ): String
+
     external fun nativeSetSurface(surface: Surface?, width: Int, height: Int): Boolean
 
     external fun nativeRunFrame(): Long

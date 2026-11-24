@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Reader for the PSP PGF fonts in flash0:/font.
 
 PGF stores a char map, glyph metadata tables and a nibble-RLE bitmap stream per

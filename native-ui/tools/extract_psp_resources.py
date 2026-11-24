@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Extract the XMB's images, sounds, models and fonts from a local flash0 dump.
 
 Output is the ready resource tree that the pack builder zips and the application

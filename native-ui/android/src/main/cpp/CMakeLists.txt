@@ -9,6 +9,10 @@ add_library(emucorea_xmb SHARED
     xmb_renderer.cpp
     png_image.cpp
     pgf_font.cpp
+    xmb_extract.cpp
+    psp_rlz.cpp
+    psp_gim.cpp
+    psp_vag.cpp
     at3_decoder.cpp
     third_party/vlnky/psp_wave.cpp
     third_party/vlnky/rco_error.cpp

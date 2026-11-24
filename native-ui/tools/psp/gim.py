@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Decoder for PSP GIM images, as used by the XMB's RCO resources.
 
 The container after "MIG.00.1PSP" is a chain of 16-byte block headers (type,

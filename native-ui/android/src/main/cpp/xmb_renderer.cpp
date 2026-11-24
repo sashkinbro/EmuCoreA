@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 SBRO
+// SPDX-License-Identifier: GPL-2.0-or-later
+
 #include "xmb_renderer.h"
 
 #include <android/log.h>
@@ -28,7 +31,7 @@ const char *kCategoryKeys[8] = {
 	"msgtop_video", "msgshare_game", "msgtop_network", "msg_psn",
 };
 const char *kCategoryFallbacks[8] = {
-	"Settings", "Extras", "Photo", "Music", "Video", "Game", "Network", "PlayStation\u00aeNetwork",
+	"Settings", "Extras", "Photo", "Music", "Video", "Game", "Network", "Online",
 };
 constexpr float kItemIconX = 110.0f;
 constexpr float kSelectedItemY = 136.0f;
@@ -111,47 +114,86 @@ const uint8_t kBackgroundRows[17][3] = {
 	{182, 62, 10}, {182, 62, 10},
 };
 
-// 12 authentic PSP monthly theme swatches (sampled from 01-12_03g.bmp)
-const float kMonthGradients[12][3] = {
-	{0.729f, 0.745f, 0.800f}, // Jan (Silver)
-	{0.922f, 0.718f, 0.078f}, // Feb (Gold)
-	{0.494f, 0.757f, 0.188f}, // Mar (Spring Green)
-	{0.973f, 0.592f, 0.698f}, // Apr (Sakura Pink)
-	{0.071f, 0.467f, 0.106f}, // May (Emerald)
-	{0.600f, 0.439f, 0.855f}, // Jun (Violet)
-	{0.039f, 0.671f, 0.788f}, // Jul (Turquoise)
-	{0.039f, 0.408f, 0.733f}, // Aug (Ocean Blue)
-	{0.420f, 0.063f, 0.569f}, // Sep (Royal Purple)
-	{1.000f, 0.616f, 0.180f}, // Oct (Amber)
-	{0.392f, 0.157f, 0.094f}, // Nov (PSP 6.60 Dark Mahogany matching orig_10.png)
-	{0.812f, 0.094f, 0.027f}, // Dec (Crimson)
+// Theme colours. At startup LoadThemeSwatches() replaces these with the centre
+// pixel of each colour swatch in the user's own firmware
+// (images/themes/orig_NN.png and ext_NN.png, extracted on the device). The
+// values below are EmuCoreA's own approximations of the colour names and are
+// used only for a swatch that is missing.
+float kMonthGradients[12][3] = {
+	{0.75f, 0.76f, 0.80f}, // Silver
+	{0.92f, 0.72f, 0.10f}, // Gold
+	{0.50f, 0.75f, 0.20f}, // Spring Green
+	{0.96f, 0.60f, 0.70f}, // Pink
+	{0.08f, 0.45f, 0.12f}, // Emerald
+	{0.60f, 0.45f, 0.85f}, // Violet
+	{0.05f, 0.65f, 0.78f}, // Turquoise
+	{0.05f, 0.40f, 0.72f}, // Ocean Blue
+	{0.42f, 0.08f, 0.56f}, // Purple
+	{1.00f, 0.62f, 0.20f}, // Amber
+	{0.392f, 0.157f, 0.094f}, // Mahogany (EmuCoreA's own tuning; kept over the firmware swatch)
+	{0.80f, 0.10f, 0.05f}, // Crimson
 };
 
-// 22 authentic PSP-2000/3000 Slim extended theme swatches (sampled from 13-27.bmp)
-const float kExtColorSwatches[22][3] = {
-	{0.996f, 0.514f, 0.647f}, // Rose Pink
-	{1.000f, 0.243f, 0.529f}, // Hot Pink
-	{0.922f, 0.000f, 0.275f}, // Crimson
-	{0.835f, 0.200f, 0.655f}, // Magenta
-	{0.667f, 0.004f, 0.494f}, // Deep Magenta
-	{0.525f, 0.000f, 0.314f}, // Wine Red
-	{0.620f, 0.600f, 0.824f}, // Lavender
-	{0.412f, 0.424f, 0.737f}, // Periwinkle
-	{0.318f, 0.306f, 0.667f}, // Slate Blue
-	{0.000f, 0.886f, 0.427f}, // Mint Green
-	{0.008f, 0.780f, 0.365f}, // Emerald
-	{0.000f, 0.616f, 0.247f}, // Forest Green
-	{0.278f, 0.267f, 0.420f}, // Steel Gray
-	{0.196f, 0.176f, 0.282f}, // Charcoal
-	{0.059f, 0.039f, 0.133f}, // Midnight Blue
-	{0.063f, 0.063f, 0.118f}, // Piano Black
-	{0.753f, 0.702f, 0.839f}, // Pearl Lilac
-	{0.518f, 0.533f, 0.565f}, // Silver
-	{0.376f, 0.102f, 0.824f}, // Electric Violet
-	{0.827f, 0.169f, 0.478f}, // Berry
-	{0.863f, 0.694f, 0.106f}, // Gold
-	{0.604f, 0.498f, 0.322f}, // Bronze
+float kExtColorSwatches[22][3] = {
+	{0.98f, 0.52f, 0.65f}, // Rose Pink
+	{1.00f, 0.25f, 0.53f}, // Hot Pink
+	{0.90f, 0.02f, 0.28f}, // Crimson
+	{0.83f, 0.20f, 0.65f}, // Magenta
+	{0.66f, 0.02f, 0.50f}, // Deep Magenta
+	{0.52f, 0.02f, 0.31f}, // Wine Red
+	{0.62f, 0.60f, 0.82f}, // Lavender
+	{0.41f, 0.42f, 0.74f}, // Periwinkle
+	{0.32f, 0.31f, 0.66f}, // Slate Blue
+	{0.02f, 0.88f, 0.43f}, // Mint Green
+	{0.02f, 0.78f, 0.36f}, // Emerald
+	{0.02f, 0.62f, 0.25f}, // Forest Green
+	{0.28f, 0.27f, 0.42f}, // Steel Gray
+	{0.20f, 0.18f, 0.28f}, // Charcoal
+	{0.06f, 0.04f, 0.13f}, // Midnight Blue
+	{0.06f, 0.06f, 0.12f}, // Piano Black
+	{0.75f, 0.70f, 0.84f}, // Pearl Lilac
+	{0.52f, 0.53f, 0.56f}, // Silver
+	{0.38f, 0.10f, 0.82f}, // Electric Violet
+	{0.83f, 0.17f, 0.48f}, // Berry
+	{0.86f, 0.69f, 0.11f}, // Gold
+	{0.60f, 0.50f, 0.32f}, // Bronze
 };
+
+// The swatch BMPs are uniform tiles; their centre pixel is the theme colour.
+bool SampleSwatchCentre(const std::string &path, float out[3]) {
+	std::vector<uint8_t> file;
+	std::vector<uint8_t> rgba;
+	int w = 0;
+	int h = 0;
+	if (!ReadFile(path, &file) || !DecodePng(file, &w, &h, &rgba) || w <= 0 || h <= 0) {
+		return false;
+	}
+	const size_t i = (static_cast<size_t>(h / 2) * w + w / 2) * 4;
+	if (i + 2 >= rgba.size()) {
+		return false;
+	}
+	for (int c = 0; c < 3; ++c) {
+		out[c] = rgba[i + c] / 255.0f;
+	}
+	return true;
+}
+
+void LoadThemeSwatches(const std::string &root) {
+	int loaded = 0;
+	char name[64];
+	for (int m = 0; m < 12; ++m) {
+		if (m == 10) {
+			continue;  // November keeps EmuCoreA's own tuning.
+		}
+		std::snprintf(name, sizeof(name), "/images/themes/orig_%02d.png", m);
+		loaded += SampleSwatchCentre(root + name, kMonthGradients[m]) ? 1 : 0;
+	}
+	for (int e = 0; e < 22; ++e) {
+		std::snprintf(name, sizeof(name), "/images/themes/ext_%02d.png", e);
+		loaded += SampleSwatchCentre(root + name, kExtColorSwatches[e]) ? 1 : 0;
+	}
+	__android_log_print(ANDROID_LOG_INFO, kTag, "theme swatches from firmware: %d/33", loaded);
+}
 
 const char *kExtColorKeys[22] = {
 	"xmb_color_ext_00", "xmb_color_ext_01", "xmb_color_ext_02", "xmb_color_ext_03",
@@ -315,6 +357,7 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 
 	root_ = resource_root;
 	LoadTextCatalog();
+	LoadThemeSwatches(root_);
 	if (!BuildProgram()) {
 		return false;
 	}
@@ -407,8 +450,6 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 		{"status_ms", "images/sysconf_plugin/tex_ms.png"},
 		{"status_busy", "images/system_plugin_fg/tex_busy.png"},
 		{"status_busy_shadow", "images/system_plugin_fg/tex_busy_shadow.png"},
-		{"open_psp_logo", "images/opening_plugin/tex_psp_logo.png"},
-		{"open_sce_logo", "images/opening_plugin/tex_logo.png"},
 		{"open_glow", "images/opening_plugin/tex_glow.png"},
 		{"open_glow_a", "images/opening_plugin/tex_glow_A.png"},
 		{"open_glow_b_top", "images/opening_plugin/tex_glow_B_top.png"},
@@ -446,7 +487,7 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 	RebuildCategories();
 
 	if (first_init) {
-		category_selected_ = {0, 0, 0, 0, 0, 2, 0, 0}; // Game -> Memory Stick (index 2)
+		category_selected_ = {0, 0, 0, 0, 0, 2, 0, 0}; // Game -> Memory Card (index 2)
 		items_ = categories_[5];
 		item_ = 2;
 		item_from_ = 2;
@@ -484,10 +525,10 @@ bool XmbRenderer::Initialize(const std::string &resource_root) {
 }
 
 void XmbRenderer::RebuildCategories() {
-	const std::string ms = TextOr("msgshare_ms", "Memory Stick\u2122");
+	const std::string ms = TextOr("msgshare_ms", "Memory Card");
 	const std::string free_sub = TextOr("msgshare_info_space", "Free Space") + " " + free_space_text_;
 
-	// 0: Settings (authentic PSP 6.60 order)
+	// 0: Settings (item order measured from 6.60)
 	categories_[0] = {
 		{ TextOr("msgtop_sysconf_update", "System Update"), "", "item_update" },
 		{ TextOr("msgtop_sysconf_usb", "USB Connection"), "", "item_usb" },
@@ -516,7 +557,7 @@ void XmbRenderer::RebuildCategories() {
 	};
 	// 3: Music
 	categories_[3] = {
-		{ TextOr("msg_sensme_channels", "SensMe\u2122 channels"), "", "item_sensme" },
+		{ TextOr("msg_sensme_channels", "Mood Channels"), "", "item_sensme" },
 		{ ms, free_sub, "item_memstick" },
 	};
 	// 4: Video
@@ -532,18 +573,18 @@ void XmbRenderer::RebuildCategories() {
 	// 6: Network
 	categories_[6] = {
 		{ TextOr("xmb_manuals", "Online Instruction Manuals"), "", "item_manuals" },
-		{ TextOr("msgtop_network_lftv", "LocationFree\u2122 Player"), "", "item_locationfree" },
+		{ TextOr("msgtop_network_lftv", "Remote TV Player"), "", "item_locationfree" },
 		{ TextOr("xmb_remote_play", "Remote Play"), "", "item_remoteplay" },
 		{ TextOr("msgtop_network_rss", "RSS Channel"), "", "item_rss" },
 		{ TextOr("msgtop_network_browser", "Internet Browser"), "", "item_internet_browser" },
 		{ TextOr("msg_internet_search", "Internet Search"), "", "item_internet_search" },
 		{ TextOr("xmb_internet_radio", "Internet Radio"), "", "item_internet_radio" },
-		{ TextOr("xmb_skype", "Skype\u2122"), "", "item_skype" },
+		{ TextOr("xmb_skype", "Internet Calls"), "", "item_skype" },
 	};
-	// 7: PlayStation Network
+	// 7: Online
 	categories_[7] = {
-		{ TextOr("msg_signup", "Sign Up for PlayStation\u00aeNetwork"), "", "item_psn_signup" },
-		{ TextOr("msg_ps_store", "PlayStation\u00aeStore"), "", "item_psn_store" },
+		{ TextOr("msg_signup", "Create Online Account"), "", "item_psn_signup" },
+		{ TextOr("msg_ps_store", "Online Store"), "", "item_psn_store" },
 		{ TextOr("msg_information_board", "Information Board"), "", "item_info_board" },
 	};
 	if (category_ >= 0 && category_ < 8) {
@@ -999,7 +1040,7 @@ void XmbRenderer::DrawStatusBar() {
 	                             : 4.0f;
 	const float top_y_off = (corner_pad > 8.0f) ? 2.0f : 0.0f;
 
-	// Top-left transient Memory Stick access indicator (authentic PSP boot & loading behavior)
+	// Top-left transient memory-card access indicator during boot and loading
 	if (opening_t_ < 0.95f || resume_t_ < 0.85f || games_loading_ || saves_loading_) {
 		float ms_slide = 0.0f;
 		float ms_alpha = bar_alpha;
@@ -1046,7 +1087,7 @@ void XmbRenderer::DrawStatusBar() {
 	const float clock_x = (screen_width_ - 38.0f - corner_pad) - width;
 	DrawText(clock, clock_x, 18.0f + top_y_off, scale, color, true);
 
-	// Authentic PSP top status bar indicators to the left of the clock (Bluetooth, Wi-Fi, AVLS, Mute)
+	// Top status bar indicators to the left of the clock (Bluetooth, Wi-Fi, AVLS, Mute)
 	float icon_x = clock_x - 10.0f;
 	if (bluetooth_enabled_) {
 		auto bt = textures_.find("status_bt");
@@ -2375,8 +2416,9 @@ void XmbRenderer::DrawSystemInfoDialog() {
 			}
 			DrawText(v, val_x, y, val_scale, white, true);
 		};
-		row(box_y + 62.0f, TextOr("xmb_sysinfo_fw", "System Software"), "7.1 EmuCore Edition");
-		row(box_y + 86.0f, TextOr("xmb_sysinfo_model", "Model"), "PSP\u2122 4000");
+		// No Sony model or system-software release is claimed: this is EmuCoreA's menu.
+		row(box_y + 62.0f, TextOr("xmb_sysinfo_fw", "System Software"), "EmuCoreA");
+		row(box_y + 86.0f, TextOr("xmb_sysinfo_model", "Model"), "Android");
 		row(box_y + 110.0f, TextOr("xmb_sysinfo_name", "Nickname"), device_name_);
 		row(box_y + 134.0f, TextOr("msgshare_info_space", "Free Space"), free_space_text_);
 
@@ -3153,7 +3195,7 @@ void XmbRenderer::KeyPressed(Key key) {
 				if (category_ == 0) {
 					if (tex == "item_update") {
 						OpenNoticeDialog(title, {
-							TextOr("xmb_notice_update_1", "The system software of your PSP\u2122 4000 system is version 7.1 EmuCore Edition"),
+							TextOr("xmb_notice_update_1", "This menu is part of EmuCoreA and is updated together with the app."),
 							TextOr("xmb_notice_update_2", "There is no need to update."),
 						});
 						pending_sound = 1;
@@ -3161,7 +3203,7 @@ void XmbRenderer::KeyPressed(Key key) {
 					}
 					if (tex == "item_usb") {
 						OpenNoticeDialog(title, {
-							TextOr("xmb_usb_status", "Memory Stick\u2122 USB Mode"),
+							TextOr("xmb_usb_status", "Memory Card USB Mode"),
 							TextOr("xmb_games_count_lbl", "Installed Games") + ": " + std::to_string(games_.size()),
 							TextOr("msgshare_info_space", "Free Space") + ": " + free_space_text_,
 							TextOr("xmb_sysinfo_name", "Nickname") + ": " + device_name_,
@@ -3213,7 +3255,7 @@ void XmbRenderer::KeyPressed(Key key) {
 					}
 				} else if (category_ == 2) {
 					if (tex == "item_camera") {
-						OpenNoticeDialog(title, {TextOr("xmb_notice_camera", "Connect a camera compatible with the PSP\u2122 system.")});
+						OpenNoticeDialog(title, {TextOr("xmb_notice_camera", "Connect a compatible camera.")});
 						pending_sound = 1;
 						break;
 					}
@@ -3237,7 +3279,7 @@ void XmbRenderer::KeyPressed(Key key) {
 				} else if (category_ == 5) {
 					if (tex == "item_game_sharing") {
 						OpenNoticeDialog(title, {
-							TextOr("xmb_notice_gamesharing_1", "Searching for a nearby PSP\u2122 system..."),
+							TextOr("xmb_notice_gamesharing_1", "Searching for a nearby system..."),
 							TextOr("xmb_notice_gamesharing_2", "No Game Sharing sessions found."),
 						});
 						pending_sound = 1;
@@ -3267,12 +3309,12 @@ void XmbRenderer::KeyPressed(Key key) {
 						break;
 					}
 					if (tex == "item_locationfree") {
-						OpenNoticeDialog(title, {TextOr("xmb_notice_locationfree", "No LocationFree\u2122 Base Station is registered.")});
+						OpenNoticeDialog(title, {TextOr("xmb_notice_locationfree", "No remote TV base station is registered.")});
 						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_remoteplay") {
-						OpenNoticeDialog(title, {TextOr("xmb_notice_remoteplay", "Register a PS3\u2122 system to start Remote Play.")});
+						OpenNoticeDialog(title, {TextOr("xmb_notice_remoteplay", "Register a home console to start Remote Play.")});
 						pending_sound = 1;
 						break;
 					}
@@ -3284,7 +3326,7 @@ void XmbRenderer::KeyPressed(Key key) {
 					if (tex == "item_internet_browser") {
 						browser_confirm_active_ = true;
 						browser_confirm_selected_ = 0;
-						pending_browser_url_ = "https://www.playstation.com";
+						pending_browser_url_ = "https://emucorea.web.app/";
 						pending_sound = 1;
 						break;
 					}
@@ -3301,24 +3343,24 @@ void XmbRenderer::KeyPressed(Key key) {
 						break;
 					}
 					if (tex == "item_skype") {
-						OpenNoticeDialog(title, {TextOr("xmb_notice_skype", "Skype\u2122 service for PSP\u2122 has been discontinued.")});
+						OpenNoticeDialog(title, {TextOr("xmb_notice_skype", "Internet calling is not available.")});
 						pending_sound = 1;
 						break;
 					}
 				} else if (category_ == 7) {
 					if (tex == "item_psn_signup") {
-						OpenNoticeDialog(title, {TextOr("xmb_notice_psn", "PlayStation\u00aeNetwork is unavailable in offline emulator mode.")});
+						OpenNoticeDialog(title, {TextOr("xmb_notice_psn", "Online services are not available in EmuCoreA.")});
 						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_psn_store") {
-						OpenNoticeDialog(title, {TextOr("xmb_notice_ps_store", "PlayStation\u00aeStore cannot be accessed in offline emulator mode.")});
+						OpenNoticeDialog(title, {TextOr("xmb_notice_ps_store", "The online store is not available in EmuCoreA.")});
 						pending_sound = 1;
 						break;
 					}
 					if (tex == "item_info_board") {
 						OpenNoticeDialog(title, {
-							"PSP\u2122 4000  |  7.1 EmuCore Edition",
+							"EmuCoreA",
 							TextOr("xmb_games_count_lbl", "Installed Games") + ": " + std::to_string(games_.size()) +
 							    "   " + TextOr("xmb_saves_count_lbl", "Saved Data") + ": " + std::to_string(saves_.size()),
 							TextOr("msgshare_info_space", "Free Space") + ": " + free_space_text_,
@@ -3778,7 +3820,7 @@ void XmbRenderer::DrawOpeningTransition() {
 		const float black[4] = {0.0f, 0.0f, 0.0f, fade * fade};
 		DrawSolidQuad(0.0f, 0.0f, screen_width_, kScreenHeight, black);
 	}
-	// 2. Authentic opening_plugin.rco light-streak glow across the wave (0.05 -> 0.72)
+	// 2. Light-streak glow (opening_plugin textures from the user firmware) across the wave (0.05 -> 0.72)
 	if (opening_t_ < 0.74f) {
 		const float u = std::clamp((opening_t_ - 0.04f) / 0.68f, 0.0f, 1.0f);
 		const float bell = std::sin(u * 3.14159265f);
@@ -3808,17 +3850,8 @@ void XmbRenderer::DrawOpeningTransition() {
 			DrawTexture(glow_a->second, gx, 136.0f, 1.6f, gc);
 		}
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-		// Subtle Sony Computer Entertainment emblem glimmer before XMB icons take focus
-		if (opening_t_ < 0.56f) {
-			const float lu = std::clamp((opening_t_ - 0.06f) / 0.48f, 0.0f, 1.0f);
-			const float l_alpha = std::sin(lu * 3.14159265f) * 0.88f;
-			auto sce = textures_.find("open_sce_logo");
-			if (sce != textures_.end() && l_alpha > 0.02f) {
-				const float sc[4] = {1.0f, 1.0f, 1.0f, l_alpha};
-				DrawTexture(sce->second, cx + 96.0f, 148.0f, 0.90f, sc);
-			}
-		}
+		// The firmware's company emblem is deliberately not drawn: EmuCoreA does not present
+		// itself with Sony's marks.
 	}
 }
 
@@ -3832,7 +3865,7 @@ void XmbRenderer::DrawResumeTransition() {
 		const float black[4] = {0.0f, 0.0f, 0.0f, fade * fade};
 		DrawSolidQuad(0.0f, 0.0f, screen_width_, kScreenHeight, black);
 	}
-	// Authentic 15-frame system_plugin_fg/tex_busy.png spinner in bottom-right corner
+	// 15-frame busy spinner (system_plugin_fg/tex_busy.png from the user firmware) in bottom-right corner
 	const float busy_alpha = 1.0f - std::clamp((resume_t_ - 0.55f) / 0.45f, 0.0f, 1.0f);
 	if (busy_alpha > 0.02f) {
 		const int frame = static_cast<int>(time_elapsed_ * 30.0f) % 15;
@@ -3855,7 +3888,7 @@ void XmbRenderer::DrawGameBootAnimation() {
 	const float t = std::clamp(launch_t_, 0.0f, 1.0f);
 	const float cx = screen_width_ * 0.5f;
 
-	// 1. Luminous pearl-white & sky-cyan PSP Gameboot backdrop using real Sony 13-27.bmp gradient (ext_10.png)
+	// 1. Luminous pearl-white & sky-cyan PSP Gameboot backdrop using the user firmware theme gradient (ext_10.png)
 	const float bg_in = std::clamp(t / 0.18f, 0.0f, 1.0f);
 	const float bg_ease = bg_in * bg_in * (3.0f - 2.0f * bg_in);
 	const float base_col[4] = {0.90f, 0.96f, 1.0f, bg_ease};
@@ -3877,7 +3910,7 @@ void XmbRenderer::DrawGameBootAnimation() {
 	glBindVertexArray(vertex_array_);
 	bound_texture_ = 0;
 
-	// 2. Authentic opening_plugin.rco light beams & glow ribbons
+	// 2. Light beams (opening_plugin textures from the user firmware) & glow ribbons
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE);
 	auto glow_mid = textures_.find("open_glow_b_mid");
 	auto glow_top = textures_.find("open_glow_b_top");
@@ -3908,28 +3941,16 @@ void XmbRenderer::DrawGameBootAnimation() {
 	}
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	// 3. Authentic opening_plugin/tex_psp_logo.png ("PSP PlayStation Portable", 260x80)
-	auto psp_logo = textures_.find("open_psp_logo");
-	if (psp_logo != textures_.end() && t >= 0.10f) {
+	// 3. The firmware's product logo is deliberately not drawn: EmuCoreA does not present
+	//    itself with Sony's marks. The light sweep stays on its own.
+	if (glow_a != textures_.end() && t >= 0.10f) {
 		const float lin = std::clamp((t - 0.10f) / 0.22f, 0.0f, 1.0f);
 		const float lout = 1.0f - std::clamp((t - 0.76f) / 0.16f, 0.0f, 1.0f);
-		const float lalpha = lin * lout;
-		const float lscale = 0.88f + 0.13f * (1.0f - (1.0f - std::clamp((t - 0.10f) / 0.72f, 0.0f, 1.0f)) *
-		                                             (1.0f - std::clamp((t - 0.10f) / 0.72f, 0.0f, 1.0f)));
-		// Crisp dark-navy drop shadow + dark-charcoal/metallic PSP logo over luminous pearl wave
-		const float shadow_c[4] = {0.06f, 0.14f, 0.26f, lalpha * 0.42f};
-		const float logo_c[4] = {0.10f, 0.13f, 0.20f, lalpha * 0.96f};
-		DrawTexture(psp_logo->second, cx + 1.5f, 137.5f, lscale, shadow_c);
-		DrawTexture(psp_logo->second, cx, 136.0f, lscale, logo_c);
-
-		// Specular highlight sweep across the PSP logo
-		if (glow_a != textures_.end()) {
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-			const float sx = (cx - 130.0f) + std::clamp((t - 0.15f) / 0.60f, 0.0f, 1.0f) * 260.0f;
-			const float sc[4] = {1.0f, 1.0f, 1.0f, 0.75f * lalpha};
-			DrawTexture(glow_a->second, sx, 130.0f, 1.45f, sc);
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		}
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+		const float sx = (cx - 130.0f) + std::clamp((t - 0.15f) / 0.60f, 0.0f, 1.0f) * 260.0f;
+		const float sc[4] = {1.0f, 1.0f, 1.0f, 0.75f * lin * lout};
+		DrawTexture(glow_a->second, sx, 130.0f, 1.45f, sc);
+		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	}
 
 	// 4. Final fade to pure black before handing over to EmulationScreen (0.78 -> 1.00)

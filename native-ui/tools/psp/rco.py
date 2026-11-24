@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 SBRO
+# SPDX-License-Identifier: GPL-2.0-or-later
 """Reader for the PSP RCO (PRF) resource containers in flash0:/vsh/resource.
 
 The container is a tree of 0x28-byte entries plus type-specific fields. The tree
