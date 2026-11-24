@@ -3973,22 +3973,54 @@ void XmbRenderer::DrawGameBootAnimation() {
 		const float lout = 1.0f - std::clamp((t - 0.76f) / 0.16f, 0.0f, 1.0f);
 		const float alpha = lin * lout;
 		const float grow = 1.0f - std::clamp((t - 0.10f) / 0.72f, 0.0f, 1.0f);
-		const float scale = 1.55f * (0.88f + 0.12f * (1.0f - grow * grow));
-		static const std::string kAppName = "EmuCoreA";
-		const float width = MeasureText(kAppName, scale);
+		const float settle = 0.88f + 0.12f * (1.0f - grow * grow);
+
+		// Wide-tracked capitals, drawn letter by letter, so the name reads like a light,
+		// airy wordmark rather than a block of bold text.
+		auto tracked_width = [this](const std::string &text, float s, float tracking) {
+			float w = 0.0f;
+			for (size_t i = 0; i < text.size(); ++i) {
+				w += MeasureText(std::string(1, text[i]), s) + (i + 1 < text.size() ? tracking : 0.0f);
+			}
+			return w;
+		};
+		auto draw_tracked = [this](const std::string &text, float x, float baseline, float s,
+		                           float tracking, const float color[4]) {
+			for (char ch : text) {
+				const std::string glyph(1, ch);
+				DrawText(glyph, x, baseline, s, color, false);
+				x += MeasureText(glyph, s) + tracking;
+			}
+		};
+
+		static const std::string kWordmark = "EMUCOREA";
+		const float scale = 1.30f * settle;
+		const float tracking = 7.0f * settle;
+		const float width = tracked_width(kWordmark, scale, tracking);
 		const float x = cx - width * 0.5f;
-		const float baseline = 136.0f + 9.0f * scale;
-		// Dark-navy lettering with a soft drop shadow over the pearl-white wave.
-		const float shadow_c[4] = {0.06f, 0.14f, 0.26f, alpha * 0.40f};
-		const float text_c[4] = {0.10f, 0.13f, 0.20f, alpha * 0.96f};
-		DrawText(kAppName, x + 1.5f, baseline + 1.5f, scale, shadow_c, false);
-		DrawText(kAppName, x, baseline, scale, text_c, false);
+		const float baseline = 134.0f + 8.0f * scale;
+		// Steel-blue lettering: a pale bevel underneath and a soft shadow give it the
+		// engraved, metallic look over the pearl-white wave.
+		const float shadow_c[4] = {0.05f, 0.12f, 0.24f, alpha * 0.22f};
+		const float bevel_c[4] = {1.0f, 1.0f, 1.0f, alpha * 0.70f};
+		const float text_c[4] = {0.24f, 0.30f, 0.42f, alpha * 0.92f};
+		draw_tracked(kWordmark, x + 1.5f, baseline + 2.0f, scale, tracking, shadow_c);
+		draw_tracked(kWordmark, x, baseline + 1.0f, scale, tracking, bevel_c);
+		draw_tracked(kWordmark, x, baseline, scale, tracking, text_c);
+
+		// Small caption under the wordmark, right-aligned like the original's.
+		static const std::string kCaption = "Portable Emulator";
+		const float caption_scale = 0.52f * settle;
+		const float caption_w = MeasureText(kCaption, caption_scale);
+		const float caption_c[4] = {0.30f, 0.36f, 0.48f, alpha * 0.85f};
+		DrawText(kCaption, x + width - caption_w, baseline + 15.0f * settle, caption_scale, caption_c, false);
+
 		// Light sweep across the name
 		if (glow_a != textures_.end()) {
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-			const float sx = (cx - width * 0.5f) + std::clamp((t - 0.15f) / 0.60f, 0.0f, 1.0f) * width;
+			const float sx = x + std::clamp((t - 0.15f) / 0.60f, 0.0f, 1.0f) * width;
 			const float sc[4] = {1.0f, 1.0f, 1.0f, 0.75f * alpha};
-			DrawTexture(glow_a->second, sx, 130.0f, 1.45f, sc);
+			DrawTexture(glow_a->second, sx, baseline - 8.0f * scale, 1.45f, sc);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		}
 	}
