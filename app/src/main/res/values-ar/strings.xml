@@ -2164,6 +2164,7 @@
     <string name="xmb_fw_not_found">لا تحتوي أي من ألعابك على تحديث للنظام. اختر ملف تحديث PSP ‏(EBOOT.PBP أو DATA.BIN) أو صورة قرص لعبة تحتوي عليه.</string>
     <string name="xmb_fw_no_updater_in_file">لا يحتوي هذا الملف على تحديث لنظام PSP.</string>
     <string name="xmb_fw_failed">تعذّر تثبيت النظام: %1$s</string>
+    <string name="xmb_fw_unsupported">النظام %1$s غير مناسب لوضع XMB. اختر ملف تحديث 6.60 أو 6.61 ‏(EBOOT.PBP أو DATA.BIN) أو صورة قرص تحتوي عليه.</string>
     <string name="xmb_fw_hint">تحتوي معظم أقراص PSP على تحديث في PSP_GAME/SYSDIR/UPDATE. يعمل الإصدار 6.60 أو 6.61 بشكل أفضل.</string>
     <string name="xmb_fw_choose_file">اختيار ملف</string>
     <string name="xmb_fw_back">رجوع</string>

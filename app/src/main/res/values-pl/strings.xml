@@ -2177,6 +2177,7 @@
     <string name="xmb_fw_not_found">Żadna z twoich gier nie zawiera aktualizacji oprogramowania. Wybierz plik aktualizacji PSP (EBOOT.PBP lub DATA.BIN) albo obraz płyty, który ją zawiera.</string>
     <string name="xmb_fw_no_updater_in_file">Ten plik nie zawiera aktualizacji oprogramowania PSP.</string>
     <string name="xmb_fw_failed">Nie udało się zainstalować oprogramowania: %1$s</string>
+    <string name="xmb_fw_unsupported">Oprogramowanie %1$s nie pasuje do trybu XMB. Wybierz plik aktualizacji 6.60 lub 6.61 (EBOOT.PBP lub DATA.BIN) albo obraz płyty, który go zawiera.</string>
     <string name="xmb_fw_hint">Większość płyt PSP zawiera aktualizację w PSP_GAME/SYSDIR/UPDATE. Najlepiej działa wersja 6.60 lub 6.61.</string>
     <string name="xmb_fw_choose_file">Wybierz plik</string>
     <string name="xmb_fw_back">Wstecz</string>

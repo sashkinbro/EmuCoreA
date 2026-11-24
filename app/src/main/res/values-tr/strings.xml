@@ -2156,6 +2156,7 @@
     <string name="xmb_fw_not_found">Oyunlarınızın hiçbirinde yazılım güncellemesi yok. Bir PSP güncelleme dosyası (EBOOT.PBP veya DATA.BIN) ya da güncelleme içeren bir disk kalıbı seçin.</string>
     <string name="xmb_fw_no_updater_in_file">Bu dosya bir PSP yazılım güncellemesi içermiyor.</string>
     <string name="xmb_fw_failed">Yazılım yüklenemedi: %1$s</string>
+    <string name="xmb_fw_unsupported">%1$s yazılımı XMB moduna uygun değil. 6.60 veya 6.61 güncelleme dosyası (EBOOT.PBP veya DATA.BIN) ya da onu içeren bir disk kalıbı seçin.</string>
     <string name="xmb_fw_hint">Çoğu PSP diski PSP_GAME/SYSDIR/UPDATE içinde bir güncelleme barındırır. En iyi 6.60 veya 6.61 sürümü çalışır.</string>
     <string name="xmb_fw_choose_file">Dosya seç</string>
     <string name="xmb_fw_back">Geri</string>

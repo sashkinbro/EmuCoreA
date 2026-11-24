@@ -2156,6 +2156,7 @@
     <string name="xmb_fw_not_found">आपके किसी भी गेम में फ़र्मवेयर अपडेट नहीं है। PSP अपडेट फ़ाइल (EBOOT.PBP या DATA.BIN) या अपडेट वाली गेम डिस्क इमेज चुनें।</string>
     <string name="xmb_fw_no_updater_in_file">इस फ़ाइल में PSP फ़र्मवेयर अपडेट नहीं है।</string>
     <string name="xmb_fw_failed">फ़र्मवेयर इंस्टॉल नहीं हो सका: %1$s</string>
+    <string name="xmb_fw_unsupported">फ़र्मवेयर %1$s XMB मोड के लिए उपयुक्त नहीं है। 6.60 या 6.61 अपडेट फ़ाइल (EBOOT.PBP या DATA.BIN) या उसे रखने वाली डिस्क इमेज चुनें।</string>
     <string name="xmb_fw_hint">अधिकांश PSP डिस्क में PSP_GAME/SYSDIR/UPDATE में अपडेट होता है। फ़र्मवेयर 6.60 या 6.61 सबसे अच्छा काम करता है।</string>
     <string name="xmb_fw_choose_file">फ़ाइल चुनें</string>
     <string name="xmb_fw_back">वापस</string>

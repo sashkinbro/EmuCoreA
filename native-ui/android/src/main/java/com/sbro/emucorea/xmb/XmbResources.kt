@@ -30,6 +30,9 @@ object XmbResources {
     private const val MARKER_FORMAT = "xmb-resources-v2"
     private val ID_NAME = Regex("^[0-9a-f]{64}$")
 
+    /** The firmware's menu images don't match what the renderer needs (another version). */
+    class UnsupportedFirmwareException(val firmware: String, message: String) : IllegalStateException(message)
+
     /** Thrown by [ensure] while no firmware has been installed. */
     class MissingException : IllegalStateException(
         "XMB resources are not installed; the user's firmware has to be installed first",
@@ -100,9 +103,18 @@ object XmbResources {
                     throw IllegalStateException("extractor wrote no manifest")
                 }
                 val manifestText = manifest.readText()
-                val id = sha256(manifestText.toByteArray())
                 val firmware = FIRMWARE_FIELD.find(manifestText)?.groupValues?.get(1)
                     ?.substringBefore(':')?.trim().orEmpty().ifEmpty { "unknown" }
+                val unresolved = alignImages(staging, manifestText)
+                if (unresolved.isNotEmpty()) {
+                    staging.deleteRecursively()
+                    throw UnsupportedFirmwareException(
+                        firmware,
+                        "firmware $firmware is not supported: ${unresolved.size} menu images are missing " +
+                            "(${unresolved.take(3).joinToString()}). Use a 6.60 or 6.61 update.",
+                    )
+                }
+                val id = sha256(manifestText.toByteArray())
                 val files = staging.walkTopDown().count { it.isFile }
                 File(staging, COMPLETE_NAME).writeText("$MARKER_FORMAT\n$id\n$firmware\n$files\n")
                 val target = File(root, id)
@@ -157,7 +169,49 @@ object XmbResources {
         if (keep == null) File(root, "current").delete()
     }
 
-    private val FIRMWARE_FIELD = Regex("\"firmware\"\\s*:\\s*\"([^\"]*)\"")
+    /**
+     * Puts every image the renderer loads at the path it expects, matching by
+     * the digest of the image's source payload ([XmbExpectedImages]). Labels
+     * like `topmenu_icon/EV` are positional and shift between firmware
+     * versions; without this an icon would land on its neighbour's item.
+     * Returns the expected paths no extracted image matched.
+     */
+    private fun alignImages(staging: File, manifestText: String): List<String> {
+        val entries = org.json.JSONObject(manifestText).getJSONArray("files")
+        val pathBySha = HashMap<String, String>()
+        val shaByPath = HashMap<String, String>()
+        for (i in 0 until entries.length()) {
+            val entry = entries.getJSONObject(i)
+            val file = entry.optString("file").replace('\\', '/')
+            val sha = entry.optString("sha256_source")
+            if (file.isEmpty() || sha.isEmpty() || sha.startsWith("[")) continue
+            shaByPath[file] = sha
+            pathBySha.putIfAbsent(sha, file)
+        }
+        // Read every source first, so a move never overwrites an image another one still needs.
+        val plan = LinkedHashMap<String, ByteArray>()
+        val unresolved = ArrayList<String>()
+        for ((path, expected) in XmbExpectedImages.bySourceSha256) {
+            if (shaByPath[path] == expected) continue
+            val source = pathBySha[expected]
+            if (source == null) {
+                unresolved += path
+                continue
+            }
+            plan[path] = File(staging, source).readBytes()
+        }
+        for ((path, bytes) in plan) {
+            val target = File(staging, path)
+            target.parentFile?.mkdirs()
+            target.writeBytes(bytes)
+        }
+        if (plan.isNotEmpty()) {
+            android.util.Log.i("XmbResources", "moved ${plan.size} images to their renderer paths")
+        }
+        return unresolved
+    }
+
+    private val FIRMWARE_FIELD =Regex("\"firmware\"\\s*:\\s*\"([^\"]*)\"")
 
     private fun sha256(bytes: ByteArray): String =
         MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }

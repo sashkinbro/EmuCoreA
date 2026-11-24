@@ -2170,6 +2170,7 @@
     <string name="xmb_fw_not_found">Tidak ada game Anda yang berisi pembaruan firmware. Pilih berkas pembaruan PSP (EBOOT.PBP atau DATA.BIN) atau image disk game yang memuatnya.</string>
     <string name="xmb_fw_no_updater_in_file">Berkas ini tidak berisi pembaruan firmware PSP.</string>
     <string name="xmb_fw_failed">Gagal memasang firmware: %1$s</string>
+    <string name="xmb_fw_unsupported">Firmware %1$s tidak cocok untuk mode XMB. Pilih berkas pembaruan 6.60 atau 6.61 (EBOOT.PBP atau DATA.BIN) atau image disk yang memuatnya.</string>
     <string name="xmb_fw_hint">Sebagian besar disk PSP menyertakan pembaruan di PSP_GAME/SYSDIR/UPDATE. Firmware 6.60 atau 6.61 bekerja paling baik.</string>
     <string name="xmb_fw_choose_file">Pilih berkas</string>
     <string name="xmb_fw_back">Kembali</string>

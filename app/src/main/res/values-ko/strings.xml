@@ -2155,6 +2155,7 @@
     <string name="xmb_fw_not_found">펌웨어 업데이트가 포함된 게임이 없습니다. PSP 업데이트 파일(EBOOT.PBP 또는 DATA.BIN)이나 업데이트가 포함된 디스크 이미지를 선택하세요.</string>
     <string name="xmb_fw_no_updater_in_file">이 파일에는 PSP 펌웨어 업데이트가 없습니다.</string>
     <string name="xmb_fw_failed">펌웨어를 설치할 수 없습니다: %1$s</string>
+    <string name="xmb_fw_unsupported">펌웨어 %1$s은(는) XMB 모드에 맞지 않습니다. 6.60 또는 6.61 업데이트 파일(EBOOT.PBP 또는 DATA.BIN)이나 이를 포함한 디스크 이미지를 선택하세요.</string>
     <string name="xmb_fw_hint">대부분의 PSP 디스크에는 PSP_GAME/SYSDIR/UPDATE에 업데이트가 들어 있습니다. 6.60 또는 6.61이 가장 좋습니다.</string>
     <string name="xmb_fw_choose_file">파일 선택</string>
     <string name="xmb_fw_back">뒤로</string>

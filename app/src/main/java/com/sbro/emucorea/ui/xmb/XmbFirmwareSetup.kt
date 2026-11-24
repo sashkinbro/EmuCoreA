@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.sbro.emucorea.R
 import com.sbro.emucorea.data.GameItem
+import com.sbro.emucorea.xmb.XmbResources
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -57,6 +58,7 @@ private sealed interface SetupState {
     data object NotFound : SetupState
     data object PickedFileHasNoUpdater : SetupState
     data class Failed(val message: String) : SetupState
+    data class Unsupported(val version: String) : SetupState
 }
 
 /**
@@ -99,7 +101,12 @@ fun XmbFirmwareSetup(
                 }
                 lastError = result.exceptionOrNull()
             }
-            state = SetupState.Failed(lastError?.message ?: lastError?.javaClass?.simpleName.orEmpty())
+            val error = lastError
+            state = if (error is XmbResources.UnsupportedFirmwareException) {
+                SetupState.Unsupported(error.firmware)
+            } else {
+                SetupState.Failed(error?.message ?: error?.javaClass?.simpleName.orEmpty())
+            }
         }
     }
 
@@ -190,11 +197,12 @@ fun XmbFirmwareSetup(
                     )
                 }
 
-                SetupState.NotFound, SetupState.PickedFileHasNoUpdater, is SetupState.Failed -> {
+                SetupState.NotFound, SetupState.PickedFileHasNoUpdater, is SetupState.Failed, is SetupState.Unsupported -> {
                     val message = when (current) {
                         SetupState.NotFound -> stringResource(R.string.xmb_fw_not_found)
                         SetupState.PickedFileHasNoUpdater -> stringResource(R.string.xmb_fw_no_updater_in_file)
                         is SetupState.Failed -> stringResource(R.string.xmb_fw_failed, current.message)
+                        is SetupState.Unsupported -> stringResource(R.string.xmb_fw_unsupported, current.version)
                         else -> ""
                     }
                     Text(message, color = Color(0xFFFFD27A), fontSize = 14.sp, textAlign = TextAlign.Center)

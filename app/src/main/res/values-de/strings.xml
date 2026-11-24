@@ -2158,6 +2158,7 @@
     <string name="xmb_fw_not_found">Keines deiner Spiele enthält ein Firmware-Update. Wähle eine PSP-Update-Datei (EBOOT.PBP oder DATA.BIN) oder ein Disc-Abbild, das eines enthält.</string>
     <string name="xmb_fw_no_updater_in_file">Diese Datei enthält kein PSP-Firmware-Update.</string>
     <string name="xmb_fw_failed">Firmware konnte nicht installiert werden: %1$s</string>
+    <string name="xmb_fw_unsupported">Firmware %1$s passt nicht zum XMB-Modus. Wähle eine Update-Datei 6.60 oder 6.61 (EBOOT.PBP oder DATA.BIN) oder ein Disc-Abbild, das eine enthält.</string>
     <string name="xmb_fw_hint">Die meisten PSP-Discs enthalten ein Update unter PSP_GAME/SYSDIR/UPDATE. Firmware 6.60 oder 6.61 funktioniert am besten.</string>
     <string name="xmb_fw_choose_file">Datei wählen</string>
     <string name="xmb_fw_back">Zurück</string>

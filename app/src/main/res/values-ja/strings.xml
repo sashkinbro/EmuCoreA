@@ -2155,6 +2155,7 @@
     <string name="xmb_fw_not_found">どのゲームにもシステムアップデートが含まれていません。PSPのアップデートファイル(EBOOT.PBPまたはDATA.BIN)か、アップデートを含むディスクイメージを選択してください。</string>
     <string name="xmb_fw_no_updater_in_file">このファイルにはPSPのシステムアップデートが含まれていません。</string>
     <string name="xmb_fw_failed">インストールできませんでした: %1$s</string>
+    <string name="xmb_fw_unsupported">システムソフトウェア %1$s はXMBモードに対応していません。6.60または6.61のアップデートファイル(EBOOT.PBPまたはDATA.BIN)か、それを含むディスクイメージを選択してください。</string>
     <string name="xmb_fw_hint">多くのPSPディスクには PSP_GAME/SYSDIR/UPDATE にアップデートが含まれています。6.60または6.61が最適です。</string>
     <string name="xmb_fw_choose_file">ファイルを選択</string>
     <string name="xmb_fw_back">戻る</string>

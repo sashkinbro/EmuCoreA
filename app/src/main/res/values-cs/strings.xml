@@ -2177,6 +2177,7 @@
     <string name="xmb_fw_not_found">Žádná z vašich her neobsahuje aktualizaci firmwaru. Vyberte soubor aktualizace PSP (EBOOT.PBP nebo DATA.BIN) nebo obraz disku, který ji obsahuje.</string>
     <string name="xmb_fw_no_updater_in_file">Tento soubor neobsahuje aktualizaci firmwaru PSP.</string>
     <string name="xmb_fw_failed">Firmware se nepodařilo nainstalovat: %1$s</string>
+    <string name="xmb_fw_unsupported">Firmware %1$s se pro režim XMB nehodí. Vyberte soubor aktualizace 6.60 nebo 6.61 (EBOOT.PBP nebo DATA.BIN) nebo obraz disku, který jej obsahuje.</string>
     <string name="xmb_fw_hint">Většina disků PSP obsahuje aktualizaci v PSP_GAME/SYSDIR/UPDATE. Nejlépe funguje firmware 6.60 nebo 6.61.</string>
     <string name="xmb_fw_choose_file">Vybrat soubor</string>
     <string name="xmb_fw_back">Zpět</string>

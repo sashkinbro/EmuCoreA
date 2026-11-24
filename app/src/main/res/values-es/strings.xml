@@ -2158,6 +2158,7 @@
     <string name="xmb_fw_not_found">Ninguno de tus juegos incluye una actualización de firmware. Elige un archivo de actualización de PSP (EBOOT.PBP o DATA.BIN) o una imagen de disco que la contenga.</string>
     <string name="xmb_fw_no_updater_in_file">Este archivo no contiene una actualización de firmware de PSP.</string>
     <string name="xmb_fw_failed">No se pudo instalar el firmware: %1$s</string>
+    <string name="xmb_fw_unsupported">El firmware %1$s no sirve para el modo XMB. Elige un archivo de actualización 6.60 o 6.61 (EBOOT.PBP o DATA.BIN) o una imagen de disco que lo contenga.</string>
     <string name="xmb_fw_hint">La mayoría de los discos de PSP incluyen una actualización en PSP_GAME/SYSDIR/UPDATE. El firmware 6.60 o 6.61 funciona mejor.</string>
     <string name="xmb_fw_choose_file">Elegir archivo</string>
     <string name="xmb_fw_back">Atrás</string>

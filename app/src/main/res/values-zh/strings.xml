@@ -2157,6 +2157,7 @@
     <string name="xmb_fw_not_found">您的游戏中没有固件更新。请选择 PSP 更新文件（EBOOT.PBP 或 DATA.BIN）或包含更新的游戏光盘镜像。</string>
     <string name="xmb_fw_no_updater_in_file">此文件不包含 PSP 固件更新。</string>
     <string name="xmb_fw_failed">无法安装固件：%1$s</string>
+    <string name="xmb_fw_unsupported">固件 %1$s 不适用于 XMB 模式。请选择 6.60 或 6.61 更新文件（EBOOT.PBP 或 DATA.BIN）或包含它的游戏光盘镜像。</string>
     <string name="xmb_fw_hint">大多数 PSP 光盘在 PSP_GAME/SYSDIR/UPDATE 中带有更新。固件 6.60 或 6.61 效果最佳。</string>
     <string name="xmb_fw_choose_file">选择文件</string>
     <string name="xmb_fw_back">返回</string>

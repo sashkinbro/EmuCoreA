@@ -2171,6 +2171,7 @@
     <string name="xmb_fw_not_found">هیچ‌کدام از بازی‌های شما به‌روزرسانی سیستم‌عامل ندارند. یک فایل به‌روزرسانی PSP ‏(EBOOT.PBP یا DATA.BIN) یا ایمیج دیسکی که آن را دارد انتخاب کنید.</string>
     <string name="xmb_fw_no_updater_in_file">این فایل به‌روزرسانی سیستم‌عامل PSP ندارد.</string>
     <string name="xmb_fw_failed">نصب سیستم‌عامل ناموفق بود: %1$s</string>
+    <string name="xmb_fw_unsupported">سیستم‌عامل %1$s برای حالت XMB مناسب نیست. یک فایل به‌روزرسانی 6.60 یا 6.61 ‏(EBOOT.PBP یا DATA.BIN) یا ایمیج دیسکی که آن را دارد انتخاب کنید.</string>
     <string name="xmb_fw_hint">بیشتر دیسک‌های PSP در PSP_GAME/SYSDIR/UPDATE یک به‌روزرسانی دارند. نسخه 6.60 یا 6.61 بهترین نتیجه را می‌دهد.</string>
     <string name="xmb_fw_choose_file">انتخاب فایل</string>
     <string name="xmb_fw_back">بازگشت</string>

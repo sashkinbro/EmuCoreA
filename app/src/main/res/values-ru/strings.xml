@@ -2160,6 +2160,7 @@
     <string name="xmb_fw_not_found">Ни в одной из ваших игр нет обновления прошивки. Выберите файл обновления PSP (EBOOT.PBP или DATA.BIN) или образ диска игры, который его содержит.</string>
     <string name="xmb_fw_no_updater_in_file">Этот файл не содержит обновления прошивки PSP.</string>
     <string name="xmb_fw_failed">Не удалось установить прошивку: %1$s</string>
+    <string name="xmb_fw_unsupported">Прошивка %1$s не подходит для режима XMB. Выберите файл обновления 6.60 или 6.61 (EBOOT.PBP или DATA.BIN) либо образ диска игры, который его содержит.</string>
     <string name="xmb_fw_hint">Большинство дисков PSP содержат обновление в PSP_GAME/SYSDIR/UPDATE. Лучше всего подходит прошивка 6.60 или 6.61.</string>
     <string name="xmb_fw_choose_file">Выбрать файл</string>
     <string name="xmb_fw_back">Назад</string>
