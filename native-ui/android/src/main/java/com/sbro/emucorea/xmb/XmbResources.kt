@@ -56,11 +56,10 @@ object XmbResources {
         val current = File(root, "current")
         val id = runCatching { current.readText().trim() }.getOrNull()
         val found = id?.takeIf { ID_NAME.matches(it) }?.let { readComplete(File(root, it)) }
-        if (found == null) {
-            // Nothing usable: drop whatever an older build left behind, including the
-            // pack that earlier versions installed from the APK.
-            cleanObsolete(root, keep = null)
-        }
+        // First lookup in this process: nothing can be using an older tree any more, so
+        // drop it (one kept by a background upgrade, or the pack older builds installed
+        // from the APK).
+        cleanObsolete(root, keep = found?.id)
         cached = found
         found
     }
@@ -73,8 +72,11 @@ object XmbResources {
     /**
      * Builds the tree from an unpacked flash0 directory (one holding
      * `vsh/resource/` and `font/`). Blocking; call off the main thread.
+     *
+     * With [keepPrevious] (a background upgrade while the XMB may be open) the
+     * tree in use stays on disk; it is removed on the next process start.
      */
-    fun install(context: Context, flash0: File): Installed = synchronized(this) {
+    fun install(context: Context, flash0: File, keepPrevious: Boolean = false): Installed = synchronized(this) {
         require(File(flash0, "vsh/resource").isDirectory) {
             "no vsh/resource under ${flash0.absolutePath}"
         }
@@ -105,7 +107,13 @@ object XmbResources {
                 val manifestText = manifest.readText()
                 val firmware = FIRMWARE_FIELD.find(manifestText)?.groupValues?.get(1)
                     ?.substringBefore(':')?.trim().orEmpty().ifEmpty { "unknown" }
-                val unresolved = alignImages(staging, manifestText)
+                val versionNumber = versionToInt(firmware)
+                if (versionNumber in 1 until MIN_FIRMWARE) {
+                    staging.deleteRecursively()
+                    throw UnsupportedFirmwareException(firmware, "firmware $firmware is older than 6.00")
+                }
+                val unresolved = alignImages(staging, manifestText) +
+                    REQUIRED_FILES.filterNot { File(staging, it).isFile }
                 if (unresolved.isNotEmpty()) {
                     staging.deleteRecursively()
                     throw UnsupportedFirmwareException(
@@ -125,7 +133,12 @@ object XmbResources {
                     throw IllegalStateException("cannot move the resources into ${target.absolutePath}")
                 }
                 File(root, "current").writeText(id + "\n")
-                cleanObsolete(root, keep = id)
+                val previous = cached?.id
+                if (keepPrevious && previous != null && previous != id) {
+                    cleanObsolete(root, keep = id, alsoKeep = previous)
+                } else {
+                    cleanObsolete(root, keep = id)
+                }
                 val installed = Installed(target, id, firmware, files)
                 cached = installed
                 installed
@@ -158,9 +171,9 @@ object XmbResources {
         return Installed(directory, id, lines[2].trim(), files)
     }
 
-    private fun cleanObsolete(root: File, keep: String?) {
+    private fun cleanObsolete(root: File, keep: String?, alsoKeep: String? = null) {
         root.listFiles()?.forEach { child ->
-            if (child.isDirectory && child.name != keep && child.name != STAGING_NAME &&
+            if (child.isDirectory && child.name != keep && child.name != alsoKeep && child.name != STAGING_NAME &&
                 ID_NAME.matches(child.name)
             ) {
                 child.deleteRecursively()
@@ -220,6 +233,37 @@ object XmbResources {
         )
         return unresolved
     }
+
+    /** The oldest system software whose shell the XMB is built from (6.00 added the Extras column). */
+    const val MIN_FIRMWARE = 600
+
+    /**
+     * "6.31" -> 631; a single-digit minor part is tens ("5.5" -> 550). 0 when it isn't
+     * a version at all, so an unknown version never passes a comparison by accident.
+     */
+    fun versionToInt(version: String): Int {
+        val parts = version.trim().split('.')
+        if (parts.size != 2) return 0
+        val major = parts[0].toIntOrNull() ?: return 0
+        val minorText = parts[1].take(2)
+        val minor = minorText.toIntOrNull() ?: return 0
+        return major * 100 + if (minorText.length == 1) minor * 10 else minor
+    }
+
+    /**
+     * Non-image files the scene cannot work without. Anything else that is missing
+     * is optional and simply not drawn or played.
+     */
+    private val REQUIRED_FILES = listOf(
+        "fonts/ltn0.pgf",
+        "rco/system_plugin_bg.rco",
+        "models/system_plugin_bg/mdl_bg.gmo",
+        "audio/system_plugin/snd_cursor.wav",
+        "audio/system_plugin/snd_decide.wav",
+        "audio/system_plugin/snd_cancel.wav",
+        "audio/system_plugin/snd_category_decide.wav",
+        "images/themes/ext_10.png",
+    ) + (0 until 12).map { "images/themes/orig_%02d.png".format(java.util.Locale.ROOT, it) }
 
     private val FIRMWARE_FIELD =Regex("\"firmware\"\\s*:\\s*\"([^\"]*)\"")
 

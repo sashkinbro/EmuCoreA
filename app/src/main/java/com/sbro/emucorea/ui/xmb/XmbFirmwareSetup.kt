@@ -111,7 +111,7 @@ fun XmbFirmwareSetup(
     }
 
     // Automatic path: once the library is known, look for an updater and install it.
-    LaunchedEffect(isLoadingGames, attempt) {
+    LaunchedEffect(isLoadingGames, attempt, games.size) {
         if (state is SetupState.Installing) return@LaunchedEffect
         if (isLoadingGames) {
             state = SetupState.WaitingForLibrary

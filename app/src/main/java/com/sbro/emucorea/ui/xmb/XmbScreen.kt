@@ -462,6 +462,13 @@ fun XmbScreen(
         )
         return
     }
+    // Resources from a firmware other than 6.60/6.61: once the library is known, quietly look
+    // for a better updater and rebuild from it; the new tree is used the next time the mode opens.
+    LaunchedEffect(isLoadingGames) {
+        if (!isLoadingGames && games.isNotEmpty()) {
+            withContext(Dispatchers.IO) { XmbFirmwareInstaller.upgradeIfBetter(context, games) }
+        }
+    }
     XmbScene(games, isLoadingGames, onGameSelected, onSaveSelected, onDeleteGame, onExitXmb, modifier)
 }
 
