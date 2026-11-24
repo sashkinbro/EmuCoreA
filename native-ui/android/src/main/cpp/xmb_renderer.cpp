@@ -3864,8 +3864,19 @@ void XmbRenderer::DrawOpeningTransition() {
 			DrawTexture(glow_a->second, gx, 136.0f, 1.6f, gc);
 		}
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-		// The firmware's company emblem is deliberately not drawn: EmuCoreA does not present
-		// itself with Sony's marks.
+		// EmuCoreA's name glimmers where the firmware shows its company emblem (which is
+		// deliberately not drawn: EmuCoreA does not present itself with Sony's marks).
+		if (opening_t_ < 0.56f) {
+			const float lu = std::clamp((opening_t_ - 0.06f) / 0.48f, 0.0f, 1.0f);
+			const float l_alpha = std::sin(lu * 3.14159265f) * 0.88f;
+			if (l_alpha > 0.02f) {
+				static const std::string kAppName = "EmuCoreA";
+				const float scale = 0.95f;
+				const float width = MeasureText(kAppName, scale);
+				const float tc[4] = {1.0f, 1.0f, 1.0f, l_alpha};
+				DrawText(kAppName, cx + 96.0f - width * 0.5f, 148.0f + 6.0f, scale, tc, true);
+			}
+		}
 	}
 }
 
@@ -3955,16 +3966,31 @@ void XmbRenderer::DrawGameBootAnimation() {
 	}
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	// 3. The firmware's product logo is deliberately not drawn: EmuCoreA does not present
-	//    itself with Sony's marks. The light sweep stays on its own.
-	if (glow_a != textures_.end() && t >= 0.10f) {
+	// 3. EmuCoreA's own name in place of the firmware's product logo (EmuCoreA does not
+	//    present itself with Sony's marks), with the logo's fade, settle and light sweep.
+	if (t >= 0.10f) {
 		const float lin = std::clamp((t - 0.10f) / 0.22f, 0.0f, 1.0f);
 		const float lout = 1.0f - std::clamp((t - 0.76f) / 0.16f, 0.0f, 1.0f);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE);
-		const float sx = (cx - 130.0f) + std::clamp((t - 0.15f) / 0.60f, 0.0f, 1.0f) * 260.0f;
-		const float sc[4] = {1.0f, 1.0f, 1.0f, 0.75f * lin * lout};
-		DrawTexture(glow_a->second, sx, 130.0f, 1.45f, sc);
-		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		const float alpha = lin * lout;
+		const float grow = 1.0f - std::clamp((t - 0.10f) / 0.72f, 0.0f, 1.0f);
+		const float scale = 1.55f * (0.88f + 0.12f * (1.0f - grow * grow));
+		static const std::string kAppName = "EmuCoreA";
+		const float width = MeasureText(kAppName, scale);
+		const float x = cx - width * 0.5f;
+		const float baseline = 136.0f + 9.0f * scale;
+		// Dark-navy lettering with a soft drop shadow over the pearl-white wave.
+		const float shadow_c[4] = {0.06f, 0.14f, 0.26f, alpha * 0.40f};
+		const float text_c[4] = {0.10f, 0.13f, 0.20f, alpha * 0.96f};
+		DrawText(kAppName, x + 1.5f, baseline + 1.5f, scale, shadow_c, false);
+		DrawText(kAppName, x, baseline, scale, text_c, false);
+		// Light sweep across the name
+		if (glow_a != textures_.end()) {
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE);
+			const float sx = (cx - width * 0.5f) + std::clamp((t - 0.15f) / 0.60f, 0.0f, 1.0f) * width;
+			const float sc[4] = {1.0f, 1.0f, 1.0f, 0.75f * alpha};
+			DrawTexture(glow_a->second, sx, 130.0f, 1.45f, sc);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+		}
 	}
 
 	// 4. Final fade to pure black before handing over to EmulationScreen (0.78 -> 1.00)
