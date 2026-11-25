@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,6 +63,9 @@ import com.sbro.emucorea.ui.emulation.EmulationScreen
 import com.sbro.emucorea.ui.formats.SupportedFormatsScreen
 import com.sbro.emucorea.ui.feedback.FeedbackScreen
 import com.sbro.emucorea.ui.projects.OurProjectsScreen
+import com.sbro.emucorea.ui.store.LocalOpenStore
+import com.sbro.emucorea.ui.store.StoreInstalledScreen
+import com.sbro.emucorea.ui.store.StoreItemScreen
 import com.sbro.emucorea.ui.home.HomeScreen
 import com.sbro.emucorea.ui.home.HomeViewModel
 import com.sbro.emucorea.ui.xmb.XmbScreen
@@ -143,7 +147,7 @@ object OnboardingRoute
 object CatalogSearchRoute
 
 @Serializable
-object HubRoute
+data class HubRoute(val tab: String? = null, val storeTab: String? = null)
 
 @Serializable
 object SupportedFormatsRoute
@@ -178,6 +182,12 @@ object FeedbackRoute
 
 @Serializable
 object ProjectsRoute
+
+@Serializable
+data class StoreItemRoute(val id: String)
+
+@Serializable
+object StoreInstalledRoute
 
 @Serializable
 data class GameSettingsManagerRoute(val gamePath: String? = null)
@@ -363,7 +373,7 @@ fun AppNavigation(
         }
     }
     val navigateHub: () -> Unit = {
-        navController.navigate(HubRoute) {
+        navController.navigate(HubRoute()) {
             launchSingleTop = true
         }
     }
@@ -608,7 +618,8 @@ fun AppNavigation(
                 }
             }
 
-            composable<HubRoute> {
+            composable<HubRoute> { hubBackStackEntry ->
+                val hubRoute = hubBackStackEntry.toRoute<HubRoute>()
                 val detailBackStack = rememberSaveable(
                     saver = listSaver(
                         save = { it.toList() },
@@ -673,7 +684,20 @@ fun AppNavigation(
                     ) {
                         HubScreen(
                             onBackClick = { navController.popBackStack() },
-                            onOpenArticle = openDetail
+                            onOpenArticle = openDetail,
+                            onOpenStoreItem = { id ->
+                                navController.navigate(StoreItemRoute(id)) {
+                                    launchSingleTop = true
+                                }
+                            },
+                            onOpenInstalled = {
+                                navController.navigate(StoreInstalledRoute) {
+                                    launchSingleTop = true
+                                }
+                            },
+                            initialTab = hubRoute.tab,
+                            initialStoreTab = hubRoute.storeTab,
+                            backEnabled = detailBackStack.isEmpty()
                         )
                     }
 
@@ -853,6 +877,13 @@ fun AppNavigation(
                     onBackClick = { navController.popBackStack() },
                     onLaunchGame = launchGamePickerAction
                 ) {
+                    CompositionLocalProvider(
+                        LocalOpenStore provides { tab ->
+                            navController.navigate(HubRoute(tab = "store", storeTab = tab)) {
+                                launchSingleTop = true
+                            }
+                        }
+                    ) {
                     SettingsScreen(
                         initialTab = route.tab,
                         onBackClick = { navController.popBackStack() },
@@ -883,6 +914,7 @@ fun AppNavigation(
                         },
                         viewModel = settingsViewModel
                     )
+                    }
                 }
             }
 
@@ -1071,6 +1103,25 @@ fun AppNavigation(
                 ) {
                     OurProjectsScreen(onBackClick = { navController.popBackStack() })
                 }
+            }
+
+            composable<StoreInstalledRoute> {
+                StoreInstalledScreen(
+                    onBackClick = { navController.popBackStack() },
+                    onOpenItem = { id ->
+                        navController.navigate(StoreItemRoute(id)) {
+                            launchSingleTop = true
+                        }
+                    }
+                )
+            }
+
+            composable<StoreItemRoute> { backStackEntry ->
+                val route = backStackEntry.toRoute<StoreItemRoute>()
+                StoreItemScreen(
+                    itemId = route.id,
+                    onBackClick = { navController.popBackStack() }
+                )
             }
 
             composable<SaveManagerRoute> { backStackEntry ->
