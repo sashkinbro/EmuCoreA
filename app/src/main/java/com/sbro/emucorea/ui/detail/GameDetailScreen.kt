@@ -55,13 +55,14 @@ import androidx.compose.material.icons.rounded.Save
 import androidx.compose.material.icons.rounded.SmartDisplay
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.VideoLibrary
-import androidx.compose.material3.Button
+import com.sbro.emucorea.ui.theme.style.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
+import com.sbro.emucorea.ui.theme.style.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.sbro.emucorea.ui.theme.style.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -422,7 +423,7 @@ private fun DetailSkeleton(
                     modifier = Modifier
                         .height(36.dp)
                         .width(if (it == 2) 132.dp else 72.dp)
-                        .clip(RoundedCornerShape(999.dp))
+                        .clip(neonShape(999.dp))
                 )
             }
         }
@@ -576,7 +577,7 @@ private fun MetaChip(
     text: String
 ) {
     Surface(
-        shape = RoundedCornerShape(999.dp),
+        shape = neonShape(999.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
     ) {
         Row(
@@ -602,7 +603,7 @@ private fun MetaChip(
 @Composable
 private fun GenreChip(text: String) {
     Surface(
-        shape = RoundedCornerShape(999.dp),
+        shape = neonShape(999.dp),
         color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
     ) {
         Text(
@@ -834,7 +835,7 @@ private fun VideoCard(
                 modifier = Modifier
                     .align(Alignment.BottomStart)
                     .padding(10.dp),
-                shape = RoundedCornerShape(999.dp),
+                shape = neonShape(999.dp),
                 color = Color.Black.copy(alpha = 0.48f)
             ) {
                 Text(
@@ -1085,7 +1086,7 @@ private fun LandscapeVideoTopBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(
-            shape = RoundedCornerShape(999.dp),
+            shape = neonShape(999.dp),
             color = Color.Black.copy(alpha = 0.42f)
         ) {
             Text(

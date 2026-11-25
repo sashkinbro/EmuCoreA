@@ -61,20 +61,20 @@ import com.sbro.emucorea.core.PpssppCoreOptionLocalization
 import com.sbro.emucorea.core.CoreOptionStore
 import androidx.compose.material.icons.rounded.Tune
 import com.sbro.emucorea.ui.common.AppAlertDialog as AlertDialog
-import androidx.compose.material3.Button
+import com.sbro.emucorea.ui.theme.style.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenu
+import com.sbro.emucorea.ui.theme.style.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
+import com.sbro.emucorea.ui.theme.style.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import com.sbro.emucorea.ui.common.SyncedSlider
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
+import com.sbro.emucorea.ui.theme.style.Surface
+import com.sbro.emucorea.ui.theme.style.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import com.sbro.emucorea.ui.theme.style.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect

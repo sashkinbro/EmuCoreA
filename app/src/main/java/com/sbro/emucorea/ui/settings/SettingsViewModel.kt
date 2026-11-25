@@ -1,5 +1,7 @@
 package com.sbro.emucorea.ui.settings
 
+import kotlinx.coroutines.flow.Flow
+import androidx.compose.runtime.Immutable
 import android.app.Activity
 import android.app.Application
 import android.net.Uri
@@ -414,6 +416,12 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         if (mode == ThemeMode.NEON) {
             preferences.setTouchControlVisualStyle(TouchControlVisualStyle.MODERN)
         }
+    }
+
+    val themePackageId: Flow<String?> = preferences.themePackageId
+
+    fun applyThemePackage(id: String, requiresPro: Boolean) = viewModelScope.launch {
+        preferences.applyThemePackage(id, requiresPro)
     }
 
     fun purchasePro(

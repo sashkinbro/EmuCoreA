@@ -57,11 +57,11 @@ import com.sbro.emucorea.ui.common.gamepadFocusableCard
 import com.sbro.emucorea.ui.common.tvFocusGroup
 import com.sbro.emucorea.ui.theme.neon.neonShape
 import com.sbro.emucorea.ui.theme.neon.neonButtonShape
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.TextButton
+import com.sbro.emucorea.ui.theme.style.Button
+import com.sbro.emucorea.ui.theme.style.FilledTonalButton
+import com.sbro.emucorea.ui.theme.style.OutlinedButton
+import com.sbro.emucorea.ui.theme.style.Surface
+import com.sbro.emucorea.ui.theme.style.TextButton
 
 private fun openLink(context: Context, url: String, failedMessage: String) {
     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
