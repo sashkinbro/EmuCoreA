@@ -139,9 +139,16 @@ bool FramebufferManagerCommon::PresentsToOtherOutput() const {
 }
 
 void FramebufferManagerCommon::SetDisplayFramebuffer(u32 framebuf, u32 stride, GEBufferFormat format) {
+	const u32 prevPtr = displayFramebufPtr_;
 	displayFramebufPtr_ = framebuf & 0x3FFFFFFF;
 	if (Memory::IsVRAMAddress(displayFramebufPtr_))
 		displayFramebufPtr_ = framebuf & 0x041FFFFF;
+	if (displayFramebufPtr_ != prevPtr) {
+		displaySwitchedFromPtr_ = prevPtr;
+		displaySwitched_ = true;
+		displaySwitchedReally_ = true;
+		displayChecksSinceSwitch_ = 0;
+	}
 	displayStride_ = stride;
 	displayFormat_ = format;
 }
@@ -209,6 +216,59 @@ VirtualFramebuffer *FramebufferManagerCommon::ResolveVFB(u32 addr, int stride, G
 
 VirtualFramebuffer *FramebufferManagerCommon::GetDisplayVFB() {
 	return GetExactVFB(displayFramebufPtr_, displayStride_, displayFormat_);
+}
+
+// The framebuffer holding a display address, at its start or at an offset into it. Unlike
+// FindDisplayVFB, this only looks: it never resolves a format, so it's safe for a per-vblank check.
+VirtualFramebuffer *FramebufferManagerCommon::FindDisplayContainingVFB(u32 addr) const {
+	addr &= 0x3FFFFFFF;
+	if (Memory::IsVRAMAddress(addr))
+		addr &= 0x041FFFFF;
+	VirtualFramebuffer *match = nullptr;
+	for (VirtualFramebuffer *v : vfbs_) {
+		if (v->fb_format != displayFormat_ || v->fb_stride != displayStride_) {
+			continue;
+		}
+		if (addr >= v->fb_address && addr < v->fb_address + v->BufferByteSize(RASTER_COLOR)) {
+			if (!match || v->fb_address > match->fb_address) {
+				match = v;
+			}
+		}
+	}
+	return match;
+}
+
+bool FramebufferManagerCommon::ConsumeDisplayDirty(bool really) {
+	bool &switchedFlag = really ? displaySwitchedReally_ : displaySwitched_;
+	const bool switched = switchedFlag;
+	switchedFlag = false;
+	if (!really && displayChecksSinceSwitch_ < 1000) {
+		displayChecksSinceSwitch_++;
+	}
+
+	VirtualFramebuffer *vfb = GetDisplayVFB();
+	// With no framebuffer at exactly this address, present every time, as we always have.
+	bool dirty = true;
+	if (vfb) {
+		bool &dirtyFlag = really ? vfb->reallyDirtyAfterDisplay : vfb->dirtyAfterDisplay;
+		dirty = dirtyFlag;
+		dirtyFlag = false;
+	}
+
+	// A game that shows two parts of one buffer in turn (Silent Hill: Shattered Memories flips between
+	// the halves of a 1024-wide one) draws its next frame into the same framebuffer it's displaying, so
+	// the dirty flags would present each frame twice, or once a vblank late when the drawing used them
+	// up before the switch. While it keeps switching within one framebuffer, only the switches count.
+	// Between separate framebuffers the dirty flags are right: God of War switches every vblank but
+	// draws only every other one when slow, and showing the stale buffer again would judder.
+	const int SWITCHING_CHECKS = 8;
+	if (displayChecksSinceSwitch_ <= SWITCHING_CHECKS && displaySwitchedFromPtr_ != 0) {
+		VirtualFramebuffer *containing = FindDisplayContainingVFB(displayFramebufPtr_);
+		if (containing && FindDisplayContainingVFB(displaySwitchedFromPtr_) == containing) {
+			return switched;
+		}
+	}
+	return dirty;
 }
 
 // Heuristics to figure out the size of FBO to create.
@@ -383,7 +443,6 @@ static void ApplyKillzoneFramebufferSplit(FramebufferHeuristicParams *params, in
 
 VirtualFramebuffer *FramebufferManagerCommon::DoSetRenderFrameBuffer(FramebufferHeuristicParams &params, u32 skipDrawReason) {
 	gstate_c.Clean(DIRTY_FRAMEBUF);
-
 	// Collect all parameters. This whole function has really become a cesspool of heuristics...
 	// but it appears that's what it takes, unless we emulate VRAM layout more accurately somehow.
 
@@ -3260,6 +3319,26 @@ void FramebufferManagerCommon::DestroyAllFBOs() {
 	drawPixelsCache_.clear();
 }
 
+bool FramebufferManagerCommon::BindDepthCopyAsTexture(int stage) {
+	VirtualFramebuffer *vfb = currentRenderVfb_;
+	if (!vfb || !vfb->fbo || !useBufferedRendering_ || vfb->fbo->MultiSampleLevel() != 0) {
+		return false;
+	}
+	if (!depthCopy_ || depthCopyVfb_ != vfb) {
+		Draw::Framebuffer *copy = GetTempFBO(TempFBO::DEPTH_COPY, vfb->renderWidth, vfb->renderHeight);
+		if (!copy) {
+			return false;
+		}
+		CopyDepthRect(vfb->fbo, 0, 0, copy, 0, 0, vfb->renderWidth, vfb->renderHeight, vfb->renderScaleFactor, "DepthCopyForEqual");
+		gpuStats.perFrame.numDepthCopies++;
+		RebindFramebuffer("After DepthCopyForEqual");
+		depthCopy_ = copy;
+		depthCopyVfb_ = vfb;
+	}
+	draw_->BindFramebufferAsTexture(depthCopy_, stage, Draw::Aspect::DEPTH_BIT, Draw::ALL_LAYERS);
+	return true;
+}
+
 void FramebufferManagerCommon::CheckMaskCopyStillValid(const VirtualFramebuffer *vfb) {
 	// Anything but a draw with the same write mask, without blending or a logic op, can change the bits the copy holds.
 	if (vfb != maskCopyVfb_ || gstate.isModeClear() || gstate.getColorMask() != maskCopyMask_ ||
@@ -3277,6 +3356,7 @@ static const char *TempFBOReasonToString(TempFBO reason) {
 	case TempFBO::DEPTH_SHIFT: return "depth_shift";
 	case TempFBO::SAMPLE0: return "sample0";
 	case TempFBO::MASK_COPY: return "mask_copy";
+	case TempFBO::DEPTH_COPY: return "depth_copy";
 	default: break;
 	}
 	return "";
@@ -3320,7 +3400,7 @@ Draw::Framebuffer *FramebufferManagerCommon::GetTempFBO(TempFBO reason, u16 w, u
 		return it->second.fbo;
 	}
 
-	bool z_stencil = reason == TempFBO::STENCIL || reason == TempFBO::DEPTH_SHIFT;
+	bool z_stencil = reason == TempFBO::STENCIL || reason == TempFBO::DEPTH_SHIFT || reason == TempFBO::DEPTH_COPY;
 	char name[128];
 	snprintf(name, sizeof(name), "tempfbo_%s_%dx%d", TempFBOReasonToString(reason), w / renderScaleFactor_, h / renderScaleFactor_);
 
@@ -4023,6 +4103,12 @@ void FramebufferManagerCommon::BlitFramebuffer(VirtualFramebuffer *dst, int dstX
 	// multisampling it reads the single-sampled depth, which is never resolved, while a copy takes all the samples.
 	if (channel == RASTER_DEPTH && src != dst && src->fbo->MultiSampleLevel() == dst->fbo->MultiSampleLevel() && draw_->GetDeviceCaps().framebufferSeparateDepthCopySupported) {
 		useCopy = true;
+	}
+	// Where drawing depth from a texture isn't exact, blit it. Silent Hill: Origins' flashlight shadows test EQUAL
+	// against depth carried over when the buffer is widened for them.
+	if (channel == RASTER_DEPTH && src != dst && !useCopy && draw_->GetBugs().Has(Draw::Bugs::RASTER_DEPTH_COPY_INEXACT) &&
+		draw_->GetDeviceCaps().framebufferDepthBlitSupported && src->fbo->MultiSampleLevel() == 0 && dst->fbo->MultiSampleLevel() == 0) {
+		useBlit = true;
 	}
 
 	float srcXFactor = src->renderScaleFactor;

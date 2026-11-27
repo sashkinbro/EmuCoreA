@@ -130,12 +130,14 @@ struct CompatFlags {
 	bool FastEmulatedGPU;
 	bool CorrectCullAfterClip;
 	bool ScreenLinearColors;
+	bool HideOtherGamesSaveData;
 	float SpriteBorderFix;
 	bool TextureCLUTInShader;
 	bool DisableRangeCulling;
 	bool BlockTransferReadbackSmall;
 	bool SelfTextureCopyTracksDraws;
 	bool TolerantDepthEqual;
+	bool SnapVertexXY;
 	bool TruncateBilinear;
 	bool DepthCLUTIntoHalves;
 	bool AccurateSplines;

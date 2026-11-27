@@ -393,6 +393,8 @@ static constexpr ConfigSetting generalSettings[] = {
 	ConfigSetting("DefaultTab", SETTING(g_Config, iDefaultTab), 0, CfgFlag::DEFAULT),
 	ConfigSetting("DisableHLEFlags", SETTING(g_Config, iDisableHLE), 0, CfgFlag::PER_GAME | CfgFlag::REPORT),
 	ConfigSetting("ForceEnableHLEFlags", SETTING(g_Config, iForceEnableHLE), 0, CfgFlag::PER_GAME | CfgFlag::REPORT),
+	ConfigSetting("LLEUtilityDialogs", SETTING(g_Config, bLLEUtilityDialogs), false, CfgFlag::PER_GAME | CfgFlag::REPORT)
+		.Label(I18NCat::DEVELOPER, "Use the firmware's utility dialogs (experimental, partial)"),
 
 	ConfigSetting("ScreenshotMode", SETTING(g_Config, iScreenshotMode), 0, CfgFlag::DEFAULT)
 		.Label(I18NCat::SYSTEM, "Screenshot mode").Choices(screenshotModeNames),
@@ -918,7 +920,7 @@ static int DefaultAnalogAltSpeedPercent() {
 	return LegacyFpsLimitToPercent(g_Config.iLegacyAnalogFpsLimit);
 }
 
-static constexpr const char *externalDisplayNames[] = { "Show the game", "Mirror the screen" };
+static constexpr const char *externalDisplayNames[] = { "Show the game", "Mirror / Off" };
 static constexpr const char *gpuBackendNames[] = { "OpenGL", "Direct3D 9", "Direct3D 11", "Vulkan", "Metal" };
 static constexpr const char *internalResolutionNames[] = { "Auto (1:1)", "1x PSP", "2x PSP", "3x PSP", "4x PSP", "5x PSP", "6x PSP", "7x PSP", "8x PSP", "9x PSP", "10x PSP" };
 static constexpr const char *msaaLevelNames[] = { "Off", "2x", "4x", "8x", "16x" };
@@ -1778,9 +1780,11 @@ void Config::UpdateIniLocation(const char *iniFileName, const char *controllerIn
 	const char *ppssppIniFilename = IsVREnabled() ? "ppssppvr.ini" : "ppsspp.ini";
 	const char *controlsIniFilename = IsVREnabled() ? "controlsvr.ini" : "controls.ini";
 
+	// The default files go straight in the search path. FindConfigFile would also check that they exist, which
+	// nothing here uses, and with a memory stick on a content URI each check is a slow call at startup.
 	bool exists;
-	iniFilename_ = FindConfigFile(searchPath_, useIniFilename ? iniFileName : ppssppIniFilename, &exists);
-	controllerIniFilename_ = FindConfigFile(searchPath_, useControllerIniFilename ? controllerIniFilename : controlsIniFilename, &exists);
+	iniFilename_ = useIniFilename ? FindConfigFile(searchPath_, iniFileName, &exists) : searchPath_ / ppssppIniFilename;
+	controllerIniFilename_ = useControllerIniFilename ? FindConfigFile(searchPath_, controllerIniFilename, &exists) : searchPath_ / controlsIniFilename;
 }
 
 bool Config::LoadAppendedConfig(bool save) {

@@ -329,12 +329,12 @@ void GameScreen::CreateContentViews(UI::ViewGroup *parent) {
 	// Scrolling action menu to the right.
 	using namespace UI;
 
-	Margins actionMenuMargins(0, 15, 15, 0);
+	Margins actionMenuMargins(0, 12, 12, 0);
 
 	ScrollView *leftScroll = new ScrollView(ORIENT_VERTICAL, new LinearLayoutParams(1.0f, Margins(0)));
 
 	LinearLayout *leftColumn = new LinearLayout(ORIENT_VERTICAL, new LinearLayoutParams(FILL_PARENT, WRAP_CONTENT));
-	leftColumn->SetPadding(Margins(8, 8, 8, 8));
+	leftColumn->SetPadding(Margins(12, 12, 12, 12));
 
 	leftScroll->Add(leftColumn);
 
@@ -529,6 +529,7 @@ void GameScreen::CreateContentViews(UI::ViewGroup *parent) {
 				if (found) {
 					NoticeView *tvVerified = infoLayout->Add(new NoticeView(NoticeLevel::INFO, ga->T("ISO OK according to the ReDump project"), "", new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
 					tvVerified->SetLevel(NoticeLevel::SUCCESS);
+					tvVerified->SetRoundCorners();
 				}
 			}
 		} else if (!isHomebrew_) {
@@ -554,6 +555,7 @@ void GameScreen::CreateContentViews(UI::ViewGroup *parent) {
 				NoticeView *tvVerified = infoLayout->Add(new NoticeView(NoticeLevel::INFO, ga->T("Click \"Calculate CRC\" to verify ISO"), "", new LinearLayoutParams(WRAP_CONTENT, WRAP_CONTENT)));
 				tvVerified->SetVisibility(UI::V_VISIBLE);
 				tvVerified->SetLevel(NoticeLevel::INFO);
+				tvVerified->SetRoundCorners();
 			}
 		}
 	}
@@ -602,15 +604,13 @@ void GameScreen::CreateSettingsViews(UI::ViewGroup *rightColumn, bool inPopup) {
 	const bool fileTypeSupportCRC = FileTypeSupportsCRC(info_->fileType);
 	const bool portrait = GetDeviceOrientation() == DeviceOrientation::Portrait;
 
-	LinearLayout *rightColumnItems = new LinearLayout(ORIENT_VERTICAL);
-	rightColumn->Add(rightColumnItems);
-
-	ChoiceGroup *choices = rightColumnItems->Add(new ChoiceGroup());
+	ChoiceGroupList *rightColumnItems = rightColumn->Add(new ChoiceGroupList());
+	rightColumnItems->SetSpacing(12.0f);
 
 	// UMD Video plays in the XMB, with the disc in the drive.
 	const Path vshPath = info_->fileType == IdentifiedFileType::PSP_UMD_VIDEO_ISO ? lookups_.umdVideoVSHPath : Path();
 	if (!inGame_ && (FileTypeIsPlayable(info_->fileType, lookups_.firmwareRunsPS1Discs) || !vshPath.empty())) {
-		Choice *play = choices->Add(new Choice(ga->T("Play"), ImageID("I_PLAY")));
+		Choice *play = rightColumnItems->Add(new ChoiceGroup())->Add(new Choice(ga->T("Play"), ImageID("I_PLAY")));
 		play->OnClick.Add([this, vshPath](UI::EventParams &e) {
 			if (vshPath.empty()) {
 				screenManager()->switchScreen(new EmuScreen(gamePath_));
@@ -621,6 +621,8 @@ void GameScreen::CreateSettingsViews(UI::ViewGroup *rightColumn, bool inPopup) {
 		// The file is being read, and maybe about to be replaced.
 		play->SetEnabled(!GamePacker::IsPacking(gamePath_));
 	}
+
+	ChoiceGroup *choices = rightColumnItems->Add(new ChoiceGroup());
 
 	if (!info_->id.empty() && !inGame_) {
 		if (info_->hasConfig) {

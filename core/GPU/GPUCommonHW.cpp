@@ -784,25 +784,13 @@ void GPUCommonHW::InvalidateCache(u32 addr, int size, GPUInvalidationType type) 
 bool GPUCommonHW::FramebufferDirty() {
 	if (!framebufferManager_)
 		return true;
-	VirtualFramebuffer *vfb = framebufferManager_->GetDisplayVFB();
-	if (vfb) {
-		bool dirty = vfb->dirtyAfterDisplay;
-		vfb->dirtyAfterDisplay = false;
-		return dirty;
-	}
-	return true;
+	return framebufferManager_->ConsumeDisplayDirty(false);
 }
 
 bool GPUCommonHW::FramebufferReallyDirty() {
 	if (!framebufferManager_)
 		return true;
-	VirtualFramebuffer *vfb = framebufferManager_->GetDisplayVFB();
-	if (vfb) {
-		bool dirty = vfb->reallyDirtyAfterDisplay;
-		vfb->reallyDirtyAfterDisplay = false;
-		return dirty;
-	}
-	return true;
+	return framebufferManager_->ConsumeDisplayDirty(true);
 }
 
 void GPUCommonHW::ExecuteOp(u32 op, u32 diff) {
@@ -1036,6 +1024,9 @@ void GPUCommonHW::Execute_Prim(u32 op, u32 diff) {
 			drawnBounds = ScissorBounds();
 		}
 		NoteSelfTextureDraw(vfb, drawnBounds);
+	}
+	if (draw_->GetBugs().Has(Draw::Bugs::EQUAL_DEPTH_TEST_BROKEN)) {
+		UpdateShaderDepthEqual();
 	}
 	if (PSP_CoreParameter().compat.flags().TolerantDepthEqual) {
 		UpdateTolerantDepthEqual();
@@ -1409,6 +1400,9 @@ void GPUCommonHW::Execute_Bezier(u32 op, u32 diff) {
 	if (vfb && PSP_CoreParameter().compat.flags().SelfTextureCopyTracksDraws) {
 		NoteSelfTextureDraw(vfb, ScissorBounds());
 	}
+	if (draw_->GetBugs().Has(Draw::Bugs::EQUAL_DEPTH_TEST_BROKEN)) {
+		UpdateShaderDepthEqual();
+	}
 	if (PSP_CoreParameter().compat.flags().TolerantDepthEqual) {
 		UpdateTolerantDepthEqual();
 	}
@@ -1491,6 +1485,9 @@ void GPUCommonHW::Execute_Spline(u32 op, u32 diff) {
 
 	if (vfb && PSP_CoreParameter().compat.flags().SelfTextureCopyTracksDraws) {
 		NoteSelfTextureDraw(vfb, ScissorBounds());
+	}
+	if (draw_->GetBugs().Has(Draw::Bugs::EQUAL_DEPTH_TEST_BROKEN)) {
+		UpdateShaderDepthEqual();
 	}
 	if (PSP_CoreParameter().compat.flags().TolerantDepthEqual) {
 		UpdateTolerantDepthEqual();
@@ -1582,10 +1579,23 @@ void GPUCommonHW::NoteSelfTextureDraw(const VirtualFramebuffer *vfb, DrawnBounds
 	}
 }
 
+// Only called with Bugs::EQUAL_DEPTH_TEST_BROKEN. Changes to the depth state flush first, so this is the first draw with it.
+void GPUCommonHW::UpdateShaderDepthEqual() {
+	const bool needsShader = gstate.isDepthTestEnabled() && gstate.getDepthTestFunction() == GE_COMP_EQUAL && !gstate.isModeClear() &&
+		framebufferManager_->UseBufferedRendering() && framebufferManager_->GetMSAALevel() == 0;
+	if (needsShader != gstate_c.depthEqualNeedsShader || (!needsShader && gstate_c.shaderDepthEqual)) {
+		gstate_c.depthEqualNeedsShader = needsShader;
+		// The backend decides on shaderDepthEqual.
+		gstate_c.shaderDepthEqual = false;
+		gstate_c.Dirty(DIRTY_BLEND_STATE | DIRTY_DEPTHSTENCIL_STATE | DIRTY_FRAGMENTSHADER_STATE);
+	}
+}
+
 // See TolerantDepthEqual in compat.ini. Changes to the depth state flush first, so this is the first draw with it.
 void GPUCommonHW::UpdateTolerantDepthEqual() {
+	// Exact emulation of EQUAL wins over the tolerance.
 	const bool tolerant = gstate.isDepthTestEnabled() && gstate.getDepthTestFunction() == GE_COMP_EQUAL &&
-		!gstate.isDepthWriteEnabled() && !gstate.isModeThrough();
+		!gstate.isDepthWriteEnabled() && !gstate.isModeThrough() && !gstate_c.depthEqualNeedsShader;
 	if (tolerant != gstate_c.tolerantDepthEqual) {
 		gstate_c.tolerantDepthEqual = tolerant;
 		gstate_c.Dirty(DIRTY_DEPTHSTENCIL_STATE | DIRTY_VIEWPORT_UNIFORMS);

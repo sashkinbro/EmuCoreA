@@ -146,9 +146,11 @@ static int Replace_memcpy(MIPSState *mips) {
 			// Already logged.
 		} else if (std::min(destPtr, srcPtr) + bytes > std::max(destPtr, srcPtr)) {
 			// Overlap.  Star Ocean breaks if it's not handled in 16 bytes blocks.
+			// Each block is loaded whole before it's stored, which memmove does on every host (memcpy of
+			// a block that overlaps itself depends on the C library).
 			const u32 blocks = bytes & ~0x0f;
 			for (u32 offset = 0; offset < blocks; offset += 0x10) {
-				memcpy(dst + offset, src + offset, 0x10);
+				memmove(dst + offset, src + offset, 0x10);
 			}
 			for (u32 offset = blocks; offset < bytes; ++offset) {
 				dst[offset] = src[offset];
@@ -1060,6 +1062,23 @@ static int Hook_kankabanchoutbr_download_frame(MIPSState *mips) {
 	if (Memory::IsVRAMAddress(fb_address)) {
 		gpu->PerformReadbackToMemory(fb_address, 0x00044000);
 		NotifyMemInfo(MemBlockFlags::WRITE, fb_address, 0x00044000, "kankabanchoutbr_download_frame");
+	}
+	return 0;
+}
+
+// The bloom's bright pass runs on the CPU: it thresholds the 128x128 565 buffer the game renders the
+// scene into, 0x8000 bytes past its output (0417c000 -> 04174000), and the output is drawn over the scene.
+// Without a readback here it thresholds whatever frame was last downloaded, which sticks on screen.
+// The function starts 8 bytes in, after a `b self` stub the analyzer counts as part of it.
+static int Hook_kankabanchoutbr_bloom_threshold(MIPSState *mips) {
+	const u32 obj = mips->r[MIPS_REG_A0];
+	if (!Memory::IsValid4AlignedAddress(obj + 0x10)) {
+		return 0;
+	}
+	const u32 src = Memory::ReadUnchecked_U32(obj + 0x10) + 0x8000;
+	if (Memory::IsVRAMAddress(src)) {
+		gpu->PerformReadbackToMemory(src, 0x8000);
+		NotifyMemInfo(MemBlockFlags::WRITE, src, 0x8000, "kankabanchoutbr_bloom_threshold");
 	}
 	return 0;
 }
@@ -2257,6 +2276,7 @@ static const ReplacementTableEntry entries[] = {
 	{ "syphonfilterls_fade", &Hook_syphonfilterls_fade_hold, 0, REPFLAG_HOOK, 0x18C },
 	{ "socomftb3_read_luminance", &Hook_socomftb3_read_luminance, 0, REPFLAG_HOOK, 0x4C },
 	{ "splitsecond_sun_visibility", &Hook_splitsecond_sun_visibility, 0, REPFLAG_HOOK, 0x744 },
+	{ "kankabanchoutbr_bloom_threshold", &Hook_kankabanchoutbr_bloom_threshold, 0, REPFLAG_HOOK, 0x8 },
 	{}
 };
 

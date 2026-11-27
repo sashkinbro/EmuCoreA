@@ -39,6 +39,7 @@ import android.os.StrictMode;
 import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.InputType;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
 import android.view.Gravity;
@@ -1009,8 +1010,10 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		Display display = null;
 		if (externalDisplayWatched && "1".equals(NativeApp.queryConfig("externalDisplayOutput"))) {
 			DisplayManager displayManager = (DisplayManager)getSystemService(Context.DISPLAY_SERVICE);
+			// The display we're on (in desktop windowing, that can be the external one). Not the device's main one.
+			int ownDisplayId = getWindowManager().getDefaultDisplay().getDisplayId();
 			for (Display candidate : displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)) {
-				if (!isBuiltInDisplay(candidate)) {
+				if (candidate.getDisplayId() != ownDisplayId && !isBuiltInDisplay(candidate) && isTvShaped(candidate)) {
 					display = candidate;
 					break;
 				}
@@ -1047,6 +1050,26 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		}
 		DeviceProductInfo info = display.getDeviceProductInfo();
 		return info != null && info.getConnectionToSinkType() == DeviceProductInfo.CONNECTION_TO_SINK_BUILT_IN;
+	}
+
+	// A 4:3 or squarer display is a handheld's second screen (the AYN Thor's isn't reported as built in),
+	// not a TV, and the game shouldn't move there. TVs and monitors are 16:9 or 16:10.
+	private static boolean isTvShaped(Display display) {
+		if ("AYN".equalsIgnoreCase(Build.MANUFACTURER) && Build.MODEL != null && Build.MODEL.toLowerCase(Locale.ROOT).contains("thor")) {
+			return false;
+		}
+		DisplayMetrics metrics = new DisplayMetrics();
+		display.getRealMetrics(metrics);
+		int longSide = Math.max(metrics.widthPixels, metrics.heightPixels);
+		int shortSide = Math.min(metrics.widthPixels, metrics.heightPixels);
+		if (shortSide <= 0) {
+			return false;
+		}
+		boolean tvShaped = (float)longSide / (float)shortSide >= 1.5f;
+		if (!tvShaped) {
+			Log.i(TAG, "Not showing the game on display " + display.getDisplayId() + " (" + display.getName() + "), " + metrics.widthPixels + "x" + metrics.heightPixels + " is too square for a TV");
+		}
+		return tvShaped;
 	}
 
 	private void dismissExternalDisplay() {
@@ -1139,10 +1162,12 @@ public class PpssppActivity extends AppCompatActivity implements SensorEventList
 		// native state, so shutting down here would pull the audio and the graphics context out from under it.
 		// (recreate() is not affected, it destroys the old activity before creating the new one.)
 		if (checkCurrent("shutting down audio and the native side in onDestroy")) {
-			// TODO: Can we ensure that the GL thread has stopped rendering here?
-			// I've seen crashes that seem to indicate that sometimes it hasn't...
-			NativeApp.audioShutdown();
 			if (shuttingDown) {
+				// TODO: Can we ensure that the GL thread has stopped rendering here?
+				// I've seen crashes that seem to indicate that sometimes it hasn't...
+				// Only now, since the audio state holds the microphone's, which the next activity needs
+				// while the native side (and the game using the mic) keeps running.
+				NativeApp.audioShutdown();
 				Log.i(TAG, "in onDestroy, shutting down. Calling NativeApp.shutdown().");
 				NativeApp.shutdown();
 				unregisterCallbacks();

@@ -116,6 +116,7 @@
 #include "Core/Debugger/Breakpoints.h"
 #include "Core/Debugger/SymbolMap.h"
 #include "Common/UI/Context.h"
+#include "Common/UI/IconCache.h"
 #include "Common/UI/Root.h"
 #include "Common/UI/View.h"
 #include "Common/UI/ViewGroup.h"
@@ -155,6 +156,9 @@
 #if defined(USE_SDL3_TTF) && !PPSSPP_PLATFORM(MAC) && !PPSSPP_PLATFORM(IOS)
 #define HAVE_TEXT_DRAWER_SDL
 #include "Common/Render/Text/draw_text_sdl.h"
+#endif
+#if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
+#include "Common/Render/Text/draw_text_win.h"
 #endif
 #include "Common/Net/Resolve.h"
 
@@ -536,14 +540,22 @@ bool TestUtf8() {
 		EXPECT_TRUE(sanitized.substr(0, 3) == "abc");
 	}
 
-	// ConvertUTF8ToJavaModifiedUTF8 must simply drop an incomplete trailing
-	// sequence rather than asserting or crashing.
+	// ConvertUTF8ToJavaModifiedUTF8 must only output valid modified UTF-8, replacing bad bytes.
 	{
-		std::string input = "abc";
-		input += (char)0xF0;
+		const std::string replacement = "\xEF\xBF\xBD";  // U+FFFD
 		std::string output;
-		ConvertUTF8ToJavaModifiedUTF8(&output, input);
-		EXPECT_TRUE(output == "abc");
+
+		// An incomplete trailing sequence.
+		ConvertUTF8ToJavaModifiedUTF8(&output, std::string("abc\xF0"));
+		EXPECT_TRUE(output == "abc" + replacement);
+
+		// Bad bytes in the middle don't take the rest of the string with them.
+		ConvertUTF8ToJavaModifiedUTF8(&output, std::string("a\x80" "b\xC3?\xF0" "cd"));
+		EXPECT_TRUE(output == "a" + replacement + "b" + replacement + "?" + replacement + "cd");
+
+		// Valid 2 and 3 byte sequences are copied, NUL becomes C0 80, and a 4 byte one a surrogate pair.
+		ConvertUTF8ToJavaModifiedUTF8(&output, std::string("\xC3\xA9\xE2\x82\xAC", 5) + std::string(1, '\0') + "\xF0\x9F\x8E\xAE");
+		EXPECT_TRUE(output == std::string("\xC3\xA9\xE2\x82\xAC\xC0\x80\xED\xA0\xBC\xED\xBE\xAE"));
 	}
 
 	// ReplaceInvalidUTF8 must always return well-formed UTF-8, keeping the good parts.  This one
@@ -2591,10 +2603,14 @@ bool TestVFPUDot() {
 				toBits(a[0]), toBits(a[1]), toBits(a[2]), toBits(a[3]), toBits(b[0]), toBits(b[1]), toBits(b[2]), toBits(b[3]), actual, scalar, expected);
 			return false;
 		}
-		// vfpu_multi_dot on the last four a's as the matrix, each output against the reference.
+		// vfpu_multi_dot on the last four a's as the matrix, each output against the reference, at
+		// every term count.
 		memcpy(lastA[n & 3], a, sizeof(lastA[0]));
-		if ((n++ & 3) == 3 && !checkMulti(b, 2 + (int)(n % 3), (n & 4) != 0))
-			return false;
+		const bool transposed = (n++ & 1) != 0;
+		for (int terms = 1; terms <= 4; terms++) {
+			if (!checkMulti(b, terms, transposed))
+				return false;
+		}
 		return true;
 	};
 	return ForEachVFPUDotTestCase(check);
@@ -4645,24 +4661,30 @@ bool TestTextDrawerCache() {
 	return true;
 }
 
-bool TestTextDrawerSDL() {
-#if defined(HAVE_TEXT_DRAWER_SDL)
-	bool registeredAssets = false;
-	if (!g_VFS.Exists("Roboto_Condensed-Regular.ttf")) {
-		Path candidates[] = {
-			Path("assets"),
-			Path("../assets"),
-			File::GetExeDirectory() / "assets",
-			File::GetExeDirectory() / "../assets",
-		};
-		for (const auto &cand : candidates) {
-			if (File::Exists(cand / "Roboto_Condensed-Regular.ttf")) {
-				g_VFS.Register("", new DirectoryReader(cand));
-				registeredAssets = true;
-				break;
-			}
+// Makes our fonts readable through g_VFS, which the drawers load them from. Returns true if it registered
+// something, to undo with g_VFS.Clear().
+static bool RegisterFontAssets() {
+	if (g_VFS.Exists("Roboto_Condensed-Regular.ttf")) {
+		return false;
+	}
+	Path candidates[] = {
+		Path("assets"),
+		Path("../assets"),
+		File::GetExeDirectory() / "assets",
+		File::GetExeDirectory() / "../assets",
+	};
+	for (const auto &cand : candidates) {
+		if (File::Exists(cand / "Roboto_Condensed-Regular.ttf")) {
+			g_VFS.Register("", new DirectoryReader(cand));
+			return true;
 		}
 	}
+	return false;
+}
+
+bool TestTextDrawerSDL() {
+#if defined(HAVE_TEXT_DRAWER_SDL)
+	const bool registeredAssets = RegisterFontAssets();
 
 	TextDrawerSDL drawer(nullptr);
 	EXPECT_TRUE(drawer.SupportsColorEmoji());
@@ -4692,6 +4714,80 @@ bool TestTextDrawerSDL() {
 	}
 #endif
 	return true;
+}
+
+// Draws a two-line string whose first line is much shorter than its second, and checks where the first
+// line starts.
+static bool CheckTextDrawerAlignment(TextDrawer &drawer) {
+	drawer.SetForcedDPIScale(1.0f);
+	const FontStyle font(FontFamily::SansSerif, 20, FontStyleFlags::Default);
+
+	// Where the first line's leftmost coverage is, as a fraction of the text width.
+	auto firstLineStart = [&](std::string_view str, int align, float *start) {
+		std::vector<uint8_t> bitmap;
+		TextStringEntry entry(0);
+		if (!drawer.DrawStringBitmapRect(font, 1.0f, bitmap, entry, Draw::DataFormat::R8_UNORM, str, Bounds(0, 0, 1000.0f, 1000.0f), align, false)) {
+			return false;
+		}
+		if (entry.width <= 0 || (int)bitmap.size() < entry.bmWidth * entry.bmHeight) {
+			return false;
+		}
+		int minX = entry.bmWidth;
+		for (int y = 0; y < entry.height / 2; y++) {
+			for (int x = 0; x < minX; x++) {
+				if (bitmap[y * entry.bmWidth + x] > 0x40) {
+					minX = x;
+					break;
+				}
+			}
+		}
+		*start = (float)minX / (float)entry.width;
+		return true;
+	};
+
+	float start = 0.0f;
+	// Right-aligned first: DirectWrite used to keep that alignment for the next left-aligned string.
+	EXPECT_TRUE(firstLineStart("i\nWWWWWWWWWW", ALIGN_RIGHT, &start));
+	EXPECT_TRUE(start > 0.7f);
+	EXPECT_TRUE(firstLineStart("l\nWWWWWWWWWW", ALIGN_LEFT, &start));
+	EXPECT_TRUE(start < 0.2f);
+	EXPECT_TRUE(firstLineStart("i\nWWWWWWWWWW", ALIGN_HCENTER, &start));
+	EXPECT_TRUE(start > 0.3f && start < 0.6f);
+	return true;
+}
+
+bool TestTextDrawerAlignment() {
+	const bool registeredAssets = RegisterFontAssets();
+	bool success = true;
+#if defined(_WIN32) && !PPSSPP_PLATFORM(UWP)
+	{
+		TextDrawerWin32 gdi(nullptr);
+		if (!CheckTextDrawerAlignment(gdi)) {
+			printf("GDI text drawer failed\n");
+			success = false;
+		}
+		// Create() picks DirectWrite on Windows 10 and later. Its header doesn't compile after the
+		// lean Windows headers this file has already included.
+		std::unique_ptr<TextDrawer> directWrite(TextDrawer::Create(nullptr));
+		if (directWrite && !CheckTextDrawerAlignment(*directWrite)) {
+			printf("DirectWrite text drawer failed\n");
+			success = false;
+		}
+	}
+#endif
+#if defined(HAVE_TEXT_DRAWER_SDL)
+	{
+		TextDrawerSDL sdl(nullptr);
+		if (!CheckTextDrawerAlignment(sdl)) {
+			printf("SDL text drawer failed\n");
+			success = false;
+		}
+	}
+#endif
+	if (registeredAssets) {
+		g_VFS.Clear();
+	}
+	return success;
 }
 
 // Tab/Shift+Tab focus navigation walks the view hierarchy in declaration order rather than by
@@ -5185,7 +5281,7 @@ bool TestDrmBBRead() {
 		bool shortRead = false;
 		int closes = 0;
 		int OpenFile(std::string, FileAccess, const char * = nullptr) override { return 1; }
-		size_t SeekFile(u32, s32, FileMove move) override { return move == FILEMOVE_END ? length : 0; }
+		size_t SeekFile(u32, s64, FileMove move) override { return move == FILEMOVE_END ? length : 0; }
 		size_t ReadFile(u32, u8 *out, s64 size) override {
 			const size_t count = shortRead ? 0 : (size_t)size;
 			memcpy(out, bytes.data(), count);
@@ -5215,7 +5311,7 @@ bool TestDrmBBRecovery() {
 		std::vector<u8> temp{4, 5};
 		bool exists = true;
 		int OpenFile(std::string, FileAccess, const char * = nullptr) override { return 1; }
-		size_t SeekFile(u32, s32, FileMove move) override { return move == FILEMOVE_END ? temp.size() : 0; }
+		size_t SeekFile(u32, s64, FileMove move) override { return move == FILEMOVE_END ? temp.size() : 0; }
 		size_t ReadFile(u32, u8 *out, s64 size) override { memcpy(out, temp.data(), (size_t)size); return (size_t)size; }
 		PSPFileInfo GetFileInfo(std::string) override { PSPFileInfo info; info.exists = exists; info.size = temp.size(); return info; }
 		bool RemoveFile(const std::string &) override { exists = false; return true; }
@@ -5268,6 +5364,41 @@ bool TestDrmBBCommit() {
 	fs.files[dir + "EBOOT.PBP"] = {1, 2, 3}; fs.files[dir + "_TEMP.PBP"] = {4, 5, 6};
 	EXPECT_FALSE(CommitDrmBBEboot(fs, dir));
 	EXPECT_TRUE(fs.files[dir + "_DRMBB_BACKUP.PBP"] == std::vector<u8>({1, 2, 3}));
+	return true;
+}
+
+// The icon cache is loaded from disk while it's already in use, so entries and downloads may have arrived
+// first.
+static bool TestIconCacheLoad() {
+	const Path path = UnitTestTempPath("unittest_icon.cache");
+	{
+		IconCache saved;
+		EXPECT_TRUE(saved.InsertIcon("a", IconFormat::PNG, std::string("saved a")));
+		EXPECT_TRUE(saved.InsertIcon("b", IconFormat::PNG, std::string("saved b")));
+		EXPECT_TRUE(saved.InsertIcon("c", IconFormat::PNG, std::string("saved c")));
+		FILE *f = File::OpenCFile(path, "wb");
+		EXPECT_TRUE(f);
+		saved.SaveToFile(f);
+		fclose(f);
+	}
+
+	IconCache cache;
+	EXPECT_TRUE(cache.InsertIcon("a", IconFormat::PNG, std::string("newer a, longer")));
+	EXPECT_TRUE(cache.MarkPending("b"));
+	FILE *f = File::OpenCFile(path, "rb");
+	EXPECT_TRUE(f);
+	const bool loaded = cache.LoadFromFile(f);
+	fclose(f);
+	File::Delete(path);
+	EXPECT_TRUE(loaded);
+
+	const IconCacheStats stats = cache.GetStats();
+	EXPECT_EQ_INT(stats.cachedCount, 3);
+	// "a" kept the newer entry.
+	EXPECT_EQ_INT(stats.dataSize, strlen("newer a, longer") + strlen("saved b") + strlen("saved c"));
+	// The download of "b" is no longer waited for, its result is turned away.
+	EXPECT_EQ_INT(stats.pending, 0);
+	EXPECT_TRUE(!cache.InsertIcon("b", IconFormat::PNG, std::string("downloaded b")));
 	return true;
 }
 
@@ -5448,6 +5579,7 @@ TestItem availableTests[] = {
 	TEST_ITEM(UITextEdit),
 	TEST_ITEM(TextDrawerCache),
 	TEST_ITEM(TextDrawerSDL),
+	TEST_ITEM(TextDrawerAlignment),
 	TEST_ITEM(FatShortNames),
 	TEST_ITEM(GEDumpGameID),
 	TEST_ITEM(UmdDiscType),
@@ -5458,6 +5590,7 @@ TestItem availableTests[] = {
 	TEST_ITEM(SaveStateMounts),
 	TEST_ITEM(SaveStatePeek),
 	TEST_ITEM(StereoResamplerExcessDrop),
+	TEST_ITEM(IconCacheLoad),
 };
 
 int main(int argc, const char *argv[]) {

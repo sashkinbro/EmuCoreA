@@ -248,6 +248,8 @@ enum class TempFBO {
 	SAMPLE0,
 	// A copy for draws that read only the bits outside their write mask.
 	MASK_COPY,
+	// The depth that draws with gstate_c.shaderDepthEqual test against.
+	DEPTH_COPY,
 };
 
 inline Draw::DataFormat GEFormatToThin3D(GEBufferFormat geFormat) {
@@ -416,6 +418,10 @@ public:
 	u32 DisplayFramebufAddr() const {
 		return displayFramebufPtr_;
 	}
+	// Whether the displayed framebuffer has a new frame to present since the last call, for
+	// GPUCommonHW's FramebufferDirty() (really = false) and FramebufferReallyDirty() (really = true),
+	// which each consume their own flags.
+	bool ConsumeDisplayDirty(bool really);
 	u32 DisplayFramebufStride() const {
 		return displayStride_;
 	}
@@ -540,6 +546,13 @@ public:
 	void DiscardFramebufferCopy() {
 		currentFramebufferCopy_ = nullptr;
 		maskCopy_ = nullptr;
+		depthCopy_ = nullptr;
+	}
+	// Binds a copy of the current render target's depth, for gstate_c.shaderDepthEqual. The copy is kept until
+	// DiscardDepthCopy(), which the caller does when a draw may have changed the depth.
+	bool BindDepthCopyAsTexture(int stage);
+	void DiscardDepthCopy() {
+		depthCopy_ = nullptr;
 	}
 	// The target hasn't changed, but texturing from it should see the latest drawing.
 	void DiscardSelfTextureCopy() {
@@ -624,6 +637,7 @@ protected:
 	static bool ShouldDownloadFramebufferDepth(const VirtualFramebuffer *vfb);
 	void DownloadFramebufferOnSwitch(VirtualFramebuffer *vfb);
 	VirtualFramebuffer *FindDisplayVFB(u32 fbaddr, u32 *offsetX, u32 *offsetY);
+	VirtualFramebuffer *FindDisplayContainingVFB(u32 addr) const;
 	bool ReadFramebufferForDebug(VirtualFramebuffer *vfb, int x, int y, int w, int h, GPUDebugBuffer &buffer, int maxScaleFactor);
 
 	bool FindTransferFramebuffer(u32 basePtr, int stride, int x, int y, int w, int h, int bpp, bool destination, BlockTransferRect *rect);
@@ -664,6 +678,12 @@ protected:
 	bool needBackBufferYSwap_ = false;
 
 	u32 displayFramebufPtr_ = 0;
+	// For ConsumeDisplayDirty(): the address displayed before the latest switch, whether a switch hasn't
+	// been reported yet (one flag per caller), and how many checks ago the latest switch was.
+	u32 displaySwitchedFromPtr_ = 0;
+	bool displaySwitched_ = false;
+	bool displaySwitchedReally_ = false;
+	int displayChecksSinceSwitch_ = 0;
 	u32 displayStride_ = 0;
 	GEBufferFormat displayFormat_ = GE_FORMAT_565;
 	u32 prevDisplayFramebufPtr_ = 0;
@@ -686,6 +706,10 @@ protected:
 	Draw::Framebuffer *maskCopy_ = nullptr;
 	const VirtualFramebuffer *maskCopyVfb_ = nullptr;
 	u32 maskCopyMask_ = 0;
+
+	// See BindDepthCopyAsTexture.
+	Draw::Framebuffer *depthCopy_ = nullptr;
+	const VirtualFramebuffer *depthCopyVfb_ = nullptr;
 
 	// The range of PSP memory that may contain FBOs.  So we can skip iterating.
 	u32 framebufColorRangeEnd_ = 0;

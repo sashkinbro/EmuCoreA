@@ -640,14 +640,33 @@ private:
 	bool ignoreText_ = false;
 };
 
+// Repeats a held slider key, slowly at first and then faster.
+class SliderKeyRepeat {
+public:
+	void Start(InputKeyCode key);
+	void Stop() { key_ = NKCODE_UNKNOWN; }
+	bool IsHeld(InputKeyCode key) const { return key_ != NKCODE_UNKNOWN && key_ == key; }
+	InputKeyCode Key() const { return key_; }
+	// How many steps to take now. numSteps is how many steps the slider's whole range has.
+	int Update(int numSteps);
+
+private:
+	InputKeyCode key_ = NKCODE_UNKNOWN;
+	double startTime_ = 0.0;
+	double lastTime_ = 0.0;
+	double accum_ = 0.0;
+};
+
 class Slider : public Clickable {
 public:
 	Slider(int *value, int minValue, int maxValue, int step = 1, LayoutParams *layoutParams = nullptr)
-		: Clickable(layoutParams), value_(value), showPercent_(false), minValue_(minValue), maxValue_(maxValue), paddingLeft_(5), paddingRight_(70), repeat_(-1) {
+		: Clickable(layoutParams), value_(value), showPercent_(false), minValue_(minValue), maxValue_(maxValue), paddingLeft_(5), paddingRight_(70) {
 		step_ = step <= 0 ? 1 : step;
 	}
 	void Draw(UIContext &dc) override;
 	std::string DescribeText() const override;
+	// Left and right change the value.
+	bool CanMoveFocus(FocusMove dir) const override { return dir != FocusMove::LEFT && dir != FocusMove::RIGHT; }
 	bool Key(const KeyInput &input) override;
 	bool Touch(const TouchInput &input) override;
 	void Update() override;
@@ -674,18 +693,19 @@ private:
 	float paddingLeft_;
 	float paddingRight_;
 	int step_;
-	int repeat_ = 0;
 	const int *fixedChoices_ = nullptr;
 	size_t numFixedChoices_ = 0;
-	InputKeyCode repeatCode_ = NKCODE_UNKNOWN;
+	SliderKeyRepeat repeat_;
 };
 
 class SliderFloat : public Clickable {
 public:
 	SliderFloat(float *value, float minValue, float maxValue, LayoutParams *layoutParams = 0)
-		: Clickable(layoutParams), value_(value), minValue_(minValue), maxValue_(maxValue), paddingLeft_(5), paddingRight_(70), repeat_(-1) {}
+		: Clickable(layoutParams), value_(value), minValue_(minValue), maxValue_(maxValue), paddingLeft_(5), paddingRight_(70) {}
 	void Draw(UIContext &dc) override;
 	std::string DescribeText() const override;
+	// Left and right change the value.
+	bool CanMoveFocus(FocusMove dir) const override { return dir != FocusMove::LEFT && dir != FocusMove::RIGHT; }
 	bool Key(const KeyInput &input) override;
 	bool Touch(const TouchInput &input) override;
 	void Update() override;
@@ -704,8 +724,7 @@ private:
 	float maxValue_;
 	float paddingLeft_;
 	float paddingRight_;
-	int repeat_;
-	InputKeyCode repeatCode_ = NKCODE_UNKNOWN;
+	SliderKeyRepeat repeat_;
 };
 
 // Basic button that modifies a bitfield based on the pressed status. Supports multitouch.
@@ -833,6 +852,10 @@ protected:
 	// hackery
 	virtual bool IsSticky() const { return false; }
 
+	// GetContentDimensionsBySpec, but with textPadding in place of textPadding_.
+	void MeasureWithTextPadding(const UIContext &dc, MeasureSpec horiz, const Padding &textPadding, float &w, float &h) const;
+	void GetTextPadding(const UIContext &dc, float *left, float *right) const;
+
 	std::string text_;
 	std::string smallText_;
 	ImageID image_;  // Centered if no text, on the left if text.
@@ -929,6 +952,12 @@ protected:
 
 	float CalculateValueScale(const UIContext &dc, std::string_view valueText, float availWidth) const;
 
+	// ValueText, masked if it's a password.
+	std::string DisplayedValueText(bool *shadow) const;
+	bool ShowsTitle() const {
+		return !text_.empty() && !hideTitle_;
+	}
+
 	bool passwordMasking_ = false;
 };
 
@@ -980,6 +1009,7 @@ public:
 
 	void Draw(UIContext &dc) override;
 	std::string DescribeText() const override;
+	void GetContentDimensionsBySpec(const UIContext &dc, MeasureSpec horiz, MeasureSpec vert, float &w, float &h) const override;
 	void GetContentDimensions(const UIContext &dc, float &w, float &h) const override;
 
 	//allow external agents to toggle the checkbox
