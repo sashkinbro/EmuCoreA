@@ -116,7 +116,8 @@ data class EmulationRoute(
     val bootSmokeProbe: Boolean = false,
     val autotestMode: Boolean = false,
     val renderer: Int? = null,
-    val exitAppOnExit: Boolean = false
+    val exitAppOnExit: Boolean = false,
+    val launchedFromXmb: Boolean = false
 )
 
 internal fun EmulationRoute.isMeaningfulReviewSession(): Boolean =
@@ -377,6 +378,11 @@ fun AppNavigation(
             launchSingleTop = true
         }
     }
+    val launchXmbGame: (String, Int?) -> Unit = { gamePath, saveSlot ->
+        navController.navigate(EmulationRoute(gamePath = gamePath, saveSlot = saveSlot, launchedFromXmb = true)) {
+            launchSingleTop = true
+        }
+    }
     val launchGamePickerAction: () -> Unit = {
         launchGamePicker.launch(arrayOf("*/*"))
     }
@@ -443,17 +449,9 @@ fun AppNavigation(
                     games = libraryGames,
                     isLoadingGames = xmbState.isLoading || xmbState.isBootstrapping,
                     onGameSelected = { index ->
-                        libraryGames.getOrNull(index)?.let { game ->
-                            navController.navigate(EmulationRoute(gamePath = game.path)) {
-                                launchSingleTop = true
-                            }
-                        }
+                        libraryGames.getOrNull(index)?.let { game -> launchXmbGame(game.path, null) }
                     },
-                    onSaveSelected = { gamePath, slot ->
-                        navController.navigate(EmulationRoute(gamePath = gamePath, saveSlot = slot)) {
-                            launchSingleTop = true
-                        }
-                    },
+                    onSaveSelected = launchXmbGame,
                     onDeleteGame = { game ->
                         runCatching {
                             com.sbro.emucorea.core.DocumentPathResolver.resolveFilePath(context, game.path)?.let {
@@ -549,11 +547,7 @@ fun AppNavigation(
                         onShelfModeChanged = { isShelfMode ->
                             homeDrawerEnabled = !isShelfMode
                         },
-                        onSaveSelected = { gamePath, slot ->
-                            navController.navigate(EmulationRoute(gamePath = gamePath, saveSlot = slot)) {
-                                launchSingleTop = true
-                            }
-                        }
+                        onLaunchFromXmb = launchXmbGame
                     )
                 }
             }
@@ -732,6 +726,7 @@ fun AppNavigation(
                     autotestMode = route.autotestMode,
                     rendererOverride = route.renderer,
                     restoredAfterProcessDeath = blockRestoredEmulationRoute,
+                    launchedFromXmb = route.launchedFromXmb,
                     onExit = { activePlayTimeMs ->
                         if (route.exitAppOnExit) {
                             activity?.finishAndRemoveTask()

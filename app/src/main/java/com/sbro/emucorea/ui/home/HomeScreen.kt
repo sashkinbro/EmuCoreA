@@ -188,10 +188,10 @@ fun HomeScreen(
     onLoadSaveClick: (GameItem) -> Unit,
     onManageGameClick: (GameItem) -> Unit,
     onCreateShortcutClick: (GameItem) -> Unit,
+    onLaunchFromXmb: (gamePath: String, saveSlot: Int?) -> Unit,
     onMenuClick: (() -> Unit)? = null,
     onShelfModeChanged: (Boolean) -> Unit = {},
     onOpenProSettings: () -> Unit = {},
-    onSaveSelected: ((String, Int) -> Unit)? = null,
     viewModel: HomeViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -537,10 +537,10 @@ fun HomeScreen(
                         onGameSelected = { index ->
                             val game = uiState.games.getOrNull(index)
                             if (game != null) {
-                                onGameClick(game)
+                                onLaunchFromXmb(game.path, null)
                             }
                         },
-                        onSaveSelected = onSaveSelected,
+                        onSaveSelected = onLaunchFromXmb,
                         onDeleteGame = { game ->
                             runCatching {
                                 com.sbro.emucorea.core.DocumentPathResolver.resolveFilePath(context, game.path)?.let {
