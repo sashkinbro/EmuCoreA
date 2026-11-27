@@ -61,9 +61,6 @@ class CoverArtRepository(context: Context) {
         return File(cacheDirectory, "source_$hash").apply { mkdirs() }
     }
 
-    /** Clears only automatically downloaded covers. User-selected covers live in filesDir and are preserved. */
-    fun clearCache(): CoverCacheClearResult = clearDirectories(listOf(coverCacheDirectory))
-
     /** Clears all temporary cover/image downloads without touching library metadata or custom artwork. */
     fun clearAllTemporaryImageCaches(): CoverCacheClearResult =
         clearDirectories(listOf(coverCacheDirectory, remoteImageCacheDirectory))

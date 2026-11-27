@@ -170,7 +170,7 @@ class CoverArtRepositoryInstrumentedTest {
             val custom = File(root, "files/library/custom-game-covers/custom.png")
             custom.parentFile!!.mkdirs()
             downloaded.copyTo(custom)
-            val result = repository.clearCache()
+            val result = repository.clearAllTemporaryImageCaches()
             assertTrue(result.fullyCleared)
             assertFalse(downloaded.exists())
             assertTrue(custom.exists())

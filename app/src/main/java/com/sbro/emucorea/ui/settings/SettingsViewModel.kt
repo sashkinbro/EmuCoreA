@@ -1170,8 +1170,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setCoverDownloadBaseUrl(url: String?) {
         viewModelScope.launch {
             preferences.setCoverDownloadBaseUrl(url)
-            CoverArtRepository(getApplication()).clearCache()
-            clearCoverImageMemoryCache()
         }
     }
 
