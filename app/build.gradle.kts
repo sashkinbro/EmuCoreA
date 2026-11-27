@@ -79,6 +79,7 @@ android {
             abiFilters += "arm64-v8a"
         }
         discordSdkDirectory?.let { sdkDir ->
+            @Suppress("UnstableApiUsage")
             externalNativeBuild {
                 cmake {
                     arguments += listOf(
@@ -140,7 +141,7 @@ android {
         }
     }
     discordSdkDirectory?.let { sdkDir ->
-        sourceSets["main"].jniLibs.srcDir(sdkDir)
+        sourceSets["main"].jniLibs.directories.add(sdkDir.absolutePath)
         // libemucorea_discord.so (DiscordNative's JNI bridge) is built here.
         externalNativeBuild {
             cmake {
@@ -149,12 +150,13 @@ android {
             }
         }
     }
-    sourceSets["main"].assets.srcDir(rootProject.file("core/assets"))
+    sourceSets["main"].assets.directories.add(rootProject.file("core/assets").absolutePath)
     androidResources {
         // This frontend does not ship PPSSPP's web debugger.
         ignoreAssetsPattern = "!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:debugger"
     }
     bundle {
+        @Suppress("UnstableApiUsage")
         language {
             enableSplit = false
         }
@@ -165,6 +167,9 @@ android {
 }
 
 dependencies {
+    // Compose BOM constraints apply to both the app and its instrumentation tests.
+    val composeBom = platform(libs.androidx.compose.bom)
+
     implementation(project(":core-native"))
     implementation(project(":native-ui:android"))
     implementation(libs.libarchive)
@@ -177,7 +182,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
-    implementation(platform(libs.androidx.compose.bom))
+    @Suppress("AvoidDuplicateDependencies")
+    implementation(composeBom)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
@@ -211,7 +217,8 @@ dependencies {
     testImplementation(libs.json)
     testImplementation(libs.robolectric)
     testImplementation(libs.androidx.test.core)
-    androidTestImplementation(platform(libs.androidx.compose.bom))
+    @Suppress("AvoidDuplicateDependencies")
+    androidTestImplementation(composeBom)
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)
